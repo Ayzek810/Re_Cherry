@@ -43,6 +43,37 @@ export function tracedInvoke(channel: string, spanContext: SpanContext | undefin
 
 // Custom APIs for renderer
 const api = {
+  dshSyncProviders: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncProviders, providers),
+  dshStreamSmoke: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_StreamSmoke, payload),
+  dshComplete: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_Complete, payload),
+  dshStreamComplete: (payload: unknown, onEvent: (data: unknown) => void) => {
+    const requestId = (payload as { requestId: string }).requestId
+    const listener = (_event: Electron.IpcRendererEvent, data: { requestId?: string }) => {
+      if (data?.requestId === requestId) onEvent(data)
+    }
+    ipcRenderer.on(IpcChannel.Dsh_CompletionEvent, listener)
+    return ipcRenderer
+      .invoke(IpcChannel.Dsh_StreamComplete, payload)
+      .finally(() => ipcRenderer.off(IpcChannel.Dsh_CompletionEvent, listener))
+  },
+  dshTopicList: () => ipcRenderer.invoke(IpcChannel.Dsh_TopicList),
+  dshTopicCreate: (input: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_TopicCreate, input),
+  dshTopicRename: (id: string, name: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRename, id, name),
+  dshTopicDelete: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicDelete, id),
+  dshTopicOpen: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicOpen, id),
+  dshTopicSend: (id: string, text: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text),
+  dshTopicStop: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicStop, id),
+  dshTopicRunning: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRunning, id),
+  dshTopicEvents: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicEvents, id),
+  dshTopicGet: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicGet, id),
+  dshSearchMessages: (terms: string[]) => ipcRenderer.invoke(IpcChannel.Dsh_SearchMessages, terms),
+  dshOnSessionEvent: (callback: (payload: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => {
+      callback(data)
+    }
+    ipcRenderer.on(IpcChannel.Dsh_SessionEvent, listener)
+    return () => ipcRenderer.off(IpcChannel.Dsh_SessionEvent, listener)
+  },
   getAppInfo: () => ipcRenderer.invoke(IpcChannel.App_Info),
   getDiskInfo: (directoryPath: string): Promise<{ free: number; size: number } | null> =>
     ipcRenderer.invoke(IpcChannel.App_GetDiskInfo, directoryPath),

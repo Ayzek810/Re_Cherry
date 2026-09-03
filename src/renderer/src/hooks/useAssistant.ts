@@ -6,7 +6,6 @@ import {
   MODEL_SUPPORTED_OPTIONS,
   MODEL_SUPPORTED_REASONING_EFFORT
 } from '@renderer/config/models'
-import { db } from '@renderer/databases'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
@@ -159,18 +158,6 @@ export function useAssistant(id: string) {
     moveTopic: (topic: Topic, toAssistant: Assistant) => {
       dispatch(addTopic({ assistantId: toAssistant.id, topic: { ...topic, assistantId: toAssistant.id } }))
       dispatch(removeTopic({ assistantId: assistant.id, topic }))
-      // update topic messages in database
-      void db.topics
-        .where('id')
-        .equals(topic.id)
-        .modify((dbTopic) => {
-          if (dbTopic.messages) {
-            dbTopic.messages = dbTopic.messages.map((message) => ({
-              ...message,
-              assistantId: toAssistant.id
-            }))
-          }
-        })
     },
     updateTopic: (topic: Topic) => dispatch(updateTopic({ assistantId: assistant.id, topic })),
     updateTopics: (topics: Topic[]) => dispatch(updateTopics({ assistantId: assistant.id, topics })),

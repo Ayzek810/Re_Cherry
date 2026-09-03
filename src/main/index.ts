@@ -146,6 +146,15 @@ if (!app.requestSingleInstanceLock()) {
 
     const mainWindow = windowService.createMainWindow()
 
+    // 启动 dsh 内核（并行，不阻塞窗口创建；失败仅告警，不影响应用启动）
+    import('./kernel').then(async ({ bootKernel }) => {
+      try {
+        await bootKernel()
+      } catch (error) {
+        logger.error('Failed to boot dsh kernel', error instanceof Error ? error : new Error(String(error)))
+      }
+    })
+
     new TrayService()
 
     // Setup macOS application menu

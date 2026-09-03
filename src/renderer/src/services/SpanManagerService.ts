@@ -5,9 +5,9 @@ import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { cleanContext, endContext, getContext, startContext } from '@mcp-trace/trace-web'
 import type { Context, Span } from '@opentelemetry/api'
 import { context, SpanStatusCode, trace } from '@opentelemetry/api'
-import { db } from '@renderer/databases'
 import { getEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import store from '@renderer/store'
 import { handleResult } from '@renderer/trace/dataHandler/CommonResultHandler'
 import { handleMessageStream } from '@renderer/trace/dataHandler/MessageStreamHandler'
 import { handleStream } from '@renderer/trace/dataHandler/StreamHandler'
@@ -79,8 +79,13 @@ class SpanManagerService {
     if (message.role === 'user') {
       await window.api.trace.cleanHistory(message.topicId, message.traceId)
 
-      const topic = await db.topics.get(message.topicId)
-      _models = topic?.messages.filter((m) => m.role === 'assistant' && m.askId === message.id).map((m) => m.model)
+      // Dexie 已废弃：从 Redux 找同 askId 的助手消息
+      const state = store.getState()
+      const topicMessageIds = state.messages.messageIdsByTopic[message.topicId] ?? []
+      _models = topicMessageIds
+        .map((id) => state.messages.entities[id])
+        .filter((m) => m && m.role === 'assistant' && m.askId === message.id)
+        .map((m) => m!.model)
     } else {
       _models = [message.model]
       await window.api.trace.cleanHistory(message.topicId, message.traceId || '', message.model?.name)
@@ -138,11 +143,11 @@ class SpanManagerService {
   private async _getContentFromMessage(message: Message, content?: string): Promise<StartSpanParams> {
     let _content = content
     if (!_content) {
-      const blocks = await Promise.all(
-        message.blocks.map(async (blockId) => {
-          return await db.message_blocks.get(blockId)
-        })
-      )
+      // Dexie 已废弃：从 Redux 读块
+      const state = store.getState()
+      const blocks = message.blocks
+        .map((blockId) => state.messageBlocks.entities[blockId])
+        .filter((b) => b !== undefined)
       _content = blocks.find((data) => data?.type === MessageBlockType.MAIN_TEXT)?.content
     }
     return {

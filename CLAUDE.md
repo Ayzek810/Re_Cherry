@@ -52,10 +52,9 @@ If the skill is unavailable, directly read `.agents/skills/gh-create-issue/SKILL
   - If having i18n sort issues, run `pnpm i18n:sync` first
   - If having formatting issues, run `pnpm format` first
 - **Full Build**: `pnpm build` — TypeScript typecheck + electron-vite build
-- **Test**: `pnpm test` — Run all Vitest tests (main + renderer + aiCore + shared + scripts)
+- **Test**: `pnpm test` — Run all Vitest tests (main + renderer + shared + scripts)
   - `pnpm test:main` — Main process tests only (Node environment)
   - `pnpm test:renderer` — Renderer process tests only (jsdom environment)
-  - `pnpm test:aicore` — aiCore package tests only
   - `pnpm test:watch` — Watch mode
   - `pnpm test:coverage` — With v8 coverage report
   - `pnpm test:e2e` — Playwright end-to-end tests
@@ -78,14 +77,12 @@ If the skill is unavailable, directly read `.agents/skills/gh-create-issue/SKILL
 
 ```
 src/
-  main/          # Node.js backend (Electron main process)
+  main/          # Node.js backend (Electron main process) — contains the dsh kernel (src/main/kernel)
   renderer/      # React UI (Electron renderer process)
   preload/       # Secure IPC bridge (contextBridge)
 packages/
-  aiCore/        # @cherrystudio/ai-core — AI SDK middleware & provider abstraction
   shared/        # Cross-process types, constants, IPC channel definitions
   mcp-trace/     # OpenTelemetry tracing for MCP operations
-  ai-sdk-provider/  # Custom AI SDK provider implementations
   extension-table-plus/  # TipTap table extension
 ```
 
@@ -99,7 +96,6 @@ packages/
 | `@types` | `src/renderer/src/types/` |
 | `@logger` | `src/main/services/LoggerService` (main) / `src/renderer/src/services/LoggerService` (renderer) |
 | `@mcp-trace/trace-core` | `packages/mcp-trace/trace-core/` |
-| `@cherrystudio/ai-core` | `packages/aiCore/src/` |
 
 ### Main Process (`src/main/`)
 
@@ -134,13 +130,12 @@ Agents subsystem (`src/main/services/agents/`):
 React 19 + Redux Toolkit SPA. Key structure:
 
 ```
-aiCore/          # Legacy middleware pipeline (deprecated, migrating to packages/aiCore)
 api/             # IPC call wrappers (typed electron API calls)
 components/      # Shared UI components (Ant Design 5 + styled-components + TailwindCSS v4)
 databases/       # Dexie (IndexedDB) — topics, files, message_blocks, etc.
 hooks/           # React hooks (useAssistant, useChatContext, useModel, etc.)
 pages/           # Route pages (home, settings, knowledge, paintings, notes, etc.)
-services/        # Frontend services (ApiService, ModelService, MemoryService, etc.)
+services/        # Frontend services (ApiService, kernelChat, MemoryService, etc.)
 store/           # Redux Toolkit slices
 types/           # TypeScript type definitions
 workers/         # Web Workers
@@ -185,23 +180,15 @@ Slices (redux-persist enabled):
 - Tracing: `tracedInvoke()` in preload attaches OpenTelemetry span context to IPC calls
 - Typed API surface exposed via `contextBridge` as `window.api`
 
-### AI Core (`packages/aiCore/`)
+### dsh Kernel (`src/main/kernel/`)
 
-The `@cherrystudio/ai-core` package abstracts AI SDK providers:
+The dsh (DeepSeek Harness) kernel is embedded in-process as a Cordis plugin tree:
+- `index.ts` — programmatic plugin assembly (llm + pi-ai adapter + session persistence + agent loop)
+- `topics.ts` — topic registry and chat operations (topic = dsh session + agent)
+- `providers.ts` — renderer provider config → pi-ai routes
+- `credentials.ts` — in-memory credential provider (apiKey pushed from renderer)
 
-```
-src/core/
-  providers/    # Provider registry (HubProvider, factory, registry)
-  middleware/   # LanguageModelV2Middleware pipeline (manager, wrapper)
-  plugins/      # Built-in plugins
-  runtime/      # Runtime execution
-  options/      # Request option preparation
-```
-
-- Built on Vercel AI SDK v5 (`ai` package) with `LanguageModelV2Middleware`
-- `HubProvider` aggregates multiple provider backends
-- Supports: OpenAI, Anthropic, Google, Azure, Mistral, Bedrock, Vertex, Ollama, Perplexity, xAI, HuggingFace, Cerebras, OpenRouter, Copilot, and more
-- Custom fork of openai package: `@cherrystudio/openai`
+Renderer side: `src/renderer/src/services/kernelChat.ts` is the event-stream projection bridge (UI = display of the kernel). Chat/auxiliary LLM calls go through `window.api.dsh*` IPC.
 
 ### Multi-Window Architecture
 
@@ -243,7 +230,7 @@ logger.error("message", error);
 | UI | Ant Design 5.27, styled-components 6, TailwindCSS v4 |
 | State | Redux Toolkit, redux-persist, Dexie (IndexedDB) |
 | Rich Text | TipTap 3.2 (with Yjs collaboration) |
-| AI SDK | Vercel AI SDK v5 (`ai`), `@cherrystudio/ai-core` |
+| AI Kernel | dsh (DeepSeek Harness) — Cordis plugin tree embedded in main process |
 | Build | electron-vite 5 with rolldown-vite 7 (experimental) |
 | Test | Vitest 3 (unit), Playwright (e2e) |
 | Lint/Format | ESLint 9, oxlint, Biome 2 |
@@ -293,7 +280,6 @@ Several dependencies have patches in `patches/` — be careful when upgrading:
 - Tests use Vitest 3 with project-based configuration
 - Main process tests: Node environment, `tests/main.setup.ts`
 - Renderer tests: jsdom environment, `tests/renderer.setup.ts`, `@testing-library/react`
-- aiCore tests: separate `packages/aiCore/vitest.config.ts`
 - All tests run without CI dependency (fully local)
 - Coverage via v8 provider (`pnpm test:coverage`)
 - **Features without tests are not considered complete**

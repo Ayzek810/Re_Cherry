@@ -151,6 +151,7 @@ export interface SettingsState {
   // QuickAssistant
   enableQuickAssistant: boolean
   clickTrayToShowQuickAssistant: boolean
+  quickAssistantPrompt: string
   multiModelMessageStyle: MultiModelMessageStyle
   readClipboardAtStartup: boolean
   notionDatabaseID: string | null
@@ -335,8 +336,9 @@ export const initialState: SettingsState = {
     disabled: []
   },
   narrowMode: false,
-  enableQuickAssistant: true,
+  enableQuickAssistant: false,
   clickTrayToShowQuickAssistant: false,
+  quickAssistantPrompt: '',
   readClipboardAtStartup: true,
   multiModelMessageStyle: 'horizontal',
   notionDatabaseID: '',
@@ -686,6 +688,9 @@ const settingsSlice = createSlice({
     setEnableQuickAssistant: (state, action: PayloadAction<boolean>) => {
       state.enableQuickAssistant = action.payload
     },
+    setQuickAssistantPrompt: (state, action: PayloadAction<string>) => {
+      state.quickAssistantPrompt = action.payload
+    },
     setReadClipboardAtStartup: (state, action: PayloadAction<boolean>) => {
       state.readClipboardAtStartup = action.payload
     },
@@ -939,6 +944,7 @@ export const {
   setNarrowMode,
   setClickTrayToShowQuickAssistant,
   setEnableQuickAssistant,
+  setQuickAssistantPrompt,
   setReadClipboardAtStartup,
   setMultiModelMessageStyle,
   setNotionDatabaseID,

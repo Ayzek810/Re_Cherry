@@ -244,5 +244,24 @@ export enum IpcChannel {
   ExternalApps_DetectInstalled = 'external-apps:detect-installed',
 
   // Analytics
-  Analytics_TrackTokenUsage = 'analytics:track-token-usage'
+  Analytics_TrackTokenUsage = 'analytics:track-token-usage',
+
+  // dsh kernel
+  Dsh_SyncProviders = 'dsh:sync-providers',
+  Dsh_StreamSmoke = 'dsh:stream-smoke',
+  Dsh_Complete = 'dsh:complete',
+  Dsh_StreamComplete = 'dsh:stream-complete',
+  Dsh_CompletionEvent = 'dsh:completion-event',
+  Dsh_TopicList = 'dsh:topic-list',
+  Dsh_TopicCreate = 'dsh:topic-create',
+  Dsh_TopicRename = 'dsh:topic-rename',
+  Dsh_TopicDelete = 'dsh:topic-delete',
+  Dsh_TopicOpen = 'dsh:topic-open',
+  Dsh_TopicSend = 'dsh:topic-send',
+  Dsh_TopicStop = 'dsh:topic-stop',
+  Dsh_TopicRunning = 'dsh:topic-running',
+  Dsh_TopicEvents = 'dsh:topic-events',
+  Dsh_TopicGet = 'dsh:topic-get',
+  Dsh_SearchMessages = 'dsh:search-messages',
+  Dsh_SessionEvent = 'dsh:session-event'
 }

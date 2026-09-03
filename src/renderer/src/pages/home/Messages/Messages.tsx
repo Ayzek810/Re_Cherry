@@ -9,7 +9,6 @@ import useScrollPosition from '@renderer/hooks/useScrollPosition'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useTimer } from '@renderer/hooks/useTimer'
-import { autoRenameTopic } from '@renderer/hooks/useTopic'
 import SelectionBox from '@renderer/pages/home/Messages/SelectionBox'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
@@ -18,7 +17,7 @@ import { estimateHistoryTokens } from '@renderer/services/TokenService'
 import store, { useAppDispatch } from '@renderer/store'
 import { messageBlocksSelectors, updateOneBlock } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
-import { saveMessageAndBlocksToDB, updateMessageAndBlocksThunk } from '@renderer/store/thunk/messageThunk'
+import { updateMessageAndBlocksThunk } from '@renderer/store/thunk/messageThunk'
 import type { Assistant, Topic } from '@renderer/types'
 import type { MessageBlock } from '@renderer/types/newMessage'
 import { type Message, MessageBlockType } from '@renderer/types/newMessage'
@@ -162,7 +161,6 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
 
           const { message: clearMessage } = getUserMessage({ assistant, topic, type: 'clear' })
           dispatch(newMessagesActions.addMessage({ topicId: topic.id, message: clearMessage }))
-          await saveMessageAndBlocksToDB(topic.id, clearMessage, [])
 
           scrollToBottom()
         } finally {
@@ -188,8 +186,7 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
         if (success) {
           // 3. Set the new topic as active
           setActiveTopic(newTopic)
-          // 4. Trigger auto-rename for the new topic
-          void autoRenameTopic(assistant, newTopic.id)
+          // 4. 话题命名由 dsh 内核自动完成（session-title），此处不再触发
         } else {
           // Optional: Handle cloning failure (e.g., show an error message)
           // You might want to remove the added topic if cloning fails

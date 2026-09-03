@@ -7,7 +7,6 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useSettings } from '@renderer/hooks/useSettings'
-import i18n from '@renderer/i18n'
 import { useAppDispatch } from '@renderer/store'
 import { setUpdateState } from '@renderer/store/runtime'
 import { ThemeMode } from '@renderer/types'
@@ -15,8 +14,7 @@ import { runAsyncFunction } from '@renderer/utils'
 import { UpgradeChannel } from '@shared/config/constant'
 import { Avatar, Button, Progress, Radio, Row, Switch, Tag, Tooltip } from 'antd'
 import { debounce } from 'lodash'
-import { Briefcase, Bug, Building2, Github, Globe, Mail, Rss } from 'lucide-react'
-import { BadgeQuestionMark } from 'lucide-react'
+import { Github, Rss } from 'lucide-react'
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -65,23 +63,6 @@ const AboutSettings: FC = () => {
 
   const onOpenWebsite = (url: string) => {
     void window.api.openWebsite(url)
-  }
-
-  const mailto = async () => {
-    const email = 'support@cherry-ai.com'
-    const subject = `${APP_NAME} Feedback`
-    const version = (await window.api.getAppInfo()).version
-    const platform = window.electron.process.platform
-    const url = `mailto:${email}?subject=${subject}&body=%0A%0AVersion: ${version} | Platform: ${platform}`
-    onOpenWebsite(url)
-  }
-
-  const debug = async () => {
-    await window.api.devTools.toggle()
-  }
-
-  const showEnterprise = async () => {
-    onOpenWebsite('https://enterprise.cherry-ai.com')
   }
 
   const showReleases = async () => {
@@ -168,18 +149,13 @@ const AboutSettings: FC = () => {
     setAutoCheckUpdate(autoCheckUpdate)
   }, [autoCheckUpdate, setAutoCheckUpdate])
 
-  const onOpenDocs = () => {
-    const isChinese = i18n.language.startsWith('zh')
-    void window.api.openWebsite(isChinese ? 'https://docs.cherry-ai.com/' : 'https://docs.cherry-ai.com/docs/en-us')
-  }
-
   return (
     <SettingContainer theme={theme}>
       <SettingGroup theme={theme}>
         <SettingTitle>
           {t('settings.about.title')}
           <HStack alignItems="center">
-            <Link to="https://github.com/CherryHQ/cherry-studio">
+            <Link to="https://github.com/Ayzek810/Re_Cherry">
               <GithubOutlined style={{ marginRight: 4, color: 'var(--color-text)', fontSize: 20 }} />
             </Link>
           </HStack>
@@ -187,7 +163,7 @@ const AboutSettings: FC = () => {
         <SettingDivider />
         <AboutHeader>
           <Row align="middle">
-            <AvatarWrapper onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio')}>
+            <AvatarWrapper onClick={() => onOpenWebsite('https://github.com/Ayzek810/Re_Cherry')}>
               {update.downloadProgress > 0 && (
                 <ProgressCircle
                   type="circle"
@@ -204,7 +180,7 @@ const AboutSettings: FC = () => {
               <Title>{APP_NAME}</Title>
               <Description>{t('settings.about.description')}</Description>
               <Tag
-                onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/releases')}
+                onClick={() => onOpenWebsite('https://github.com/Ayzek810/Re_Cherry/releases')}
                 color="cyan"
                 style={{ marginTop: 8, cursor: 'pointer' }}>
                 v{version}
@@ -280,14 +256,6 @@ const AboutSettings: FC = () => {
       <SettingGroup theme={theme}>
         <SettingRow>
           <SettingRowTitle>
-            <BadgeQuestionMark size={18} />
-            {t('docs.title')}
-          </SettingRowTitle>
-          <Button onClick={onOpenDocs}>{t('settings.about.website.button')}</Button>
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
             <Rss size={18} />
             {t('settings.about.releases.title')}
           </SettingRowTitle>
@@ -296,55 +264,14 @@ const AboutSettings: FC = () => {
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>
-            <Globe size={18} />
-            {t('settings.about.website.title')}
-          </SettingRowTitle>
-          <Button onClick={() => onOpenWebsite('https://cherry-ai.com')}>{t('settings.about.website.button')}</Button>
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
             <Github size={18} />
             {t('settings.about.feedback.title')}
           </SettingRowTitle>
-          <Button onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/issues/new/choose')}>
+          <Button onClick={() => onOpenWebsite('https://github.com/Ayzek810/Re_Cherry/issues/new/choose')}>
             {t('settings.about.feedback.button')}
           </Button>
         </SettingRow>
         <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
-            <Building2 size={18} />
-            {t('settings.about.enterprise.title')}
-          </SettingRowTitle>
-          <Button onClick={showEnterprise}>{t('settings.about.website.button')}</Button>
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
-            <Mail size={18} />
-            {t('settings.about.contact.title')}
-          </SettingRowTitle>
-          <Button onClick={mailto}>{t('settings.about.contact.button')}</Button>
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
-            <Briefcase size={18} />
-            {t('settings.about.careers.title')}
-          </SettingRowTitle>
-          <Button onClick={() => onOpenWebsite('https://www.cherry-ai.com/careers')}>
-            {t('settings.about.careers.button')}
-          </Button>
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>
-            <Bug size={18} />
-            {t('settings.about.debug.title')}
-          </SettingRowTitle>
-          <Button onClick={debug}>{t('settings.about.debug.open')}</Button>
-        </SettingRow>
       </SettingGroup>
     </SettingContainer>
   )

@@ -2233,7 +2233,7 @@
         "open": "打开",
         "title": "调试面板"
       },
-      "description": "一款为创造者而生的 AI 助手",
+      "description": "剑阁峥嵘而崔嵬",
       "downloading": "正在下载更新...",
       "enterprise": {
         "title": "企业版"
@@ -3473,10 +3473,6 @@
       "provider_key_overridden": "成功更新 {{provider}} 的 API 密钥",
       "provider_key_override_confirm": "{{provider}} 已存在相同 API 密钥，是否覆盖？",
       "provider_name": "服务商名称",
-      "quick_assistant_default_tag": "默认",
-      "quick_assistant_model": "快捷助手模型",
-      "quick_assistant_model_tooltip": "使用助手：会同时使用助手的系统提示词和模型参数",
-      "quick_assistant_selection": "选择助手",
       "quick_model": {
         "description": "执行话题命名、搜索关键字提炼等简单任务时使用的模型",
         "label": "快速模型",
@@ -3816,7 +3812,12 @@
       "enable_quick_assistant": "启用快捷助手",
       "read_clipboard_at_startup": "启动时读取剪贴板",
       "title": "快捷助手",
-      "use_shortcut_to_show": "右键点击托盘图标或使用快捷键启动"
+      "use_shortcut_to_show": "右键点击托盘图标或使用快捷键启动",
+      "model_label": "模型",
+      "model_description": "快捷助手使用的模型，与聊天/话题命名模型相互独立。",
+      "prompt_label": "提示词",
+      "prompt_description": "快捷助手的系统提示词。留空则仅使用模型默认行为。",
+      "prompt_placeholder": "输入快捷助手的系统提示词…"
     },
     "quickPanel": {
       "back": "后退",

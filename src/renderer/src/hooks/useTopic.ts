@@ -1,26 +1,18 @@
 import { loggerService } from '@logger'
-import db from '@renderer/databases'
-import i18n from '@renderer/i18n'
-import { fetchMessagesSummary } from '@renderer/services/ApiService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { safeDeleteFiles } from '@renderer/services/MessagesService'
 import store from '@renderer/store'
-import { updateTopic } from '@renderer/store/assistants'
 import { setNewlyRenamedTopics, setRenamingTopics } from '@renderer/store/runtime'
 import { loadTopicMessagesThunk } from '@renderer/store/thunk/messageThunk'
 import type { Assistant, FileMetadata, Topic } from '@renderer/types'
-import type { FileMessageBlock, ImageMessageBlock } from '@renderer/types/newMessage'
+import type { FileMessageBlock, ImageMessageBlock, Message } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
-import { findMainTextBlocks } from '@renderer/utils/messageUtils/find'
-import { truncateText } from '@renderer/utils/naming'
-import { find, isEmpty } from 'lodash'
-import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
+import { find } from 'lodash'
+import { useEffect, useState } from 'react'
 
 import { useAssistant } from './useAssistant'
-import { getStoreSetting } from './useSettings'
 
 let _activeTopic: Topic
-let _setActiveTopic: Dispatch<SetStateAction<Topic>>
 
 const logger = loggerService.withContext('useTopic')
 
@@ -29,7 +21,6 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
   const [activeTopic, setActiveTopic] = useState(topic || _activeTopic || assistant?.topics[0])
 
   _activeTopic = activeTopic
-  _setActiveTopic = setActiveTopic
 
   useEffect(() => {
     if (activeTopic) {
@@ -113,151 +104,59 @@ export const finishTopicRenaming = (topicId: string) => {
   }, 700)
 }
 
-const topicRenamingLocks = new Set<string>()
-
-export const autoRenameTopic = async (assistant: Assistant, topicId: string) => {
-  if (topicRenamingLocks.has(topicId)) {
-    return
-  }
-
-  try {
-    topicRenamingLocks.add(topicId)
-
-    const topic = await getTopicById(topicId)
-    const enableTopicNaming = getStoreSetting('enableTopicNaming')
-
-    if (isEmpty(topic.messages)) {
-      return
-    }
-
-    if (topic.isNameManuallyEdited) {
-      return
-    }
-
-    const applyTopicName = (name: string) => {
-      const data = { ...topic, name } as Topic
-      if (topic.id === _activeTopic.id) {
-        _setActiveTopic(data)
-      }
-      store.dispatch(updateTopic({ assistantId: assistant.id, topic: data }))
-    }
-
-    const getFirstMessageName = () => {
-      const message = topic.messages[0]
-      const blocks = findMainTextBlocks(message)
-      const text = blocks
-        .map((block) => block.content)
-        .join('\n\n')
-        .trim()
-
-      return truncateText(text)
-    }
-
-    if (!enableTopicNaming) {
-      const topicName = getFirstMessageName()
-      if (topicName) {
-        try {
-          startTopicRenaming(topicId)
-          applyTopicName(topicName)
-        } finally {
-          finishTopicRenaming(topicId)
-        }
-      }
-      return
-    }
-
-    if (topic && topic.name === i18n.t('chat.default.topic.name') && topic.messages.length >= 2) {
-      startTopicRenaming(topicId)
-      try {
-        const { text: summaryText, error } = await fetchMessagesSummary({ messages: topic.messages })
-        if (summaryText) {
-          applyTopicName(summaryText)
-        } else {
-          if (error) {
-            window.toast?.error(`${i18n.t('message.error.fetchTopicName')}: ${error}`)
-          }
-          const fallbackName = getFirstMessageName()
-          if (fallbackName) {
-            applyTopicName(fallbackName)
-          }
-        }
-      } finally {
-        finishTopicRenaming(topicId)
-      }
-    }
-  } finally {
-    topicRenamingLocks.delete(topicId)
-  }
-}
-
 // Convert class to object with functions since class only has static methods
 // 只有静态方法,没必要用class，可以export {}
 export const TopicManager = {
   async getTopic(id: string) {
-    return await db.topics.get(id)
+    const state = store.getState()
+    for (const assistant of state.assistants.assistants) {
+      const topic = assistant.topics.find((topic) => topic.id === id)
+      if (topic) return topic
+    }
+    return undefined
   },
 
   async getAllTopics() {
-    return await db.topics.toArray()
+    const state = store.getState()
+    return state.assistants.assistants.flatMap((assistant) => assistant.topics)
   },
 
   /**
-   * 加载并返回指定话题的消息
+   * 加载并返回指定话题的消息（dsh 内核替换：从内核会话加载进 Redux 后读取）
    */
   async getTopicMessages(id: string) {
-    const topic = await TopicManager.getTopic(id)
-    if (!topic) return []
-
     await store.dispatch(loadTopicMessagesThunk(id))
-
-    // 获取更新后的话题
-    const updatedTopic = await TopicManager.getTopic(id)
-    return updatedTopic?.messages || []
+    const state = store.getState()
+    return (state.messages.messageIdsByTopic[id] ?? [])
+      .map((messageId) => state.messages.entities[messageId])
+      .filter((message): message is Message => message !== undefined)
   },
 
   async removeTopic(id: string) {
     await TopicManager.clearTopicMessages(id)
-    await db.topics.delete(id)
+    // 通知内核删除话题会话（内核持久化数据按"旧数据不管"政策保留为孤儿）
+    void window.api.dshTopicDelete(id).catch((error) => {
+      logger.warn(`TopicManager: failed to delete kernel session for topic ${id}`, error as Error)
+    })
   },
 
   async clearTopicMessages(id: string): Promise<void> {
-    // 暂存需要删除的文件信息
-    let filesToDelete: FileMetadata[] = []
+    // 从 Redux 收集并删除关联文件（Dexie 已废弃，块数据由内核事件驱动）
+    const state = store.getState()
+    const blockIds = (state.messages.messageIdsByTopic[id] ?? []).flatMap(
+      (messageId) => state.messages.entities[messageId]?.blocks ?? []
+    )
+    const filesToDelete = blockIds
+      .map((blockId) => state.messageBlocks.entities[blockId])
+      .filter(
+        (block): block is FileMessageBlock | ImageMessageBlock =>
+          block !== undefined &&
+          (block.type === MessageBlockType.IMAGE || block.type === MessageBlockType.FILE) &&
+          block.file !== undefined
+      )
+      .map((block) => block.file)
+      .filter((file): file is FileMetadata => file !== undefined)
 
-    try {
-      await db.transaction('rw', [db.topics, db.message_blocks], async () => {
-        const topic = await db.topics.get(id)
-
-        if (!topic || !topic.messages || topic.messages.length === 0) {
-          return
-        }
-
-        const blockIds = topic.messages.flatMap((message) => message.blocks || [])
-
-        if (blockIds.length > 0) {
-          // 删除 block 之前先从 DB 里找出来
-          const blocks = await db.message_blocks.where('id').anyOf(blockIds).toArray()
-
-          // 提取文件元数据
-          filesToDelete = blocks
-            .filter(
-              (block): block is ImageMessageBlock | FileMessageBlock =>
-                block.type === MessageBlockType.IMAGE || block.type === MessageBlockType.FILE
-            )
-            .map((block) => block.file)
-            .filter((file) => file !== undefined)
-
-          await db.message_blocks.bulkDelete(blockIds)
-        }
-
-        await db.topics.update(id, { messages: [] })
-      })
-    } catch (dbError) {
-      logger.error(`Failed to clear database records for topic ${id}:`, dbError as Error)
-      throw dbError
-    }
-
-    // 删除文件
     if (filesToDelete.length > 0) {
       await safeDeleteFiles(filesToDelete)
     }

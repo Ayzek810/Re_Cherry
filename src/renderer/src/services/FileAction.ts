@@ -1,9 +1,11 @@
 import { loggerService } from '@logger'
 import TextEditPopup from '@renderer/components/Popups/TextEditPopup'
-import db from '@renderer/databases'
 import FileManager from '@renderer/services/FileManager'
+import store from '@renderer/store'
+import { removeManyBlocks } from '@renderer/store/messageBlock'
+import { newMessagesActions } from '@renderer/store/newMessage'
 import type { FileMetadata } from '@renderer/types'
-import type { Message } from '@renderer/types/newMessage'
+import type { FileMessageBlock, ImageMessageBlock } from '@renderer/types/newMessage'
 import dayjs from 'dayjs'
 
 // 排序相关
@@ -47,34 +49,41 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
 
   await FileManager.deleteFile(fileId, true)
 
-  const relatedBlocks = await db.message_blocks.where('file.id').equals(fileId).toArray()
-  const blockIdsToDelete = relatedBlocks.map((b) => b.id)
-  const affectedMessageIds = [...new Set(relatedBlocks.map((b) => b.messageId))]
-
+  // Dexie 已废弃：从 Redux 清理引用该文件的块（块数据由内核事件驱动）
   try {
-    await db.transaction('rw', db.topics, db.message_blocks, async () => {
-      const allTopics = await db.topics.toArray()
-      const topicsToUpdate: Record<string, { messages: Message[] }> = {}
+    const state = store.getState()
+    const relatedBlockIds = Object.values(state.messageBlocks.entities)
+      .filter((block) => {
+        if (!block) return false
+        if (block.type === 'file' || block.type === 'image') {
+          return (block as FileMessageBlock | ImageMessageBlock).file?.id === fileId
+        }
+        return false
+      })
+      .map((block) => block!.id)
 
-      for (const topic of allTopics) {
-        let modified = false
-        const newMessages = (topic.messages || []).map((msg) => {
-          if (affectedMessageIds.includes(msg.id)) {
-            const filtered = (msg.blocks || []).filter((blk) => !blockIdsToDelete.includes(blk))
-            if (filtered.length < (msg.blocks || []).length) {
-              modified = true
-              return { ...msg, blocks: filtered }
-            }
-          }
-          return msg
-        })
-        if (modified) topicsToUpdate[topic.id] = { messages: newMessages }
+    if (relatedBlockIds.length === 0) {
+      return
+    }
+
+    // 从各话题消息的 blocks 数组移除
+    for (const topicId of Object.keys(state.messages.messageIdsByTopic)) {
+      const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
+      for (const messageId of messageIds) {
+        const message = state.messages.entities[messageId]
+        if (message && message.blocks?.some((id) => relatedBlockIds.includes(id))) {
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId,
+              updates: { blocks: message.blocks.filter((id) => !relatedBlockIds.includes(id)) }
+            })
+          )
+        }
       }
-
-      await Promise.all(Object.entries(topicsToUpdate).map(([id, data]) => db.topics.update(id, data)))
-      await db.message_blocks.bulkDelete(blockIdsToDelete)
-    })
-    logger.info(`Deleted ${blockIdsToDelete.length} blocks for file ${fileId}`)
+    }
+    store.dispatch(removeManyBlocks(relatedBlockIds))
+    logger.info(`Removed ${relatedBlockIds.length} blocks referencing file ${fileId} from Redux`)
   } catch (err) {
     logger.error(`Error removing file blocks for ${fileId}:`, err as Error)
     window.modal.error({ content: t('files.delete.db_error'), centered: true })

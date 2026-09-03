@@ -1,4 +1,3 @@
-import { dbService } from '@renderer/services/db/DbService'
 import type { DiagnosisContext, DiagnosisResult } from '@renderer/services/ErrorDiagnosisService'
 import { diagnoseError } from '@renderer/services/ErrorDiagnosisService'
 import store from '@renderer/store'
@@ -12,7 +11,6 @@ function persistDiagnosis(blockId: string, diagnosis: DiagnosisResult) {
   const block = store.getState().messageBlocks.entities[blockId]
   const updatedMetadata = { ...block?.metadata, diagnosis }
   store.dispatch(updateOneBlock({ id: blockId, changes: { metadata: updatedMetadata } }))
-  void dbService.updateSingleBlock(blockId, { metadata: updatedMetadata })
 }
 
 const diagPanelStyle: React.CSSProperties = {

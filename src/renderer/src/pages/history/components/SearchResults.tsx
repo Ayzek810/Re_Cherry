@@ -1,9 +1,7 @@
 import { LoadingIcon } from '@renderer/components/Icons'
-import db from '@renderer/databases'
 import useScrollPosition from '@renderer/hooks/useScrollPosition'
-import { selectTopicsMap } from '@renderer/store/assistants'
 import type { Topic } from '@renderer/types'
-import { type Message, MessageBlockType } from '@renderer/types/newMessage'
+import { type Message } from '@renderer/types/newMessage'
 import {
   buildKeywordRegexes,
   buildKeywordUnionRegex,
@@ -11,11 +9,9 @@ import {
   splitKeywordsToTerms
 } from '@renderer/utils/keywordSearch'
 import { List, Segmented, Spin, Typography } from 'antd'
-import { useLiveQuery } from 'dexie-react-hooks'
 import type { FC } from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSelector } from 'react-redux'
 import styled from 'styled-components'
 
 const { Text, Title } = Typography
@@ -194,10 +190,6 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
   const [sortOrder, setSortOrder] = useState<ResultSortOrder>('newest')
   const [searchTerms, setSearchTerms] = useState<string[]>(splitKeywordsToTerms(keywords))
 
-  const topics = useLiveQuery(() => db.topics.toArray(), [])
-  // FIXME: db 中没有 topic.name 等信息，只能从 store 获取
-  const storeTopicsMap = useSelector(selectTopicsMap)
-
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searchStats, setSearchStats] = useState({ count: 0, time: 0 })
   const [isLoading, setIsLoading] = useState(false)
@@ -215,34 +207,28 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
 
     const startTime = performance.now()
     const newSearchTerms = splitKeywordsToTerms(keywords)
-    const searchRegexes = buildKeywordRegexes(newSearchTerms, { matchMode, flags: 'i' })
 
-    const blocks = (await db.message_blocks.toArray())
-      .filter((block) => block.type === MessageBlockType.MAIN_TEXT)
-      .filter((block) => {
-        const searchableContent = stripMarkdownFormatting(block.content)
-        return searchRegexes.every((regex) => regex.test(searchableContent))
-      })
+    // dsh 内核替换：搜索走内核会话（SQLite 权威数据源，旧 Dexie 数据不参与）
+    const { hits } = await window.api.dshSearchMessages(newSearchTerms)
 
-    const messages = topics?.flatMap((topic) => topic.messages)
-
-    const results = await Promise.all(
-      blocks.map(async (block) => {
-        const message = messages?.find((message) => message.id === block.messageId)
-        if (message) {
-          const topic = storeTopicsMap.get(message.topicId)
-          if (topic) {
-            return {
-              message,
-              topic,
-              content: block.content,
-              snippet: buildSearchSnippet(block.content, newSearchTerms, matchMode)
-            }
-          }
-        }
-        return null
-      })
-    ).then((results) => results.filter(Boolean) as SearchResult[])
+    const results: SearchResult[] = hits.map((hit) => {
+      const message = {
+        id: `kernel-${hit.topicId}-${hit.seq}`,
+        topicId: hit.topicId,
+        role: hit.role,
+        assistantId: 'kernel',
+        createdAt: new Date(hit.createdAt).toISOString(),
+        status: 'success',
+        blocks: []
+      } as Message
+      const topic = { id: hit.topicId, name: hit.topicName } as Topic
+      return {
+        message,
+        topic,
+        content: hit.text,
+        snippet: buildSearchSnippet(hit.text, newSearchTerms, matchMode)
+      }
+    })
 
     const endTime = performance.now()
     setSearchResults(results)
@@ -252,7 +238,7 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
     })
     setSearchTerms(newSearchTerms)
     setIsLoading(false)
-  }, [keywords, matchMode, storeTopicsMap, topics])
+  }, [keywords, matchMode])
 
   const sortedSearchResults = useMemo(() => {
     const results = [...searchResults]

@@ -3473,10 +3473,6 @@
       "provider_key_overridden": "Successfully updated API key for {{provider}}",
       "provider_key_override_confirm": "{{provider}} already has an API key ({{existingKey}}). Do you want to override it with the new key ({{newKey}})?",
       "provider_name": "Provider Name",
-      "quick_assistant_default_tag": "Default",
-      "quick_assistant_model": "Quick Assistant Model",
-      "quick_assistant_model_tooltip": "Using Assistant: Will use both the assistant's system prompt and model parameters",
-      "quick_assistant_selection": "Select Assistant",
       "quick_model": {
         "description": "Model used for simple tasks such as topic naming and keyword extraction",
         "label": "Quick Model",
@@ -3816,7 +3812,12 @@
       "enable_quick_assistant": "Enable Quick Assistant",
       "read_clipboard_at_startup": "Read clipboard at startup",
       "title": "Quick Assistant",
-      "use_shortcut_to_show": "Right-click the tray icon or use shortcuts to start"
+      "use_shortcut_to_show": "Right-click the tray icon or use shortcuts to start",
+      "model_label": "Model",
+      "model_description": "Model used by the quick assistant, independent from chat and topic-naming models.",
+      "prompt_label": "Prompt",
+      "prompt_description": "System prompt for the quick assistant. Leave empty to use the model default behavior.",
+      "prompt_placeholder": "Enter the quick assistant system prompt…"
     },
     "quickPanel": {
       "back": "Back",

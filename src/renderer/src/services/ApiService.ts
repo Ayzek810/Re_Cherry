@@ -1,206 +1,34 @@
 /**
  * 职责：提供原子化的、无状态的API调用函数
+ * dsh 内核替换后：聊天/摘要/生成/健康检查全部走内核，本文件只保留
+ * 图像生成（保留功能）、模型列表与 key 轮换等薄封装。
  */
 import { loggerService } from '@logger'
-import { buildStreamTextParams } from '@renderer/aiCore/prepareParams'
-import type { AiSdkMiddlewareConfig } from '@renderer/aiCore/types/middlewareConfig'
-import { buildProviderOptions } from '@renderer/aiCore/utils/options'
-import { isDedicatedImageGenerationModel, isEmbeddingModel, isFunctionCallingModel } from '@renderer/config/models'
+import { isEmbeddingModel } from '@renderer/config/models'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
-import type { Assistant, MCPTool, Model, Provider } from '@renderer/types'
-import { type FetchChatCompletionParams, getEffectiveMcpMode, isSystemProvider } from '@renderer/types'
-import type { StreamTextParams } from '@renderer/types/aiCoreTypes'
+import { getEmbeddingDimensions } from '@renderer/services/embedding'
+import type { Assistant, Model, Provider } from '@renderer/types'
+import { isSystemProvider } from '@renderer/types'
 import { type Chunk, ChunkType } from '@renderer/types/chunk'
-import type { Message, ResponseError } from '@renderer/types/newMessage'
-import { removeSpecialCharactersForTopicName, uuid } from '@renderer/utils'
-import { abortCompletion, readyToAbort } from '@renderer/utils/abortController'
-import { trackTokenUsage } from '@renderer/utils/analytics'
-import { isToolUseModeFunction } from '@renderer/utils/assistant'
-import { isPromptToolUse, isSupportedToolUse } from '@renderer/utils/assistant'
-import { getErrorMessage, isAbortError } from '@renderer/utils/error'
+import type { Message } from '@renderer/types/newMessage'
+import { removeSpecialCharactersForTopicName } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import { purifyMarkdownImages } from '@renderer/utils/markdown'
 import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { containsSupportedVariables, replacePromptVariables } from '@renderer/utils/prompt'
 import { NOT_SUPPORT_API_KEY_PROVIDER_TYPES, NOT_SUPPORT_API_KEY_PROVIDERS } from '@renderer/utils/provider'
 import { isEmpty, takeRight } from 'lodash'
 
-import type { AiProviderConfig } from '../aiCore'
-import { AiProvider } from '../aiCore'
 import {
   // getAssistantProvider,
   // getAssistantSettings,
-  getDefaultAssistant,
   getDefaultModel,
   getProviderByModel,
   getQuickModel
 } from './AssistantService'
-import { ConversationService } from './ConversationService'
-import type { BlockManager } from './messageStreaming'
-import type { StreamProcessorCallbacks } from './StreamProcessingService'
-// FIXME: 这里太多重复逻辑，需要重构
 
 const logger = loggerService.withContext('ApiService')
-const SUMMARY_REQUEST_TIMEOUT_MS = 15_000
-
-/**
- * 将用户消息转换为LLM可以理解的格式并发送请求
- * @param request - 包含消息内容和助手信息的请求对象
- * @param onChunkReceived - 接收流式响应数据的回调函数
- */
-// 目前先按照函数来写,后续如果有需要到class的地方就改回来
-export async function transformMessagesAndFetch(
-  request: {
-    messages: Message[]
-    assistant: Assistant
-    blockManager: BlockManager
-    assistantMsgId: string
-    callbacks: StreamProcessorCallbacks
-    topicId?: string // 添加 topicId 用于 trace
-    allowedTools?: string[]
-    options: {
-      signal?: AbortSignal
-      timeout?: number
-      headers?: Record<string, string>
-    }
-  },
-  onChunkReceived: (chunk: Chunk) => void
-) {
-  const { messages, assistant } = request
-
-  try {
-    const { modelMessages, uiMessages } = await ConversationService.prepareMessagesForModel(messages, assistant)
-
-    // replace prompt variables
-    assistant.prompt = await replacePromptVariables(assistant.prompt, assistant.model?.name)
-
-    // 专用图像生成模型直接走 fetchImageGeneration
-    const model = assistant.model || getDefaultModel()
-    if (isDedicatedImageGenerationModel(model)) {
-      await fetchImageGeneration({
-        messages: uiMessages,
-        assistant,
-        onChunkReceived
-      })
-      return
-    }
-
-    await fetchChatCompletion({
-      messages: modelMessages,
-      assistant: assistant,
-      topicId: request.topicId,
-      allowedTools: request.allowedTools,
-      requestOptions: request.options,
-      uiMessages,
-      onChunkReceived
-    })
-  } catch (error: any) {
-    onChunkReceived({ type: ChunkType.ERROR, error })
-  }
-}
-
-/**
- * Note: This path always uses AI SDK streaming under the hood via `streamText`.
- * There is no `generateText` (non-stream) branch inside this function.
- */
-export async function fetchChatCompletion({
-  messages,
-  prompt,
-  assistant,
-  requestOptions,
-  onChunkReceived,
-  topicId,
-  uiMessages,
-  allowedTools
-}: FetchChatCompletionParams) {
-  logger.info('fetchChatCompletion called with detailed context', {
-    messageCount: messages?.length || 0,
-    prompt: prompt,
-    assistantId: assistant.id,
-    topicId,
-    hasTopicId: !!topicId,
-    modelId: assistant.model?.id,
-    modelName: assistant.model?.name
-  })
-
-  // Get base provider and apply API key rotation
-  // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.
-  // Nested properties (if any) are never modified after creation.
-  const baseProvider = getProviderByModel(assistant.model || getDefaultModel())
-  const providerWithRotatedKey = {
-    ...baseProvider,
-    apiKey: getRotatedApiKey(baseProvider)
-  }
-
-  const AI = new AiProvider(assistant.model || getDefaultModel(), providerWithRotatedKey)
-  const provider = AI.getActualProvider()
-
-  const mcpTools: MCPTool[] = []
-  onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
-
-  if (prompt) {
-    messages = [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  }
-
-  // 使用 transformParameters 模块构建参数
-  const {
-    params: aiSdkParams,
-    modelId,
-    capabilities,
-    webSearchPluginConfig,
-    idleTimeout
-  } = await buildStreamTextParams(messages, assistant, provider, {
-    mcpTools: mcpTools,
-    allowedTools,
-    webSearchProviderId: assistant.webSearchProviderId,
-    requestOptions
-  })
-
-  // Safely fallback to prompt tool use when function calling is not supported by model.
-  const usePromptToolUse =
-    isPromptToolUse(assistant) || (isToolUseModeFunction(assistant) && !isFunctionCallingModel(assistant.model))
-
-  const mcpMode = getEffectiveMcpMode(assistant)
-  const middlewareConfig: AiSdkMiddlewareConfig = {
-    streamOutput: assistant.settings?.streamOutput ?? true,
-    onChunk: onChunkReceived,
-    enableReasoning: capabilities.enableReasoning,
-    isPromptToolUse: usePromptToolUse,
-    isSupportedToolUse: isSupportedToolUse(assistant),
-    webSearchPluginConfig: webSearchPluginConfig,
-    enableWebSearch: capabilities.enableWebSearch,
-    enableGenerateImage: capabilities.enableGenerateImage,
-    enableUrlContext: capabilities.enableUrlContext,
-    mcpMode,
-    mcpTools,
-    uiMessages,
-    knowledgeRecognition: assistant.knowledgeRecognition,
-    idleTimeout
-  }
-
-  // Wrap onChunkReceived to automatically track token usage on completion
-  const originalOnChunk = middlewareConfig.onChunk
-  middlewareConfig.onChunk = (chunk: Chunk) => {
-    if (chunk.type === ChunkType.BLOCK_COMPLETE) {
-      trackTokenUsage({ usage: chunk.response?.usage, model: assistant?.model, source: 'chat' })
-    }
-    originalOnChunk?.(chunk)
-  }
-
-  // --- Call AI Completions ---
-  await AI.completions(modelId, aiSdkParams, {
-    ...middlewareConfig,
-    assistant,
-    topicId,
-    callType: 'chat',
-    uiMessages
-  })
-}
 
 /**
  * 从消息中收集图像（用于图像编辑）
@@ -210,13 +38,6 @@ async function collectImagesFromMessages(userMessage: Message, assistantMessage?
   const images: string[] = []
 
   // 收集用户消息中的图像
-  // NOTE: Use `block.file.name` (always the on-disk filename) rather than
-  // `block.file.id + block.file.ext` — some save paths (saveBase64Image,
-  // savePastedImage) store `ext` without the leading dot, so concatenation
-  // produces broken paths like `<uuid>jpg` → ENOENT.
-  // Also note: `block.file.type` is a FileType enum (e.g. "image"), NOT a MIME
-  // type. `base64Image` derives the real MIME from the extension internally
-  // (and normalizes jpg → image/jpeg).
   const userImageBlocks = findImageBlocks(userMessage)
   for (const block of userImageBlocks) {
     if (block.file) {
@@ -248,9 +69,65 @@ async function collectImagesFromMessages(userMessage: Message, assistantMessage?
   return images
 }
 
+/** OpenAI 兼容图像生成：POST {apiHost}/images/generations。 */
+async function generateImages(
+  provider: Provider,
+  model: string,
+  prompt: string,
+  imageSize: string,
+  batchSize: number
+): Promise<string[]> {
+  const response = await fetch(`${provider.apiHost}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {})
+    },
+    body: JSON.stringify({ model, prompt, size: imageSize, n: batchSize })
+  })
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    throw new Error(`Image generation failed (${response.status}): ${detail.slice(0, 200)}`)
+  }
+  const data = (await response.json()) as { data?: { b64_json?: string; url?: string }[] }
+  return (data.data ?? []).map((item) => item.b64_json ?? item.url ?? '').filter(Boolean)
+}
+
+/** OpenAI 兼容图像编辑：POST {apiHost}/images/edits（multipart，逐张编辑）。 */
+async function editImages(
+  provider: Provider,
+  model: string,
+  prompt: string,
+  inputImages: string[],
+  imageSize: string
+): Promise<string[]> {
+  const results: string[] = []
+  for (const dataUrl of inputImages) {
+    const blob = await (await fetch(dataUrl)).blob()
+    const form = new FormData()
+    form.append('model', model)
+    form.append('prompt', prompt)
+    form.append('size', imageSize)
+    form.append('image', blob, `image.${blob.type.split('/')[1] ?? 'png'}`)
+    const response = await fetch(`${provider.apiHost}/images/edits`, {
+      method: 'POST',
+      headers: provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {},
+      body: form
+    })
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '')
+      throw new Error(`Image edit failed (${response.status}): ${detail.slice(0, 200)}`)
+    }
+    const data = (await response.json()) as { data?: { b64_json?: string; url?: string }[] }
+    results.push(...(data.data ?? []).map((item) => item.b64_json ?? item.url ?? '').filter(Boolean))
+  }
+  return results
+}
+
 /**
  * 独立的图像生成函数
  * 专用于 DALL-E、GPT-Image-1 等专用图像生成模型
+ * （内核替换后保留此功能，供后续重新挂回聊天流）
  */
 export async function fetchImageGeneration({
   messages,
@@ -261,13 +138,11 @@ export async function fetchImageGeneration({
   assistant: Assistant
   onChunkReceived: (chunk: Chunk) => void
 }) {
-  // 创建 AI provider
   const baseProvider = getProviderByModel(assistant.model || getDefaultModel())
-  const providerWithRotatedKey = {
+  const provider = {
     ...baseProvider,
     apiKey: getRotatedApiKey(baseProvider)
   }
-  const aiProvider = new AiProvider(assistant.model || getDefaultModel(), providerWithRotatedKey)
 
   onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
   onChunkReceived({ type: ChunkType.IMAGE_CREATED })
@@ -275,7 +150,6 @@ export async function fetchImageGeneration({
   const startTime = Date.now()
 
   try {
-    // 提取 prompt 和图像
     const lastUserMessage = messages.findLast((m) => m.role === 'user')
     const lastAssistantMessage = messages.findLast((m) => m.role === 'assistant')
 
@@ -285,27 +159,15 @@ export async function fetchImageGeneration({
 
     const prompt = getMainTextContent(lastUserMessage)
     const inputImages = await collectImagesFromMessages(lastUserMessage, lastAssistantMessage)
-
-    // 调用 generateImage 或 editImage
-    // 使用默认图像生成配置
     const imageSize = '1024x1024'
     const batchSize = 1
+    const modelId = assistant.model!.id
 
     let images: string[]
     if (inputImages.length > 0) {
-      images = await aiProvider.editImage({
-        model: assistant.model!.id,
-        prompt: prompt || '',
-        inputImages,
-        imageSize
-      })
+      images = await editImages(provider, modelId, prompt || '', inputImages, imageSize)
     } else {
-      images = await aiProvider.generateImage({
-        model: assistant.model!.id,
-        prompt: prompt || '',
-        imageSize,
-        batchSize
-      })
+      images = await generateImages(provider, modelId, prompt || '', imageSize, batchSize)
     }
 
     // 发送结果 chunks
@@ -315,10 +177,6 @@ export async function fetchImageGeneration({
       image: { type: imageType, images }
     })
 
-    // Emit BLOCK_COMPLETE so the stream processor's onComplete runs and the
-    // assistant message transitions out of "processing". Without this, the
-    // trailing PlaceholderBlock in Blocks/index.tsx stays visible next to the
-    // finished image because `isMessageProcessing(message)` remains true.
     const imageResponse = {
       usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
       metrics: {
@@ -355,97 +213,36 @@ export async function fetchMessagesSummary({
     return { text: null, error: i18n.t('error.no_api_key') }
   }
 
-  // Apply API key rotation
-  // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.
-  // Nested properties (if any) are never modified after creation.
-  const providerWithRotatedKey = {
-    ...provider,
-    apiKey: getRotatedApiKey(provider)
-  }
+  const conversation = JSON.stringify(
+    contextMessages.map((message) => {
+      const structredMessage = {
+        role: message.role,
+        mainText: purifyMarkdownImages(getMainTextContent(message))
+      }
 
-  const AI = new AiProvider(model, providerWithRotatedKey)
-  const actualProvider = AI.getActualProvider()
+      // 让LLM知道消息中包含的文件，但只提供文件名
+      const fileBlocks = findFileBlocks(message)
+      let fileList: Array<string> = []
+      if (fileBlocks.length && fileBlocks.length > 0) {
+        fileList = fileBlocks.map((fileBlock) => fileBlock.file.origin_name)
+      }
+      return {
+        ...structredMessage,
+        files: fileList.length > 0 ? fileList : undefined
+      }
+    })
+  )
 
-  const topicId = messages?.find((message) => message.topicId)?.topicId || ''
-
-  // LLM对多条消息的总结有问题，用单条结构化的消息表示会话内容会更好
-  const structredMessages = contextMessages.map((message) => {
-    const structredMessage = {
-      role: message.role,
-      mainText: purifyMarkdownImages(getMainTextContent(message))
-    }
-
-    // 让LLM知道消息中包含的文件，但只提供文件名
-    // 对助手消息而言，没有提供工具调用结果等更多信息，仅提供文本上下文。
-    const fileBlocks = findFileBlocks(message)
-    let fileList: Array<string> = []
-    if (fileBlocks.length && fileBlocks.length > 0) {
-      fileList = fileBlocks.map((fileBlock) => fileBlock.file.origin_name)
-    }
-    return {
-      ...structredMessage,
-      files: fileList.length > 0 ? fileList : undefined
-    }
-  })
-  const conversation = JSON.stringify(structredMessages)
-
-  const defaultAssistant = getDefaultAssistant()
-  const summaryAssistant = {
-    ...defaultAssistant,
-    settings: {
-      ...defaultAssistant.settings,
-      reasoning_effort: 'none',
-      qwenThinkMode: false
-    },
-    prompt,
-    model
-  } satisfies Assistant
-
-  const { providerOptions, standardParams } = buildProviderOptions(summaryAssistant, model, actualProvider, {
-    enableReasoning: false,
-    enableWebSearch: false,
-    enableGenerateImage: false
-  })
-
-  const llmMessages = {
-    system: prompt,
-    prompt: conversation,
-    providerOptions,
-    ...standardParams,
-    abortSignal: AbortSignal.timeout(SUMMARY_REQUEST_TIMEOUT_MS),
-    maxRetries: 0
-  }
-
-  const middlewareConfig: AiSdkMiddlewareConfig = {
-    streamOutput: false,
-    enableReasoning: false,
-    isPromptToolUse: false,
-    isSupportedToolUse: false,
-    enableWebSearch: false,
-    enableGenerateImage: false,
-    enableUrlContext: false,
-    mcpTools: []
-  }
   try {
-    // 从 messages 中找到有 traceId 的助手消息，用于绑定现有 trace
-    const messageWithTrace = messages.find((m) => m.role === 'assistant' && m.traceId)
-
-    if (messageWithTrace && messageWithTrace.traceId) {
-      // 导入并调用 appendTrace 来绑定现有 trace，传入summary使用的模型名
-      const { appendTrace } = await import('@renderer/services/SpanManagerService')
-      await appendTrace({ topicId, traceId: messageWithTrace.traceId, model })
-    }
-
-    const { getText, usage } = await AI.completions(model.id, llmMessages, {
-      ...middlewareConfig,
-      assistant: summaryAssistant,
-      topicId,
-      callType: 'summary'
+    // dsh 内核替换：话题命名走内核一次性 completion（无 session 残留）
+    const { text } = await window.api.dshComplete({
+      provider: provider.id,
+      model: model.id,
+      system: prompt,
+      messages: [{ role: 'user', text: conversation }],
+      maxTokens: 128
     })
 
-    trackTokenUsage({ usage, model })
-
-    const text = getText()
     const result = removeSpecialCharactersForTopicName(text)
     return result ? { text: result } : { text: null, error: i18n.t('error.no_response') }
   } catch (error: unknown) {
@@ -471,55 +268,17 @@ export async function fetchGenerate({
     return ''
   }
 
-  // Apply API key rotation
-  // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.
-  // Nested properties (if any) are never modified after creation.
-  const providerWithRotatedKey = {
-    ...provider,
-    apiKey: getRotatedApiKey(provider)
-  }
-
-  const AI = new AiProvider(model, providerWithRotatedKey)
-
-  const assistant = getDefaultAssistant()
-  assistant.model = model
-  assistant.prompt = prompt
-
-  // const params: CompletionsParams = {
-  //   callType: 'generate',
-  //   messages: content,
-  //   assistant,
-  //   streamOutput: false
-  // }
-
-  const middlewareConfig: AiSdkMiddlewareConfig = {
-    streamOutput: assistant.settings?.streamOutput ?? false,
-    enableReasoning: false,
-    isPromptToolUse: false,
-    isSupportedToolUse: false,
-    enableWebSearch: false,
-    enableGenerateImage: false,
-    enableUrlContext: false
-  }
-
   try {
-    const result = await AI.completions(
-      model.id,
-      {
-        system: prompt,
-        prompt: content
-      },
-      {
-        ...middlewareConfig,
-        assistant,
-        callType: 'generate'
-      }
-    )
-
-    trackTokenUsage({ usage: result.usage, model })
-
-    return result.getText() || ''
+    // dsh 内核替换：搜索编排/记忆/错误诊断等一次性生成走内核 completion
+    const { text } = await window.api.dshComplete({
+      provider: provider.id,
+      model: model.id,
+      system: prompt,
+      messages: [{ role: 'user', text: content }]
+    })
+    return text || ''
   } catch (error: any) {
+    logger.warn('fetchGenerate failed via kernel', error)
     return ''
   }
 }
@@ -583,26 +342,36 @@ export function getRotatedApiKey(provider: Provider): string {
   return nextKey
 }
 
+/**
+ * 拉取 provider 模型列表（OpenAI 兼容 /models；不支持的 provider 返回配置中的静态列表）。
+ */
 export async function fetchModels(provider: Provider): Promise<Model[]> {
-  // Apply API key rotation
-  // NOTE: Shallow copy is intentional. Provider objects are not mutated by downstream code.
-  // Nested properties (if any) are never modified after creation.
-  const providerWithRotatedKey = {
-    ...provider,
-    apiKey: getRotatedApiKey(provider)
+  const apiHost = provider.apiHost
+  if (!apiHost) {
+    return provider.models ?? []
   }
-
-  const AI = new AiProvider(providerWithRotatedKey)
-
   try {
-    return await AI.models()
+    const response = await fetch(`${apiHost}/models`, {
+      headers: provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}
+    })
+    if (!response.ok) {
+      throw new Error(`List models failed (${response.status})`)
+    }
+    const data = (await response.json()) as { data?: { id: string }[] }
+    const models = (data.data ?? []).map((item) => ({
+      id: item.id,
+      name: item.id,
+      provider: provider.id,
+      group: 'default'
+    }))
+    return models.length > 0 ? models : (provider.models ?? [])
   } catch (error) {
     logger.error('Failed to fetch models from provider', {
       providerId: provider.id,
       providerName: provider.name,
       error: error instanceof Error ? error.message : String(error)
     })
-    return []
+    return provider.models ?? []
   }
 }
 
@@ -639,52 +408,24 @@ export function checkApiProvider(provider: Provider): void {
 export async function checkApi(provider: Provider, model: Model, timeout = 15000): Promise<void> {
   checkApiProvider(provider)
 
-  const ai = new AiProvider(model, provider)
-
-  const assistant = getDefaultAssistant()
-  assistant.model = model
-  assistant.prompt = 'test' // 避免部分 provider 空系统提示词会报错
-
   if (isEmbeddingModel(model)) {
     logger.info('checkApi: embedding model detected, calling getEmbeddingDimensions', { modelId: model.id })
     const timerPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
-    await Promise.race([ai.getEmbeddingDimensions(model), timerPromise])
-  } else {
-    const abortId = uuid()
-    const signal = readyToAbort(abortId)
-    let streamError: ResponseError | undefined
-    const params: StreamTextParams = {
-      system: assistant.prompt,
-      prompt: 'hi',
-      abortSignal: signal
-    }
-    const config: AiProviderConfig = {
-      streamOutput: true,
-      enableReasoning: false,
-      isSupportedToolUse: false,
-      enableWebSearch: false,
-      enableGenerateImage: false,
-      isPromptToolUse: false,
-      enableUrlContext: false,
-      assistant,
-      callType: 'check',
-      onChunk: (chunk: Chunk) => {
-        if (chunk.type === ChunkType.ERROR) {
-          streamError = chunk.error
-        } else {
-          abortCompletion(abortId)
-        }
-      }
-    }
-
-    try {
-      await ai.completions(model.id, params, config)
-    } catch (e) {
-      if (!isAbortError(e) && !isAbortError(streamError)) {
-        throw streamError ?? e
-      }
-    }
+    await Promise.race([getEmbeddingDimensions(provider, model), timerPromise])
+    return
   }
+
+  // dsh 内核替换：健康检查 = 内核一次性 completion 的 'hi' ping
+  const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+  await Promise.race([
+    window.api.dshComplete({
+      provider: provider.id,
+      model: model.id,
+      messages: [{ role: 'user', text: 'hi' }],
+      maxTokens: 16
+    }),
+    timeoutPromise
+  ])
 }
 
 export async function checkModel(provider: Provider, model: Model, timeout = 15000): Promise<{ latency: number }> {

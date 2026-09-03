@@ -5,6 +5,7 @@ import { isLocalAi } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import db from '@renderer/databases'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
+import { initKernelBridge, syncProvidersToKernel } from '@renderer/services/kernelChat'
 import MemoryService from '@renderer/services/MemoryService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
@@ -179,6 +180,18 @@ export function useAppInit() {
     const memoryService = MemoryService.getInstance()
     memoryService.updateConfig().catch((error) => logger.error('Failed to update memory config:', error))
   }, [memoryConfig])
+
+  useEffect(() => {
+    // dsh 内核桥：订阅内核 session 事件流
+    initKernelBridge()
+  }, [])
+
+  const kernelProviders = useAppSelector((state) => state.llm.providers)
+
+  useEffect(() => {
+    // 把 provider 配置同步进内核（provider 变更时自动重同步）
+    void syncProvidersToKernel(kernelProviders)
+  }, [kernelProviders])
 
   useEffect(() => {
     void checkDataLimit()

@@ -1,4 +1,3 @@
-import { adaptProvider } from '@renderer/aiCore/provider/providerConfig'
 import OpenAIAlert from '@renderer/components/Alert/OpenAIAlert'
 import { showErrorDetailPopup } from '@renderer/components/ErrorDetailModal'
 import { LoadingIcon } from '@renderer/components/Icons'
@@ -32,6 +31,7 @@ import {
   isSupportAnthropicPromptCacheProvider,
   isVertexProvider
 } from '@renderer/utils/provider'
+import { adaptProviderApiHost } from '@renderer/utils/providerHost'
 import { Button, Divider, Flex, Input, Select, Space, Switch, Tooltip } from 'antd'
 import Link from 'antd/es/typography/Link'
 import { debounce, isEmpty } from 'lodash'
@@ -311,7 +311,7 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
   }, [configuredApiHost, apiHost])
 
   const hostPreview = () => {
-    const formattedApiHost = adaptProvider({ provider: { ...provider, apiHost } }).apiHost
+    const formattedApiHost = adaptProviderApiHost({ ...provider, apiHost }).apiHost
 
     if (isOllamaProvider(provider)) {
       return formattedApiHost + '/chat'

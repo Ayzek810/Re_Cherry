@@ -44,7 +44,7 @@ const initialState: ShortcutsState = {
       key: 'mini_window',
       shortcut: ['Ctrl', 'Space'],
       editable: true,
-      enabled: true,
+      enabled: false,
       system: true
     },
     {

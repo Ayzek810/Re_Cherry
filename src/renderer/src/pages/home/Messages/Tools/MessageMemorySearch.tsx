@@ -1,10 +1,13 @@
-import type { MemorySearchToolInput, MemorySearchToolOutput } from '@renderer/aiCore/tools/MemorySearchTool'
 import Spinner from '@renderer/components/Spinner'
 import type { NormalToolResponse } from '@renderer/types'
 import { Typography } from 'antd'
 import { ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
+
+/** 本地结构类型（原 aiCore 的 MemorySearchTool 已随 aiCore 移除）。 */
+type MemorySearchToolInput = { query: string; limit?: number }
+type MemorySearchToolOutput = unknown[]
 
 const { Text } = Typography
 

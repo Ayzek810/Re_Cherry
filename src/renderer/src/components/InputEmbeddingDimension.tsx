@@ -1,13 +1,13 @@
 import { loggerService } from '@logger'
 import { RefreshIcon } from '@renderer/components/Icons'
 import { useProvider } from '@renderer/hooks/useProvider'
+import { getEmbeddingDimensions } from '@renderer/services/embedding'
 import type { Model } from '@renderer/types'
 import { getErrorMessage } from '@renderer/utils'
 import { Button, InputNumber, Space, Tooltip } from 'antd'
 import { memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { AiProvider } from '../aiCore'
 import { getRotatedApiKey } from '../services/ApiService'
 
 const logger = loggerService.withContext('DimensionsInput')
@@ -53,8 +53,7 @@ const InputEmbeddingDimension = ({
         ...provider,
         apiKey: getRotatedApiKey(provider)
       }
-      const aiProvider = new AiProvider(providerWithRotatedKey)
-      const dimension = await aiProvider.getEmbeddingDimensions(model)
+      const dimension = await getEmbeddingDimensions(providerWithRotatedKey, model)
       // for controlled input
       if (ref?.current) {
         ref.current.value = dimension.toString()

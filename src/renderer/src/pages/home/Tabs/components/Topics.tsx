@@ -5,7 +5,6 @@ import { DraggableVirtualList } from '@renderer/components/DraggableList'
 import { CopyIcon, DeleteIcon, EditIcon } from '@renderer/components/Icons'
 import PromptPopup from '@renderer/components/Popups/PromptPopup'
 import { isMac } from '@renderer/config/constant'
-import { db } from '@renderer/databases'
 import { useAssistant, useAssistants } from '@renderer/hooks/useAssistant'
 import { useInPlaceEdit } from '@renderer/hooks/useInPlaceEdit'
 import { modelGenerating } from '@renderer/hooks/useRuntime'
@@ -146,7 +145,6 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       e.stopPropagation()
       if (assistant.topics.length === 1) {
         const newTopic = getDefaultTopic(assistant.id)
-        await db.topics.add({ id: newTopic.id, messages: [] })
         addTopic(newTopic)
         setActiveTopic(newTopic)
       } else {

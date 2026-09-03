@@ -1,7 +1,12 @@
 import type { TokenUsage } from '@mcp-trace/trace-core'
 import type { Span } from '@opentelemetry/api'
-import type { CompletionsResult } from '@renderer/aiCore/types'
 import { endSpan } from '@renderer/services/SpanManagerService'
+
+/** 本地结构类型（原 aiCore 的 CompletionsResult 已随 aiCore 移除）。 */
+interface CompletionsResult {
+  getText: () => string
+  usage?: any
+}
 
 export class CompletionsResultHandler {
   private data: any

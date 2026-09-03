@@ -1,32 +1,23 @@
 import { loggerService } from '@logger'
 import { isMac } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useSettings } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
-import { fetchChatCompletion } from '@renderer/services/ApiService'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
-import { ConversationService } from '@renderer/services/ConversationService'
 import { getAssistantMessage, getUserMessage } from '@renderer/services/MessagesService'
 import store, { useAppSelector } from '@renderer/store'
-import { updateOneBlock, upsertManyBlocks, upsertOneBlock } from '@renderer/store/messageBlock'
+import { removeManyBlocks, updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
-import { cancelThrottledBlockUpdate, throttledBlockUpdate } from '@renderer/store/thunk/messageThunk'
-import type { Topic } from '@renderer/types'
+import type { Assistant, Topic } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
-import type { Chunk } from '@renderer/types/chunk'
-import { ChunkType } from '@renderer/types/chunk'
 import { AssistantMessageStatus, MessageBlockStatus } from '@renderer/types/newMessage'
-import { abortCompletion } from '@renderer/utils/abortController'
-import { isAbortError } from '@renderer/utils/error'
-import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
+import { createMainTextBlock } from '@renderer/utils/messageUtils/create'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { replacePromptVariables } from '@renderer/utils/prompt'
 import { defaultLanguage } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { Divider } from 'antd'
-import { cloneDeep, isEmpty } from 'lodash'
-import { last } from 'lodash'
+import { isEmpty, last } from 'lodash'
 import type { FC } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -41,10 +32,29 @@ import InputBar from './components/InputBar'
 
 const logger = loggerService.withContext('HomeWindow')
 
+/** 快捷助手固定标识：不依赖任何 Assistant 配置，消息也不计入聊天消息库 */
+const MINI_ASSISTANT_ID = 'quick-assistant'
+
 const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
-  const { language, readClipboardAtStartup, windowStyle } = useSettings()
+  const { language, readClipboardAtStartup, quickAssistantPrompt, windowStyle } = useSettings()
   const { theme } = useTheme()
   const { t } = useTranslation()
+  const { quickAssistantModel } = useAppSelector((state) => state.llm)
+
+  // 快捷助手 = 独立简单 chatbot：模型与提示词来自快捷助手设置，不读取 assistants 列表
+  const miniAssistant = useMemo<Assistant>(
+    () => ({
+      id: MINI_ASSISTANT_ID,
+      name: t('settings.quickAssistant.title'),
+      prompt: quickAssistantPrompt || '',
+      topics: [],
+      type: 'assistant',
+      settings: {},
+      model: quickAssistantModel
+    }),
+    [quickAssistantPrompt, quickAssistantModel, t]
+  )
+  const currentAssistant = miniAssistant
 
   const [route, setRoute] = useState<'home' | 'chat' | 'summary' | 'explanation'>('home')
   const [isFirstMessage, setIsFirstMessage] = useState(true)
@@ -63,11 +73,10 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
   const [error, setError] = useState<string | null>(null)
 
-  const { quickAssistantId } = useAppSelector((state) => state.llm)
-  const { assistant: currentAssistant } = useAssistant(quickAssistantId)
-
-  const currentTopic = useRef<Topic>(getDefaultTopic(currentAssistant.id))
+  const currentTopic = useRef<Topic>(getDefaultTopic(MINI_ASSISTANT_ID))
   const currentAskId = useRef('')
+  // dsh:complete 无法中途取消：暂停/清除时置位，结果返回后丢弃
+  const cancelledRef = useRef(false)
 
   const inputBarRef = useRef<HTMLDivElement>(null)
   const featureMenusRef = useRef<FeatureMenusRef>(null)
@@ -222,9 +231,10 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         return
       }
 
-      try {
-        const topicId = currentTopic.current.id
+      const topicId = currentTopic.current.id
+      cancelledRef.current = false
 
+      try {
         const { message: userMessage, blocks } = getUserMessage({
           content: [prompt, userContent].filter(Boolean).join('\n\n'),
           assistant: currentAssistant,
@@ -243,27 +253,6 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
         store.dispatch(newMessagesActions.addMessage({ topicId, message: assistantMessage }))
 
-        const allMessagesForTopic = selectMessagesForTopic(store.getState(), topicId)
-        const userMessageIndex = allMessagesForTopic.findIndex((m) => m?.id === userMessage.id)
-
-        const messagesForContext = allMessagesForTopic
-          .slice(0, userMessageIndex + 1)
-          .filter((m) => m && !m.status?.includes('ing'))
-
-        let blockId: string | null = null
-        let thinkingBlockId: string | null = null
-        let thinkingStartTime: number | null = null
-
-        const resolveThinkingDuration = (duration?: number) => {
-          if (typeof duration === 'number' && Number.isFinite(duration)) {
-            return duration
-          }
-          if (thinkingStartTime !== null) {
-            return Math.max(0, performance.now() - thinkingStartTime)
-          }
-          return 0
-        }
-
         setIsLoading(true)
         setIsOutputted(false)
         setError(null)
@@ -271,183 +260,106 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         setIsFirstMessage(false)
         setUserInputText('')
 
-        const newAssistant = cloneDeep(currentAssistant)
-        if (!newAssistant.settings) {
-          newAssistant.settings = {}
+        const model = currentAssistant.model
+        if (!model || !model.provider) {
+          throw new Error('Quick assistant model is not configured')
         }
-        newAssistant.settings.streamOutput = true
-        // 显式关闭这些功能
-        newAssistant.webSearchProviderId = undefined
-        newAssistant.mcpServers = undefined
-        newAssistant.knowledge_bases = undefined
-        // replace prompt vars
-        newAssistant.prompt = await replacePromptVariables(currentAssistant.prompt, currentAssistant?.model.name)
-        // logger.debug('newAssistant', newAssistant)
 
-        const { modelMessages, uiMessages } = await ConversationService.prepareMessagesForModel(
-          messagesForContext,
-          newAssistant
+        // 快捷助手 = 独立简单 chatbot：携带本窗口 Redux 中的上下文做一次性流式 completion，
+        // 不创建内核会话、不写入任何持久化存储，消息不计入聊天消息库
+        const history = selectMessagesForTopic(store.getState(), topicId)
+        const context = history
+          .filter((m) => m && m.role !== 'system')
+          .slice(-20)
+          .map((m) => ({ role: m.role as 'user' | 'assistant', text: getMainTextContent(m) }))
+          .filter((m) => m.text.length > 0)
+        const system = await replacePromptVariables(currentAssistant.prompt, model.name)
+
+        // 流式回复块
+        const replyBlock = createMainTextBlock(assistantMessage.id, '', { status: MessageBlockStatus.STREAMING })
+        store.dispatch(upsertManyBlocks([replyBlock]))
+        store.dispatch(
+          newMessagesActions.updateMessage({
+            topicId,
+            messageId: assistantMessage.id,
+            updates: { blocks: [replyBlock.id], status: AssistantMessageStatus.PROCESSING }
+          })
         )
 
-        await fetchChatCompletion({
-          messages: modelMessages,
-          assistant: newAssistant,
-          requestOptions: {},
-          topicId,
-          uiMessages: uiMessages,
-          onChunkReceived: (chunk: Chunk) => {
-            switch (chunk.type) {
-              case ChunkType.THINKING_START:
-                {
-                  setIsOutputted(true)
-                  thinkingStartTime = performance.now()
-                  if (thinkingBlockId) {
-                    store.dispatch(
-                      updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.STREAMING } })
-                    )
-                  } else {
-                    const block = createThinkingBlock(assistantMessage.id, '', {
-                      status: MessageBlockStatus.STREAMING
-                    })
-                    thinkingBlockId = block.id
-                    store.dispatch(
-                      newMessagesActions.updateMessage({
-                        topicId,
-                        messageId: assistantMessage.id,
-                        updates: { blockInstruction: { id: block.id } }
-                      })
-                    )
-                    store.dispatch(upsertOneBlock(block))
-                  }
-                }
-                break
-              case ChunkType.THINKING_DELTA:
-                {
-                  setIsOutputted(true)
-                  if (thinkingBlockId) {
-                    if (thinkingStartTime === null) {
-                      thinkingStartTime = performance.now()
-                    }
-                    const thinkingDuration = resolveThinkingDuration(chunk.thinking_millsec)
-                    throttledBlockUpdate(thinkingBlockId, {
-                      content: chunk.text,
-                      thinking_millsec: thinkingDuration
-                    })
-                  }
-                }
-                break
-              case ChunkType.THINKING_COMPLETE:
-                {
-                  if (thinkingBlockId) {
-                    const thinkingDuration = resolveThinkingDuration(chunk.thinking_millsec)
-                    cancelThrottledBlockUpdate(thinkingBlockId)
-                    store.dispatch(
-                      updateOneBlock({
-                        id: thinkingBlockId,
-                        changes: { status: MessageBlockStatus.SUCCESS, thinking_millsec: thinkingDuration }
-                      })
-                    )
-                  }
-                  thinkingStartTime = null
-                  thinkingBlockId = null
-                }
-                break
-              case ChunkType.TEXT_START:
-                {
-                  setIsOutputted(true)
-                  if (blockId) {
-                    store.dispatch(updateOneBlock({ id: blockId, changes: { status: MessageBlockStatus.STREAMING } }))
-                  } else {
-                    const block = createMainTextBlock(assistantMessage.id, '', {
-                      status: MessageBlockStatus.STREAMING
-                    })
-                    blockId = block.id
-                    store.dispatch(
-                      newMessagesActions.updateMessage({
-                        topicId,
-                        messageId: assistantMessage.id,
-                        updates: { blockInstruction: { id: block.id } }
-                      })
-                    )
-                    store.dispatch(upsertOneBlock(block))
-                  }
-                }
-                break
-              case ChunkType.TEXT_DELTA:
-                {
-                  setIsOutputted(true)
-                  if (blockId) {
-                    throttledBlockUpdate(blockId, { content: chunk.text })
-                  }
-                }
-                break
+        // rAF 合并文本增量，避免高频 delta 刷爆渲染
+        let streamedText = ''
+        let rafId = 0
+        const flushText = () => {
+          store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { content: streamedText } }))
+        }
 
-              case ChunkType.TEXT_COMPLETE:
-                {
-                  if (blockId) {
-                    cancelThrottledBlockUpdate(blockId)
-                    store.dispatch(
-                      updateOneBlock({
-                        id: blockId,
-                        changes: { content: chunk.text, status: MessageBlockStatus.SUCCESS }
-                      })
-                    )
-                  }
-                }
-                break
-              case ChunkType.ERROR: {
-                //stop the thinking timer
-                const isAborted = isAbortError(chunk.error)
-                const possibleBlockId = thinkingBlockId || blockId
-                if (possibleBlockId) {
-                  store.dispatch(
-                    updateOneBlock({
-                      id: possibleBlockId,
-                      changes: {
-                        status: isAborted ? MessageBlockStatus.PAUSED : MessageBlockStatus.ERROR
-                      }
-                    })
-                  )
-                  store.dispatch(
-                    newMessagesActions.updateMessage({
-                      topicId,
-                      messageId: assistantMessage.id,
-                      updates: {
-                        status: isAborted ? AssistantMessageStatus.PAUSED : AssistantMessageStatus.SUCCESS
-                      }
-                    })
-                  )
-                }
-                if (!isAborted) {
-                  throw new Error(chunk.error.message)
-                }
-                thinkingStartTime = null
-                thinkingBlockId = null
+        await window.api.dshStreamComplete(
+          {
+            requestId: assistantMessage.id,
+            provider: model.provider,
+            model: model.id,
+            system: system || undefined,
+            messages: context
+          },
+          (data) => {
+            if (cancelledRef.current) return
+            const event = data as { type: string; text?: string; message?: string }
+            if (event.type === 'delta' && event.text !== undefined) {
+              streamedText += event.text
+              if (rafId === 0) {
+                rafId = requestAnimationFrame(() => {
+                  rafId = 0
+                  flushText()
+                })
               }
-              //fall through
-              case ChunkType.BLOCK_COMPLETE:
-                setIsLoading(false)
-                setIsOutputted(true)
-                currentAskId.current = ''
-                store.dispatch(
-                  newMessagesActions.updateMessage({
-                    topicId,
-                    messageId: assistantMessage.id,
-                    updates: { status: AssistantMessageStatus.SUCCESS }
-                  })
-                )
-                break
+            } else if (event.type === 'done') {
+              if (rafId !== 0) {
+                cancelAnimationFrame(rafId)
+                rafId = 0
+              }
+              flushText()
+              store.dispatch(
+                updateOneBlock({
+                  id: replyBlock.id,
+                  changes: { content: streamedText, status: MessageBlockStatus.SUCCESS }
+                })
+              )
+              store.dispatch(
+                newMessagesActions.updateMessage({
+                  topicId,
+                  messageId: assistantMessage.id,
+                  updates: { status: AssistantMessageStatus.SUCCESS }
+                })
+              )
+              setIsLoading(false)
+              setIsOutputted(true)
+              currentAskId.current = ''
+            } else if (event.type === 'error') {
+              if (rafId !== 0) {
+                cancelAnimationFrame(rafId)
+                rafId = 0
+              }
+              store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { status: MessageBlockStatus.ERROR } }))
+              store.dispatch(
+                newMessagesActions.updateMessage({
+                  topicId,
+                  messageId: assistantMessage.id,
+                  updates: { status: AssistantMessageStatus.ERROR }
+                })
+              )
+              setIsLoading(false)
+              setIsOutputted(true)
+              currentAskId.current = ''
+              setError(event.message || 'An error occurred')
             }
           }
-        })
+        )
       } catch (err) {
-        if (isAbortError(err)) return
+        if (cancelledRef.current) {
+          return
+        }
         handleError(err instanceof Error ? err : new Error('An error occurred'))
-        logger.error('Error fetching result:', err as Error)
-      } finally {
-        setIsLoading(false)
-        setIsOutputted(true)
-        currentAskId.current = ''
+        logger.error('Quick assistant error:', err as Error)
       }
     },
     [userContent, currentAssistant]
@@ -455,7 +367,26 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
   const handlePause = useCallback(() => {
     if (currentAskId.current) {
-      abortCompletion(currentAskId.current)
+      // 丢弃本次流式结果并收尾 UI
+      cancelledRef.current = true
+      const topicId = currentTopic.current?.id
+      if (topicId) {
+        const state = store.getState()
+        const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
+        const pending = messageIds
+          .map((id) => state.messages.entities[id])
+          .find((m) => m && m.role === 'assistant' && m.id === currentAskId.current)
+        if (pending) {
+          store.dispatch(removeManyBlocks(pending.blocks ?? []))
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId: pending.id,
+              updates: { blocks: [], status: AssistantMessageStatus.PAUSED }
+            })
+          )
+        }
+      }
       setIsLoading(false)
       setIsOutputted(true)
       currentAskId.current = ''
@@ -475,7 +406,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         }
 
         // Reset the topic
-        currentTopic.current = getDefaultTopic(currentAssistant.id)
+        currentTopic.current = getDefaultTopic(MINI_ASSISTANT_ID)
 
         // Reset selection only after using a feature and returning to home.
         featureMenusRef.current?.resetSelectedIndex()
@@ -514,9 +445,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       return t('miniwindow.input.placeholder.title')
     }
     return t('miniwindow.input.placeholder.empty', {
-      model: quickAssistantId ? currentAssistant.name : currentAssistant.model.name
+      model: currentAssistant.model?.name || ''
     })
-  }, [referenceText, route, t, quickAssistantId, currentAssistant])
+  }, [referenceText, route, t, currentAssistant])
 
   // Memoize footer props
   const baseFooterProps = useMemo(

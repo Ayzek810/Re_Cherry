@@ -1,7 +1,7 @@
 import type { AzureOpenAIProvider, ProviderType } from '@renderer/types'
 import { isSystemProvider, type Provider, type SystemProviderId, SystemProviderIds } from '@renderer/types'
-import { isAzureOpenAIProvider } from '@shared/aiCore/provider/utils'
 import { CLAUDE_SUPPORTED_PROVIDERS } from '@shared/config/providers'
+import { isAzureOpenAIProvider } from '@shared/provider/utils'
 
 export const isAzureResponsesEndpoint = (provider: AzureOpenAIProvider) => {
   return provider.apiVersion === 'preview' || provider.apiVersion === 'v1'
@@ -162,7 +162,7 @@ export {
   isOllamaProvider,
   isPerplexityProvider,
   isVertexProvider
-} from '@shared/aiCore/provider/utils'
+} from '@shared/provider/utils'
 
 export function isAIGatewayProvider(provider: Provider): boolean {
   return provider.type === 'gateway'

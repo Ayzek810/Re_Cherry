@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import { autoRenameTopic } from '@renderer/hooks/useTopic'
 import i18n from '@renderer/i18n'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { NotificationService } from '@renderer/services/NotificationService'
@@ -322,8 +321,7 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           })
         }
 
-        // 更新topic的name
-        void autoRenameTopic(assistant, topicId)
+        // 话题命名由 dsh 内核自动完成（session-title），此处不再触发
 
         // 处理usage估算
         // For OpenRouter, always use the accurate usage data from API, don't estimate

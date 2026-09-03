@@ -3473,10 +3473,6 @@
       "provider_key_overridden": "成功更新 {{provider}} 的 API 金鑰",
       "provider_key_override_confirm": "{{provider}} 已存在相同 API 金鑰，是否覆蓋？",
       "provider_name": "提供者名稱",
-      "quick_assistant_default_tag": "預設",
-      "quick_assistant_model": "快捷助手模型",
-      "quick_assistant_model_tooltip": "使用助手：會同時使用助手的系統提示詞和模型參數",
-      "quick_assistant_selection": "選擇助手",
       "quick_model": {
         "description": "用於話題命名、搜尋關鍵字提煉等簡單任務的模型",
         "label": "快速模型",
@@ -3816,7 +3812,12 @@
       "enable_quick_assistant": "啟用快捷助手",
       "read_clipboard_at_startup": "啟動時讀取剪貼簿",
       "title": "快捷助手",
-      "use_shortcut_to_show": "右鍵點選工具列圖示或使用快捷鍵啟動"
+      "use_shortcut_to_show": "右鍵點選工具列圖示或使用快捷鍵啟動",
+      "model_label": "模型",
+      "model_description": "快速助手使用的模型，與聊天／話題命名模型相互獨立。",
+      "prompt_label": "提示詞",
+      "prompt_description": "快速助手的系統提示詞。留空則僅使用模型預設行為。",
+      "prompt_placeholder": "輸入快速助手的系統提示詞…"
     },
     "quickPanel": {
       "back": "後退",

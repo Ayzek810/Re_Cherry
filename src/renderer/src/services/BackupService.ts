@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
-import { upgradeToV7, upgradeToV8 } from '@renderer/databases/upgrades'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import { setLocalBackupSyncState, setWebDAVSyncState } from '@renderer/store/backup'
@@ -623,9 +622,7 @@ export async function handleData(data: Record<string, any>) {
     await clearDatabase()
 
     for (const { key, value } of data.indexedDB) {
-      if (key.startsWith('topic:')) {
-        await db.table('topics').add({ id: value.id, messages: value.messages })
-      }
+      // Dexie 已废弃：topic: 前缀（旧话题+消息）不再恢复（旧数据政策）
       if (key === 'image://avatar') {
         await db.table('settings').add({ id: key, value })
       }
@@ -647,18 +644,7 @@ export async function handleData(data: Record<string, any>) {
 
     await restoreDatabase(data.indexedDB)
 
-    if (data.version === 3) {
-      await db.transaction('rw', db.tables, async (tx) => {
-        await db.table('message_blocks').clear()
-        await upgradeToV7(tx)
-      })
-    }
-
-    if (data.version === 4) {
-      await db.transaction('rw', db.tables, async (tx) => {
-        await upgradeToV8(tx)
-      })
-    }
+    // 旧版本（v3/v4）针对已废弃表的额外迁移不再执行（旧数据政策）
 
     window.toast.success(i18n.t('message.restore.success'))
     setTimeout(() => window.api.relaunchApp(), 1000)
@@ -680,8 +666,11 @@ async function backupDatabase() {
 }
 
 async function restoreDatabase(backup: Record<string, any>) {
+  // Dexie 已废弃：只恢复当前存在的表（旧备份中的 topics/message_blocks 数据跳过）
+  const existingTables = new Set(db.tables.map((table) => table.name))
   await db.transaction('rw', db.tables, async () => {
     for (const tableName in backup) {
+      if (!existingTables.has(tableName)) continue
       await db.table(tableName).clear()
       await db.table(tableName).bulkAdd(backup[tableName])
     }

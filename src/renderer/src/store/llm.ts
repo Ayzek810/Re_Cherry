@@ -55,7 +55,7 @@ export interface LlmState {
   /** @deprecated */
   topicNamingModel: Model
   quickModel: Model
-  quickAssistantId: string
+  quickAssistantModel: Model
   settings: LlmSettings
 }
 
@@ -63,7 +63,7 @@ export const initialState: LlmState = {
   defaultModel: SYSTEM_MODELS.defaultModel[0],
   topicNamingModel: SYSTEM_MODELS.defaultModel[1],
   quickModel: SYSTEM_MODELS.defaultModel[1],
-  quickAssistantId: '',
+  quickAssistantModel: SYSTEM_MODELS.defaultModel[1],
   providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)),
   settings: {
     ollama: {
@@ -187,8 +187,8 @@ const llmSlice = createSlice({
       state.quickModel = action.payload.model
     },
 
-    setQuickAssistantId: (state, action: PayloadAction<string>) => {
-      state.quickAssistantId = action.payload
+    setQuickAssistantModel: (state, action: PayloadAction<{ model: Model }>) => {
+      state.quickAssistantModel = action.payload.model
     },
     setOllamaKeepAliveTime: (state, action: PayloadAction<number>) => {
       state.settings.ollama.keepAliveTime = action.payload
@@ -253,7 +253,7 @@ export const {
   removeModel,
   setDefaultModel,
   setQuickModel,
-  setQuickAssistantId,
+  setQuickAssistantModel,
   setOllamaKeepAliveTime,
   setLMStudioKeepAliveTime,
   setGPUStackKeepAliveTime,

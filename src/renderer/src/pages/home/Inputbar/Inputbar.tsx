@@ -6,7 +6,6 @@ import {
   isVisionModel,
   isVisionModels
 } from '@renderer/config/models'
-import db from '@renderer/databases'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useInputText } from '@renderer/hooks/useInputText'
 import { useMessageOperations, useTopicLoading } from '@renderer/hooks/useMessageOperations'
@@ -320,8 +319,6 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
 
   const addNewTopic = useCallback(async () => {
     const newTopic = getDefaultTopic(assistant.id)
-
-    await db.topics.add({ id: newTopic.id, messages: [] })
 
     if (assistant.defaultModel) {
       setModel(assistant.defaultModel)

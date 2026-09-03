@@ -26,14 +26,13 @@ import { allMinApps } from '@renderer/config/minapps'
 import { isFunctionCallingModel, isNotSupportTextDeltaModel, qwenModel, SYSTEM_MODELS } from '@renderer/config/models'
 import { SYSTEM_PROVIDERS } from '@renderer/config/providers'
 import { DEFAULT_SIDEBAR_ICONS } from '@renderer/config/sidebar'
-import db from '@renderer/databases'
 import { getModel } from '@renderer/hooks/useModel'
 import i18n from '@renderer/i18n'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
 const defaultPreprocessProviders: any[] = []
 import type { Assistant, Model, Provider, ProviderApiOptions, WebSearchProvider } from '@renderer/types'
 import { isBuiltinMCPServer, isSystemProvider, SystemProviderIds } from '@renderer/types'
-import { getDefaultGroupName, getLeadingEmoji, runAsyncFunction, uuid } from '@renderer/utils'
+import { getDefaultGroupName, getLeadingEmoji, uuid } from '@renderer/utils'
 import {
   isSupportArrayContentProvider,
   isSupportDeveloperRoleProvider,
@@ -613,26 +612,8 @@ const migrateConfig = {
     }
   },
   '34': (state: RootState) => {
-    try {
-      state.assistants.assistants.forEach((assistant) => {
-        assistant.topics.forEach((topic) => {
-          topic.assistantId = assistant.id
-          void runAsyncFunction(async () => {
-            const _topic = await db.topics.get(topic.id)
-            if (_topic) {
-              const messages = (_topic?.messages || []).map((message) => ({
-                ...message,
-                assistantId: assistant.id
-              }))
-              void db.topics.put({ ..._topic, messages }, topic.id)
-            }
-          })
-        })
-      })
-      return state
-    } catch (error) {
-      return state
-    }
+    // Dexie 已废弃 + 旧数据政策：该版本原为旧话题补 assistantId（读写 Dexie），置空保留版本号
+    return state
   },
   '35': (state: RootState) => {
     try {
@@ -3182,6 +3163,33 @@ const migrateConfig = {
       return state
     } catch (error) {
       logger.error('migrate 209 error', error as Error)
+      return state
+    }
+  },
+  '210': (state: RootState) => {
+    try {
+      // 快捷助手独立配置：模型 + 提示词（不依赖 Assistant 对象）
+      if (state.llm.quickAssistantModel === undefined) {
+        state.llm.quickAssistantModel = state.llm.quickModel ?? SYSTEM_MODELS.defaultModel[1]
+      }
+      if (typeof state.settings.quickAssistantPrompt !== 'string') {
+        state.settings.quickAssistantPrompt = ''
+      }
+      return state
+    } catch (error) {
+      return state
+    }
+  },
+  '211': (state: RootState) => {
+    try {
+      // 快捷助手两个开关默认改为关（快捷键 + 设置页启用）
+      const miniShortcut = state.shortcuts?.shortcuts?.find((s) => s.key === 'mini_window')
+      if (miniShortcut) {
+        miniShortcut.enabled = false
+      }
+      state.settings.enableQuickAssistant = false
+      return state
+    } catch (error) {
       return state
     }
   }

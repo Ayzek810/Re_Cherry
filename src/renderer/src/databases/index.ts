@@ -15,8 +15,6 @@
  * --------------------------------------------------------------------------
  */
 import type { FileMetadata, KnowledgeNoteItem, QuickPhrase } from '@renderer/types'
-// Import necessary types for blocks and new message structure
-import type { Message as NewMessage, MessageBlock } from '@renderer/types/newMessage'
 import { Dexie, type EntityTable } from 'dexie'
 
 import { upgradeToV5, upgradeToV7, upgradeToV8 } from './upgrades'
@@ -26,11 +24,9 @@ export const db = new Dexie('CherryStudio', {
   chromeTransactionDurability: 'strict'
 }) as Dexie & {
   files: EntityTable<FileMetadata, 'id'>
-  topics: EntityTable<{ id: string; messages: NewMessage[] }, 'id'> // Correct type for topics
   settings: EntityTable<{ id: string; value: any }, 'id'>
   knowledge_notes: EntityTable<KnowledgeNoteItem, 'id'>
   quick_phrases: EntityTable<QuickPhrase, 'id'>
-  message_blocks: EntityTable<MessageBlock, 'id'> // Correct type for message_blocks
 }
 
 db.version(1).stores({
@@ -131,6 +127,12 @@ db.version(10).stores({
 db.version(11).stores({
   translate_history: null,
   translate_languages: null
+})
+
+// Chat messages/topics moved to the dsh kernel (session storage is authoritative): drop the tables
+db.version(12).stores({
+  topics: null,
+  message_blocks: null
 })
 
 export default db
