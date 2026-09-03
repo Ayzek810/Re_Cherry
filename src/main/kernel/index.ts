@@ -285,12 +285,29 @@ function registerKernelIpc(): void {
         ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens })
       }
       try {
+        let finished = false
         for await (const chunk of ctx.llm.stream(options)) {
           if (chunk.type === 'text-delta') {
             send({ type: 'delta', text: chunk.text })
+          } else if (chunk.type === 'finish') {
+            // 流已产出终态 chunk（文本输出完毕）。立即收尾并跳出循环，
+            // 不依赖适配器在 finish 之后是否还会正常返回迭代结束——
+            // 否则连接挂起时 for-await 永不结束，done 永远到不了 UI。
+            finished = true
+            if (chunk.reason?.kind === 'error') {
+              const failure = chunk.reason.failure as { message?: string } | undefined
+              send({ type: 'error', message: failure?.message || 'stream error' })
+            } else if (chunk.reason?.kind === 'aborted') {
+              send({ type: 'error', message: 'stream aborted' })
+            } else {
+              send({ type: 'done' })
+            }
+            break
           }
         }
-        send({ type: 'done' })
+        if (!finished) {
+          send({ type: 'done' })
+        }
         return { ok: true }
       } catch (error) {
         send({ type: 'error', message: error instanceof Error ? error.message : String(error) })

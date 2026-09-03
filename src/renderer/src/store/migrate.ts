@@ -3192,6 +3192,15 @@ const migrateConfig = {
     } catch (error) {
       return state
     }
+  },
+  '212': (state: RootState) => {
+    try {
+      // 启动后读取剪切板默认改为关闭
+      state.settings.readClipboardAtStartup = false
+      return state
+    } catch (error) {
+      return state
+    }
   }
 }
 

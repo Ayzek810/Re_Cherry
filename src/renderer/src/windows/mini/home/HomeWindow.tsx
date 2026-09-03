@@ -41,6 +41,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   const { t } = useTranslation()
   const { quickAssistantModel } = useAppSelector((state) => state.llm)
 
+  /** 内嵌预览（设置页）时不主动抢焦点；真实小窗（mini window）由窗口显示事件聚焦。 */
+  const isEmbedded = !draggable
+
   // 快捷助手 = 独立简单 chatbot：模型与提示词来自快捷助手设置，不读取 assistants 列表
   const miniAssistant = useMemo<Assistant>(
     () => ({
@@ -110,6 +113,17 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       }
     }
   }, [])
+
+  // 真实小窗：一轮输出结束后把焦点还给输入条，便于连续对话。
+  // 内嵌预览（设置页）不做任何自动聚焦，避免打断提示词编辑。
+  const wasLoadingRef = useRef(isLoading)
+  useEffect(() => {
+    if (isEmbedded) return
+    if (wasLoadingRef.current && !isLoading) {
+      focusInput()
+    }
+    wasLoadingRef.current = isLoading
+  }, [isLoading, isEmbedded, focusInput])
 
   // Use useCallback with stable dependencies to avoid infinite loops
   const readClipboard = useCallback(async () => {
@@ -472,9 +486,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
               <InputBar
                 text={userInputText}
                 assistant={currentAssistant}
-                referenceText={referenceText}
                 placeholder={inputPlaceholder}
-                loading={isLoading}
                 handleKeyDown={handleKeyDown}
                 handleChange={handleChange}
                 ref={inputBarRef}
@@ -507,9 +519,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           <InputBar
             text={userInputText}
             assistant={currentAssistant}
-            referenceText={referenceText}
             placeholder={inputPlaceholder}
-            loading={isLoading}
             handleKeyDown={handleKeyDown}
             handleChange={handleChange}
             ref={inputBarRef}

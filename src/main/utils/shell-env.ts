@@ -17,7 +17,7 @@ const SHELL_ENV_TIMEOUT_MS = 15_000
 const appendCherryBinToPath = (env: Record<string, string>) => {
   const pathSeparator = isWin ? ';' : ':'
   const homeDirFromEnv = env.HOME || env.Home || env.USERPROFILE || env.UserProfile || os.homedir()
-  const cherryBinPath = path.join(homeDirFromEnv, '.cherrystudio', 'bin')
+  const cherryBinPath = path.join(homeDirFromEnv, '.re_cherry', 'bin')
   const pathKeys = Object.keys(env).filter((key) => key.toLowerCase() === 'path')
   const canonicalPathKey = pathKeys[0] || (isWin ? 'Path' : 'PATH')
   const existingPathValue = env[canonicalPathKey] || env.PATH || ''

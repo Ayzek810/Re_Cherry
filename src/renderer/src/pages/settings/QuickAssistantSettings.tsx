@@ -13,12 +13,10 @@ import {
   setQuickAssistantPrompt,
   setReadClipboardAtStartup
 } from '@renderer/store/settings'
-import HomeWindow from '@renderer/windows/mini/home/HomeWindow'
-import { Input, Select, Switch, Tooltip } from 'antd'
+import { Select, Switch, Tooltip } from 'antd'
 import type { FC } from 'react'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import styled from 'styled-components'
 
 import {
   SettingContainer,
@@ -161,34 +159,69 @@ const QuickAssistantSettings: FC = () => {
           <SettingTitle>{t('settings.quickAssistant.prompt_label')}</SettingTitle>
           <SettingDivider />
           <SettingRow>
-            <Input.TextArea
-              rows={4}
+            <PromptTextarea
               value={quickAssistantPrompt}
-              onChange={(e) => dispatch(setQuickAssistantPrompt(e.target.value))}
+              onChange={(value) => dispatch(setQuickAssistantPrompt(value))}
               placeholder={t('settings.quickAssistant.prompt_placeholder')}
-              style={{ width: '100%' }}
             />
           </SettingRow>
           <SettingDescription>{t('settings.quickAssistant.prompt_description')}</SettingDescription>
         </SettingGroup>
       )}
-      {enableQuickAssistant && (
-        <AssistantContainer>
-          <HomeWindow draggable={false} />
-        </AssistantContainer>
-      )}
     </SettingContainer>
   )
 }
 
-const AssistantContainer = styled.div`
-  width: 100%;
-  height: 460px;
-  background-color: var(--color-background);
-  border-radius: 10px;
-  border: 0.5px solid var(--color-border);
-  margin: 0 auto;
-  overflow: hidden;
-`
+/**
+ * 提示词输入框：原生 textarea + 本地受控 + 防抖提交。
+ * 避免 antd TextArea 每键 dispatch 到全局 store 造成的重渲染/焦点怪癖。
+ */
+function PromptTextarea({
+  value,
+  onChange,
+  placeholder
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+}) {
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    setDraft(value)
+  }, [value])
+
+  // 防抖 300ms 提交，避免每键同步 dispatch 触发全页重渲染
+  useEffect(() => {
+    if (draft === value) return
+    const timer = window.setTimeout(() => onChange(draft), 300)
+    return () => window.clearTimeout(timer)
+  }, [draft, onChange, value])
+
+  return (
+    <textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      placeholder={placeholder}
+      rows={4}
+      spellCheck={false}
+      className="ant-input"
+      style={{
+        width: '100%',
+        minHeight: 88,
+        resize: 'vertical',
+        padding: '4px 11px',
+        fontSize: 14,
+        lineHeight: 1.5715,
+        color: 'var(--color-text-1)',
+        backgroundColor: 'var(--color-background-soft)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 6,
+        outline: 'none',
+        fontFamily: 'inherit'
+      }}
+    />
+  )
+}
 
 export default QuickAssistantSettings

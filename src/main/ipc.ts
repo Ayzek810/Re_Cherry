@@ -9,7 +9,6 @@ import { getIpCountry } from '@main/utils/ipService'
 import { autoDiscoverGitBash, getGitBashPathInfo, validateGitBashPath } from '@main/utils/process'
 import { handleZoomFactor } from '@main/utils/zoom'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
-import type { UpgradeChannel } from '@shared/config/constant'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { extractPdfText } from '@shared/utils/pdf'
@@ -21,7 +20,6 @@ import fontList from 'font-list'
 
 import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
-import AppUpdater from './services/AppUpdater'
 import BackupManager from './services/BackupManager'
 import { ConfigKeys, configManager } from './services/ConfigManager'
 import { ExportService } from './services/ExportService'
@@ -76,14 +74,9 @@ const exportService = new ExportService()
 const memoryService = MemoryService.getInstance()
 
 export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
-  const appUpdater = new AppUpdater()
   const notificationService = new NotificationService()
 
   // Register shutdown handlers
-  powerMonitorService.registerShutdownHandler(() => {
-    appUpdater.setAutoUpdate(false)
-  })
-
   powerMonitorService.registerShutdownHandler(() => {
     const mw = windowService.getMainWindow()
     if (mw && !mw.isDestroyed()) {
@@ -137,9 +130,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     return shell.openExternal(url)
   })
 
-  // Update
-  ipcMain.handle(IpcChannel.App_QuitAndInstall, () => appUpdater.quitAndInstall())
-
   // language
   ipcMain.handle(IpcChannel.App_SetLanguage, (_, language) => {
     configManager.setLanguage(language)
@@ -186,29 +176,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     configManager.setTrayOnClose(isActive)
   })
 
-  // auto update
-  ipcMain.handle(IpcChannel.App_SetAutoUpdate, (_, isActive: boolean) => {
-    appUpdater.setAutoUpdate(isActive)
-    configManager.setAutoUpdate(isActive)
-  })
-
-  ipcMain.handle(IpcChannel.App_SetTestPlan, async (_, isActive: boolean) => {
-    logger.info(`set test plan: ${isActive}`)
-    if (isActive !== configManager.getTestPlan()) {
-      appUpdater.cancelDownload()
-      configManager.setTestPlan(isActive)
-    }
-  })
-
-  ipcMain.handle(IpcChannel.App_SetTestChannel, async (_, channel: UpgradeChannel) => {
-    logger.info(`set test channel: ${channel}`)
-    if (channel !== configManager.getTestChannel()) {
-      appUpdater.cancelDownload()
-      configManager.setTestChannel(channel)
-    }
-  })
-
-  //only for mac
+  // only for mac
   if (isMac) {
     ipcMain.handle(IpcChannel.App_MacIsProcessTrusted, (): boolean => {
       return systemPreferences.isTrustedAccessibilityClient(false)
@@ -426,11 +394,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 
   // Reset all data (factory reset)
   ipcMain.handle(IpcChannel.App_ResetData, () => backupManager.resetData())
-
-  // check for update
-  ipcMain.handle(IpcChannel.App_CheckForUpdate, async () => {
-    return await appUpdater.checkForUpdates()
-  })
 
   // notification
   ipcMain.handle(IpcChannel.Notification_Send, async (_, notification: Notification) => {

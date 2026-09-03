@@ -18,7 +18,6 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { AppLogo, UserAvatar } from '@renderer/config/env'
 import type { MinAppRegion, MinAppType, Topic, WebSearchStatus } from '@renderer/types'
-import type { UpdateInfo } from 'builder-util-runtime'
 
 export interface ChatState {
   isMultiSelectMode: boolean
@@ -32,18 +31,6 @@ export interface ChatState {
 
 export interface WebSearchState {
   activeSearches: Record<string, WebSearchStatus>
-}
-
-export interface UpdateState {
-  info: UpdateInfo | null
-  checking: boolean
-  downloading: boolean
-  downloaded: boolean
-  downloadProgress: number
-  available: boolean
-  ignore: boolean
-  /** Whether the update check was manually triggered by user clicking the button */
-  manualCheck: boolean
 }
 
 export interface RuntimeState {
@@ -60,7 +47,6 @@ export interface RuntimeState {
   searching: boolean
   filesPath: string
   resourcesPath: string
-  update: UpdateState
   export: ExportState
   chat: ChatState
   websearch: WebSearchState
@@ -87,16 +73,6 @@ const initialState: RuntimeState = {
   searching: false,
   filesPath: '',
   resourcesPath: '',
-  update: {
-    info: null,
-    checking: false,
-    downloading: false,
-    downloaded: false,
-    downloadProgress: 0,
-    available: false,
-    ignore: false,
-    manualCheck: false
-  },
   export: {
     isExporting: false
   },
@@ -145,9 +121,6 @@ const runtimeSlice = createSlice({
     },
     setResourcesPath: (state, action: PayloadAction<string>) => {
       state.resourcesPath = action.payload
-    },
-    setUpdateState: (state, action: PayloadAction<Partial<UpdateState>>) => {
-      state.update = { ...state.update, ...action.payload }
     },
     setExportState: (state, action: PayloadAction<Partial<ExportState>>) => {
       state.export = { ...state.export, ...action.payload }
@@ -210,7 +183,6 @@ export const {
   setSearching,
   setFilesPath,
   setResourcesPath,
-  setUpdateState,
   setExportState,
   // Chat related actions
   toggleMultiSelectMode,

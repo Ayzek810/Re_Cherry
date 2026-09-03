@@ -170,7 +170,7 @@ describe('shell-env – Windows registry PATH', () => {
 
     const env = await refreshShellEnv()
 
-    expect(env.Path).toContain('.cherrystudio')
+    expect(env.Path).toContain('.re_cherry')
   })
 
   // -- does not spawn cmd.exe -----------------------------------------------

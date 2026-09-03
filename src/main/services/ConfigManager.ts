@@ -14,7 +14,6 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
-import type { UpgradeChannel } from '@shared/config/constant'
 import { defaultLanguage, ZOOM_SHORTCUTS } from '@shared/config/constant'
 import type { LanguageVarious, Shortcut } from '@types'
 import { ThemeMode } from '@types'
@@ -34,9 +33,6 @@ export enum ConfigKeys {
   Shortcuts = 'shortcuts',
   ClickTrayToShowQuickAssistant = 'clickTrayToShowQuickAssistant',
   EnableQuickAssistant = 'enableQuickAssistant',
-  AutoUpdate = 'autoUpdate',
-  TestPlan = 'testPlan',
-  TestChannel = 'testChannel',
   EnableDataCollection = 'enableDataCollection',
   DisableHardwareAcceleration = 'disableHardwareAcceleration',
   UseSystemTitleBar = 'useSystemTitleBar',
@@ -153,30 +149,6 @@ export class ConfigManager {
 
   setEnableQuickAssistant(value: boolean) {
     this.setAndNotify(ConfigKeys.EnableQuickAssistant, value)
-  }
-
-  getAutoUpdate(): boolean {
-    return this.get<boolean>(ConfigKeys.AutoUpdate, true)
-  }
-
-  setAutoUpdate(value: boolean) {
-    this.set(ConfigKeys.AutoUpdate, value)
-  }
-
-  getTestPlan(): boolean {
-    return this.get<boolean>(ConfigKeys.TestPlan, false)
-  }
-
-  setTestPlan(value: boolean) {
-    this.set(ConfigKeys.TestPlan, value)
-  }
-
-  getTestChannel(): UpgradeChannel {
-    return this.get<UpgradeChannel>(ConfigKeys.TestChannel)
-  }
-
-  setTestChannel(value: UpgradeChannel) {
-    this.set(ConfigKeys.TestChannel, value)
   }
 
   getEnableDataCollection(): boolean {

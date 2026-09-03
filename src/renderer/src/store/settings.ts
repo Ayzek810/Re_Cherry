@@ -339,7 +339,7 @@ export const initialState: SettingsState = {
   enableQuickAssistant: false,
   clickTrayToShowQuickAssistant: false,
   quickAssistantPrompt: '',
-  readClipboardAtStartup: true,
+  readClipboardAtStartup: false,
   multiModelMessageStyle: 'horizontal',
   notionDatabaseID: '',
   notionApiKey: '',

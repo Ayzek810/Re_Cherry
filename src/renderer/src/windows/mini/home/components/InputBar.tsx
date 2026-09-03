@@ -1,46 +1,41 @@
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
-import { useTimer } from '@renderer/hooks/useTimer'
 import type { Assistant } from '@renderer/types'
-import { Input as AntdInput } from 'antd'
-import type { InputRef } from 'rc-input/lib/interface'
 import React, { useRef } from 'react'
 import styled from 'styled-components'
 
 interface InputBarProps {
   text: string
   assistant: Assistant
-  referenceText: string
   placeholder: string
-  loading: boolean
   handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void
 }
 
+/**
+ * 快捷助手输入条。
+ * 用原生 input 而非 antd Input：避免 antd autoFocus/受控组件在弹窗内反复抢焦点的怪癖。
+ * 聚焦统一由 HomeWindow 通过 ref 主动控制（窗口显示 / 发送后），本组件不自动抢焦点。
+ */
 const InputBar = ({
   ref,
   text,
   assistant,
   placeholder,
-  loading,
   handleKeyDown,
   handleChange
 }: InputBarProps & { ref?: React.RefObject<HTMLDivElement | null> }) => {
-  const inputRef = useRef<InputRef>(null)
-  const { setTimeoutTimer } = useTimer()
-  if (!loading) {
-    setTimeoutTimer('focus', () => inputRef.current?.input?.focus(), 0)
-  }
+  const inputRef = useRef<HTMLInputElement>(null)
+
   return (
     <InputWrapper ref={ref}>
       {assistant.model && <ModelAvatar model={assistant.model} size={30} />}
       <Input
+        ref={inputRef}
         value={text}
         placeholder={placeholder}
-        variant="borderless"
-        autoFocus
         onKeyDown={handleKeyDown}
         onChange={handleChange}
-        ref={inputRef}
+        spellCheck={false}
       />
     </InputWrapper>
   )
@@ -53,11 +48,20 @@ const InputWrapper = styled.div`
   margin-top: 10px;
 `
 
-const Input = styled(AntdInput)`
+const Input = styled.input`
+  flex: 1;
+  min-width: 0;
   background: none;
   border: none;
+  outline: none;
   -webkit-app-region: none;
+  color: var(--color-text);
   font-size: 18px;
+  line-height: 24px;
+  padding: 4px 0;
+  &::placeholder {
+    color: var(--color-text-3);
+  }
 `
 
 export default InputBar
