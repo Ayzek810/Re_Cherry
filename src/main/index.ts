@@ -6,6 +6,7 @@ import './bootstrap'
 import '@main/config'
 
 import { loggerService } from '@logger'
+import { IpcChannel } from '@shared/IpcChannel'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { replaceDevtoolsFont } from '@main/utils/windowUtil'
 import { app, crashReporter } from 'electron'
@@ -19,7 +20,6 @@ import { analyticsService } from './services/AnalyticsService'
 import { appMenuService } from './services/AppMenuService'
 import { configManager } from './services/ConfigManager'
 import { nodeTraceService } from './services/NodeTraceService'
-import powerMonitorService from './services/PowerMonitorService'
 import {
   CHERRY_STUDIO_PROTOCOL,
   handleProtocolUrl,
@@ -161,7 +161,6 @@ if (!app.requestSingleInstanceLock()) {
     appMenuService?.setupApplicationMenu()
 
     nodeTraceService.init()
-    powerMonitorService.init()
     analyticsService.init()
 
     // Extract bundled rtk binary to ~/.re_cherry/bin/ on first run
@@ -228,6 +227,12 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => {
     app.isQuitting = true
+    // 通知渲染进程 flush 持久化状态（原系统关机 handler 的保存职责迁到这里；
+    // 窗口 close 时 WindowService 也会发一次，幂等）
+    const mainWindow = windowService.getMainWindow()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IpcChannel.App_SaveData)
+    }
   })
 
   app.on('will-quit', async () => {
@@ -236,6 +241,15 @@ if (!app.requestSingleInstanceLock()) {
       await analyticsService.destroy()
     } catch (error) {
       logger.warn('Error cleaning up services:', error as Error)
+    }
+
+    // 停止 dsh 内核：dispose 所有插件 fiber（SQLite 连接、事件监听等），
+    // 否则这些句柄拖住主进程，应用退不干净
+    try {
+      const { stopKernel } = await import('./kernel')
+      await stopKernel()
+    } catch (error) {
+      logger.warn('Error stopping dsh kernel:', error as Error)
     }
 
     // finish the logger

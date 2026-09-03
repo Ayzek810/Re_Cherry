@@ -30,7 +30,6 @@ import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
 import NotificationService from './services/NotificationService'
 import * as NutstoreService from './services/NutstoreService'
-import powerMonitorService from './services/PowerMonitorService'
 import { proxyManager } from './services/ProxyManager'
 import { searchService } from './services/SearchService'
 import { isSafeExternalUrl } from './services/security'
@@ -75,14 +74,6 @@ const memoryService = MemoryService.getInstance()
 
 export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   const notificationService = new NotificationService()
-
-  // Register shutdown handlers
-  powerMonitorService.registerShutdownHandler(() => {
-    const mw = windowService.getMainWindow()
-    if (mw && !mw.isDestroyed()) {
-      mw.webContents.send(IpcChannel.App_SaveData)
-    }
-  })
 
   const checkMainWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) {

@@ -19,6 +19,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 import { CherryCredentialProvider } from './credentials'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import {
+  clearLiveHandles,
   createTopic,
   deleteTopic,
   getTopic,
@@ -40,6 +41,33 @@ let kernelContext: Context | undefined
 /** 已启动的内核上下文；未启动或已销毁时为 undefined。 */
 export function getKernel(): Context | undefined {
   return kernelContext
+}
+
+/**
+ * 停止内核：逆序 dispose 注册表中所有插件 fiber，
+ * SQLite 持久化连接、事件监听等副作用随各自 disposer 清理。
+ * 应用退出（will-quit）时必须调用，否则主进程事件循环被拖住、进程退不干净。
+ */
+export async function stopKernel(): Promise<void> {
+  const ctx = kernelContext
+  if (ctx === undefined) return
+  kernelContext = undefined
+  clearLiveHandles()
+
+  const runtimes = [...ctx.registry.values()]
+  for (const runtime of runtimes.reverse()) {
+    for (const fiber of [...runtime.fibers]) {
+      try {
+        await fiber.dispose()
+      } catch (error) {
+        logger.warn(
+          'dsh kernel: fiber dispose failed during shutdown',
+          error instanceof Error ? error : new Error(String(error))
+        )
+      }
+    }
+  }
+  logger.info('dsh kernel stopped')
 }
 
 /**
@@ -361,9 +389,11 @@ function registerKernelIpc(): void {
     return { running: isTopicRunning(requireKernel(), id) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicEvents, (_event, id: string) => {
+  ipcMain.handle(IpcChannel.Dsh_TopicEvents, async (_event, id: string) => {
     const ctx = requireKernel()
-    void openTopic(ctx, id)
+    // 必须 await：重启后 agent 需从持久化异步 resume，
+    // 不同步等待则下方 sessionEvents 取不到 agent 而抛 "session is not loaded"
+    await openTopic(ctx, id)
     return { events: sessionEvents(ctx, id) }
   })
 

@@ -158,6 +158,11 @@ export async function sendMessage(ctx: Context, id: string, text: string): Promi
   agent.send(message, 'next-turn', true)
 }
 
+/** 内核停止时调用：清空 live handle 引用（agent 本体由注册表 fiber 销毁负责）。 */
+export function clearLiveHandles(): void {
+  liveHandles.clear()
+}
+
 /** 中止当前回合。 */
 export function stopTopic(ctx: Context, id: string): void {
   const agent = ctx.agents.get(SessionId(id))

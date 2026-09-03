@@ -7,7 +7,7 @@ import store from '@renderer/store'
 import { updateTopic, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
-import type { Assistant } from '@renderer/types'
+import type { Assistant, Model } from '@renderer/types'
 import {
   AssistantMessageStatus,
   type MainTextMessageBlock,
@@ -379,9 +379,17 @@ function projectEventsToMessages(
           blockIds.push(block.id)
         }
       }
+      // 回填生成该消息的模型身份（头像/显示名/重新生成都依赖 modelId/model）。
+      // source 类型上必填，但 SQLite 旧行或坏行可能缺失：缺了只退化为无头像，不让整个话题投影失败
+      const source = event.data.message.source
+      const modelFields: Partial<Message> =
+        source !== undefined && source.model !== undefined
+          ? { modelId: source.model, model: { id: source.model, provider: source.provider } as Model }
+          : {}
       messages.push(
         createKernelMessage(messageId, topicId, assistantId, 'assistant', blockIds, {
           askId: lastUserMessageId,
+          ...modelFields,
           status: 'success' as AssistantMessageStatus
         })
       )
