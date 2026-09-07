@@ -271,6 +271,82 @@ export function useMessageOperations(topic: Topic) {
   )
 
   /**
+   * 并行回答核心（v1 遗产"切换模型回答"的新形态）：
+   * 把当前会话按锚点问题 fork 成一个隐藏 parallel 子话题（branchKind='parallel'，
+   * 内核 seed 截至锚点轮之前），用所选模型在子会话里重新回答同一问题。
+   * 主会话日志分毫不动；子会话回答经家族投影并进主视图卡片组（useParallelAnswers）；
+   * 不切换视图、不进侧栏/分叉图/页码体系。同锚多模型 = 各自独立子会话（互不污染）。
+   * 返回 false = 锚点不可解析/内核 fork 失败（轮未结束等），调用方保守放弃。
+   */
+  const startParallelAnswer = useCallback(
+    async (anchorAssistantMessage: Message, newModel: Model, assistant: Assistant): Promise<boolean> => {
+      if (anchorAssistantMessage.role !== 'assistant' || !anchorAssistantMessage.askId) {
+        logger.warn('[startParallelAnswer] expects an anchored assistant message')
+        return false
+      }
+      const state = store.getState()
+      const anchor =
+        state.messages.entities[anchorAssistantMessage.askId] ??
+        selectMessagesForTopic(state, topic.id).find((m) => m.id === anchorAssistantMessage.askId)
+      if (!anchor || anchor.role !== 'user' || anchor.topicId !== topic.id) {
+        logger.warn('[startParallelAnswer] anchor question not in current topic, skip')
+        return false
+      }
+      const text = getMainTextContent(anchor)
+      if (text.trim().length === 0) {
+        logger.warn('[startParallelAnswer] anchor question has no text content, skip')
+        return false
+      }
+      // TODO(v0.3.0 工作模式)：工作模式 active（含工具上下文）时禁用此入口
+      const forked = await forkBranchToKernel(topic.id, anchor)
+      if (forked === null) return false
+
+      const childTopic: Topic = {
+        id: forked.id,
+        type: TopicType.Chat,
+        assistantId: assistant.id,
+        name: forked.name ?? topic.name,
+        createdAt: new Date(forked.createdAt ?? Date.now()).toISOString(),
+        updatedAt: new Date(forked.updatedAt ?? Date.now()).toISOString(),
+        messages: [],
+        parentTopicId: topic.id,
+        branchKind: 'parallel'
+      }
+      dispatch(addTopic({ assistantId: assistant.id, topic: childTopic }))
+
+      const { message: userMessage, blocks } = getUserMessage({ content: text, assistant, topic: childTopic })
+
+      // 直接发进子会话（不经 loadTopicMessagesThunk：避免把 currentTopicId 指到隐藏会话；
+      // 种子历史无需入 store——卡片组只消费子会话自有轮的回答）。
+      void dispatch(sendMessageThunk(userMessage, blocks ?? [], { ...assistant, model: newModel }, childTopic.id))
+      return true
+    },
+    [dispatch, topic]
+  )
+
+  /**
+   * "切换模型回答"按钮（MessageMenubar）的唯一入口：
+   * 走隐藏 parallel 子会话；锚点不可解析/内核 fork 失败时保守放弃（不回退旧的
+   * 同话题补答路径——那正是"并行回答污染上下文"的病灶）。@model 提及路径本轮不迁移。
+   */
+  const switchModelAnswer = useCallback(
+    async (message: Message, newModel: Model, assistant: Assistant) => {
+      if (message.role !== 'assistant') return
+      if (message.topicId !== topic.id) {
+        // 并行回答卡（属于隐藏 parallel 子会话）不允许再并行
+        logger.warn('[switchModelAnswer] foreign-topic card, skip')
+        return
+      }
+      await appendMessageTrace(message, newModel)
+      const ok = await startParallelAnswer(message, newModel, assistant)
+      if (!ok) {
+        logger.warn('[switchModelAnswer] parallel fork unavailable (open turn or unresolved anchor), give up')
+      }
+    },
+    [appendMessageTrace, startParallelAnswer, topic.id]
+  )
+
+  /**
    * Updates message blocks by comparing original and edited blocks.
    * Handles adding, updating, and removing blocks in a single operation.
    * @param messageId The ID of the message to update
@@ -436,6 +512,7 @@ export function useMessageOperations(topic: Topic) {
     regenerateAssistantMessage,
     resendUserMessageWithEdit,
     appendAssistantResponse,
+    switchModelAnswer,
     createNewContext,
     clearTopicMessages,
     pauseMessages,

@@ -12,6 +12,7 @@ import { CodeStyleProvider } from './context/CodeStyleProvider'
 import { NotificationProvider } from './context/NotificationProvider'
 import StyleSheetManager from './context/StyleSheetManager'
 import { ThemeProvider } from './context/ThemeProvider'
+import BootConfigSync from './hooks/useBootConfigSync'
 import Router from './Router'
 
 const logger = loggerService.withContext('App.tsx')
@@ -38,6 +39,7 @@ function App(): React.ReactElement {
               <NotificationProvider>
                 <CodeStyleProvider>
                   <PersistGate loading={null} persistor={persistor}>
+                    <BootConfigSync />
                     <TopViewContainer>
                       <Router />
                     </TopViewContainer>

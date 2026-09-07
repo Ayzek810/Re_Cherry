@@ -263,8 +263,8 @@ export type Topic = {
   isNameManuallyEdited?: boolean
   /** 分支血缘：有值 = 由内核 fork 创建的分支子话题（值为父话题 id）；侧栏/话题列表只显示根（无此字段）。 */
   parentTopicId?: string
-  /** 分支意图：regenerate = 对模型回复重新生成（应共享原用户节点、长新回复节点）；resend = 对用户消息重发/编辑重发（新开用户节点）。 */
-  branchKind?: 'resend' | 'regenerate'
+  /** 分支意图：regenerate = 对模型回复重新生成（应共享原用户节点、长新回复节点）；resend = 对用户消息重发/编辑重发（新开用户节点）；parallel = 切换模型回答的隐藏旁答子会话（旁答经家族投影并进主视图卡片组，不进侧栏/分叉图/页码）。 */
+  branchKind?: 'resend' | 'regenerate' | 'parallel'
 }
 
 export type User = {

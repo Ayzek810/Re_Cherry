@@ -260,6 +260,11 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
     const shared = parentChain ? Math.min(session.shared, parentChain.length) : 0
     const chain: CMPageUnit[] = []
     const isRegenerate = branchKinds[session.id] === 'regenerate'
+    // parallel（切换模型回答的隐藏旁答子会话）：不进页码体系——
+    // 其自有轮不注册 answersOf/questionsOf/owner，切页/页签箭头对旁答不可见。
+    // 链（chains）照常建：共享前缀引用祖先单元，旁答轮挂自己的 unit，
+    // 这样将来若有后代也不至于找父链失败。
+    const isParallel = branchKinds[session.id] === 'parallel'
 
     for (let index = 0; index < session.turns.length; index += 1) {
       if (index < shared && parentChain?.[index] !== undefined) {
@@ -268,30 +273,28 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
         continue
       }
       let ownerUser: string
-      if (
-        index === shared &&
-        isRegenerate &&
-        parentChain !== undefined &&
-        parentChain[index] !== undefined
-      ) {
+      if (index === shared && isRegenerate && parentChain !== undefined && parentChain[index] !== undefined) {
         // regenerate：提问并入祖先提问节点，回复挂在祖先提问下
         ownerUser = (parentChain[index] as CMPageUnit).userId
       } else {
         ownerUser = session.id + ':u:' + index
-        userOwnerOf.set(ownerUser, session.id)
+        if (!isParallel) userOwnerOf.set(ownerUser, session.id)
       }
       const replyIds: string[] = []
       const turnReplies = session.turns[index]?.replies ?? []
       turnReplies.forEach((_reply, replyIndex) => {
         const replyId = session.id + ':a:' + index + ':' + replyIndex
-        pushUnique(answersOf, ownerUser, replyId)
-        replyOwnerOf.set(replyId, { sessionId: session.id, turnIndex: index, replyIndex })
+        if (!isParallel) {
+          pushUnique(answersOf, ownerUser, replyId)
+          replyOwnerOf.set(replyId, { sessionId: session.id, turnIndex: index, replyIndex })
+        }
         replyIds.push(replyId)
       })
       const unit: CMPageUnit = { userId: ownerUser, replyIds }
       chain.push(unit)
       // 链边：前一 unit 的最后回复（无回复则用前一提问）→ 本提问；仅源是回复节点时构成"提问页"
-      if (index > 0) {
+      // （parallel 会话的自有轮不产生链边 = 不占任何提问页）
+      if (index > 0 && !isParallel) {
         const prev = chain[index - 1] as CMPageUnit
         if (prev.userId !== unit.userId) {
           const source = prev.replyIds.length > 0 ? (prev.replyIds[prev.replyIds.length - 1] as string) : prev.userId
@@ -314,4 +317,3 @@ export interface CMPagePosition {
   members: string[]
   currentIndex: number
 }
-

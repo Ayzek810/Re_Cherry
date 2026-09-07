@@ -5,9 +5,9 @@ import type { Topic } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import {
   buildPageFamily,
+  type CMFamily,
   type CMPageFamily,
-  type CMPagePosition,
-  type CMFamily
+  type CMPagePosition
 } from '@renderer/utils/conversationModel'
 import { loadConversationTree } from '@renderer/utils/conversationTreeCache'
 import { kernelRootTopicId, materializeKernelTopicRow, requestTopicSwitch } from '@renderer/utils/topicBranch'
@@ -57,14 +57,20 @@ const ResendPageBar: React.FC<{ topic: Topic; scopeMessage: Message }> = ({ topi
     return Number.isFinite(value) ? value : undefined
   }
 
+  // 并行回答卡（来自隐藏 parallel 子会话的消息）不属于当前会话页码体系：不标 <k/n>
+  if (scopeMessage.topicId !== topic.id) {
+    return null
+  }
+
   let position: CMPagePosition | null = null
   if (projection) {
     const { family, page } = projection
     const session = family.byId.get(topic.id)
     const userSeqs = session?.userSeqs ?? []
     const replySeqs = session?.replySeqs ?? []
-    const kindsOfTopic = store.getState().assistants.assistants
-      .find((a) => a.id === topic.assistantId)
+    const kindsOfTopic = store
+      .getState()
+      .assistants.assistants.find((a) => a.id === topic.assistantId)
       ?.topics.find((row) => row.id === topic.id)?.branchKind
 
     if (scopeMessage.role === 'assistant') {

@@ -36,17 +36,7 @@ import type { MenuProps } from 'antd'
 import { Dropdown, Popconfirm, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
-import {
-  AtSign,
-  Bug,
-  Check,
-  FilePenLine,
-  ListChecks,
-  Menu,
-  Save,
-  ThumbsUp,
-  Upload
-} from 'lucide-react'
+import { AtSign, Bug, Check, FilePenLine, ListChecks, Menu, Save, ThumbsUp, Upload } from 'lucide-react'
 import type { Dispatch, FC, ReactNode, SetStateAction } from 'react'
 import { Fragment, memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -122,7 +112,7 @@ const MessageMenubar: FC<Props> = (props) => {
   // remove confirm for regenerate; tooltip stays simple
   const [showDeleteTooltip, setShowDeleteTooltip] = useState(false)
   // const assistantModel = assistant?.model
-  const { deleteMessage, resendMessage, regenerateAssistantMessage, appendAssistantResponse, removeMessageBlock } =
+  const { deleteMessage, resendMessage, regenerateAssistantMessage, switchModelAnswer, removeMessageBlock } =
     useMessageOperations(topic)
 
   const { isBubbleStyle } = useMessageStyle()
@@ -411,14 +401,16 @@ const MessageMenubar: FC<Props> = (props) => {
     }
   }, [isAssistantMessage, message.askId, topic.id])
 
+  // 切换模型回答（v1 遗产按钮）：走隐藏 parallel 子会话（不污染主话题上下文），
+  // 旁答经 useParallelAnswers 投影并进本组卡片；工作模式 active 时入口隐藏（v0.3.0 实装）。
   const onMentionModel = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation()
       const selectedModel = await SelectChatModelPopup.show({ model, filter: mentionModelFilter })
       if (!selectedModel) return
-      void appendAssistantResponse(message, selectedModel, { ...assistant, model: selectedModel })
+      void switchModelAnswer(message, selectedModel, { ...assistant, model: selectedModel })
     },
-    [appendAssistantResponse, assistant, mentionModelFilter, message, model]
+    [switchModelAnswer, assistant, mentionModelFilter, message, model]
   )
 
   const onUseful = useCallback(

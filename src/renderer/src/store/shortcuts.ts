@@ -135,7 +135,7 @@ const initialState: ShortcutsState = {
   ]
 }
 
-const getSerializableShortcuts = (shortcuts: Shortcut[]) => {
+export const getSerializableShortcuts = (shortcuts: Shortcut[]) => {
   return shortcuts.map((shortcut) => ({
     key: shortcut.key,
     shortcut: [...shortcut.shortcut],

@@ -40,6 +40,7 @@ import MessageGroup from './MessageGroup'
 import NarrowLayout from './NarrowLayout'
 import Prompt from './Prompt'
 import { MessagesContainer, ScrollContainer } from './shared'
+import useParallelAnswers from './useParallelAnswers'
 
 interface MessagesProps {
   assistant: Assistant
@@ -51,7 +52,13 @@ interface MessagesProps {
 
 const logger = loggerService.withContext('Messages')
 
-const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic: _setActiveTopic, onComponentUpdate, onFirstUpdate }) => {
+const Messages: React.FC<MessagesProps> = ({
+  assistant,
+  topic,
+  setActiveTopic: _setActiveTopic,
+  onComponentUpdate,
+  onFirstUpdate
+}) => {
   const { containerRef: scrollContainerRef, handleScroll: handleScrollPosition } = useScrollPosition(
     `topic-${topic.id}`
   )
@@ -254,6 +261,9 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic: _
     requestAnimationFrame(() => onComponentUpdate?.())
   }, [onComponentUpdate])
 
+  // 并行回答（隐藏 parallel 子会话的旁答）：家族投影供给，仅作分组显示合并
+  const parallelAnswers = useParallelAnswers(topic)
+
   // NOTE: 因为displayMessages是倒序的，所以得到的groupedMessages每个group内部也是倒序的，需要再倒一遍
   const groupedMessages = useMemo(() => {
     const grouped = Object.entries(getGroupedMessages(displayMessages))
@@ -263,10 +273,19 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic: _
       })[]
     } = {}
     grouped.forEach(([key, group]) => {
-      newGrouped[key] = group.toReversed()
+      const reversed = group.toReversed()
+      // parallel 旁答并进对应问题的答案组（v1 多模型卡片）：追加在组尾（点选序）。
+      // 只影响显示合并——不进 displayMessages 平铺（锚点/上下文计数/加载窗口均不受影响）。
+      if (key.startsWith('assistant') && parallelAnswers.size > 0) {
+        const extra = parallelAnswers.get(key.slice('assistant'.length))
+        if (extra !== undefined && extra.length > 0) {
+          reversed.push(...extra.map((m) => ({ ...m, index: -1 })))
+        }
+      }
+      newGrouped[key] = reversed
     })
     return Object.entries(newGrouped)
-  }, [displayMessages])
+  }, [displayMessages, parallelAnswers])
 
   return (
     <MessagesContainer

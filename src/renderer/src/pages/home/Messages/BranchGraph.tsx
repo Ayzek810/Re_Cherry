@@ -3,9 +3,9 @@ import '@xyflow/react/dist/style.css'
 import { UserOutlined } from '@ant-design/icons'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { useConversationTree } from '@renderer/hooks/useConversationTree'
 import type { Model } from '@renderer/types'
 import { originOf } from '@renderer/utils/conversationModel'
-import { useConversationTree } from '@renderer/hooks/useConversationTree'
 import { type Edge, MarkerType, type Node } from '@xyflow/react'
 import {
   Controls,
@@ -315,6 +315,14 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
 
     // 父先于子（loadFamily 保留内核 BFS 顺序）：子会话解析共享/合并轮时父链已就绪
     for (const session of family.sessions) {
+      // parallel（隐藏旁答子会话）：分叉图不可见——不建节点/边；
+      // 链只保留共享前缀引用（假想后代解析血缘时不至于错乱）。
+      if (branchKinds?.[session.id] === 'parallel') {
+        const sharedParent = session.parentTopicId ? chains.get(session.parentTopicId) : undefined
+        const sharedPrefix = sharedParent ? Math.min(session.shared, sharedParent.length) : 0
+        chains.set(session.id, sharedParent ? sharedParent.slice(0, sharedPrefix) : [])
+        continue
+      }
       const parentChain = session.parentTopicId ? chains.get(session.parentTopicId) : undefined
       // 防御：共享段截到父链可引用的前缀（正常血缘下 shared ≤ 父轮数恒成立）
       const shared = parentChain ? Math.min(session.shared, parentChain.length) : 0
