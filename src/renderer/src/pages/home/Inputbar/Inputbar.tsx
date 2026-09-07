@@ -75,7 +75,6 @@ type ProviderActionHandlers = {
   resizeTextArea: () => void
   addNewTopic: () => void
   clearTopic: () => void
-  onNewContext: () => void
   onTextChange: (updater: string | ((prev: string) => string)) => void
   toggleExpanded: (nextState?: boolean) => void
 }
@@ -89,7 +88,6 @@ const Inputbar: FC<Props> = ({ assistant: initialAssistant, setActiveTopic, topi
     resizeTextArea: () => {},
     addNewTopic: () => {},
     clearTopic: () => {},
-    onNewContext: () => {},
     onTextChange: () => {},
     toggleExpanded: () => {}
   })
@@ -115,7 +113,6 @@ const Inputbar: FC<Props> = ({ assistant: initialAssistant, setActiveTopic, topi
         resizeTextArea: () => actionsRef.current.resizeTextArea(),
         addNewTopic: () => actionsRef.current.addNewTopic(),
         clearTopic: () => actionsRef.current.clearTopic(),
-        onNewContext: () => actionsRef.current.onNewContext(),
         onTextChange: (updater) => actionsRef.current.onTextChange(updater),
         toggleExpanded: (next) => actionsRef.current.toggleExpanded(next)
       }}>
@@ -310,14 +307,6 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
     focusTextarea()
   }, [focusTextarea, loading, onPause, topic])
 
-  const onNewContext = useCallback(() => {
-    if (loading) {
-      void onPause()
-      return
-    }
-    void EventEmitter.emit(EVENT_NAMES.NEW_CONTEXT)
-  }, [loading, onPause])
-
   const addNewTopic = useCallback(async () => {
     const newTopic = getDefaultTopic(assistant.id)
 
@@ -361,11 +350,10 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       resizeTextArea,
       addNewTopic,
       clearTopic,
-      onNewContext,
       onTextChange: setText,
       toggleExpanded: handleToggleExpanded
     }
-  }, [resizeTextArea, addNewTopic, clearTopic, onNewContext, setText, handleToggleExpanded, actionsRef])
+  }, [resizeTextArea, addNewTopic, clearTopic, setText, handleToggleExpanded, actionsRef])
 
   useShortcut(
     'new_topic',
@@ -462,7 +450,6 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
           estimateTokenCount={tokenCountProps.estimateTokenCount}
           inputTokenCount={tokenCountProps.inputTokenCount}
           contextCount={tokenCountProps.contextCount}
-          onClick={onNewContext}
         />
       )}
     </>

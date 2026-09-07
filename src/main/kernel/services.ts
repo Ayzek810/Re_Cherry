@@ -11,6 +11,7 @@ import { loggerService } from '@logger'
 import {
   createTopic,
   deleteTopic,
+  destroyTurns,
   forkTopic,
   getTopic,
   isTopicRunning,
@@ -47,6 +48,8 @@ export interface TopicTreeService {
   updateConfig: (id: string, patch: { reasoningEffort?: string }) => Promise<import('./topics').KernelTopic>
   open: (id: string) => Promise<import('@deepseek-ai/dsh-agent').Agent>
   delete: (id: string) => Promise<void>
+  /** 消息级删除引擎：锚点集合计算 + 物理截断/清盘 + 焦点推导，一次事务内核权威。 */
+  destroyTurns: (topicId: string, anchorUserSeqs: number[]) => Promise<import('./topics').DestroyTurnsResult>
   fork: (sourceTopicId: string, anchorUserMessageSeq: number) => Promise<import('./topics').KernelTopic>
   send: (id: string, text: string, reasoningEffort?: string) => Promise<void>
   stop: (id: string) => void
@@ -89,6 +92,7 @@ export function registerAppServiceSeams(ctx: Context): void {
     updateConfig: (id: string, patch: { reasoningEffort?: string }) => updateTopicConfig(id, patch),
     open: (id: string) => openTopic(ctx, id),
     delete: (id: string) => deleteTopic(ctx, id),
+    destroyTurns: (topicId: string, anchorUserSeqs: number[]) => destroyTurns(ctx, topicId, anchorUserSeqs),
     fork: (sourceTopicId: string, anchorUserMessageSeq: number) => forkTopic(ctx, sourceTopicId, anchorUserMessageSeq),
     send: (id: string, text: string, reasoningEffort?: string) => sendMessage(ctx, id, text, { reasoningEffort }),
     stop: (id: string) => stopTopic(ctx, id),

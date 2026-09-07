@@ -11,11 +11,10 @@ import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useTimer } from '@renderer/hooks/useTimer'
 import SelectionBox from '@renderer/pages/home/Messages/SelectionBox'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
-import { getContextCount, getGroupedMessages, getUserMessage } from '@renderer/services/MessagesService'
+import { getContextCount, getGroupedMessages } from '@renderer/services/MessagesService'
 import { estimateHistoryTokens } from '@renderer/services/TokenService'
 import store, { useAppDispatch } from '@renderer/store'
 import { messageBlocksSelectors, updateOneBlock } from '@renderer/store/messageBlock'
-import { newMessagesActions } from '@renderer/store/newMessage'
 import { updateMessageAndBlocksThunk } from '@renderer/store/thunk/messageThunk'
 import type { Assistant, Topic } from '@renderer/types'
 import type { MessageBlock } from '@renderer/types/newMessage'
@@ -65,14 +64,13 @@ const Messages: React.FC<MessagesProps> = ({
   const [displayMessages, setDisplayMessages] = useState<Message[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [isProcessingContext, setIsProcessingContext] = useState(false)
 
   useAssistant(assistant.id)
   const { showPrompt, messageNavigation } = useSettings()
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const messages = useTopicMessages(topic.id)
-  const { displayCount, clearTopicMessages, deleteMessage } = useMessageOperations(topic)
+  const { displayCount, clearTopicMessages } = useMessageOperations(topic)
   const { setTimeoutTimer } = useTimer()
 
   const { isMultiSelectMode, handleSelectMessage } = useChatContext(topic)
@@ -146,33 +144,6 @@ const Messages: React.FC<MessagesProps> = ({
           void window.api.file.saveImage(removeSpecialCharactersForFileName(topic.name), imageData)
         }
       }),
-      EventEmitter.on(EVENT_NAMES.NEW_CONTEXT, async () => {
-        if (isProcessingContext) return
-        setIsProcessingContext(true)
-
-        try {
-          const messages = messagesRef.current
-
-          if (messages.length === 0) {
-            return
-          }
-
-          const lastMessage = last(messages)
-
-          if (lastMessage?.type === 'clear') {
-            await deleteMessage(lastMessage.id)
-            scrollToBottom()
-            return
-          }
-
-          const { message: clearMessage } = getUserMessage({ assistant, topic, type: 'clear' })
-          dispatch(newMessagesActions.addMessage({ topicId: topic.id, message: clearMessage }))
-
-          scrollToBottom()
-        } finally {
-          setIsProcessingContext(false)
-        }
-      }),
       EventEmitter.on(
         EVENT_NAMES.EDIT_CODE_BLOCK,
         async (data: { msgBlockId: string; codeBlockId: string; newContent: string }) => {
@@ -213,7 +184,7 @@ const Messages: React.FC<MessagesProps> = ({
 
     return () => unsubscribes.forEach((unsub) => unsub())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistant, dispatch, scrollToBottom, topic, isProcessingContext])
+  }, [assistant, dispatch, scrollToBottom, topic])
 
   useEffect(() => {
     void runAsyncFunction(async () => {

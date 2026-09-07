@@ -9,7 +9,6 @@ import './thinkingTool'
 import './urlContextTool'
 import './clearTopicTool'
 import './toggleExpandTool'
-import './newContextTool'
 import './slashCommandsTool'
 
 // Export registry functions

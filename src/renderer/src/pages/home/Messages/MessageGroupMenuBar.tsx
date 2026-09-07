@@ -56,7 +56,10 @@ const MessageGroupMenuBar: FC<Props> = ({
         danger: true
       },
       okText: t('common.delete'),
-      onOk: () => deleteGroupMessages(askId)
+      onOk: () =>
+        deleteGroupMessages(askId).then((ok) => {
+          if (!ok) window.toast.error(t('message.delete.failed'))
+        })
     })
   }
 

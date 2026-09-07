@@ -1,16 +1,23 @@
 import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
-import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
-import { forkBranchToKernel } from '@renderer/services/kernelChat'
+import {
+  destroyTurnsInKernel,
+  forkBranchToKernel,
+  kernelAnchorOf,
+  loadKernelTopicMessages,
+  type DestroyTurnsResponse,
+  type KernelAnchor
+} from '@renderer/services/kernelChat'
 import { getUserMessage } from '@renderer/services/MessagesService'
 import { appendMessageTrace, pauseTrace, restartTrace } from '@renderer/services/SpanManagerService'
 import { estimateUserPromptUsage } from '@renderer/services/TokenService'
 import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer/store'
-import { addTopic } from '@renderer/store/assistants'
+import { addTopic, removeTopic, selectTopicsMap, updateTopicUpdatedAt } from '@renderer/store/assistants'
+import { upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
+import { TopicManager } from '@renderer/hooks/useTopic'
 import {
   appendAssistantResponseThunk,
-  clearTopicMessagesThunk,
   loadTopicMessagesThunk,
   regenerateAssistantResponseThunk,
   removeBlocksThunk,
@@ -25,7 +32,7 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { abortCompletion } from '@renderer/utils/abortController'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
-import { requestTopicSwitch } from '@renderer/utils/topicBranch'
+import { materializeKernelTopicRow, requestTopicSwitch } from '@renderer/utils/topicBranch'
 import { difference } from 'lodash'
 import { useCallback } from 'react'
 
@@ -48,6 +55,23 @@ export const selectNewDisplayCount = createSelector(
  * @param topic 当前主题对象。 / The current topic object.
  * @returns 包含消息操作函数的对象。 / An object containing message operation functions.
  */
+/**
+ * 单条消息 → 其“轮问题”锚点（v0.2.3 删除接线）：user 取自身 seq；
+ * assistant 归一到其 askId 问题（store 查问后解析）—— 页内组落本页轮，
+ * 并行卡组（copyQuestionId）天然落旁答子会话，引擎再按血统上溯定真正创建会话。
+ */
+function anchorOfMessage(state: RootState, message: Message, fallbackTopicId: string): KernelAnchor | undefined {
+  const anchor = kernelAnchorOf(message.topicId ?? fallbackTopicId, message)
+  if (anchor === undefined) return undefined
+  if (message.role === 'user') return anchor
+  if (message.role === 'assistant' && message.askId !== undefined) {
+    const question = state.messages.entities[message.askId] as Message | undefined
+    if (question === undefined) return undefined
+    return kernelAnchorOf(question.topicId ?? anchor.sessionId, question)
+  }
+  return undefined
+}
+
 export function useMessageOperations(topic: Topic) {
   const dispatch = useAppDispatch()
 
@@ -104,19 +128,156 @@ export function useMessageOperations(topic: Topic) {
   )
 
   // ---------------------------------------------------------------------------
-  // [恢复标记] 消息级删除已临时禁用（按钮保留为 no-op，避免 UI 假删）。
-  // 原实现（truncateDelete/deleteMessage/deleteGroupMessages 走内核截断/焦点回跳）
-  // 已在 kernel/topics.ts 的 MARKER 处拆除。装回时在此恢复原逻辑并在
-  // services.ts(ctx.topicTree.truncateAtTurn)、kernel/index.ts(Dsh_TopicTruncate)、
-  // preload 与 IpcChannel 复原。
+  // 消息级删除（v0.2.3 destroyTurns 引擎接线）：内核权威。
+  // 渲染层只负责把消息归一成“轮问题锚点”后交给内核；受影响集合、物理
+  // 截断/清盘、焦点推导全在内核一次算完，落地见 applyDestroyTurnsResult。
   // ---------------------------------------------------------------------------
-  const deleteMessage = useCallback(async (_id: string, _traceId?: string, _modelName?: string) => {
-    logger.warn('[deleteMessage] message deletion is disabled (no-op)')
-  }, [])
 
-  const deleteGroupMessages = useCallback(async (_askId: string) => {
-    logger.warn('[deleteGroupMessages] message deletion is disabled (no-op)')
-  }, [])
+  /** 落地内核删除结果：purged 收拾本地行/块；truncated 重开+重投影+updatedAt 提升（驱动家族签名刷新）；当前页被整支清盘时按焦点导航。 */
+  const applyDestroyTurnsResult = useCallback(
+    async (result: DestroyTurnsResponse): Promise<void> => {
+      // 1) 清盘话题：内核已物理删除，本地只收拾 —— 清消息/块/文件引用 + 去 topic 行
+      for (const purgedId of result.purgedTopics) {
+        try {
+          await TopicManager.clearTopicMessages(purgedId)
+        } catch (error) {
+          logger.warn(
+            '[applyDestroyTurns] failed to clear local messages for ' + purgedId,
+            error instanceof Error ? error : new Error(String(error))
+          )
+        }
+        const stateNow = store.getState()
+        const row = selectTopicsMap(stateNow).get(purgedId)
+        if (row === undefined) continue
+        const owner = stateNow.assistants.assistants.find((assistant) =>
+          (assistant.topics ?? []).some((candidate) => candidate.id === purgedId)
+        )
+        if (owner !== undefined) dispatch(removeTopic({ assistantId: owner.id, topic: row }))
+      }
+
+      // 2) 截断存活话题：重开内核会话（从截断日志 resume）+ 整表重投影 + 行 updatedAt 提升
+      for (const item of result.truncated) {
+        try {
+          await window.api.dshTopicOpen(item.id)
+        } catch (error) {
+          logger.warn(
+            '[applyDestroyTurns] failed to reopen ' + item.id,
+            error instanceof Error ? error : new Error(String(error))
+          )
+        }
+        const kernelData = await loadKernelTopicMessages(item.id)
+        if (kernelData !== null) {
+          if (kernelData.blocks.length > 0) dispatch(upsertManyBlocks(kernelData.blocks))
+          dispatch(newMessagesActions.messagesReceived({ topicId: item.id, messages: kernelData.messages }))
+        }
+        dispatch(updateTopicUpdatedAt({ topicId: item.id }))
+      }
+
+      // 3) 焦点：当前页被整支清盘时按内核给的落点导航
+      if (result.focusTopicId !== null && result.purgedTopics.includes(topic.id)) {
+        const focusId = result.focusTopicId
+        const stateNow = store.getState()
+        const mapNow = selectTopicsMap(stateNow)
+        let row = mapNow.get(focusId)
+        if (row === undefined) {
+          const materialized = await materializeKernelTopicRow({
+            sessionId: focusId,
+            assistantId: topic.assistantId,
+            allTopics: [...mapNow.values()]
+          })
+          if (materialized !== null) {
+            row = materialized.row
+            if (materialized.created) dispatch(addTopic({ assistantId: topic.assistantId, topic: row }))
+          }
+        }
+        if (row !== undefined && row.branchKind === 'parallel') {
+          // 旁答隐藏会话：不整页导航 —— 焦点回其父页（卡组仍在父页，删卡由签名刷新自然完成）
+          try {
+            const { topic: kernelTopic } = (await window.api.dshTopicGet(focusId)) as {
+              topic?: { parentTopicId?: string }
+            }
+            const parentId = kernelTopic?.parentTopicId
+            if (parentId !== undefined && parentId.length > 0) {
+              let target = mapNow.get(parentId)
+              if (target === undefined) {
+                const materializedParent = await materializeKernelTopicRow({
+                  sessionId: parentId,
+                  assistantId: topic.assistantId,
+                  allTopics: [...mapNow.values()]
+                })
+                if (materializedParent !== null) {
+                  target = materializedParent.row
+                  if (materializedParent.created) {
+                    dispatch(addTopic({ assistantId: topic.assistantId, topic: target }))
+                  }
+                }
+              }
+              if (target !== undefined) requestTopicSwitch(target)
+            }
+          } catch {
+            // 取父失败：留在当前页（空态兜底）
+          }
+        } else if (row !== undefined) {
+          requestTopicSwitch(row)
+        }
+      }
+    },
+    [dispatch, topic.id, topic.assistantId]
+  )
+
+  /** 按消息 id 批量删除（多选入口）：归一锚点后一次交给内核；跨会话多选不支持。 */
+  const deleteMessagesByIds = useCallback(
+    async (messageIds: string[]): Promise<boolean> => {
+      const state = store.getState()
+      const bySession = new Map<string, Set<number>>()
+      for (const messageId of messageIds) {
+        const message = state.messages.entities[messageId] as Message | undefined
+        if (message === undefined) continue
+        const anchor = anchorOfMessage(state, message, topic.id)
+        if (anchor === undefined) {
+          logger.warn('[deleteMessages] no kernel anchor for ' + messageId)
+          continue
+        }
+        const seqs = bySession.get(anchor.sessionId)
+        if (seqs !== undefined) seqs.add(anchor.seq)
+        else bySession.set(anchor.sessionId, new Set([anchor.seq]))
+      }
+      if (bySession.size === 0) {
+        logger.warn('[deleteMessages] no resolvable anchors')
+        return false
+      }
+      if (bySession.size > 1) {
+        logger.warn('[deleteMessages] multi-select across sessions is not supported')
+        return false
+      }
+      const entry = [...bySession.entries()][0] as [string, Set<number>]
+      try {
+        const result = await destroyTurnsInKernel(entry[0], [...entry[1]])
+        await applyDestroyTurnsResult(result)
+        return true
+      } catch (error) {
+        logger.error(
+          '[deleteMessages] destroyTurns failed',
+          error instanceof Error ? error : new Error(String(error))
+        )
+        return false
+      }
+    },
+    [applyDestroyTurnsResult, topic.id]
+  )
+
+  /** 删除一条消息所在轮：该轮起后缀物理删除，血统上分叉子树整支清盘（焦点见内核结果）。 */
+  const deleteMessage = useCallback(
+    async (id: string, _traceId?: string, _modelName?: string): Promise<boolean> =>
+      deleteMessagesByIds([id]),
+    [deleteMessagesByIds]
+  )
+
+  /** 删除一组问答（组键即问题消息 id；语义同 deleteMessage —— 该轮起后缀删除）。 */
+  const deleteGroupMessages = useCallback(
+    async (askId: string): Promise<boolean> => deleteMessagesByIds([askId]),
+    [deleteMessagesByIds]
+  )
 
   const editMessage = useCallback(
     async (messageId: string, updates: Partial<Omit<Message, 'id' | 'topicId' | 'blocks'>>) => {
@@ -162,23 +323,37 @@ export function useMessageOperations(topic: Topic) {
   )
 
   /**
-   * 清除当前或指定主题的所有消息。 / Clears all messages for the current or specified topic.
-   * Dispatches clearTopicMessagesThunk.
+   * 清空话题 = 物理删除该页全部可见轮（v0.2.3 语义归一）：锚点取页内第一个可解析
+   * 用户轮；跨血统的牵连（祖先截断/子树清盘/焦点）全部由 destroyTurns 单次事务给出。
+   * 本地Thunk 版只清 Redux、内核不落盘，换页即复活，已废弃。
    */
   const clearTopicMessages = useCallback(
-    async (_topicId?: string) => {
+    async (_topicId?: string): Promise<boolean> => {
       const topicIdToClear = _topicId || topic.id
-      await dispatch(clearTopicMessagesThunk(topicIdToClear))
+      const state = store.getState()
+      const orderedIds = state.messages.messageIdsByTopic[topicIdToClear] ?? []
+      for (const messageId of orderedIds) {
+        const message = state.messages.entities[messageId] as Message | undefined
+        if (message === undefined) continue
+        const anchor = anchorOfMessage(state, message, topicIdToClear)
+        if (anchor === undefined) continue
+        try {
+          const result = await destroyTurnsInKernel(anchor.sessionId, [anchor.seq])
+          await applyDestroyTurnsResult(result)
+          return true
+        } catch (error) {
+          logger.error(
+            '[clearTopicMessages] destroyTurns failed for ' + topicIdToClear,
+            error instanceof Error ? error : new Error(String(error))
+          )
+          return false
+        }
+      }
+      logger.warn('[clearTopicMessages] no resolvable anchor in ' + topicIdToClear + ' (empty or pre-receipt)')
+      return false
     },
-    [dispatch, topic.id]
+    [applyDestroyTurnsResult, topic.id]
   )
-
-  /**
-   * 发出事件以表示创建新上下文（清空消息 UI）。 / Emits an event to signal creating a new context (clearing messages UI).
-   */
-  const createNewContext = useCallback(async () => {
-    void EventEmitter.emit(EVENT_NAMES.NEW_CONTEXT)
-  }, [])
 
   const displayCount = useAppSelector(selectNewDisplayCount)
 
@@ -507,13 +682,13 @@ export function useMessageOperations(topic: Topic) {
     displayCount,
     deleteMessage,
     deleteGroupMessages,
+    deleteMessagesByIds,
     editMessage,
     resendMessage,
     regenerateAssistantMessage,
     resendUserMessageWithEdit,
     appendAssistantResponse,
     switchModelAnswer,
-    createNewContext,
     clearTopicMessages,
     pauseMessages,
     resumeMessage,

@@ -120,6 +120,21 @@ export async function forkBranchToKernel(
   }
 }
 
+/** destroyTurns 结果的渲染侧类型（与内核 topics.ts DestroyTurnsResult 同构）。 */
+export interface DestroyTurnsResponse {
+  purgedTopics: string[]
+  truncated: { id: string; fromSeq: number }[]
+  focusTopicId: string | null
+}
+
+/** 消息级删除：受影响集合/物理/焦点全部由内核一次事务算完（kernel/topics.ts destroyTurns）。 */
+export async function destroyTurnsInKernel(
+  topicId: string,
+  anchorUserSeqs: number[]
+): Promise<DestroyTurnsResponse> {
+  return (await window.api.dshTopicDestroyTurns(topicId, anchorUserSeqs)) as DestroyTurnsResponse
+}
+
 let bridgeInitialized = false
 
 /** 应用启动时调用一次：订阅内核事件流。 */

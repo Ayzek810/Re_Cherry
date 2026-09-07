@@ -61,6 +61,8 @@ const api = {
   dshTopicCreate: (input: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_TopicCreate, input),
   dshTopicRename: (id: string, name: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRename, id, name),
   dshTopicDelete: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicDelete, id),
+  dshTopicDestroyTurns: (id: string, anchorUserSeqs: number[]) =>
+    ipcRenderer.invoke(IpcChannel.Dsh_TopicDestroyTurns, id, anchorUserSeqs),
   dshTopicOpen: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicOpen, id),
   dshTopicFork: (topicId: string, anchorUserMessageSeq: number) =>
     ipcRenderer.invoke(IpcChannel.Dsh_TopicFork, topicId, anchorUserMessageSeq),

@@ -396,6 +396,10 @@ function registerKernelIpc(): void {
     return { ok: true }
   })
 
+  ipcMain.handle(IpcChannel.Dsh_TopicDestroyTurns, async (_event, id: string, anchorUserSeqs: number[]) => {
+    return await topicTree(requireKernel()).destroyTurns(id, anchorUserSeqs)
+  })
+
   ipcMain.handle(IpcChannel.Dsh_TopicOpen, async (_event, id: string) => {
     await topicTree(requireKernel()).open(id)
     return { ok: true }

@@ -84,7 +84,6 @@ export interface InputbarToolsDispatch {
   resizeTextArea: () => void
   addNewTopic: () => void
   clearTopic: () => void
-  onNewContext: () => void
   toggleExpanded: (nextState?: boolean) => void
 
   /** Text manipulation (avoids putting text state in Context) */
@@ -154,7 +153,6 @@ interface InputbarToolsProviderProps {
     resizeTextArea: () => void
     addNewTopic: () => void
     clearTopic: () => void
-    onNewContext: () => void
     onTextChange: (updater: string | ((prev: string) => string)) => void
     toggleExpanded: (nextState?: boolean) => void
   }
@@ -235,7 +233,6 @@ export const InputbarToolsProvider: React.FC<InputbarToolsProviderProps> = ({ ch
       resizeTextArea: () => actionsRef.current.resizeTextArea(),
       addNewTopic: () => actionsRef.current.addNewTopic(),
       clearTopic: () => actionsRef.current.clearTopic(),
-      onNewContext: () => actionsRef.current.onNewContext(),
       onTextChange: (updater: string | ((prev: string) => string)) => actionsRef.current.onTextChange(updater),
       toggleExpanded: (nextState?: boolean) => actionsRef.current.toggleExpanded(nextState)
     }),

@@ -698,7 +698,8 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
     )
 
     const handleDeleteMessage = async () => {
-      await deleteMessage(message.id, message.traceId, message.model?.name)
+      const ok = await deleteMessage(message.id, message.traceId, message.model?.name)
+      if (!ok) window.toast.error(t('message.delete.failed'))
     }
 
     if (confirmDeleteMessage) {

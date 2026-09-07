@@ -16,7 +16,7 @@ export const useChatContext = (activeTopic: Topic) => {
   const { t } = useTranslation()
   const dispatch = useDispatch()
   const store = useStore<RootState>()
-  const { deleteMessage } = useMessageOperations(activeTopic)
+  const { deleteMessagesByIds } = useMessageOperations(activeTopic)
 
   const [messageRefs, setMessageRefs] = useState<Map<string, HTMLElement>>(new Map())
 
@@ -114,7 +114,8 @@ export const useChatContext = (activeTopic: Topic) => {
             centered: true,
             onOk: async () => {
               try {
-                await Promise.all(messageIds.map((messageId) => deleteMessage(messageId)))
+                const ok = await deleteMessagesByIds(messageIds)
+                if (!ok) throw new Error('destroyTurns rejected (running/cross-branch/stale)')
                 window.toast.success(t('message.delete.success'))
                 handleToggleMultiSelectMode(false)
               } catch (error) {
@@ -176,7 +177,7 @@ export const useChatContext = (activeTopic: Topic) => {
           break
       }
     },
-    [t, store, activeTopic.id, deleteMessage, handleToggleMultiSelectMode]
+    [t, store, activeTopic.id, deleteMessagesByIds, handleToggleMultiSelectMode]
   )
 
   return {
