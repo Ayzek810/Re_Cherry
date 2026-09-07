@@ -10,7 +10,6 @@ import { useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useTimer } from '@renderer/hooks/useTimer'
 import SelectionBox from '@renderer/pages/home/Messages/SelectionBox'
-import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { getContextCount, getGroupedMessages, getUserMessage } from '@renderer/services/MessagesService'
 import { estimateHistoryTokens } from '@renderer/services/TokenService'
@@ -52,7 +51,7 @@ interface MessagesProps {
 
 const logger = loggerService.withContext('Messages')
 
-const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, onComponentUpdate, onFirstUpdate }) => {
+const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic: _setActiveTopic, onComponentUpdate, onFirstUpdate }) => {
   const { containerRef: scrollContainerRef, handleScroll: handleScrollPosition } = useScrollPosition(
     `topic-${topic.id}`
   )
@@ -61,12 +60,12 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isProcessingContext, setIsProcessingContext] = useState(false)
 
-  const { addTopic } = useAssistant(assistant.id)
+  useAssistant(assistant.id)
   const { showPrompt, messageNavigation } = useSettings()
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const messages = useTopicMessages(topic.id)
-  const { displayCount, clearTopicMessages, deleteMessage, createTopicBranch } = useMessageOperations(topic)
+  const { displayCount, clearTopicMessages, deleteMessage } = useMessageOperations(topic)
   const { setTimeoutTimer } = useTimer()
 
   const { isMultiSelectMode, handleSelectMessage } = useChatContext(topic)
@@ -165,34 +164,6 @@ const Messages: React.FC<MessagesProps> = ({ assistant, topic, setActiveTopic, o
           scrollToBottom()
         } finally {
           setIsProcessingContext(false)
-        }
-      }),
-      EventEmitter.on(EVENT_NAMES.NEW_BRANCH, async (index: number) => {
-        const newTopic = getDefaultTopic(assistant.id)
-        newTopic.name = topic.name
-        const currentMessages = messagesRef.current
-
-        if (index < 0 || index > currentMessages.length) {
-          logger.error(`[NEW_BRANCH] Invalid branch index: ${index}`)
-          return
-        }
-
-        // 1. Add the new topic to Redux store FIRST
-        addTopic(newTopic)
-
-        // 2. Call the thunk to clone messages and update DB
-        const success = await createTopicBranch(topic.id, currentMessages.length - index, newTopic)
-
-        if (success) {
-          // 3. Set the new topic as active
-          setActiveTopic(newTopic)
-          // 4. 话题命名由 dsh 内核自动完成（session-title），此处不再触发
-        } else {
-          // Optional: Handle cloning failure (e.g., show an error message)
-          // You might want to remove the added topic if cloning fails
-          // removeTopic(newTopic.id); // Assuming you have a removeTopic function
-          logger.error(`[NEW_BRANCH] Failed to create topic branch for topic ${newTopic.id}`)
-          window.toast.error(t('message.branch.error')) // Example error message
         }
       }),
       EventEmitter.on(

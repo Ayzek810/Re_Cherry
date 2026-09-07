@@ -72,6 +72,12 @@ export default defineConfig({
     }
   },
   renderer: {
+    // 5173 在本机落在 Windows Hyper-V 保留端口段(5141-5240)内，绑定报 EACCES；
+    // dev server 改到保留段之外的固定端口（仅开发环境生效，生产构建不使用 server 配置）。
+    server: {
+      port: 5270,
+      strictPort: true
+    },
     plugins: [
       (async () => (await import('@tailwindcss/vite')).default())(),
       react({

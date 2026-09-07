@@ -6,12 +6,13 @@ import i18n from '@renderer/i18n'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { getAssistantMessage, getUserMessage } from '@renderer/services/MessagesService'
 import store, { useAppSelector } from '@renderer/store'
-import { removeManyBlocks, updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
+import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
 import type { Assistant, Topic } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { AssistantMessageStatus, MessageBlockStatus } from '@renderer/types/newMessage'
-import { createMainTextBlock } from '@renderer/utils/messageUtils/create'
+import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
+import { kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { replacePromptVariables } from '@renderer/utils/prompt'
 import { defaultLanguage } from '@shared/config/constant'
@@ -36,7 +37,8 @@ const logger = loggerService.withContext('HomeWindow')
 const MINI_ASSISTANT_ID = 'quick-assistant'
 
 const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
-  const { language, readClipboardAtStartup, quickAssistantPrompt, windowStyle } = useSettings()
+  const { language, readClipboardAtStartup, quickAssistantPrompt, quickAssistantReasoningEffort, windowStyle } =
+    useSettings()
   const { theme } = useTheme()
   const { t } = useTranslation()
   const { quickAssistantModel } = useAppSelector((state) => state.llm)
@@ -307,13 +309,59 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { content: streamedText } }))
         }
 
+        // 思考（reasoning）流：懒建思考块并合入消息块列表，结束后置 SUCCESS
+        let thinkingText = ''
+        let thinkingBlockId: string | undefined
+        let thinkingRafId = 0
+        const flushThinking = () => {
+          if (thinkingBlockId !== undefined) {
+            store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { content: thinkingText } }))
+          }
+        }
+        const ensureThinkingBlock = () => {
+          if (thinkingBlockId !== undefined) return thinkingBlockId
+          const block = createThinkingBlock(assistantMessage.id, '', { status: MessageBlockStatus.STREAMING })
+          thinkingBlockId = block.id
+          store.dispatch(upsertManyBlocks([block]))
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId: assistantMessage.id,
+              updates: { blocks: [block.id, replyBlock.id] }
+            })
+          )
+          return block.id
+        }
+        const finalizeThinking = () => {
+          if (thinkingRafId !== 0) {
+            cancelAnimationFrame(thinkingRafId)
+            thinkingRafId = 0
+          }
+          if (thinkingBlockId !== undefined) {
+            flushThinking()
+            store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
+          }
+        }
+        const cancelThinking = () => {
+          if (thinkingRafId !== 0) {
+            cancelAnimationFrame(thinkingRafId)
+            thinkingRafId = 0
+          }
+          if (thinkingBlockId !== undefined) {
+            store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
+          }
+        }
+
+        const reasoningEffort = kernelReasoningLevelFor(model, quickAssistantReasoningEffort)
+
         await window.api.dshStreamComplete(
           {
             requestId: assistantMessage.id,
             provider: model.provider,
             model: model.id,
             system: system || undefined,
-            messages: context
+            messages: context,
+            reasoningEffort
           },
           (data) => {
             if (cancelledRef.current) return
@@ -326,12 +374,22 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
                   flushText()
                 })
               }
+            } else if (event.type === 'reasoning-delta' && event.text !== undefined) {
+              ensureThinkingBlock()
+              thinkingText += event.text
+              if (thinkingRafId === 0) {
+                thinkingRafId = requestAnimationFrame(() => {
+                  thinkingRafId = 0
+                  flushThinking()
+                })
+              }
             } else if (event.type === 'done') {
               if (rafId !== 0) {
                 cancelAnimationFrame(rafId)
                 rafId = 0
               }
               flushText()
+              finalizeThinking()
               store.dispatch(
                 updateOneBlock({
                   id: replyBlock.id,
@@ -353,6 +411,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
                 cancelAnimationFrame(rafId)
                 rafId = 0
               }
+              cancelThinking()
               store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { status: MessageBlockStatus.ERROR } }))
               store.dispatch(
                 newMessagesActions.updateMessage({
@@ -376,35 +435,50 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         logger.error('Quick assistant error:', err as Error)
       }
     },
-    [userContent, currentAssistant]
+    [userContent, currentAssistant, quickAssistantReasoningEffort]
   )
 
   const handlePause = useCallback(() => {
-    if (currentAskId.current) {
-      // 丢弃本次流式结果并收尾 UI
-      cancelledRef.current = true
-      const topicId = currentTopic.current?.id
-      if (topicId) {
-        const state = store.getState()
-        const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
-        const pending = messageIds
-          .map((id) => state.messages.entities[id])
-          .find((m) => m && m.role === 'assistant' && m.id === currentAskId.current)
-        if (pending) {
-          store.dispatch(removeManyBlocks(pending.blocks ?? []))
-          store.dispatch(
-            newMessagesActions.updateMessage({
-              topicId,
-              messageId: pending.id,
-              updates: { blocks: [], status: AssistantMessageStatus.PAUSED }
-            })
-          )
+    cancelledRef.current = true
+    const requestUser = currentAskId.current
+    const topicId = currentTopic.current?.id
+    if (topicId && requestUser) {
+      const state = store.getState()
+      const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
+      const pending = messageIds
+        .map((id) => state.messages.entities[id])
+        .find(
+          (m) =>
+            m !== undefined &&
+            m.role === 'assistant' &&
+            (m.askId === requestUser || m.id === requestUser)
+        )
+      if (pending) {
+        // 保留内容，仅把流式中的块与消息置为 PAUSED，停掉“该条消息下”的生成中动画
+        for (const blockId of pending.blocks ?? []) {
+          const block = state.messageBlocks.entities[blockId]
+          if (
+            block !== undefined &&
+            (block.status === MessageBlockStatus.STREAMING ||
+              block.status === MessageBlockStatus.PENDING ||
+              block.status === MessageBlockStatus.PROCESSING)
+          ) {
+            store.dispatch(updateOneBlock({ id: blockId, changes: { status: MessageBlockStatus.PAUSED } }))
+          }
         }
+        store.dispatch(
+          newMessagesActions.updateMessage({
+            topicId,
+            messageId: pending.id,
+            updates: { status: AssistantMessageStatus.PAUSED }
+          })
+        )
       }
-      setIsLoading(false)
-      setIsOutputted(true)
-      currentAskId.current = ''
     }
+    // 无条件收敛 Footer/聊天区加载动画
+    setIsLoading(false)
+    setIsOutputted(true)
+    currentAskId.current = ''
   }, [])
 
   const handleEsc = useCallback(() => {

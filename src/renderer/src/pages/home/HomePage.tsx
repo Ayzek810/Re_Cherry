@@ -7,6 +7,7 @@ import { useActiveTopic } from '@renderer/hooks/useTopic'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import NavigationService from '@renderer/services/NavigationService'
 import { newMessagesActions } from '@renderer/store/newMessage'
+import { TOPIC_SWITCH_REQUEST, listRootTopics } from '@renderer/utils/topicBranch'
 import type { Assistant, Topic } from '@renderer/types'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
@@ -81,7 +82,8 @@ const HomePage: FC = () => {
       startTransition(() => {
         _setActiveAssistant(newAssistant)
         // 同步更新 active topic，避免不必要的重新渲染
-        const newTopic = newAssistant.topics[0]
+        const rootTopics = listRootTopics(newAssistant.topics ?? [])
+        const newTopic = rootTopics[0] ?? newAssistant.topics?.[0]
         _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
       })
     },
@@ -101,6 +103,18 @@ const HomePage: FC = () => {
   useEffect(() => {
     NavigationService.setNavigate(navigate)
   }, [navigate])
+
+  // 分支图/分支创建请求切话题：任何组件（含消息菜单深层）都能触发
+  useEffect(() => {
+    const onTopicSwitchRequest = (event: Event) => {
+      const topic = (event as CustomEvent).detail as Topic | undefined
+      if (topic && topic.id && topic.id !== activeTopic?.id) {
+        setActiveTopic(topic)
+      }
+    }
+    window.addEventListener(TOPIC_SWITCH_REQUEST, onTopicSwitchRequest)
+    return () => window.removeEventListener(TOPIC_SWITCH_REQUEST, onTopicSwitchRequest)
+  }, [activeTopic?.id, setActiveTopic])
 
   useEffect(() => {
     state?.assistant && setActiveAssistant(state?.assistant)

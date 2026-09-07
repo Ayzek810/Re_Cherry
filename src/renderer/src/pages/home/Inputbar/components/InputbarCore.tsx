@@ -535,16 +535,20 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
 
   const rightSectionExtras = useMemo(() => {
     const extras: React.ReactNode[] = []
-    extras.push(<SendMessageButton key="send-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />)
-
+    // v1 同款：生成中把发送键替换为醒目的红色“停止”按钮
     if (isLoading) {
       extras.push(
-        <Tooltip key="pause" placement="top" title={t('chat.input.pause')} mouseLeaveDelay={0} arrow>
-          <ActionIconButton onClick={onPause} style={{ marginRight: -2 }}>
-            <CirclePause size={20} color="var(--color-error)" />
+        <Tooltip key="stop" placement="top" title={t('chat.input.pause')} mouseLeaveDelay={0} arrow>
+          <ActionIconButton
+            onClick={onPause}
+            aria-label={t('chat.input.pause')}
+            style={{ marginRight: -2 }}>
+            <CirclePause size={22} color="var(--color-error)" />
           </ActionIconButton>
         </Tooltip>
       )
+    } else {
+      extras.push(<SendMessageButton key="send-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />)
     }
 
     return <>{extras}</>

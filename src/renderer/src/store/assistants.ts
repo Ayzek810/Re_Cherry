@@ -136,11 +136,26 @@ const assistantsSlice = createSlice({
       )
     },
     removeTopic: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
+      // 级联删除该话题 fork 出的全部子分支行（血缘在删除根时一并消失）
+      const assistantTopics = normalizeTopics(
+        state.assistants.find((assistant) => assistant.id === action.payload.assistantId)?.topics ?? []
+      )
+      const idsToRemove = new Set<string>([action.payload.topic.id])
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const topic of assistantTopics) {
+          if (topic.parentTopicId !== undefined && idsToRemove.has(topic.parentTopicId) && !idsToRemove.has(topic.id)) {
+            idsToRemove.add(topic.id)
+            changed = true
+          }
+        }
+      }
       state.assistants = state.assistants.map((assistant) =>
         assistant.id === action.payload.assistantId
           ? {
               ...assistant,
-              topics: normalizeTopics(assistant.topics).filter(({ id }) => id !== action.payload.topic.id)
+              topics: assistantTopics.filter((topic) => !idsToRemove.has(topic.id))
             }
           : assistant
       )
@@ -162,16 +177,26 @@ const assistantsSlice = createSlice({
       )
     },
     updateTopics: (state, action: PayloadAction<{ assistantId: string; topics: Topic[] }>) => {
-      state.assistants = state.assistants.map((assistant) =>
-        assistant.id === action.payload.assistantId
-          ? {
-              ...assistant,
-              topics: action.payload.topics.map((topic) =>
-                isEmpty(topic.messages) ? topic : { ...topic, messages: [] }
-              )
-            }
-          : assistant
-      )
+      state.assistants = state.assistants.map((assistant) => {
+        if (assistant.id !== action.payload.assistantId) return assistant
+        const incoming = action.payload.topics
+        // 侧栏等只操作"根话题"列表；fork 子分支行在更新时必须保留（血缘根若仍存在），避免误删
+        const existing = normalizeTopics(assistant.topics)
+        const incomingIds = new Set(incoming.map((topic) => topic.id))
+        const keptChildren = existing.filter((topic) => {
+          if (topic.parentTopicId === undefined) return false
+          let parent = existing.find((candidate) => candidate.id === topic.parentTopicId)
+          const visited = new Set<string>()
+          while (parent !== undefined && parent.parentTopicId !== undefined && !visited.has(parent.id)) {
+            visited.add(parent.id)
+            parent = existing.find((candidate) => candidate.id === parent.parentTopicId)
+          }
+          return parent !== undefined && incomingIds.has(parent.id)
+        })
+        const normalizedIncoming = incoming.map((topic) => (isEmpty(topic.messages) ? topic : { ...topic, messages: [] }))
+        const merged = uniqBy([...normalizedIncoming, ...keptChildren], 'id')
+        return { ...assistant, topics: merged }
+      })
     },
     removeAllTopics: (state, action: PayloadAction<{ assistantId: string }>) => {
       state.assistants = state.assistants.map((assistant) => {

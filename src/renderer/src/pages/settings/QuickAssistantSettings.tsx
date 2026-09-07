@@ -11,8 +11,11 @@ import {
   setClickTrayToShowQuickAssistant,
   setEnableQuickAssistant,
   setQuickAssistantPrompt,
+  setQuickAssistantReasoningEffort,
   setReadClipboardAtStartup
 } from '@renderer/store/settings'
+import type { ThinkingOption } from '@renderer/types'
+import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
 import { Select, Switch, Tooltip } from 'antd'
 import type { FC } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -28,6 +31,32 @@ import {
   SettingTitle
 } from '.'
 
+/** 思考档位 → i18n key（与输入栏 ThinkingButton 共用词表）。 */
+const REASONING_LABEL_KEY: Record<ThinkingOption, string> = {
+  default: 'assistants.settings.reasoning_effort.default',
+  none: 'assistants.settings.reasoning_effort.off',
+  minimal: 'assistants.settings.reasoning_effort.minimal',
+  low: 'assistants.settings.reasoning_effort.low',
+  medium: 'assistants.settings.reasoning_effort.medium',
+  high: 'assistants.settings.reasoning_effort.high',
+  xhigh: 'assistants.settings.reasoning_effort.xhigh',
+  max: 'assistants.settings.reasoning_effort.xhigh',
+  auto: 'assistants.settings.reasoning_effort.auto'
+}
+
+/** 思考档位描述 → i18n key。 */
+const REASONING_DESC_KEY: Record<ThinkingOption, string> = {
+  default: 'assistants.settings.reasoning_effort.default_description',
+  none: 'assistants.settings.reasoning_effort.off_description',
+  minimal: 'assistants.settings.reasoning_effort.minimal_description',
+  low: 'assistants.settings.reasoning_effort.low_description',
+  medium: 'assistants.settings.reasoning_effort.medium_description',
+  high: 'assistants.settings.reasoning_effort.high_description',
+  xhigh: 'assistants.settings.reasoning_effort.xhigh_description',
+  max: 'assistants.settings.reasoning_effort.xhigh_description',
+  auto: 'assistants.settings.reasoning_effort.auto_description'
+}
+
 /**
  * 快捷助手设置：独立的模型与提示词（不依赖 Assistant 对象）。
  * 快捷助手消息不计入聊天消息库，交互为独立简单 chatbot。
@@ -35,8 +64,14 @@ import {
 const QuickAssistantSettings: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
-  const { enableQuickAssistant, clickTrayToShowQuickAssistant, quickAssistantPrompt, setTray, readClipboardAtStartup } =
-    useSettings()
+  const {
+    enableQuickAssistant,
+    clickTrayToShowQuickAssistant,
+    quickAssistantPrompt,
+    quickAssistantReasoningEffort,
+    setTray,
+    readClipboardAtStartup
+  } = useSettings()
   const dispatch = useAppDispatch()
   const { quickAssistantModel } = useAppSelector((state) => state.llm)
   const { providers } = useProviders()
@@ -69,9 +104,16 @@ const QuickAssistantSettings: FC = () => {
       const model = providers
         .flatMap((provider) => provider.models)
         .find((m) => m.id === query?.id && m.provider === query?.provider)
-      if (model) dispatch(setQuickAssistantModel({ model }))
+      if (model) {
+        dispatch(setQuickAssistantModel({ model }))
+        // 换模型后把档位收敛到新模型支持的选项（与原版自动纠正行为一致）
+        const options = reasoningOptionsForModel(model)
+        if (!options.includes(quickAssistantReasoningEffort ?? 'none')) {
+          dispatch(setQuickAssistantReasoningEffort(options[0] ?? 'none'))
+        }
+      }
     },
-    [dispatch, providers]
+    [dispatch, providers, quickAssistantReasoningEffort]
   )
 
   const handleEnableQuickAssistant = async (enable: boolean) => {
@@ -152,6 +194,28 @@ const QuickAssistantSettings: FC = () => {
             </HStack>
           </SettingRow>
           <SettingDescription>{t('settings.quickAssistant.model_description')}</SettingDescription>
+        </SettingGroup>
+      )}
+      {enableQuickAssistant && quickAssistantModel && reasoningOptionsForModel(quickAssistantModel).length > 0 && (
+        <SettingGroup theme={theme}>
+          <SettingTitle>{t('assistants.settings.reasoning_effort.label')}</SettingTitle>
+          <SettingDivider />
+          <SettingRow>
+            <HStack style={{ width: '100%' }}>
+              <Select
+                style={{ width: 360 }}
+                value={quickAssistantReasoningEffort ?? 'none'}
+                options={reasoningOptionsForModel(quickAssistantModel).map((option) => ({
+                  value: option,
+                  label: t(REASONING_LABEL_KEY[option])
+                }))}
+                onChange={(option: ThinkingOption) => dispatch(setQuickAssistantReasoningEffort(option))}
+              />
+            </HStack>
+          </SettingRow>
+          <SettingDescription>
+            {t(REASONING_DESC_KEY[quickAssistantReasoningEffort ?? 'none'])}
+          </SettingDescription>
         </SettingGroup>
       )}
       {enableQuickAssistant && (

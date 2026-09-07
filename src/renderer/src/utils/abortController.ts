@@ -20,6 +20,15 @@ export const removeAbortController = (id: string, abortFn: () => void) => {
   }
 }
 
+/** 消息 id 改写（uuid → kernel-<topic>-<seq>）时迁移中止注册键，保证"停止"按钮仍能命中。 */
+export const renameAbortController = (from: string, to: string) => {
+  const fns = abortMap.get(from)
+  if (fns?.length) {
+    abortMap.set(to, [...(abortMap.get(to) || []), ...fns])
+    abortMap.delete(from)
+  }
+}
+
 export const abortCompletion = (id: string) => {
   const abortFns = abortMap.get(id)
   if (abortFns?.length) {

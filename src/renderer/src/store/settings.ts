@@ -27,7 +27,8 @@ import type {
   MinAppRegionFilter,
   OpenAIServiceTier,
   S3Config,
-  SidebarIcon
+  SidebarIcon,
+  ThinkingOption
 } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import type {
@@ -152,6 +153,8 @@ export interface SettingsState {
   enableQuickAssistant: boolean
   clickTrayToShowQuickAssistant: boolean
   quickAssistantPrompt: string
+  /** 快捷助手思考档位（Cherry 档位；default/auto 由内核交给 provider 决定）。 */
+  quickAssistantReasoningEffort: ThinkingOption | undefined
   multiModelMessageStyle: MultiModelMessageStyle
   readClipboardAtStartup: boolean
   notionDatabaseID: string | null
@@ -339,6 +342,7 @@ export const initialState: SettingsState = {
   enableQuickAssistant: false,
   clickTrayToShowQuickAssistant: false,
   quickAssistantPrompt: '',
+  quickAssistantReasoningEffort: 'none',
   readClipboardAtStartup: false,
   multiModelMessageStyle: 'horizontal',
   notionDatabaseID: '',
@@ -691,6 +695,9 @@ const settingsSlice = createSlice({
     setQuickAssistantPrompt: (state, action: PayloadAction<string>) => {
       state.quickAssistantPrompt = action.payload
     },
+    setQuickAssistantReasoningEffort: (state, action: PayloadAction<ThinkingOption>) => {
+      state.quickAssistantReasoningEffort = action.payload
+    },
     setReadClipboardAtStartup: (state, action: PayloadAction<boolean>) => {
       state.readClipboardAtStartup = action.payload
     },
@@ -945,6 +952,7 @@ export const {
   setClickTrayToShowQuickAssistant,
   setEnableQuickAssistant,
   setQuickAssistantPrompt,
+  setQuickAssistantReasoningEffort,
   setReadClipboardAtStartup,
   setMultiModelMessageStyle,
   setNotionDatabaseID,

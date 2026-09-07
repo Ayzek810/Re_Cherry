@@ -11,6 +11,7 @@ import { find } from 'lodash'
 import { useEffect, useState } from 'react'
 
 import { useAssistant } from './useAssistant'
+import { listRootTopics } from '@renderer/utils/topicBranch'
 
 let _activeTopic: Topic
 
@@ -18,7 +19,8 @@ const logger = loggerService.withContext('useTopic')
 
 export function useActiveTopic(assistantId: string, topic?: Topic) {
   const { assistant } = useAssistant(assistantId)
-  const [activeTopic, setActiveTopic] = useState(topic || _activeTopic || assistant?.topics[0])
+  const rootTopics = assistant ? listRootTopics(assistant.topics ?? []) : []
+  const [activeTopic, setActiveTopic] = useState(topic || _activeTopic || rootTopics[0] || assistant?.topics?.[0])
 
   _activeTopic = activeTopic
 
@@ -39,7 +41,8 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
       assistant.topics.length > 0 &&
       !find(assistant.topics, { id: activeTopic?.id })
     ) {
-      setActiveTopic(assistant.topics[0])
+      const roots = listRootTopics(assistant.topics)
+      setActiveTopic(roots[0] ?? assistant.topics[0])
     }
   }, [activeTopic?.id, assistant])
 

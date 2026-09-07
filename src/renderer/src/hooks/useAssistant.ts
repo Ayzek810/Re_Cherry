@@ -1,11 +1,6 @@
 import { loggerService } from '@logger'
-import {
-  getThinkModelType,
-  isSupportedReasoningEffortModel,
-  isSupportedThinkingTokenModel,
-  MODEL_SUPPORTED_OPTIONS,
-  MODEL_SUPPORTED_REASONING_EFFORT
-} from '@renderer/config/models'
+import { isSupportedThinkingTokenModel, isSupportedReasoningEffortModel } from '@renderer/config/models'
+import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
@@ -110,8 +105,7 @@ export function useAssistant(id: string) {
     if (settings) {
       const currentReasoningEffort = settings.reasoning_effort
       if (isSupportedThinkingTokenModel(model) || isSupportedReasoningEffortModel(model)) {
-        const modelType = getThinkModelType(model)
-        const supportedOptions = MODEL_SUPPORTED_OPTIONS[modelType]
+        const supportedOptions = reasoningOptionsForModel(model)
         if (supportedOptions.every((option) => option !== currentReasoningEffort)) {
           const cache = settings.reasoning_effort_cache
           let fallbackOption: ThinkingOption
@@ -122,10 +116,9 @@ export function useAssistant(id: string) {
           } else {
             // 灵活回退到支持的值
             // 注意：这里假设可用的options不会为空
-            const enableThinking = currentReasoningEffort !== undefined
-            fallbackOption = enableThinking
-              ? MODEL_SUPPORTED_REASONING_EFFORT[modelType][0]
-              : MODEL_SUPPORTED_OPTIONS[modelType][0]
+            const enableThinking =
+              currentReasoningEffort !== undefined && currentReasoningEffort !== 'none' && currentReasoningEffort !== 'default'
+            fallbackOption = enableThinking ? 'low' : 'auto'
           }
 
           updateAssistantSettings({

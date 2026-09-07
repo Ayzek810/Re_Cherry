@@ -134,7 +134,7 @@ const ThinkModelTypes = [
  *            It's also used as "on" when the reasoning behavior of the model only could be set to "on" and "off".
  * - 'default': Depend on default behavior. It means we would not set any reasoning related settings when calling API.
  */
-export type ReasoningEffortOption = NonNullable<OpenAI.ReasoningEffort> | 'auto' | 'default'
+export type ReasoningEffortOption = NonNullable<OpenAI.ReasoningEffort> | 'max' | 'auto' | 'default'
 export type ThinkingOption = ReasoningEffortOption
 export type ThinkingModelType = (typeof ThinkModelTypes)[number]
 export type ThinkingOptionConfig = Record<ThinkingModelType, ThinkingOption[]>
@@ -154,6 +154,7 @@ export const EFFORT_RATIO: EffortRatio = {
   medium: 0.5,
   high: 0.8,
   xhigh: 0.9,
+  max: 1,
   auto: 2
 }
 
@@ -260,6 +261,10 @@ export type Topic = {
   pinned?: boolean
   prompt?: string
   isNameManuallyEdited?: boolean
+  /** 分支血缘：有值 = 由内核 fork 创建的分支子话题（值为父话题 id）；侧栏/话题列表只显示根（无此字段）。 */
+  parentTopicId?: string
+  /** 分支意图：regenerate = 对模型回复重新生成（应共享原用户节点、长新回复节点）；resend = 对用户消息重发/编辑重发（新开用户节点）。 */
+  branchKind?: 'resend' | 'regenerate'
 }
 
 export type User = {

@@ -1,26 +1,31 @@
 import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { forkBranchToKernel } from '@renderer/services/kernelChat'
+import { getUserMessage } from '@renderer/services/MessagesService'
 import { appendMessageTrace, pauseTrace, restartTrace } from '@renderer/services/SpanManagerService'
 import { estimateUserPromptUsage } from '@renderer/services/TokenService'
 import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer/store'
+import { addTopic } from '@renderer/store/assistants'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
 import {
   appendAssistantResponseThunk,
   clearTopicMessagesThunk,
-  cloneMessagesToNewTopicThunk,
-  deleteMessageGroupThunk,
-  deleteSingleMessageThunk,
+  loadTopicMessagesThunk,
   regenerateAssistantResponseThunk,
   removeBlocksThunk,
   resendMessageThunk,
   resendUserMessageWithEditThunk,
+  sendMessage as sendMessageThunk,
   updateMessageAndBlocksThunk
 } from '@renderer/store/thunk/messageThunk'
-import { type Assistant, type Model, objectKeys, type Topic } from '@renderer/types'
+import { type Assistant, type Model, type Topic, TopicType } from '@renderer/types'
+import { objectKeys } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
-import { MessageBlockType } from '@renderer/types/newMessage'
+import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { abortCompletion } from '@renderer/utils/abortController'
+import { getMainTextContent } from '@renderer/utils/messageUtils/find'
+import { requestTopicSwitch } from '@renderer/utils/topicBranch'
 import { difference } from 'lodash'
 import { useCallback } from 'react'
 
@@ -47,32 +52,72 @@ export function useMessageOperations(topic: Topic) {
   const dispatch = useAppDispatch()
 
   /**
-   * 删除单个消息。 / Deletes a single message.
-   * Dispatches deleteSingleMessageThunk.
+   * 分支重发核心：把（编辑后）的文本作为一次重发，在内核把当前会话按锚点 fork 成子分支
+   * （源会话原样保留），随后把文本发进子分支并切换视图到子分支。
+   * 返回是否成功；失败（锚点不可解析/内核错误）时调用方回退旧逻辑。
    */
-  const deleteMessage = useCallback(
-    async (id: string, traceId?: string, modelName?: string) => {
-      await dispatch(deleteSingleMessageThunk(topic.id, id))
-      void window.api.trace.cleanHistory(topic.id, traceId || '', modelName)
+  const startBranchResend = useCallback(
+    async (
+      anchorMessage: Message,
+      assistant: Assistant,
+      text: string,
+      kind: 'resend' | 'regenerate' = 'resend'
+    ): Promise<boolean> => {
+      const trimmed = (text ?? '').trim()
+      if (trimmed.length === 0) {
+        logger.warn('[branchResend] nothing to send')
+        return false
+      }
+      const forked = await forkBranchToKernel(topic.id, anchorMessage)
+      if (forked === null) return false
+
+      const preview = trimmed.replace(/\s+/g, ' ').slice(0, 30)
+      const childTopic: Topic = {
+        id: forked.id,
+        type: TopicType.Chat,
+        assistantId: assistant.id,
+        name: preview.length > 0 ? preview : topic.name || '新分支',
+        createdAt: new Date(forked.createdAt ?? Date.now()).toISOString(),
+        updatedAt: new Date(forked.updatedAt ?? Date.now()).toISOString(),
+        messages: [],
+        parentTopicId: topic.id,
+        branchKind: kind
+      }
+      dispatch(addTopic({ assistantId: assistant.id, topic: childTopic }))
+
+      const { message: userMessage, blocks } = getUserMessage({
+        content: trimmed,
+        assistant,
+        topic: childTopic
+      })
+
+      // 关键顺序：先把子分支的完整日志（含与父分支共享的上文）从内核加载进 store，
+      // 再发新文本 —— 否则 store 里先有 stub 会让 loadTopicMessagesThunk 短路，
+      // 子分支视图将看不到该轮之上的历史。
+      await dispatch(loadTopicMessagesThunk(childTopic.id, true))
+
+      void dispatch(sendMessageThunk(userMessage, blocks ?? [], assistant, childTopic.id))
+      requestTopicSwitch(childTopic)
+      return true
     },
-    [dispatch, topic.id]
+    [dispatch, topic]
   )
 
-  /**
-   * 删除一组消息（基于 askId）。 / Deletes a group of messages (based on askId).
-   * Dispatches deleteMessageGroupThunk.
-   */
-  const deleteGroupMessages = useCallback(
-    async (askId: string) => {
-      await dispatch(deleteMessageGroupThunk(topic.id, askId))
-    },
-    [dispatch, topic.id]
-  )
+  // ---------------------------------------------------------------------------
+  // [恢复标记] 消息级删除已临时禁用（按钮保留为 no-op，避免 UI 假删）。
+  // 原实现（truncateDelete/deleteMessage/deleteGroupMessages 走内核截断/焦点回跳）
+  // 已在 kernel/topics.ts 的 MARKER 处拆除。装回时在此恢复原逻辑并在
+  // services.ts(ctx.topicTree.truncateAtTurn)、kernel/index.ts(Dsh_TopicTruncate)、
+  // preload 与 IpcChannel 复原。
+  // ---------------------------------------------------------------------------
+  const deleteMessage = useCallback(async (_id: string, _traceId?: string, _modelName?: string) => {
+    logger.warn('[deleteMessage] message deletion is disabled (no-op)')
+  }, [])
 
-  /**
-   * 编辑消息。 / Edits a message.
-   * 使用 newMessagesActions.updateMessage.
-   */
+  const deleteGroupMessages = useCallback(async (_askId: string) => {
+    logger.warn('[deleteGroupMessages] message deletion is disabled (no-op)')
+  }, [])
+
   const editMessage = useCallback(
     async (messageId: string, updates: Partial<Omit<Message, 'id' | 'topicId' | 'blocks'>>) => {
       if (!topic?.id) {
@@ -101,9 +146,19 @@ export function useMessageOperations(topic: Topic) {
   const resendMessage = useCallback(
     async (message: Message, assistant: Assistant) => {
       await restartTrace(message)
-      await dispatch(resendMessageThunk(topic.id, message, assistant))
+      const entity = store.getState().messages.entities[message.id] ?? message
+      const text = getMainTextContent(entity)
+      if (text.trim().length === 0) {
+        logger.warn('[resendMessage] message has no text content, skip')
+        return
+      }
+      const ok = await startBranchResend(entity, assistant, text)
+      if (!ok) {
+        // 锚点不可解析（例如刚发送、回执未到）时回退旧逻辑
+        await dispatch(resendMessageThunk(topic.id, entity, assistant))
+      }
     },
-    [dispatch, topic.id]
+    [dispatch, startBranchResend, topic.id]
   )
 
   /**
@@ -166,9 +221,25 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('regenerateAssistantMessage should only be called for assistant messages.')
         return
       }
-      await dispatch(regenerateAssistantResponseThunk(topic.id, message, assistant))
+      const state = store.getState()
+      const anchor =
+        (message.askId && state.messages.entities[message.askId]) ||
+        (message.askId ? selectMessagesForTopic(state, topic.id).find((m) => m.id === message.askId) : undefined)
+      if (anchor === undefined || anchor.role !== 'user') {
+        await dispatch(regenerateAssistantResponseThunk(topic.id, message, assistant))
+        return
+      }
+      const text = getMainTextContent(anchor)
+      if (text.trim().length === 0) {
+        logger.warn('[regenerateAssistantMessage] anchor has no text content, skip')
+        return
+      }
+      const ok = await startBranchResend(anchor, assistant, text, 'regenerate')
+      if (!ok) {
+        await dispatch(regenerateAssistantResponseThunk(topic.id, message, assistant))
+      }
     },
-    [dispatch, topic.id]
+    [dispatch, startBranchResend, topic.id]
   )
 
   /**
@@ -197,22 +268,6 @@ export function useMessageOperations(topic: Topic) {
       )
     },
     [dispatch, topic.id]
-  )
-
-  /**
-   * 创建一个主题分支，克隆消息到新主题。
-   * Creates a topic branch by cloning messages to a new topic.
-   * @param sourceTopicId 源主题ID / Source topic ID
-   * @param branchPointIndex 分支点索引，此索引之前的消息将被克隆 / Branch point index, messages before this index will be cloned
-   * @param newTopic 新的主题对象，必须已经创建并添加到Redux store中 / New topic object, must be already created and added to Redux store
-   * @returns 操作是否成功 / Whether the operation was successful
-   */
-  const createTopicBranch = useCallback(
-    (sourceTopicId: string, branchPointIndex: number, newTopic: Topic) => {
-      logger.info(`Cloning messages from topic ${sourceTopicId} to new topic ${newTopic.id}`)
-      return dispatch(cloneMessagesToNewTopicThunk(sourceTopicId, branchPointIndex, newTopic))
-    },
-    [dispatch]
   )
 
   /**
@@ -312,8 +367,8 @@ export function useMessageOperations(topic: Topic) {
       await editMessageBlocks(message.id, editedBlocks)
 
       const mainTextBlock = editedBlocks.find((block) => block.type === MessageBlockType.MAIN_TEXT)
-      if (!mainTextBlock) {
-        logger.error('[resendUserMessageWithEdit] Main text block not found in edited blocks')
+      if (!mainTextBlock || mainTextBlock.content.trim().length === 0) {
+        logger.warn('[resendUserMessageWithEdit] no main text content, skip')
         return
       }
 
@@ -333,10 +388,13 @@ export function useMessageOperations(topic: Topic) {
       }
 
       dispatch(newMessagesActions.updateMessage({ topicId: topic.id, messageId: message.id, updates: messageUpdates }))
-      // 对于message的修改会在下面的thunk中保存
-      await dispatch(resendUserMessageWithEditThunk(topic.id, message, assistant))
+      const ok = await startBranchResend(message, assistant, mainTextBlock.content)
+      if (!ok) {
+        // 锚点不可解析时回退旧逻辑（原地重置并重发）
+        await dispatch(resendUserMessageWithEditThunk(topic.id, message, assistant))
+      }
     },
-    [dispatch, editMessageBlocks, topic.id]
+    [dispatch, editMessageBlocks, startBranchResend, topic.id]
   )
 
   /**
@@ -382,7 +440,6 @@ export function useMessageOperations(topic: Topic) {
     clearTopicMessages,
     pauseMessages,
     resumeMessage,
-    createTopicBranch,
     editMessageBlocks,
     removeMessageBlock
   }
@@ -394,4 +451,24 @@ export const useTopicMessages = (topicId: string) => {
 
 export const useTopicLoading = (topic: Topic) => {
   return useAppSelector((state) => selectNewTopicLoading(state, topic.id))
+}
+
+/**
+ * 当前话题是否"正在生成"（存在 PENDING/PROCESSING 的助手消息）。
+ * 内核聊天的事件驱动流在 queue 排空后仍持续很久，loadingByTopic 会在 send 后很快被清掉，
+ * 不能作为"生成中"的唯一信号 —— 暂停/停止按钮的可见性应以此信号为准。
+ */
+export const useTopicGenerating = (topic: Topic) => {
+  return useAppSelector((state) => {
+    const messageIds = state.messages.messageIdsByTopic[topic.id]
+    if (messageIds === undefined || messageIds.length === 0) return false
+    return messageIds.some((id) => {
+      const message = state.messages.entities[id]
+      return (
+        message !== undefined &&
+        message.role === 'assistant' &&
+        (message.status === AssistantMessageStatus.PENDING || message.status === AssistantMessageStatus.PROCESSING)
+      )
+    })
+  })
 }

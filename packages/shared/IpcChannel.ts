@@ -246,6 +246,8 @@ export enum IpcChannel {
   Dsh_TopicRename = 'dsh:topic-rename',
   Dsh_TopicDelete = 'dsh:topic-delete',
   Dsh_TopicOpen = 'dsh:topic-open',
+  Dsh_TopicFork = 'dsh:topic-fork',
+  Dsh_TopicBranches = 'dsh:topic-branches',
   Dsh_TopicSend = 'dsh:topic-send',
   Dsh_TopicStop = 'dsh:topic-stop',
   Dsh_TopicRunning = 'dsh:topic-running',

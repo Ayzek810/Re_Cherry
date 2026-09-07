@@ -38,7 +38,8 @@ const mocks = vi.hoisted(() => ({
   MessageErrorBoundary: vi.fn(({ children }: { children: ReactNode }) => <>{children}</>),
   MessageHeader: vi.fn(() => <div className="message-header">header</div>),
   MessageMenubar: vi.fn(() => <div className="message-menubar">menubar</div>),
-  MessageOutline: vi.fn(() => null)
+  MessageOutline: vi.fn(() => null),
+  ResendPageBar: vi.fn(() => null)
 }))
 
 vi.mock('@logger', () => ({
@@ -173,6 +174,10 @@ vi.mock('../MessageMenubar', () => ({
 
 vi.mock('../MessageOutline', () => ({
   default: mocks.MessageOutline
+}))
+
+vi.mock('../ResendPageBar', () => ({
+  default: mocks.ResendPageBar
 }))
 
 const { default: MessageGroup } = await import('../MessageGroup')

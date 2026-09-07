@@ -1,6 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { type CredentialRef, credentialRef } from '@deepseek-ai/dsh-credentials'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { KERNEL_REASONING_LEVELS } from '@shared/config/reasoning'
+import { clearModelCapabilityCache } from './topics'
 import { loggerService } from '@logger'
 
 const logger = loggerService.withContext('KernelProviders')
@@ -16,9 +18,26 @@ export interface KernelProviderInput {
   enabled?: boolean
 }
 
+/**
+ * 可透传给 pi-ai 的 per-model 兼容覆盖（引擎 getCompat：仅出现的键覆盖自动探测）。
+ * Re_Cherry 用它修正第三方网关的思考参数语义（如硅基流动 DeepSeek/Zhipu 用 enable_thinking）。
+ */
+export interface KernelModelCompatInput {
+  thinkingFormat?: 'openai' | 'deepseek' | 'openrouter' | 'together' | 'zai' | 'qwen' | 'chat-template' | 'qwen-chat-template' | 'string-thinking' | 'ant-ling'
+  supportsReasoningEffort?: boolean
+  requiresReasoningContentOnAssistantMessages?: boolean
+}
+
 export interface KernelModelInput {
   id: string
   name?: string
+  /**
+   * 该模型可声明的思考档位（pi-ai reasoningEfforts：档位 → wire 拼写，off 为 null）。
+   * 渲染进程按模型家族生成；缺省表示不声明（保留 pi-ai 目录能力）。
+   */
+  reasoningEfforts?: Record<string, string | null>
+  /** 渲染进程按 provider 端点/模型家族给出的思考协议修正（缺省走 pi-ai 自动探测）。 */
+  compat?: KernelModelCompatInput
 }
 
 /**
@@ -33,6 +52,28 @@ const PROTOCOL_BY_TYPE: Record<string, string> = {
   gateway: 'openai-completions',
   ollama: 'openai-completions',
   mistral: 'openai-completions'
+}
+
+/**
+ * 卫生化渲染进程声明的思考能力字典：
+ * 只保留合法档位键与合法 wire 值（off 用 null），且必须至少含一个非 off 档位，
+ * 否则返回 undefined（不声明，走 pi-ai 目录默认），避免一条坏声明拖垮整个 provider 路由。
+ */
+function sanitizeReasoningEfforts(input: Record<string, string | null> | undefined): Record<string, string | null> | undefined {
+  if (input === undefined) return undefined
+  const dict: Record<string, string | null> = {}
+  let hasPositiveLevel = false
+  for (const [level, value] of Object.entries(input)) {
+    if (!KERNEL_REASONING_LEVELS.includes(level as (typeof KERNEL_REASONING_LEVELS)[number])) continue
+    if (level === 'off') {
+      if (value === null) dict.off = null
+      continue
+    }
+    if (typeof value !== 'string' || value.length === 0) continue
+    dict[level] = value
+    hasPositiveLevel = true
+  }
+  return hasPositiveLevel ? dict : undefined
 }
 
 /** provider id → 合法的 CredentialRef 名（POSIX 环境变量文法）。 */
@@ -70,11 +111,22 @@ export async function syncCherryProviders(ctx: Context, providers: readonly Kern
       ...(provider.apiHost === undefined ? {} : { baseURL: provider.apiHost }),
       ...(provider.models === undefined || provider.models.length === 0
         ? {}
-        : { models: provider.models.map((model) => ({ id: model.id, name: model.name ?? model.id })) })
+        : {
+            models: provider.models.map((model) => {
+              const reasoningEfforts = sanitizeReasoningEfforts(model.reasoningEfforts)
+              return {
+                id: model.id,
+                name: model.name ?? model.id,
+                ...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
+                ...(model.compat === undefined ? {} : { compat: model.compat })
+              }
+            })
+          })
     }
     synced += 1
   }
 
   await ctx.settings.update(settingsNamespace('llm-pi-ai'), { providers: profiles })
+  clearModelCapabilityCache()
   logger.info(`kernel: synced ${synced} provider routes to the kernel`)
 }

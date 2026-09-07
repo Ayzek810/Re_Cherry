@@ -4,6 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, { BlockAssembler, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import * as piAiPlugin from '@deepseek-ai/dsh-llm-pi-ai'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SqliteSessionPersistence from '@deepseek-ai/dsh-session-persistence-sqlite'
@@ -18,23 +19,30 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { CherryCredentialProvider } from './credentials'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
-import {
-  clearLiveHandles,
-  createTopic,
-  deleteTopic,
-  getTopic,
-  initTopics,
-  isTopicRunning,
-  listTopics,
-  openTopic,
-  renameTopic,
-  searchSessions,
-  sendMessage,
-  sessionEvents,
-  stopTopic
-} from './topics'
+import { registerAppServiceSeams, type TopicTreeService } from './services'
+import { clearLiveHandles, getTopic, initTopics, listTopicBranches, listTopics, searchSessions } from './topics'
 
 const logger = loggerService.withContext('Kernel')
+
+/** ctx.topicTree 服务访问器（IPC 薄转发的唯一路径；服务在 boot 时由 registerAppServiceSeams 挂接）。 */
+function topicTree(ctx: Context): TopicTreeService {
+  const service = (ctx as unknown as { topicTree: TopicTreeService }).topicTree
+  if (service === undefined) throw new Error('kernel: ctx.topicTree not registered')
+  return service
+}
+
+/** ctx.reasoning 服务访问器（思考档位收敛；独立配置插件可接管）。 */
+function reasoning(ctx: Context): {
+  resolveRequest: (p: string, m: string, r?: string) => Promise<string | undefined>
+} {
+  const service = (
+    ctx as unknown as {
+      reasoning: { resolveRequest: (p: string, m: string, r?: string) => Promise<string | undefined> }
+    }
+  ).reasoning
+  if (service === undefined) throw new Error('kernel: ctx.reasoning not registered')
+  return service
+}
 
 let kernelContext: Context | undefined
 
@@ -129,6 +137,9 @@ export async function bootKernel(): Promise<Context> {
     // Agent 层：注册表 + 回合循环（工厂由 loop 注入注册表）
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
+
+    // App 服务 seam（P5）：话题树/会话回收/思考档位查询挂到 ctx，供未来插件接管
+    registerAppServiceSeams(ctx)
 
     await initTopics(ctx)
     registerKernelIpc()
@@ -227,10 +238,12 @@ function registerKernelIpc(): void {
         system?: string
         messages: { role: 'user' | 'assistant'; text: string }[]
         maxTokens?: number
+        reasoningEffort?: string
       }
     ) => {
       const ctx = requireKernel()
       const { provider, model } = payload
+      const reasoningEffort = await reasoning(ctx).resolveRequest(provider, model, payload.reasoningEffort)
       const assembler = new BlockAssembler()
       const options = {
         provider,
@@ -247,7 +260,8 @@ function registerKernelIpc(): void {
               })
         ),
         ...(payload.system === undefined || payload.system.length === 0 ? {} : { system: payload.system }),
-        ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens })
+        ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens }),
+        ...(reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) })
       }
       for await (const chunk of ctx.llm.stream(options)) {
         assembler.push(chunk)
@@ -286,10 +300,12 @@ function registerKernelIpc(): void {
         system?: string
         messages: { role: 'user' | 'assistant'; text: string }[]
         maxTokens?: number
+        reasoningEffort?: string
       }
     ) => {
       const ctx = requireKernel()
       const { requestId, provider, model } = payload
+      const reasoningEffort = await reasoning(ctx).resolveRequest(provider, model, payload.reasoningEffort)
       const send = (data: object): void => {
         if (!event.sender.isDestroyed()) {
           event.sender.send(IpcChannel.Dsh_CompletionEvent, { requestId, ...data })
@@ -310,13 +326,16 @@ function registerKernelIpc(): void {
               })
         ),
         ...(payload.system === undefined || payload.system.length === 0 ? {} : { system: payload.system }),
-        ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens })
+        ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens }),
+        ...(reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) })
       }
       try {
         let finished = false
         for await (const chunk of ctx.llm.stream(options)) {
           if (chunk.type === 'text-delta') {
             send({ type: 'delta', text: chunk.text })
+          } else if (chunk.type === 'reasoning-delta') {
+            send({ type: 'reasoning-delta', text: chunk.text })
           } else if (chunk.type === 'finish') {
             // 流已产出终态 chunk（文本输出完毕）。立即收尾并跳出循环，
             // 不依赖适配器在 finish 之后是否还会正常返回迭代结束——
@@ -354,47 +373,63 @@ function registerKernelIpc(): void {
     IpcChannel.Dsh_TopicCreate,
     async (
       _event,
-      input: { id: string; name?: string; provider: string; model: string; maxTokens?: number; systemPrompt?: string }
+      input: {
+        id: string
+        name?: string
+        provider: string
+        model: string
+        maxTokens?: number
+        systemPrompt?: string
+        reasoningEffort?: string
+      }
     ) => {
-      return { topic: await createTopic(requireKernel(), input) }
+      return { topic: await topicTree(requireKernel()).create(input) }
     }
   )
 
   ipcMain.handle(IpcChannel.Dsh_TopicRename, async (_event, id: string, name: string) => {
-    return { topic: await renameTopic(id, name) }
+    return { topic: await topicTree(requireKernel()).rename(id, name) }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicDelete, async (_event, id: string) => {
-    await deleteTopic(id)
+    await topicTree(requireKernel()).delete(id)
     return { ok: true }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicOpen, async (_event, id: string) => {
-    await openTopic(requireKernel(), id)
+    await topicTree(requireKernel()).open(id)
     return { ok: true }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicSend, async (_event, id: string, text: string) => {
-    const ctx = requireKernel()
-    await sendMessage(ctx, id, text)
+  ipcMain.handle(IpcChannel.Dsh_TopicFork, async (_event, sourceTopicId: string, anchorUserMessageSeq: number) => {
+    return { topic: await topicTree(requireKernel()).fork(sourceTopicId, anchorUserMessageSeq) }
+  })
+
+  ipcMain.handle(IpcChannel.Dsh_TopicBranches, (_event, rootTopicId: string) => {
+    return { topics: listTopicBranches(rootTopicId) }
+  })
+
+  ipcMain.handle(IpcChannel.Dsh_TopicSend, async (_event, id: string, text: string, reasoningEffort?: string) => {
+    await topicTree(requireKernel()).send(id, text, reasoningEffort)
     return { ok: true }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicStop, (_event, id: string) => {
-    stopTopic(requireKernel(), id)
+    topicTree(requireKernel()).stop(id)
     return { ok: true }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicRunning, (_event, id: string) => {
-    return { running: isTopicRunning(requireKernel(), id) }
+    return { running: topicTree(requireKernel()).isRunning(id) }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicEvents, async (_event, id: string) => {
     const ctx = requireKernel()
+    const tree = topicTree(ctx)
     // 必须 await：重启后 agent 需从持久化异步 resume，
-    // 不同步等待则下方 sessionEvents 取不到 agent 而抛 "session is not loaded"
-    await openTopic(ctx, id)
-    return { events: sessionEvents(ctx, id) }
+    // 不同步等待则下方 events 取不到 agent 而抛 "session is not loaded"
+    await tree.open(id)
+    return { events: tree.events(id) }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicGet, (_event, id: string) => {

@@ -11,7 +11,6 @@ import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMessageOperations } from '@renderer/hooks/useMessageOperations'
 import { useEnableDeveloperMode, useMessageStyle, useSettings } from '@renderer/hooks/useSettings'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
-import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { getMessageTitle } from '@renderer/services/MessagesService'
 import type { RootState } from '@renderer/store'
 import store from '@renderer/store'
@@ -45,7 +44,6 @@ import {
   ListChecks,
   Menu,
   Save,
-  Split,
   ThumbsUp,
   Upload
 } from 'lucide-react'
@@ -109,7 +107,6 @@ type MessageMenubarButtonRenderer = (ctx: MessageMenubarButtonContext) => ReactN
 const MessageMenubar: FC<Props> = (props) => {
   const {
     message,
-    index,
     isGrouped,
     isLastMessage,
     isAssistantMessage,
@@ -174,11 +171,6 @@ const MessageMenubar: FC<Props> = (props) => {
     [message, setCopied, t] // message is needed for message.id and as a fallback. t is for translation.
   )
 
-  const onNewBranch = useCallback(async () => {
-    void EventEmitter.emit(EVENT_NAMES.NEW_BRANCH, index)
-    window.toast.success(t('chat.message.new.branch.created'))
-  }, [index, t])
-
   const handleResendUserMessage = useCallback(
     async (messageUpdate?: Message) => {
       await resendMessage(messageUpdate ?? message, assistant)
@@ -214,7 +206,7 @@ const MessageMenubar: FC<Props> = (props) => {
 
   const dropdownItems = useMemo(() => {
     const items: MenuProps['items'] = [
-      ...(isEditable
+      ...(isEditable && message.role === 'user'
         ? [
             {
               label: t('common.edit'),
@@ -224,12 +216,6 @@ const MessageMenubar: FC<Props> = (props) => {
             }
           ]
         : []),
-      {
-        label: t('chat.message.new.branch.label'),
-        key: 'new-branch',
-        icon: <Split size={15} />,
-        onClick: onNewBranch
-      },
       {
         label: t('chat.multiple.select.label'),
         key: 'multi-select',
@@ -377,7 +363,6 @@ const MessageMenubar: FC<Props> = (props) => {
     message,
     messageContainerRef,
     onEdit,
-    onNewBranch,
     t,
     toggleMultiSelectMode
   ])

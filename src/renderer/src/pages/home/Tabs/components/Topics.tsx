@@ -19,6 +19,7 @@ import { newMessagesActions } from '@renderer/store/newMessage'
 import { setGenerating } from '@renderer/store/runtime'
 import type { Assistant, Topic } from '@renderer/types'
 import { classNames, removeSpecialCharactersForFileName } from '@renderer/utils'
+import { listRootTopics, loadKernelTopicRootIds, shouldShowTopicRow } from '@renderer/utils/topicBranch'
 import { copyTopicAsMarkdown, copyTopicAsPlainText } from '@renderer/utils/copy'
 import {
   exportMarkdownToJoplin,
@@ -67,6 +68,23 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const { t } = useTranslation()
   const { assistants } = useAssistants()
   const { assistant, addTopic, removeTopic, moveTopic, updateTopic, updateTopics } = useAssistant(_assistant.id)
+  // 侧栏只展示"根话题"；fork 分支仅通过分支图切换
+  const [kernelRoots, setKernelRoots] = useState<Set<string> | null>(null)
+  const topicsKey = useMemo(() => (assistant?.topics ?? []).map((topic) => topic.id).join(','), [assistant?.topics])
+  useEffect(() => {
+    let active = true
+    void loadKernelTopicRootIds().then((ids) => {
+      if (active) setKernelRoots(ids)
+    })
+    return () => {
+      active = false
+    }
+  }, [topicsKey])
+  const rootTopics = useMemo(() => {
+    const base = listRootTopics(assistant?.topics ?? [])
+    // 内核确认存在（或当前正激活/暂无内核结果时）才展示，避免历史遗留孤儿行污染列表
+    return base.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
+  }, [assistant?.topics, kernelRoots, activeTopic?.id])
   const { showTopicTime, pinTopicsToTop, setTopicPosition, topicPosition } = useSettings()
 
   const renamingTopics = useSelector((state: RootState) => state.runtime.chat.renamingTopics)
@@ -143,14 +161,14 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const handleConfirmDelete = useCallback(
     async (topic: Topic, e: React.MouseEvent) => {
       e.stopPropagation()
-      if (assistant.topics.length === 1) {
+      if (rootTopics.length === 1) {
         const newTopic = getDefaultTopic(assistant.id)
         addTopic(newTopic)
         setActiveTopic(newTopic)
       } else {
-        const index = findIndex(assistant.topics, (t) => t.id === topic.id)
+        const index = findIndex(rootTopics, (t) => t.id === topic.id)
         if (topic.id === activeTopic.id) {
-          setActiveTopic(assistant.topics[index + 1 === assistant.topics.length ? index - 1 : index + 1])
+          setActiveTopic(rootTopics[index + 1 === rootTopics.length ? index - 1 : index + 1])
         }
       }
       await modelGenerating()
@@ -168,8 +186,8 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
 
         if (topic.pinned) {
           // 取消固定：将话题移到未固定话题的顶部
-          const pinnedTopics = assistant.topics.filter((t) => t.pinned)
-          const unpinnedTopics = assistant.topics.filter((t) => !t.pinned)
+          const pinnedTopics = rootTopics.filter((t) => t.pinned)
+          const unpinnedTopics = rootTopics.filter((t) => !t.pinned)
 
           const reorderedTopics = [...pinnedTopics.filter((t) => t.id !== topic.id), topic, ...unpinnedTopics]
 
@@ -177,8 +195,8 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
           updateTopics(reorderedTopics)
         } else {
           // 固定话题：移到固定区域顶部
-          const pinnedTopics = assistant.topics.filter((t) => t.pinned)
-          const unpinnedTopics = assistant.topics.filter((t) => !t.pinned)
+          const pinnedTopics = rootTopics.filter((t) => t.pinned)
+          const unpinnedTopics = rootTopics.filter((t) => !t.pinned)
 
           const reorderedTopics = [topic, ...pinnedTopics, ...unpinnedTopics.filter((t) => t.id !== topic.id)]
 
@@ -202,8 +220,8 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     async (topic: Topic) => {
       await modelGenerating()
       if (topic.id === activeTopic?.id) {
-        const index = findIndex(assistant.topics, (t) => t.id === topic.id)
-        setActiveTopic(assistant.topics[index + 1 === assistant.topics.length ? index - 1 : index + 1])
+        const index = findIndex(rootTopics, (t) => t.id === topic.id)
+        setActiveTopic(rootTopics[index + 1 === rootTopics.length ? index - 1 : index + 1])
       }
       removeTopic(topic)
     },
@@ -213,8 +231,8 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const onMoveTopic = useCallback(
     async (topic: Topic, toAssistant: Assistant) => {
       await modelGenerating()
-      const index = findIndex(assistant.topics, (t) => t.id === topic.id)
-      setActiveTopic(assistant.topics[index + 1 === assistant.topics.length ? 0 : index + 1])
+      const index = findIndex(rootTopics, (t) => t.id === topic.id)
+      setActiveTopic(rootTopics[index + 1 === rootTopics.length ? 0 : index + 1])
       moveTopic(topic, toAssistant)
     },
     [assistant.topics, moveTopic, setActiveTopic]
@@ -437,7 +455,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       }
     ]
 
-    if (assistants.length > 1 && assistant.topics.length > 1) {
+    if (assistants.length > 1 && rootTopics.length > 1) {
       menus.push({
         label: t('chat.topics.move_to'),
         key: 'move',
@@ -454,7 +472,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       })
     }
 
-    if (assistant.topics.length > 1 && !topic.pinned) {
+    if (rootTopics.length > 1 && !topic.pinned) {
       menus.push({ type: 'divider' })
       menus.push({
         label: t('common.delete'),
@@ -494,14 +512,14 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   // Sort topics based on pinned status if pinTopicsToTop is enabled
   const sortedTopics = useMemo(() => {
     if (pinTopicsToTop) {
-      return [...assistant.topics].sort((a, b) => {
+      return [...rootTopics].sort((a, b) => {
         if (a.pinned && !b.pinned) return -1
         if (!a.pinned && b.pinned) return 1
         return 0
       })
     }
-    return assistant.topics
-  }, [assistant.topics, pinTopicsToTop])
+    return rootTopics
+  }, [rootTopics, pinTopicsToTop])
 
   // Filter topics based on search text (only in manage mode)
   // Supports: case-insensitive, space-separated keywords (all must match)

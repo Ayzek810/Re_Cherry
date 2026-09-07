@@ -18,6 +18,7 @@ import styled from 'styled-components'
 
 import MessageItem from './Message'
 import MessageGroupMenuBar from './MessageGroupMenuBar'
+import ResendPageBar from './ResendPageBar'
 
 const logger = loggerService.withContext('MessageGroup')
 interface Props {
@@ -247,6 +248,7 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
             isGroupContextMessage={isGrouped && message.id === groupContextMessageId}
             {...messageProps}
           />
+          {!isMultiSelectMode && <ResendPageBar topic={topic} scopeMessage={message} />}
         </MessageWrapper>
       )
 
@@ -282,6 +284,7 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
     [
       isGrid,
       isGrouped,
+      isMultiSelectMode,
       topic,
       multiModelMessageStyle,
       messages,

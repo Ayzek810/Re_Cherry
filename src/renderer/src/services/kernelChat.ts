@@ -16,7 +16,10 @@ import {
   MessageBlockStatus,
   MessageBlockType
 } from '@renderer/types/newMessage'
+import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
+import { renameAbortController } from '@renderer/utils/abortController'
 import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
+import { kernelReasoningEffortsForModel, kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
 
 const logger = loggerService.withContext('KernelChat')
 
@@ -45,6 +48,78 @@ interface StreamState {
 
 const streams = new Map<string, StreamState>()
 
+// --- 分支锚点簿记（最小版，无 UI） ---
+// 本地上送的 user 消息（uuid）在回执 user/message 事件到达前拿不到内核 seq；
+// 这里按会话 FIFO 记录 "尚未回执的发送"，事件到达时把 seq 记到 uuid 上，供将来对该消息 fork。
+const pendingUserIds = new Map<string, string[]>()
+const liveUserSeq = new Map<string, number>() // key = `${topicId}\u0000${messageId}`
+
+/** 发送前登记：该 user 消息即将以内核新事件落库（会话内 FIFO）。 */
+function rememberPendingUser(topicId: string, userMessageId: string): void {
+  const queue = pendingUserIds.get(topicId) ?? []
+  queue.push(userMessageId)
+  pendingUserIds.set(topicId, queue)
+}
+
+/** user/message 事件回执：把最早一条未回执发送的 seq 关联上，返回该本地消息 id（无则 undefined）。 */
+function recordUserMessageSeq(topicId: string, seq: number): string | undefined {
+  const queue = pendingUserIds.get(topicId)
+  if (queue === undefined || queue.length === 0) return undefined
+  const userMessageId = queue.shift() as string
+  liveUserSeq.set(topicId + '\u0000' + userMessageId, seq)
+  return userMessageId
+}
+
+export interface KernelAnchor {
+  sessionId: string
+  seq: number
+}
+
+/** 消息 → 内核锚点 (sessionId, seq)。
+ * kernel-<session>-<seq> 形态直接解析；本地 uuid（尚未重载的内核消息）走回执登记表。
+ */
+export function kernelAnchorOf(topicId: string, message: Message): KernelAnchor | undefined {
+  const id = message.id
+  if (id.startsWith('kernel-')) {
+    const body = id.slice('kernel-'.length)
+    const dash = body.lastIndexOf('-')
+    if (dash <= 0) return undefined
+    const seqText = body.slice(dash + 1)
+    if (!/^[0-9]+$/.test(seqText)) return undefined
+    return { sessionId: body.slice(0, dash), seq: Number(seqText) }
+  }
+  const seq = liveUserSeq.get(topicId + '\u0000' + id)
+  return seq === undefined ? undefined : { sessionId: topicId, seq }
+}
+
+/** 在内核把 source 会话按锚点 fork 成子分支（源会话原样保留）。返回子分支信息；锚点不可解析/失败返回 null。 */
+export async function forkBranchToKernel(
+  sourceTopicId: string,
+  anchorMessage: Message
+): Promise<{ id: string; name?: string; createdAt?: number; updatedAt?: number; parentTopicId?: string } | null> {
+  const anchor = kernelAnchorOf(sourceTopicId, anchorMessage)
+  if (anchor === undefined) {
+    logger.warn('kernelChat: no kernel anchor for message ' + anchorMessage.id)
+    return null
+  }
+  if (anchor.sessionId !== sourceTopicId) {
+    logger.warn('kernelChat: anchor belongs to a different session, abort fork')
+    return null
+  }
+  try {
+    const { topic } = (await window.api.dshTopicFork(anchor.sessionId, anchor.seq)) as {
+      topic: { id: string; name?: string; createdAt?: number; updatedAt?: number; parentTopicId?: string }
+    }
+    return topic
+  } catch (error) {
+    logger.error(
+      'kernelChat: failed to fork topic ' + sourceTopicId,
+      error instanceof Error ? error : new Error(String(error))
+    )
+    return null
+  }
+}
+
 let bridgeInitialized = false
 
 /** 应用启动时调用一次：订阅内核事件流。 */
@@ -67,13 +142,35 @@ export function initKernelBridge(): void {
 /** 把渲染进程的 provider 配置同步进内核（应用启动与 provider 变更时调用）。 */
 export async function syncProvidersToKernel(providers: unknown[]): Promise<void> {
   try {
-    await window.api.dshSyncProviders(providers)
+    const enriched = (providers as Array<Record<string, unknown>>).map((provider) => {
+      const models = (provider.models as Array<Record<string, unknown>> | undefined) ?? []
+      return {
+        ...provider,
+        models: models.map((model) => {
+          const reasoningEfforts = kernelReasoningEffortsForModel(model as Model)
+          // 通用登记表：按 apiHost/provider id 命中第三方网关的思考协议（硅基流动等）
+          const compat = providerReasoningCompat(provider, model as Model)
+          if (reasoningEfforts === undefined && compat === undefined) return model
+          return {
+            ...model,
+            ...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
+            ...(compat === undefined ? {} : { compat })
+          }
+        })
+      }
+    })
+    await window.api.dshSyncProviders(enriched)
   } catch (error) {
     logger.error(
       'kernelChat: failed to sync providers to kernel',
       error instanceof Error ? error : new Error(String(error))
     )
   }
+}
+
+/** 助手当前生效的思考档位（映射为内核档位；非推理模型/auto/default 返回 undefined）。 */
+export function assistantReasoningLevel(assistant: Assistant): string | undefined {
+  return kernelReasoningLevelFor(assistant.model, assistant.settings?.reasoning_effort)
 }
 
 /** 确保内核侧存在该话题的 agent/session（幂等）。 */
@@ -87,15 +184,23 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
     provider: model.provider,
     model: model.id,
     maxTokens: assistant.settings?.maxTokens,
-    systemPrompt: assistant.prompt
+    systemPrompt: assistant.prompt,
+    reasoningEffort: assistantReasoningLevel(assistant)
   })
 }
 
 /** 发送一条消息到内核；流式回复经由事件流投影回 Redux。 */
-export async function sendToKernel(topicId: string, text: string, assistantMessageId: string): Promise<void> {
+export async function sendToKernel(
+  topicId: string,
+  text: string,
+  assistantMessageId: string,
+  reasoningEffort?: string,
+  userMessageId?: string
+): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)
+  if (userMessageId !== undefined) rememberPendingUser(topicId, userMessageId)
   try {
-    await window.api.dshTopicSend(topicId, text)
+    await window.api.dshTopicSend(topicId, text, reasoningEffort)
   } catch (error) {
     pendingStubs.delete(topicId)
     throw error
@@ -128,6 +233,16 @@ export async function loadKernelTopicMessages(
 function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): void {
   const { topicId, event } = payload
   switch (event.type) {
+    case 'user/message': {
+      // 回执登记：本地 uuid user 消息 → 内核 seq（供以后对该消息 fork 用）
+      const localUserId = recordUserMessageSeq(topicId, event.seq)
+      // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）
+      if (localUserId) {
+        liveUserSeq.delete(topicId + '\u0000' + localUserId)
+        remapMessageToKernelId(topicId, localUserId, event.seq)
+      }
+      break
+    }
     case 'turn/start': {
       startTurn(topicId, event.data.turn)
       break
@@ -137,7 +252,10 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
       break
     }
     case 'assistant/message': {
+      const stubId = pendingStubs.get(topicId)
       finalizeAssistantMessage(topicId, event.data)
+      // 助手消息收尾后同样把本地 stub 改写为 kernel id，保证会话内不再残留 uuid 消息
+      if (stubId) remapMessageToKernelId(topicId, stubId, event.seq)
       break
     }
     case 'turn/end': {
@@ -401,6 +519,21 @@ function projectEventsToMessages(
 
 function kernelMessageId(topicId: string, seq: number): string {
   return `kernel-${topicId}-${seq}`
+}
+
+/** P3 消息 id 统一：把本地 uuid 消息（user 回执/assistant 收尾）改写为 kernel-<topic>-<seq>，
+ * 同步修正其块的 messageId 与 reducer 内 askId 引用；之后删除/重发锚点可直接从 id 解析。 */
+function remapMessageToKernelId(topicId: string, localId: string, seq: number): void {
+  if (!localId || localId.startsWith('kernel-')) return
+  const newId = kernelMessageId(topicId, seq)
+  const existing = store.getState().messages.entities[localId]
+  const blockIds = existing?.blocks ?? []
+  // 中止键随消息 id 改写迁移（user 消息 uuid → kernel id），否则停止按钮按新 askId 查不到注册
+  if (existing?.role === 'user') renameAbortController(localId, newId)
+  store.dispatch(newMessagesActions.replaceMessageId({ topicId, oldId: localId, newId }))
+  for (const blockId of blockIds) {
+    store.dispatch(updateOneBlock({ id: blockId, changes: { messageId: newId } }))
+  }
 }
 
 function createKernelMessage(

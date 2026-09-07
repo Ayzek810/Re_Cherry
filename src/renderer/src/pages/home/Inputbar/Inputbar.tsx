@@ -8,7 +8,7 @@ import {
 } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useInputText } from '@renderer/hooks/useInputText'
-import { useMessageOperations, useTopicLoading } from '@renderer/hooks/useMessageOperations'
+import { useMessageOperations, useTopicGenerating } from '@renderer/hooks/useMessageOperations'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useTextareaResize } from '@renderer/hooks/useTextareaResize'
@@ -161,7 +161,8 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
 
   const { t } = useTranslation()
   const { pauseMessages } = useMessageOperations(topic)
-  const loading = useTopicLoading(topic)
+  // 生成中信号（内核事件驱动，整个生成期间为 true），驱动暂停/停止按钮与发送禁用
+  const loading = useTopicGenerating(topic)
   const dispatch = useAppDispatch()
   const isVisionAssistant = useMemo(() => isVisionModel(model), [model])
   const isGenerateImageAssistant = useMemo(() => isGenerateImageModel(model), [model])

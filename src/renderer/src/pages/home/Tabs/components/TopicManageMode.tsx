@@ -64,6 +64,8 @@ export function useTopicManageMode(): TopicManageModeState {
   }
 }
 
+import { listRootTopics, loadKernelTopicRootIds, shouldShowTopicRow } from '@renderer/utils/topicBranch'
+
 interface TopicManagePanelProps {
   assistant: Assistant
   assistants: Assistant[]
@@ -91,12 +93,24 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   const { t } = useTranslation()
   const { isManageMode, selectedIds, searchText, exitManageMode, setSelectedIds, setSearchText } = manageState
   const [isSearchMode, setIsSearchMode] = useState(false)
+  const [kernelRoots, setKernelRoots] = useState<Set<string> | null>(null)
+  const topicsKey = useMemo(() => (assistant?.topics ?? []).map((topic) => topic.id).join(','), [assistant?.topics])
+  useEffect(() => {
+    let active = true
+    void loadKernelTopicRootIds().then((ids) => {
+      if (active) setKernelRoots(ids)
+    })
+    return () => {
+      active = false
+    }
+  }, [topicsKey])
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Topics that can be selected (non-pinned, and filtered when in search mode)
   const selectableTopics = useMemo(() => {
-    const baseTopics = isSearchMode ? filteredTopics : assistant.topics
-    return (baseTopics ?? []).filter((topic) => !topic.pinned)
+    const baseTopics = isSearchMode ? filteredTopics : listRootTopics(assistant.topics ?? [])
+    const known = kernelRoots === null ? baseTopics : baseTopics.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
+    return known.filter((topic) => !topic.pinned)
   }, [assistant.topics, filteredTopics, isSearchMode])
 
   // Check if all selectable topics are selected
@@ -125,7 +139,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   const handleDeleteSelected = useCallback(async () => {
     if (selectedIds.size === 0) return
 
-    const remainingTopics = assistant.topics.filter((topic) => !selectedIds.has(topic.id))
+    const remainingTopics = listRootTopics(assistant.topics ?? []).filter((topic) => !selectedIds.has(topic.id))
     if (remainingTopics.length === 0) {
       window.toast.error(t('chat.topics.manage.error.at_least_one'))
       return
@@ -152,7 +166,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value)
     )
 
-    const actualRemainingTopics = assistant.topics.filter((topic) => !successfulIds.has(topic.id))
+    const actualRemainingTopics = listRootTopics(assistant.topics ?? []).filter((topic) => !successfulIds.has(topic.id))
     updateTopics(actualRemainingTopics)
 
     // Switch to first remaining topic if current topic was deleted
@@ -183,7 +197,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       const targetAssistant = assistants.find((a) => a.id === targetAssistantId)
       if (!targetAssistant) return
 
-      const remainingTopics = assistant.topics.filter((topic) => !selectedIds.has(topic.id))
+      const remainingTopics = listRootTopics(assistant.topics ?? []).filter((topic) => !selectedIds.has(topic.id))
       if (remainingTopics.length === 0) {
         window.toast.error(t('chat.topics.manage.error.at_least_one'))
         return

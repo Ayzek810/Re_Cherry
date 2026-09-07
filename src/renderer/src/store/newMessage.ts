@@ -88,6 +88,13 @@ interface RemoveMessagesPayload {
   messageIds: string[]
 }
 
+// Payload for remapping a message id（本地 uuid → 内核回执后的 kernel-<topic>-<seq>）
+interface ReplaceMessageIdPayload {
+  topicId: string
+  oldId: string
+  newId: string
+}
+
 // Payload for inserting a message at a specific index
 interface InsertMessageAtIndexPayload {
   topicId: string
@@ -279,6 +286,27 @@ export const messagesSlice = createSlice({
       // Apply updates if any changes were made
       if (Object.keys(changes).length > 0) {
         messagesAdapter.updateOne(state, { id: messageId, changes })
+      }
+    },
+    /** 消息 id 改写（发送时本地 uuid → 内核回执 seq 的 kernel-<topic>-<seq>）：
+     * 移动实体、替换有序 id 列表中的位置，并把同一话题里 assistant 的 askId 引用一并更新。 */
+    replaceMessageId(state, action: PayloadAction<ReplaceMessageIdPayload>) {
+      const { topicId, oldId, newId } = action.payload
+      const existing = state.entities[oldId]
+      if (!existing || newId === oldId) return
+      const moved: Message = { ...existing, id: newId }
+      delete state.entities[oldId]
+      state.entities[newId] = moved
+      const list = state.messageIdsByTopic[topicId]
+      if (list) {
+        const index = list.indexOf(oldId)
+        if (index >= 0) list[index] = newId
+      }
+      for (const id of Object.keys(state.entities)) {
+        const message = state.entities[id]
+        if (message && message.askId === oldId) {
+          state.entities[id] = { ...message, askId: newId }
+        }
       }
     }
   }

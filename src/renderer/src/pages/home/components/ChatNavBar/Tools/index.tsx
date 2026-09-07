@@ -6,19 +6,22 @@ import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShowTopics } from '@renderer/hooks/useStore'
 import { useAppDispatch } from '@renderer/store'
 import { setNarrowMode } from '@renderer/store/settings'
-import type { Assistant } from '@renderer/types'
+import type { Assistant, Topic } from '@renderer/types'
 import { Tooltip } from 'antd'
 import { PanelLeftClose, PanelRightClose, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { styled } from 'styled-components'
 
+import BranchGraphButton from './BranchGraphButton'
 import SettingsButton from './SettingsButton'
 
 interface ToolsProps {
   assistant?: Assistant
+  activeTopic?: Topic
+  setActiveTopic?: (topic: Topic) => void
 }
 
-const Tools = ({ assistant }: ToolsProps) => {
+const Tools = ({ assistant, activeTopic, setActiveTopic }: ToolsProps) => {
   const { t } = useTranslation()
   const { showTopics, toggleShowTopics } = useShowTopics()
   const { isTopNavbar } = useNavbarPosition()
@@ -32,6 +35,7 @@ const Tools = ({ assistant }: ToolsProps) => {
 
   return (
     <HStack alignItems="center" gap={8}>
+      <BranchGraphButton assistant={assistant} topic={activeTopic} onSwitchTopic={setActiveTopic} />
       <SettingsButton assistant={assistant} />
       {isTopNavbar && (
         <Tooltip title={t('navbar.expand')} mouseEnterDelay={0.8}>

@@ -56,12 +56,17 @@ const api = {
       .invoke(IpcChannel.Dsh_StreamComplete, payload)
       .finally(() => ipcRenderer.off(IpcChannel.Dsh_CompletionEvent, listener))
   },
+
   dshTopicList: () => ipcRenderer.invoke(IpcChannel.Dsh_TopicList),
   dshTopicCreate: (input: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_TopicCreate, input),
   dshTopicRename: (id: string, name: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRename, id, name),
   dshTopicDelete: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicDelete, id),
   dshTopicOpen: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicOpen, id),
-  dshTopicSend: (id: string, text: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text),
+  dshTopicFork: (topicId: string, anchorUserMessageSeq: number) =>
+    ipcRenderer.invoke(IpcChannel.Dsh_TopicFork, topicId, anchorUserMessageSeq),
+  dshTopicBranches: (rootTopicId: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicBranches, rootTopicId),
+  dshTopicSend: (id: string, text: string, reasoningEffort?: string) =>
+    ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, reasoningEffort),
   dshTopicStop: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicStop, id),
   dshTopicRunning: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRunning, id),
   dshTopicEvents: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicEvents, id),

@@ -11,13 +11,11 @@ import {
 } from '@renderer/components/Icons/SVGIcon'
 import { QuickPanelReservedSymbol, useQuickPanel } from '@renderer/components/QuickPanel'
 import {
-  getThinkModelType,
-  isDoubaoThinkingAutoModel,
   isFixedReasoningModel,
   isGPT5SeriesReasoningModel,
-  isOpenAIWebSearchModel,
-  MODEL_SUPPORTED_OPTIONS
+  isOpenAIWebSearchModel
 } from '@renderer/config/models'
+import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import type { Model, ThinkingOption } from '@renderer/types'
@@ -52,21 +50,10 @@ const ThinkingButton: FC<Props> = ({
     return assistant.settings?.reasoning_effort || 'none'
   }, [isControlled, controlledEffort, assistant.settings?.reasoning_effort])
 
-  // 确定当前模型支持的选项类型
-  const modelType = useMemo(() => getThinkModelType(model), [model])
-
   const isFixedReasoning = isFixedReasoningModel(model)
 
-  // 获取当前模型支持的选项
-  const supportedOptions: ThinkingOption[] = useMemo(() => {
-    if (modelType === 'doubao') {
-      if (isDoubaoThinkingAutoModel(model)) {
-        return ['none', 'auto', 'high']
-      }
-      return ['none', 'high']
-    }
-    return MODEL_SUPPORTED_OPTIONS[modelType]
-  }, [model, modelType])
+  // 思考档位选项：模型无关、常驻 关/自动/低/中/高/满
+  const supportedOptions: ThinkingOption[] = useMemo(() => reasoningOptionsForModel(model), [model])
 
   const onThinkingChange = useCallback(
     (option: ThinkingOption) => {
@@ -111,7 +98,8 @@ const ThinkingButton: FC<Props> = ({
     low: t('assistants.settings.reasoning_effort.low'),
     medium: t('assistants.settings.reasoning_effort.medium'),
     auto: t('assistants.settings.reasoning_effort.auto'),
-    xhigh: t('assistants.settings.reasoning_effort.xhigh')
+    xhigh: t('assistants.settings.reasoning_effort.xhigh'),
+    max: t('assistants.settings.reasoning_effort.xhigh')
   } as const satisfies Record<ThinkingOption, string>
 
   const reasoningEffortDescriptionMap = {
@@ -122,6 +110,7 @@ const ThinkingButton: FC<Props> = ({
     medium: t('assistants.settings.reasoning_effort.medium_description'),
     high: t('assistants.settings.reasoning_effort.high_description'),
     xhigh: t('assistants.settings.reasoning_effort.xhigh_description'),
+    max: t('assistants.settings.reasoning_effort.xhigh_description'),
     auto: t('assistants.settings.reasoning_effort.auto_description')
   } as const satisfies Record<ThinkingOption, string>
 

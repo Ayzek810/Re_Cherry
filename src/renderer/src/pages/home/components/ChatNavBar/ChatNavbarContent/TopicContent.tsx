@@ -1,7 +1,7 @@
 import EmojiIcon from '@renderer/components/EmojiIcon'
 import HorizontalScrollContainer from '@renderer/components/HorizontalScrollContainer'
 import AssistantSettingsPopup from '@renderer/pages/settings/AssistantSettings'
-import type { Assistant } from '@renderer/types'
+import type { Assistant, Topic } from '@renderer/types'
 import { getLeadingEmoji } from '@renderer/utils'
 import { ChevronRight } from 'lucide-react'
 import { useMemo } from 'react'
@@ -12,9 +12,11 @@ import Tools from '../Tools'
 
 type TopicContentProps = {
   assistant: Assistant
+  activeTopic?: Topic
+  setActiveTopic?: (topic: Topic) => void
 }
 
-const TopicContent = ({ assistant }: TopicContentProps) => {
+const TopicContent = ({ assistant, activeTopic, setActiveTopic }: TopicContentProps) => {
   const { t } = useTranslation()
   const assistantName = useMemo(() => assistant.name || t('chat.default.name'), [assistant.name, t])
 
@@ -37,7 +39,7 @@ const TopicContent = ({ assistant }: TopicContentProps) => {
           <SelectModelButton assistant={assistant} />
         </div>
       </HorizontalScrollContainer>
-      <Tools assistant={assistant} />
+      <Tools assistant={assistant} activeTopic={activeTopic} setActiveTopic={setActiveTopic} />
     </>
   )
 }
