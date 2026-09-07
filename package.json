@@ -1,6 +1,6 @@
 {
   "name": "Re_Cherry",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "A personalized AI assistant forked from Cherry Studio.",
   "desktopName": "Re_Cherry.desktop",
@@ -98,7 +98,6 @@
     "@deepseek-ai/dsh-tools": "0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1",
     "@libsql/client": "0.14.0",
-    "@paymoapp/electron-shutdown-handler": "1.1.2",
     "font-list": "2.0.0",
     "gray-matter": "4.0.3",
     "node-stream-zip": "1.15.0",
@@ -377,7 +376,6 @@
     "onlyBuiltDependencies": [
       "@j178/prek",
       "@kangfenmao/keyv-storage",
-      "@paymoapp/electron-shutdown-handler",
       "@scarf/scarf",
       "@swc/core",
       "electron",
