@@ -1,0 +1,49 @@
+import type { NormalToolResponse } from '@renderer/types'
+import type { ToolMessageBlock } from '@renderer/types/newMessage'
+
+import { MessageMemorySearchToolTitle } from './MessageMemorySearch'
+import { MessageWebSearchToolTitle } from './MessageWebSearch'
+
+interface Props {
+  block: ToolMessageBlock
+}
+const builtinToolsPrefix = 'builtin_'
+
+const ChooseTool = (toolResponse: NormalToolResponse): React.ReactNode | null => {
+  let toolName = toolResponse.tool.name
+  const toolType = toolResponse.tool.type
+  if (toolName.startsWith(builtinToolsPrefix)) {
+    toolName = toolName.slice(builtinToolsPrefix.length)
+    switch (toolName) {
+      case 'web_search':
+      case 'web_search_preview':
+        return toolType === 'provider' ? null : <MessageWebSearchToolTitle toolResponse={toolResponse} />
+      case 'memory_search':
+        return <MessageMemorySearchToolTitle toolResponse={toolResponse} />
+      default:
+        return null
+    }
+  }
+  return null
+}
+
+export default function MessageTool({ block }: Props) {
+  // FIXME: 语义错误，这里已经不是 MCP tool 了,更改rawMcpToolResponse需要改用户数据, 所以暂时保留
+  const toolResponse = block.metadata?.rawMcpToolResponse as NormalToolResponse
+
+  if (!toolResponse) return null
+
+  const toolRenderer = ChooseTool(toolResponse)
+
+  if (!toolRenderer) return null
+
+  return toolRenderer
+}
+
+// const PrepareToolWrapper = styled.span`
+//   display: flex;
+//   align-items: center;
+//   gap: 4px;
+//   font-size: 14px;
+//   padding-left: 0;
+// `
