@@ -166,8 +166,8 @@ describe('websearch helpers', () => {
       expect(isWebSearchModel(createModel())).toBe(false)
     })
 
-    it('handles Anthropic providers on unsupported platforms', () => {
-      providerMock.mockReturnValueOnce(createProvider({ id: SystemProviderIds['aws-bedrock'] }))
+    it('rejects non-Google Anthropic models against the Claude regex', () => {
+      providerMock.mockReturnValueOnce(createProvider({ id: 'custom-anthropic-relay' }))
       const model = createModel({ id: 'claude-2-sonnet' })
       expect(isWebSearchModel(model)).toBe(false)
     })
@@ -214,7 +214,7 @@ describe('websearch helpers', () => {
     })
 
     it('falls back to Gemini/Vertex provider regex matching', () => {
-      providerMock.mockReturnValueOnce(createProvider({ id: SystemProviderIds.vertexai }))
+      providerMock.mockReturnValueOnce(createProvider({ id: 'custom-gemini' }))
       providerMocks.isGeminiProvider.mockReturnValueOnce(true)
       expect(isWebSearchModel(createModel({ id: 'gemini-2.0-flash-latest' }))).toBe(true)
     })
@@ -347,7 +347,7 @@ describe('websearch helpers', () => {
       'gemini-flash-lite-latest',
       'gemini-pro-latest'
     ])('Gemini provider supports %s', (id) => {
-      providerMock.mockReturnValue(createProvider({ id: SystemProviderIds.vertexai }))
+      providerMock.mockReturnValue(createProvider({ id: 'custom-gemini' }))
       providerMocks.isGeminiProvider.mockReturnValue(true)
       expect(isWebSearchModel(createModel({ id }))).toBe(true)
     })

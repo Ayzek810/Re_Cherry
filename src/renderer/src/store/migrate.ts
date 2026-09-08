@@ -3201,6 +3201,22 @@ const migrateConfig = {
     } catch (error) {
       return state
     }
+  },
+  '213': (state: RootState) => {
+    try {
+      // v0.2.4: 移除内核不支持协议族的全部历史行——
+      // ① 系统提供商预设（id = gemini/azure-openai/vertexai/aws-bedrock，SystemProviderIdSchema 同步删除）；
+      // ② 历史遗留的自定义 provider（id 为随机值但 type 属不可路由协议：内核 PROTOCOL_BY_TYPE 无映射，
+      //    留着只会静默失败）。type 级枚举本身保留（migrate 历史依赖其存在）。
+      const REMOVED_PROVIDER_TYPES = new Set(['gemini', 'azure-openai', 'vertexai', 'aws-bedrock', 'vertex-anthropic'])
+      const REMOVED_SYSTEM_PROVIDER_IDS = new Set(['gemini', 'azure-openai', 'vertexai', 'aws-bedrock'])
+      state.llm.providers = state.llm.providers.filter(
+        (provider) => !REMOVED_SYSTEM_PROVIDER_IDS.has(provider.id) && !REMOVED_PROVIDER_TYPES.has(provider.type)
+      )
+      return state
+    } catch (error) {
+      return state
+    }
   }
 }
 

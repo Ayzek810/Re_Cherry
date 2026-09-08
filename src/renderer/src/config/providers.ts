@@ -1,12 +1,10 @@
 import ZhinaoProviderLogo from '@renderer/assets/images/models/360.png'
 import HunyuanProviderLogo from '@renderer/assets/images/models/hunyuan.png'
-import AzureProviderLogo from '@renderer/assets/images/models/microsoft.png'
 import Ai302ProviderLogo from '@renderer/assets/images/providers/302ai.webp'
 import AiHubMixProviderLogo from '@renderer/assets/images/providers/aihubmix.webp'
 import AiOnlyProviderLogo from '@renderer/assets/images/providers/aiOnly.webp'
 import AlayaNewProviderLogo from '@renderer/assets/images/providers/alayanew.webp'
 import AnthropicProviderLogo from '@renderer/assets/images/providers/anthropic.png'
-import AwsProviderLogo from '@renderer/assets/images/providers/aws-bedrock.webp'
 import BaichuanProviderLogo from '@renderer/assets/images/providers/baichuan.png'
 import BaiduCloudProviderLogo from '@renderer/assets/images/providers/baidu-cloud.svg'
 import BailianProviderLogo from '@renderer/assets/images/providers/bailian.png'
@@ -18,7 +16,6 @@ import DmxapiProviderLogo from '@renderer/assets/images/providers/DMXAPI.png'
 import FireworksProviderLogo from '@renderer/assets/images/providers/fireworks.png'
 import GiteeAIProviderLogo from '@renderer/assets/images/providers/gitee-ai.png'
 import GithubProviderLogo from '@renderer/assets/images/providers/github.png'
-import GoogleProviderLogo from '@renderer/assets/images/providers/google.png'
 import GPUStackProviderLogo from '@renderer/assets/images/providers/gpustack.svg'
 import GrokProviderLogo from '@renderer/assets/images/providers/grok.png'
 import GroqProviderLogo from '@renderer/assets/images/providers/groq.png'
@@ -53,7 +50,6 @@ import TencentCloudProviderLogo from '@renderer/assets/images/providers/tencent-
 import TogetherProviderLogo from '@renderer/assets/images/providers/together.png'
 import TokenFluxProviderLogo from '@renderer/assets/images/providers/tokenflux.png'
 import AIGatewayProviderLogo from '@renderer/assets/images/providers/vercel.svg'
-import VertexAIProviderLogo from '@renderer/assets/images/providers/vertexai.svg'
 import BytedanceProviderLogo from '@renderer/assets/images/providers/volcengine.png'
 import VoyageAIProviderLogo from '@renderer/assets/images/providers/voyageai.png'
 import XirangProviderLogo from '@renderer/assets/images/providers/xirang.png'
@@ -377,39 +373,6 @@ export const SYSTEM_PROVIDERS_CONFIG: Record<SystemProviderId, SystemProvider> =
     enabled: false,
     serviceTier: OpenAIServiceTiers.auto
   },
-  'azure-openai': {
-    id: 'azure-openai',
-    name: 'Azure OpenAI',
-    type: 'azure-openai',
-    apiKey: '',
-    apiHost: '',
-    apiVersion: '',
-    models: SYSTEM_MODELS['azure-openai'],
-    isSystem: true,
-    enabled: false
-  },
-  gemini: {
-    id: 'gemini',
-    name: 'Gemini',
-    type: 'gemini',
-    apiKey: '',
-    apiHost: 'https://generativelanguage.googleapis.com',
-    models: SYSTEM_MODELS.gemini,
-    isSystem: true,
-    enabled: false,
-    isVertex: false
-  },
-  vertexai: {
-    id: 'vertexai',
-    name: 'VertexAI',
-    type: 'vertexai',
-    apiKey: '',
-    apiHost: '',
-    models: SYSTEM_MODELS.vertexai,
-    isSystem: true,
-    enabled: false,
-    isVertex: true
-  },
   github: {
     id: 'github',
     name: 'Github Models',
@@ -643,16 +606,6 @@ export const SYSTEM_PROVIDERS_CONFIG: Record<SystemProviderId, SystemProvider> =
     isSystem: true,
     enabled: false
   },
-  'aws-bedrock': {
-    id: 'aws-bedrock',
-    name: 'AWS Bedrock',
-    type: 'aws-bedrock',
-    apiKey: '',
-    apiHost: '',
-    models: SYSTEM_MODELS['aws-bedrock'],
-    isSystem: true,
-    enabled: false
-  },
   poe: {
     id: 'poe',
     name: 'Poe',
@@ -744,7 +697,6 @@ export const PROVIDER_LOGO_MAP: AtLeast<SystemProviderId, string> = {
   anthropic: AnthropicProviderLogo,
   aihubmix: AiHubMixProviderLogo,
   burncloud: BurnCloudProviderLogo,
-  gemini: GoogleProviderLogo,
   stepfun: StepProviderLogo,
   doubao: BytedanceProviderLogo,
   minimax: MinimaxProviderLogo,
@@ -756,7 +708,6 @@ export const PROVIDER_LOGO_MAP: AtLeast<SystemProviderId, string> = {
   fireworks: FireworksProviderLogo,
   zhinao: ZhinaoProviderLogo,
   nvidia: NvidiaProviderLogo,
-  'azure-openai': AzureProviderLogo,
   hunyuan: HunyuanProviderLogo,
   grok: GrokProviderLogo,
   hyperbolic: HyperbolicProviderLogo,
@@ -776,9 +727,7 @@ export const PROVIDER_LOGO_MAP: AtLeast<SystemProviderId, string> = {
   tokenflux: TokenFluxProviderLogo,
   cephalon: CephalonProviderLogo,
   lanyun: LanyunProviderLogo,
-  vertexai: VertexAIProviderLogo,
   'new-api': NewAPIProviderLogo,
-  'aws-bedrock': AwsProviderLogo,
   poe: 'poe', // use svg icon component
   aionly: AiOnlyProviderLogo,
   longcat: LongCatProviderLogo,
@@ -875,17 +824,6 @@ export const PROVIDER_URLS: Record<SystemProviderId, ProviderUrls> = {
         'https://ppio.com/user/register?invited_by=JYT9GD&utm_source=github_cherry-studio&redirect=/settings/key-management',
       docs: 'https://docs.cherry-ai.com/pre-basic/providers/ppio?invited_by=JYT9GD&utm_source=github_cherry-studio',
       models: 'https://ppio.com/model-api/product/llm-api?invited_by=JYT9GD&utm_source=github_cherry-studio'
-    }
-  },
-  gemini: {
-    api: {
-      url: 'https://generativelanguage.googleapis.com'
-    },
-    websites: {
-      official: 'https://gemini.google.com/',
-      apiKey: 'https://aistudio.google.com/app/apikey',
-      docs: 'https://ai.google.dev/gemini-api/docs',
-      models: 'https://ai.google.dev/gemini-api/docs/models/gemini'
     }
   },
   silicon: {
@@ -1274,17 +1212,6 @@ export const PROVIDER_URLS: Record<SystemProviderId, ProviderUrls> = {
       models: 'https://build.nvidia.com/nim'
     }
   },
-  'azure-openai': {
-    api: {
-      url: ''
-    },
-    websites: {
-      official: 'https://azure.microsoft.com/en-us/products/ai-services/openai-service',
-      apiKey: 'https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI',
-      docs: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
-      models: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models'
-    }
-  },
   'baidu-cloud': {
     api: {
       url: 'https://qianfan.baidubce.com/v2/'
@@ -1372,17 +1299,6 @@ export const PROVIDER_URLS: Record<SystemProviderId, ProviderUrls> = {
       models: 'https://maas.lanyun.net/#/model/modelSquare'
     }
   },
-  vertexai: {
-    api: {
-      url: ''
-    },
-    websites: {
-      official: 'https://cloud.google.com/vertex-ai',
-      apiKey: 'https://console.cloud.google.com/apis/credentials',
-      docs: 'https://cloud.google.com/vertex-ai/generative-ai/docs',
-      models: 'https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models'
-    }
-  },
   'new-api': {
     api: {
       url: 'http://localhost:3000'
@@ -1390,17 +1306,6 @@ export const PROVIDER_URLS: Record<SystemProviderId, ProviderUrls> = {
     websites: {
       official: 'https://docs.newapi.pro/',
       docs: 'https://docs.newapi.pro'
-    }
-  },
-  'aws-bedrock': {
-    api: {
-      url: ''
-    },
-    websites: {
-      official: 'https://aws.amazon.com/bedrock/',
-      apiKey: 'https://docs.aws.amazon.com/bedrock/latest/userguide/security-iam.html',
-      docs: 'https://docs.aws.amazon.com/bedrock/',
-      models: 'https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html'
     }
   },
   poe: {

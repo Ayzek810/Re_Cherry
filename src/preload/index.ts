@@ -297,6 +297,14 @@ const api = {
     decrypt: (encryptedData: string, iv: string, secretKey: string) =>
       ipcRenderer.invoke(IpcChannel.Aes_Decrypt, encryptedData, iv, secretKey)
   },
+  providerKeys: {
+    get: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Get, providerId),
+    getAll: () => ipcRenderer.invoke(IpcChannel.ProviderKeys_GetAll),
+    set: (providerId: string, apiKey: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Set, providerId, apiKey),
+    setMany: (entries: Record<string, string>) => ipcRenderer.invoke(IpcChannel.ProviderKeys_SetMany, entries),
+    remove: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Remove, providerId),
+    has: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Has, providerId)
+  },
   shell: {
     openExternal: (url: string, options?: Electron.OpenExternalOptions) => {
       // Defense-in-depth: validate URL scheme before forwarding to shell.openExternal

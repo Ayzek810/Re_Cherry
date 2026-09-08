@@ -101,6 +101,13 @@ vi.mock('../WebDav', () => ({
   default: vi.fn()
 }))
 
+vi.mock('../ProviderKeyStore', () => ({
+  providerKeyStore: {
+    getAll: vi.fn(() => ({})),
+    setMany: vi.fn()
+  }
+}))
+
 vi.mock('../../utils', () => ({
   getDataPath: vi.fn(() => '/mock/data')
 }))

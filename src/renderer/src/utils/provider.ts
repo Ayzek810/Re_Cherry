@@ -81,12 +81,8 @@ export const isSupportEnableThinkingProvider = (provider: Provider) => {
   )
 }
 
-const SUPPORT_SERVICE_TIER_PROVIDERS = [
-  SystemProviderIds.openai,
-  SystemProviderIds['azure-openai'],
-  SystemProviderIds.groq
-  // TODO: 等待上游支持aws-bedrock
-]
+const SUPPORT_SERVICE_TIER_PROVIDERS = [SystemProviderIds.openai, SystemProviderIds.groq]
+// azure-openai 系统提供商已移除；service_tier 对其的自定义支持随之失效（保留 type 级判断无意义）
 
 /**
  * 判断提供商是否支持 service_tier 设置
@@ -94,7 +90,6 @@ const SUPPORT_SERVICE_TIER_PROVIDERS = [
 export const isSupportServiceTierProvider = (provider: Provider) => {
   return (
     provider.apiOptions?.isSupportServiceTier === true ||
-    provider.type === 'azure-openai' ||
     (isSystemProvider(provider) && SUPPORT_SERVICE_TIER_PROVIDERS.some((pid) => pid === provider.id))
   )
 }
@@ -114,23 +109,15 @@ export const isSupportVerbosityProvider = (provider: Provider) => {
   )
 }
 
-const SUPPORT_URL_CONTEXT_PROVIDER_TYPES = [
-  'gemini',
-  'vertexai',
-  'anthropic',
-  'azure-openai',
-  'new-api'
-] as const satisfies ProviderType[]
+const SUPPORT_URL_CONTEXT_PROVIDER_TYPES = ['anthropic', 'new-api'] as const satisfies ProviderType[]
 
 export const isSupportUrlContextProvider = (provider: Provider) => {
   return SUPPORT_URL_CONTEXT_PROVIDER_TYPES.some((type) => type === provider.type)
 }
 
-const SUPPORT_GEMINI_NATIVE_WEB_SEARCH_PROVIDERS = ['gemini', 'vertexai'] as const satisfies SystemProviderId[]
-
-/** 判断是否是使用 Gemini 原生搜索工具的 provider. 目前假设只有官方 API 使用原生工具 */
-export const isGeminiWebSearchProvider = (provider: Provider) => {
-  return SUPPORT_GEMINI_NATIVE_WEB_SEARCH_PROVIDERS.some((id) => id === provider.id)
+/** 判断是否是使用 Gemini 原生搜索工具的 provider。官方 Gemini/Vertex 系统提供商已移除，恒为 false。 */
+export const isGeminiWebSearchProvider = (_provider: Provider) => {
+  return false
 }
 
 export const isNewApiProvider = (provider: Provider) => {
@@ -177,15 +164,9 @@ export const isSupportAPIVersionProvider = (provider: Provider) => {
   return provider.apiOptions?.isNotSupportAPIVersion !== false
 }
 
-export const NOT_SUPPORT_API_KEY_PROVIDERS: readonly SystemProviderId[] = [
-  'ollama',
-  'lmstudio',
-  'vertexai',
-  'aws-bedrock',
-  'copilot'
-]
+export const NOT_SUPPORT_API_KEY_PROVIDERS: readonly SystemProviderId[] = ['ollama', 'lmstudio', 'copilot']
 
-export const NOT_SUPPORT_API_KEY_PROVIDER_TYPES: readonly ProviderType[] = ['vertexai', 'aws-bedrock']
+export const NOT_SUPPORT_API_KEY_PROVIDER_TYPES: readonly ProviderType[] = []
 
 // https://platform.claude.com/docs/en/build-with-claude/prompt-caching#1-hour-cache-duration
 export const isSupportAnthropicPromptCacheProvider = (provider: Provider) => {

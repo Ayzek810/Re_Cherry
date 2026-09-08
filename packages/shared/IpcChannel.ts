@@ -235,6 +235,14 @@ export enum IpcChannel {
   // Analytics
   Analytics_TrackTokenUsage = 'analytics:track-token-usage',
 
+  // provider key 加密存储（v0.2.4 K 线）
+  ProviderKeys_Get = 'provider-keys:get',
+  ProviderKeys_GetAll = 'provider-keys:get-all',
+  ProviderKeys_Set = 'provider-keys:set',
+  ProviderKeys_SetMany = 'provider-keys:set-many',
+  ProviderKeys_Remove = 'provider-keys:remove',
+  ProviderKeys_Has = 'provider-keys:has',
+
   // dsh kernel
   Dsh_SyncProviders = 'dsh:sync-providers',
   Dsh_StreamSmoke = 'dsh:stream-smoke',

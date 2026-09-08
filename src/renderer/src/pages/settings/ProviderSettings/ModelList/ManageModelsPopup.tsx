@@ -15,7 +15,7 @@ import {
 import { useProvider } from '@renderer/hooks/useProvider'
 import NewApiAddModelPopup from '@renderer/pages/settings/ProviderSettings/ModelList/NewApiAddModelPopup'
 import NewApiBatchAddModelPopup from '@renderer/pages/settings/ProviderSettings/ModelList/NewApiBatchAddModelPopup'
-import { fetchModels } from '@renderer/services/ApiService'
+import { fetchProviderModelList } from '@renderer/services/ApiService'
 import type { Model, Provider } from '@renderer/types'
 import { filterModelsByKeywords, getFancyProviderName } from '@renderer/utils'
 import { getDuplicateModelNames, isFreeModel } from '@renderer/utils/model'
@@ -174,20 +174,36 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
         }
       }
     })
-  }, [list, models, onAddModel, provider, t])
+  }, [list, onAddModel, provider, t])
 
-  const loadModels = useCallback(async (provider: Provider) => {
-    setLoadingModels(true)
-    try {
-      const models = await fetchModels(provider)
-      const filteredModels = models.filter((model) => !isEmpty(model.name))
-      setListModels(filteredModels)
-    } catch (error) {
-      logger.error(`Failed to load models for provider ${getFancyProviderName(provider)}`, error as Error)
-    } finally {
-      setLoadingModels(false)
-    }
-  }, [])
+  const loadModels = useCallback(
+    async (provider: Provider) => {
+      setLoadingModels(true)
+      try {
+        const result = await fetchProviderModelList(provider)
+        if (!result.ok) {
+          logger.error('Failed to load models for provider', {
+            providerId: provider.id,
+            providerName: provider.name,
+            error: result.error
+          })
+          window.toast.error({
+            title: t('settings.models.manage.fetch_list'),
+            description: result.error || t('error.unknown'),
+            timeout: 5000
+          })
+          return
+        }
+        const filteredModels = result.models.filter((model) => !isEmpty(model.name))
+        setListModels(filteredModels)
+      } catch (error) {
+        logger.error(`Failed to load models for provider ${getFancyProviderName(provider)}`, error as Error)
+      } finally {
+        setLoadingModels(false)
+      }
+    },
+    [t]
+  )
 
   useEffect(() => {
     void loadModels(provider)

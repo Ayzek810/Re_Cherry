@@ -18,7 +18,6 @@ export const SYSTEM_MODELS: Record<SystemProviderId | 'defaultModel', Model[]> =
     // Default quick assistant model
     qwenModel
   ],
-  vertexai: [],
   sophnet: [],
   '302ai': [
     {
@@ -324,58 +323,6 @@ export const SYSTEM_MODELS: Record<SystemProviderId | 'defaultModel', Model[]> =
     { id: 'gpt-5-pro', provider: 'openai', name: ' GPT 5 Pro', group: 'gpt-5' },
     { id: 'gpt-5-chat', provider: 'openai', name: ' GPT 5 Chat', group: 'gpt-5' },
     { id: 'gpt-image-1', provider: 'openai', name: ' GPT Image 1', group: 'gpt-image' }
-  ],
-  'azure-openai': [
-    {
-      id: 'gpt-4o',
-      provider: 'azure-openai',
-      name: ' GPT-4o',
-      group: 'GPT 4o'
-    },
-    {
-      id: 'gpt-4o-mini',
-      provider: 'azure-openai',
-      name: ' GPT-4o-mini',
-      group: 'GPT 4o'
-    }
-  ],
-  gemini: [
-    {
-      id: 'gemini-2.5-flash',
-      provider: 'gemini',
-      name: 'Gemini 2.5 Flash',
-      group: 'Gemini 2.5'
-    },
-    {
-      id: 'gemini-2.5-pro',
-      provider: 'gemini',
-      name: 'Gemini 2.5 Pro',
-      group: 'Gemini 2.5'
-    },
-    {
-      id: 'gemini-2.5-flash-image-preview',
-      provider: 'gemini',
-      name: 'Gemini 2.5 Flash Image',
-      group: 'Gemini 2.5'
-    },
-    {
-      id: 'gemini-3-pro-image-preview',
-      provider: 'gemini',
-      name: 'Gemini 3 Pro Image Preview',
-      group: 'Gemini 3'
-    },
-    {
-      id: 'gemini-3-pro-preview',
-      provider: 'gemini',
-      name: 'Gemini 3 Pro Preview',
-      group: 'Gemini 3'
-    },
-    {
-      id: 'gemini-3.1-pro-preview',
-      provider: 'gemini',
-      name: 'Gemini 3.1 Pro Preview',
-      group: 'Gemini 3'
-    }
   ],
   anthropic: [
     {
@@ -1867,7 +1814,6 @@ export const SYSTEM_MODELS: Record<SystemProviderId | 'defaultModel', Model[]> =
     }
   ],
   'new-api': [],
-  'aws-bedrock': [],
   poe: [
     { id: 'Claude-Opus-4.6', name: 'Claude Opus 4.6', provider: 'poe', group: 'Anthropic' },
     { id: 'Claude-Sonnet-4.6', name: 'Claude Sonnet 4.6', provider: 'poe', group: 'Anthropic' },

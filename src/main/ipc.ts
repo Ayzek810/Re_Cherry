@@ -30,6 +30,7 @@ import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
 import NotificationService from './services/NotificationService'
 import * as NutstoreService from './services/NutstoreService'
+import { providerKeyStore } from './services/ProviderKeyStore'
 import { proxyManager } from './services/ProxyManager'
 import { searchService } from './services/SearchService'
 import { isSafeExternalUrl } from './services/security'
@@ -532,6 +533,20 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   // fs
   ipcMain.handle(IpcChannel.Fs_Read, FileService.readFile.bind(FileService))
   ipcMain.handle(IpcChannel.Fs_ReadText, FileService.readTextFileWithAutoEncoding.bind(FileService))
+
+  // provider key 加密存储（v0.2.4 K 线）
+  ipcMain.handle(IpcChannel.ProviderKeys_Get, (_e, providerId: string) => providerKeyStore.get(providerId))
+  ipcMain.handle(IpcChannel.ProviderKeys_GetAll, () => providerKeyStore.getAll())
+  ipcMain.handle(IpcChannel.ProviderKeys_Set, (_e, providerId: string, apiKey: string) => {
+    providerKeyStore.set(providerId, apiKey)
+  })
+  ipcMain.handle(IpcChannel.ProviderKeys_SetMany, (_e, entries: Record<string, string>) => {
+    providerKeyStore.setMany(entries)
+  })
+  ipcMain.handle(IpcChannel.ProviderKeys_Remove, (_e, providerId: string) => {
+    providerKeyStore.remove(providerId)
+  })
+  ipcMain.handle(IpcChannel.ProviderKeys_Has, (_e, providerId: string) => providerKeyStore.has(providerId))
 
   // export
   ipcMain.handle(IpcChannel.Export_Word, exportService.exportToWord.bind(exportService))

@@ -13,7 +13,6 @@ import { useTimer } from '@renderer/hooks/useTimer'
 import { ModelList } from '@renderer/pages/settings/ProviderSettings/ModelList'
 import { checkApi } from '@renderer/services/ApiService'
 import { isProviderSupportAuth } from '@renderer/services/ProviderService'
-import type { SystemProviderId } from '@renderer/types'
 import { isSystemProvider, isSystemProviderId, SystemProviderIds } from '@renderer/types'
 import type { ApiKeyConnectivity } from '@renderer/types/healthCheck'
 import { HealthStatus } from '@renderer/types/healthCheck'
@@ -50,7 +49,6 @@ import {
   SettingTitle
 } from '..'
 import ApiOptionsSettingsPopup from './ApiOptionsSettings/ApiOptionsSettingsPopup'
-import AwsBedrockSettings from './AwsBedrockSettings'
 import CustomHeaderPopup from './CustomHeaderPopup'
 import DMXAPISettings from './DMXAPISettings'
 import GPUStackSettings from './GPUStackSettings'
@@ -106,10 +104,8 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
 
   const isAzureOpenAI = isAzureOpenAIProvider(provider)
   const isDmxapi = provider.id === 'dmxapi'
-  const noAPIInputProviders = ['aws-bedrock'] as const satisfies SystemProviderId[]
-  const hideApiInput = noAPIInputProviders.some((id) => id === provider.id)
-  const noAPIKeyInputProviders = ['copilot', 'vertexai'] as const satisfies SystemProviderId[]
-  const hideApiKeyInput = noAPIKeyInputProviders.some((id) => id === provider.id)
+  const hideApiInput = false
+  const hideApiKeyInput = ['copilot'].some((id) => id === provider.id)
 
   const providerConfig = PROVIDER_URLS[provider.id]
   const officialWebsite = providerConfig?.websites?.official
@@ -629,7 +625,6 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
       )}
       {provider.id === 'lmstudio' && <LMStudioSettings />}
       {provider.id === 'gpustack' && <GPUStackSettings />}
-      {provider.id === 'aws-bedrock' && <AwsBedrockSettings />}
       <ModelList providerId={provider.id} />
     </SettingContainer>
   )

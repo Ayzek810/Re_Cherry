@@ -12,12 +12,17 @@ import type { Assistant, Model, Provider } from '@renderer/types'
 import { isSystemProvider } from '@renderer/types'
 import { type Chunk, ChunkType } from '@renderer/types/chunk'
 import type { Message } from '@renderer/types/newMessage'
-import { removeSpecialCharactersForTopicName } from '@renderer/utils'
+import { formatApiHost, getDefaultGroupName, removeSpecialCharactersForTopicName } from '@renderer/utils'
 import { getErrorMessage } from '@renderer/utils/error'
 import { purifyMarkdownImages } from '@renderer/utils/markdown'
 import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { containsSupportedVariables, replacePromptVariables } from '@renderer/utils/prompt'
-import { NOT_SUPPORT_API_KEY_PROVIDER_TYPES, NOT_SUPPORT_API_KEY_PROVIDERS } from '@renderer/utils/provider'
+import {
+  isAnthropicProvider,
+  isOllamaProvider,
+  NOT_SUPPORT_API_KEY_PROVIDER_TYPES,
+  NOT_SUPPORT_API_KEY_PROVIDERS
+} from '@renderer/utils/provider'
 import { isEmpty, takeRight } from 'lodash'
 
 import {
@@ -342,37 +347,170 @@ export function getRotatedApiKey(provider: Provider): string {
   return nextKey
 }
 
+/** OpenAI 兼容 /models 响应解析失败时携带的用户可读原因（动态服务端文本）。 */
+export interface ProviderModelListResult {
+  models: Model[]
+  ok: boolean
+  error?: string
+}
+
+/** 不提供在线模型列表的协议族（返回显式错误而非静默静态回退）。 */
+// copilot 在 RC 配置中是 type 'openai'（走 OAuth），不在此列；真不支持列表的是下列协议族。
+const UNLISTABLE_PROVIDER_TYPES = new Set<string>([
+  'gemini',
+  'azure-openai',
+  'vertexai',
+  'aws-bedrock',
+  'vertex-anthropic'
+])
+
+function httpErrorMessage(response: Response): string {
+  const status = response.status
+  if (response.status === 401 || response.status === 403) {
+    return status + ' unauthorized'
+  }
+  if (response.status === 404) {
+    return '404 not found (check apiHost and whether the endpoint exposes a model list)'
+  }
+  return String(status)
+}
+
+async function readErrorDetail(response: Response): Promise<string | undefined> {
+  try {
+    const text = await response.text()
+    const parsed = JSON.parse(text) as { error?: { message?: string } | string; message?: string }
+    if (typeof parsed === 'object') {
+      const msg = parsed.error
+        ? typeof parsed.error === 'string'
+          ? parsed.error
+          : parsed.error.message
+        : parsed.message
+      if (msg && typeof msg === 'string' && msg.trim()) {
+        return msg.trim().slice(0, 300)
+      }
+    }
+    return text.slice(0, 300) || undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
- * 拉取 provider 模型列表（OpenAI 兼容 /models；不支持的 provider 返回配置中的静态列表）。
+ * 拉取模型行的默认分组（对齐 CS 上游 listModels 的 defaultGroup 规则）：
+ * - 系统商：取模型 id 首个 '/' 前的组织前缀（如 silicon 的 deepseek-ai/Qwen/BAAI）；无 '/' 则用 provider.id；
+ * - 自建商（isSystem === false）：走 getDefaultGroupName 启发式（按 /、空格、:、-、_ 拆前缀）。
  */
-export async function fetchModels(provider: Provider): Promise<Model[]> {
+function defaultModelGroup(modelId: string, provider: Provider): string {
+  if (provider.isSystem === false) {
+    return getDefaultGroupName(modelId, provider.id)
+  }
+  const parts = modelId.split('/')
+  return parts.length > 1 ? parts[0] : provider.id
+}
+
+/**
+ * 拉取 provider 模型列表。
+ *
+ * 策略分派（参考 CS 上游 listModels 的协议差异）：
+ * - anthropic：GET {base}/v1/models，x-api-key + anthropic-version 头
+ * - ollama：GET {base}/api/tags（返回 { models: [{ name, model }] }）
+ * - 其余 openai 兼容（openai/openai-response/new-api/gateway/mistral 及多数系统商）：
+ *   GET {base}/models，base 经 formatApiHost 规范化（自动补 /v1、去尾斜杠与 '#'）
+ * - gemini/azure-openai/vertexai/aws-bedrock/vertex-anthropic/copilot：显式不支持
+ *
+ * 失败不再静默回退静态列表：返回 { ok: false, error } 由调用方展示；
+ * SYSTEM_MODELS 静态目录的'补齐展示'由 UI 层合并，与本函数解耦。
+ */
+export async function fetchProviderModelList(provider: Provider): Promise<ProviderModelListResult> {
+  const fallbackError = (e: unknown): ProviderModelListResult => {
+    logger.error('Failed to fetch models from provider', {
+      providerId: provider.id,
+      providerName: provider.name,
+      error: e instanceof Error ? e.message : String(e)
+    })
+    return { models: [], ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+
+  if (UNLISTABLE_PROVIDER_TYPES.has(provider.type)) {
+    return {
+      models: [],
+      ok: false,
+      error: 'provider type "' + provider.type + '" does not expose a model list endpoint'
+    }
+  }
+
   const apiHost = provider.apiHost
   if (!apiHost) {
-    return provider.models ?? []
+    return { models: [], ok: false, error: 'apiHost is not configured' }
   }
+
   try {
-    const response = await fetch(`${apiHost}/models`, {
-      headers: provider.apiKey ? { Authorization: `Bearer ${provider.apiKey}` } : {}
+    // Anthropic 官方/兼容端点：/v1/models，专用鉴权头，返回 { data: [{id, display_name}] }
+    if (isAnthropicProvider(provider) || provider.type === 'anthropic') {
+      const baseUrl = formatApiHost(apiHost)
+      const headers: Record<string, string> = {
+        'x-api-key': provider.apiKey ?? '',
+        'anthropic-version': '2023-06-01'
+      }
+      const response = await fetch(baseUrl + '/models?limit=1000', { headers })
+      if (!response.ok) {
+        return { models: [], ok: false, error: 'List models failed (' + httpErrorMessage(response) + ')' }
+      }
+      const data = (await response.json()) as { data?: { id: string; display_name?: string }[] }
+      const models = (data.data ?? []).map((item) => ({
+        id: item.id,
+        name: item.display_name || item.id,
+        provider: provider.id,
+        group: defaultModelGroup(item.id, provider)
+      }))
+      return { models, ok: true }
+    }
+
+    // Ollama 本地服务：/api/tags，返回 { models: [{ name, model }] }
+    if (isOllamaProvider(provider)) {
+      const baseUrl = formatApiHost(apiHost)
+        .replace(/\/v1$/, '')
+        .replace(/\/api$/, '')
+      const response = await fetch(baseUrl + '/api/tags')
+      if (!response.ok) {
+        return { models: [], ok: false, error: 'List models failed (' + httpErrorMessage(response) + ')' }
+      }
+      const data = (await response.json()) as { models?: { name: string; model?: string }[] }
+      const models = (data.models ?? []).map((item) => ({
+        id: item.model || item.name,
+        name: item.name,
+        provider: provider.id,
+        group: defaultModelGroup(item.name, provider)
+      }))
+      return { models, ok: true }
+    }
+
+    // OpenAI 兼容端点：GET {base}/models
+    const baseUrl = formatApiHost(apiHost)
+    const response = await fetch(baseUrl + '/models', {
+      headers: provider.apiKey ? { Authorization: 'Bearer ' + provider.apiKey } : {}
     })
     if (!response.ok) {
-      throw new Error(`List models failed (${response.status})`)
+      const detail = await readErrorDetail(response)
+      return { models: [], ok: false, error: detail ?? 'List models failed (' + httpErrorMessage(response) + ')' }
     }
-    const data = (await response.json()) as { data?: { id: string }[] }
+    const data = (await response.json()) as { data?: { id: string; owned_by?: string }[] }
     const models = (data.data ?? []).map((item) => ({
       id: item.id,
       name: item.id,
       provider: provider.id,
-      group: 'default'
+      group: defaultModelGroup(item.id, provider)
     }))
-    return models.length > 0 ? models : (provider.models ?? [])
+    return { models, ok: true }
   } catch (error) {
-    logger.error('Failed to fetch models from provider', {
-      providerId: provider.id,
-      providerName: provider.name,
-      error: error instanceof Error ? error.message : String(error)
-    })
-    return provider.models ?? []
+    return fallbackError(error)
   }
+}
+
+/** 兼容薄封装：只取模型数组；失败返回空数组（调用方应改用 fetchProviderModelList 以获得错误）。 */
+export async function fetchModels(provider: Provider): Promise<Model[]> {
+  const result = await fetchProviderModelList(provider)
+  return result.models
 }
 
 export function checkApiProvider(provider: Provider): void {

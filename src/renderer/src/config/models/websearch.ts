@@ -53,8 +53,7 @@ export function isWebSearchModel(model: Model): boolean {
 
   const modelId = getLowerBaseModelName(model.id, '/')
 
-  // bedrock不支持, azure支持
-  if (isAnthropicModel(model) && !(provider.id === SystemProviderIds['aws-bedrock'])) {
+  if (isAnthropicModel(model)) {
     if (isVertexProvider(provider)) {
       return isClaude4SeriesModel(model)
     }

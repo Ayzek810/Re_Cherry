@@ -28,6 +28,7 @@ import type { CreateDirectoryOptions, FileStat } from 'webdav'
 
 import { getDataPath } from '../utils'
 import { isPathInside, resolveAndValidatePath } from '../utils/file'
+import { providerKeyStore } from './ProviderKeyStore'
 import WebDav from './WebDav'
 import { windowService } from './WindowService'
 
@@ -213,6 +214,13 @@ class BackupManager {
         logger.debug('[backupDirect] Skip the backup of the file')
         await fs.promises.mkdir(path.join(this.tempDir, 'Data'))
       }
+
+      // v0.2.4 K6：provider key 随备份流转（明文允许出现在低频迁移产物；恢复时经 main 加密写回）
+      const vaultKeys = providerKeyStore.getAll()
+      if (Object.keys(vaultKeys).length > 0) {
+        await fs.writeJson(path.join(this.tempDir, 'provider-keys.json'), vaultKeys)
+      }
+
       onProgress({ stage: 'compressing', progress: 80, total: 100 })
 
       // Step 5: Create ZIP archive
@@ -586,6 +594,20 @@ class BackupManager {
         )
       } else {
         logger.debug('[restoreDirect] No Data directory to restore')
+      }
+
+      // v0.2.4 K6：恢复备份中的 provider key（明文经 main 加密写回 provider-keys.json，重启后 K4 回填即生效）
+      const vaultSource = path.join(this.tempDir, 'provider-keys.json')
+      if (await fs.pathExists(vaultSource)) {
+        try {
+          const entries = (await fs.readJson(vaultSource)) as Record<string, string>
+          if (entries && typeof entries === 'object') {
+            providerKeyStore.setMany(entries)
+            logger.info('[restoreDirect] Provider keys restored into encrypted store')
+          }
+        } catch (error) {
+          logger.error('[restoreDirect] Failed to restore provider keys', error as Error)
+        }
       }
 
       // Clean up

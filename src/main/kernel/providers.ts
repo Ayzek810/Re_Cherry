@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { type CredentialRef, credentialRef } from '@deepseek-ai/dsh-credentials'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { KERNEL_REASONING_LEVELS } from '@shared/config/reasoning'
-import { clearModelCapabilityCache } from './topics'
 import { loggerService } from '@logger'
+import { KERNEL_REASONING_LEVELS } from '@shared/config/reasoning'
+
+import { clearModelCapabilityCache } from './topics'
 
 const logger = loggerService.withContext('KernelProviders')
 
@@ -23,7 +24,17 @@ export interface KernelProviderInput {
  * Re_Cherry 用它修正第三方网关的思考参数语义（如硅基流动 DeepSeek/Zhipu 用 enable_thinking）。
  */
 export interface KernelModelCompatInput {
-  thinkingFormat?: 'openai' | 'deepseek' | 'openrouter' | 'together' | 'zai' | 'qwen' | 'chat-template' | 'qwen-chat-template' | 'string-thinking' | 'ant-ling'
+  thinkingFormat?:
+    | 'openai'
+    | 'deepseek'
+    | 'openrouter'
+    | 'together'
+    | 'zai'
+    | 'qwen'
+    | 'chat-template'
+    | 'qwen-chat-template'
+    | 'string-thinking'
+    | 'ant-ling'
   supportsReasoningEffort?: boolean
   requiresReasoningContentOnAssistantMessages?: boolean
 }
@@ -59,7 +70,9 @@ const PROTOCOL_BY_TYPE: Record<string, string> = {
  * 只保留合法档位键与合法 wire 值（off 用 null），且必须至少含一个非 off 档位，
  * 否则返回 undefined（不声明，走 pi-ai 目录默认），避免一条坏声明拖垮整个 provider 路由。
  */
-function sanitizeReasoningEfforts(input: Record<string, string | null> | undefined): Record<string, string | null> | undefined {
+function sanitizeReasoningEfforts(
+  input: Record<string, string | null> | undefined
+): Record<string, string | null> | undefined {
   if (input === undefined) return undefined
   const dict: Record<string, string | null> = {}
   let hasPositiveLevel = false
@@ -83,7 +96,7 @@ export function credentialRefForProvider(providerId: string): CredentialRef {
 
 /**
  * 把渲染进程的 provider 配置同步进内核：
- * 1. apiKey 写入内存凭证服务（路由以此解析密钥）
+ * 1. apiKey（可为逗号拼接的多 key）写入内存凭证服务，由凭证层切分并逐请求轮换
  * 2. provider 路由写进 `llm-pi-ai` settings 段，插件 watcher 触发重新注册
  * 不支持的 provider 类型跳过并告警，不影响其余路由。
  */
@@ -126,7 +139,25 @@ export async function syncCherryProviders(ctx: Context, providers: readonly Kern
     synced += 1
   }
 
-  await ctx.settings.update(settingsNamespace('llm-pi-ai'), { providers: profiles })
+  const ns = settingsNamespace('llm-pi-ai')
+
+  // dsh-settings 的 update 是 merge 语义：删掉的 provider/端点不会自动消失，
+  // 旧 route 会残留（含其 apiKeyEnv，继续占用凭证名）。先按 diff 清理不再存在的键。
+  const section = ctx.settings.get(ns) as { providers?: Record<string, unknown> } | undefined
+  const previousKeys = section?.providers === undefined ? [] : Object.keys(section.providers)
+  const staleKeys = previousKeys.filter((key) => !(key in profiles))
+  if (staleKeys.length > 0) {
+    await ctx.settings.mutate(
+      ns,
+      staleKeys.map((key) => ({ op: 'unset', path: ['providers', key] }))
+    )
+    for (const key of staleKeys) {
+      await ctx.credentials.unset(credentialRefForProvider(key)).catch(() => void 0)
+    }
+    logger.info(`kernel: removed ${staleKeys.length} stale provider route(s): ${staleKeys.join(', ')}`)
+  }
+
+  await ctx.settings.update(ns, { providers: profiles })
   clearModelCapabilityCache()
   logger.info(`kernel: synced ${synced} provider routes to the kernel`)
 }

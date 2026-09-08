@@ -171,11 +171,8 @@ describe('provider utils', () => {
     expect(isSupportUrlContextProvider(createProvider())).toBe(false)
   })
 
-  it('identifies Gemini web search providers', () => {
-    expect(isGeminiWebSearchProvider(createSystemProvider({ id: SystemProviderIds.gemini, type: 'gemini' }))).toBe(true)
-    expect(isGeminiWebSearchProvider(createSystemProvider({ id: SystemProviderIds.vertexai, type: 'vertexai' }))).toBe(
-      true
-    )
+  it('identifies Gemini web search providers (official Gemini/Vertex system providers removed)', () => {
+    expect(isGeminiWebSearchProvider(createSystemProvider({ type: 'gemini' }))).toBe(false)
     expect(isGeminiWebSearchProvider(createSystemProvider())).toBe(false)
   })
 
