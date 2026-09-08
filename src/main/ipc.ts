@@ -33,7 +33,7 @@ import * as NutstoreService from './services/NutstoreService'
 import { proxyManager } from './services/ProxyManager'
 import { searchService } from './services/SearchService'
 import { isSafeExternalUrl } from './services/security'
-import { registerShortcuts, unregisterAllShortcuts } from './services/ShortcutService'
+import { registerShortcuts, registerUniversalShortcuts, unregisterAllShortcuts } from './services/ShortcutService'
 import {
   addEndMessage,
   addStreamMessage,
@@ -548,6 +548,12 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     if (mainWindow) {
       unregisterAllShortcuts()
       registerShortcuts(mainWindow)
+      // 主窗隐藏在托盘/后台时永不获焦，registerShortcuts 的聚焦路径不会执行；
+      // 全局键（show_app/mini_window）必须在配置落定后无条件补挂，
+      // 否则开机自启+托盘常驻场景下快捷助手要等用户手动打开主界面才能呼出
+      if (!mainWindow.isFocused()) {
+        registerUniversalShortcuts()
+      }
     }
   })
 

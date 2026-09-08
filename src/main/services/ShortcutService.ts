@@ -145,85 +145,98 @@ const convertShortcutFormat = (shortcut: string | string[]): string => {
     .join('+')
 }
 
+function registerInternal(window: BrowserWindow | null, onlyUniversalShortcuts: boolean = false) {
+  const shortcuts = configManager.getShortcuts()
+  if (!shortcuts) return
+
+  shortcuts.forEach((shortcut) => {
+    try {
+      if (shortcut.shortcut.length === 0) {
+        return
+      }
+
+      //if not enabled, exit early from the process.
+      if (!shortcut.enabled) {
+        return
+      }
+
+      // only register universal shortcuts when needed
+      if (onlyUniversalShortcuts && !['show_app', 'mini_window'].includes(shortcut.key)) {
+        return
+      }
+
+      const handler = getShortcutHandler(shortcut)
+      if (!handler) {
+        return
+      }
+
+      switch (shortcut.key) {
+        case 'show_app':
+          showAppAccelerator = formatShortcutKey(shortcut.shortcut)
+          break
+
+        case 'mini_window':
+          // 移除注册时的条件检查，在处理器内部进行检查
+          logger.info(`Processing mini_window shortcut, enabled: ${shortcut.enabled}`)
+          showMiniWindowAccelerator = formatShortcutKey(shortcut.shortcut)
+          logger.debug(`Mini window accelerator set to: ${showMiniWindowAccelerator}`)
+          break
+
+        //the following ZOOMs will register shortcuts separately, so will return
+        //zoom processors need a live window instance; the universal path filters zoom out above
+        case 'zoom_in':
+          if (!window) return
+          globalShortcut.register('CommandOrControl+=', () => handler(window))
+          globalShortcut.register('CommandOrControl+numadd', () => handler(window))
+          return
+
+        case 'zoom_out':
+          if (!window) return
+          globalShortcut.register('CommandOrControl+-', () => handler(window))
+          globalShortcut.register('CommandOrControl+numsub', () => handler(window))
+          return
+
+        case 'zoom_reset':
+          if (!window) return
+          globalShortcut.register('CommandOrControl+0', () => handler(window))
+          return
+      }
+
+      const accelerator = convertShortcutFormat(shortcut.shortcut)
+
+      globalShortcut.register(accelerator, () => handler(window as BrowserWindow))
+    } catch (error) {
+      logger.warn(`Failed to register shortcut ${shortcut.key}`)
+    }
+  })
+}
+
+/**
+ * 无条件注册全局通用快捷键（show_app / mini_window）。
+ *
+ * 背景：快捷键注册原只有两条路径——boot 时主窗 ready-to-show（读当时的主进程
+ * 配置，可能为空/陈旧）与主窗 focus。开机自启 + 启动隐藏到托盘场景下主窗永不
+ * 获焦，BootConfigSync 把 redux 真相推平到主进程后，Shortcuts_Update 的重注册
+ * 又被 isFocused 门死，导致快捷助手在用户手动打开一次主界面之前始终呼不出。
+ * 此入口不依赖焦点，由 Shortcuts_Update 在窗口未聚焦时调用，使配置落定后
+ * 全局键立即可用。
+ */
+export function registerUniversalShortcuts() {
+  const mainWindow = windowService.getMainWindow()
+  if (mainWindow && mainWindow.isDestroyed()) {
+    return
+  }
+  registerInternal(mainWindow, true)
+}
+
 export function registerShortcuts(window: BrowserWindow) {
   if (isRegisterOnBoot) {
     window.once('ready-to-show', () => {
       if (configManager.getLaunchToTray()) {
-        registerOnlyUniversalShortcuts()
+        registerInternal(window, true)
       }
     })
     isRegisterOnBoot = false
-  }
-
-  //only for clearer code
-  const registerOnlyUniversalShortcuts = () => {
-    register(true)
-  }
-
-  //onlyUniversalShortcuts is used to register shortcuts that are not window specific, like show_app & mini_window
-  //onlyUniversalShortcuts is needed when we launch to tray
-  const register = (onlyUniversalShortcuts: boolean = false) => {
-    if (window.isDestroyed()) return
-
-    const shortcuts = configManager.getShortcuts()
-    if (!shortcuts) return
-
-    shortcuts.forEach((shortcut) => {
-      try {
-        if (shortcut.shortcut.length === 0) {
-          return
-        }
-
-        //if not enabled, exit early from the process.
-        if (!shortcut.enabled) {
-          return
-        }
-
-        // only register universal shortcuts when needed
-        if (onlyUniversalShortcuts && !['show_app', 'mini_window'].includes(shortcut.key)) {
-          return
-        }
-
-        const handler = getShortcutHandler(shortcut)
-        if (!handler) {
-          return
-        }
-
-        switch (shortcut.key) {
-          case 'show_app':
-            showAppAccelerator = formatShortcutKey(shortcut.shortcut)
-            break
-
-          case 'mini_window':
-            // 移除注册时的条件检查，在处理器内部进行检查
-            logger.info(`Processing mini_window shortcut, enabled: ${shortcut.enabled}`)
-            showMiniWindowAccelerator = formatShortcutKey(shortcut.shortcut)
-            logger.debug(`Mini window accelerator set to: ${showMiniWindowAccelerator}`)
-            break
-
-          //the following ZOOMs will register shortcuts separately, so will return
-          case 'zoom_in':
-            globalShortcut.register('CommandOrControl+=', () => handler(window))
-            globalShortcut.register('CommandOrControl+numadd', () => handler(window))
-            return
-
-          case 'zoom_out':
-            globalShortcut.register('CommandOrControl+-', () => handler(window))
-            globalShortcut.register('CommandOrControl+numsub', () => handler(window))
-            return
-
-          case 'zoom_reset':
-            globalShortcut.register('CommandOrControl+0', () => handler(window))
-            return
-        }
-
-        const accelerator = convertShortcutFormat(shortcut.shortcut)
-
-        globalShortcut.register(accelerator, () => handler(window))
-      } catch (error) {
-        logger.warn(`Failed to register shortcut ${shortcut.key}`)
-      }
-    })
   }
 
   const unregister = () => {
@@ -243,7 +256,6 @@ export function registerShortcuts(window: BrowserWindow) {
         const accelerator = convertShortcutFormat(showMiniWindowAccelerator)
         handler && globalShortcut.register(accelerator, () => handler(window))
       }
-
     } catch (error) {
       logger.warn('Failed to unregister shortcuts')
     }
@@ -253,7 +265,7 @@ export function registerShortcuts(window: BrowserWindow) {
   if (undefined === windowOnHandlers.get(window)) {
     // pass register() directly to listener, the func will receive Event as argument, it's not expected
     const registerHandler = () => {
-      register()
+      registerInternal(window, false)
     }
     window.on('focus', registerHandler)
     window.on('blur', unregister)
@@ -261,7 +273,7 @@ export function registerShortcuts(window: BrowserWindow) {
   }
 
   if (!window.isDestroyed() && window.isFocused()) {
-    register()
+    registerInternal(window, false)
   }
 }
 
