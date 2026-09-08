@@ -1,10 +1,11 @@
 import { InfoCircleOutlined } from '@ant-design/icons'
+import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
+import { DeleteIcon } from '@renderer/components/Icons'
 import { HStack } from '@renderer/components/Layout'
+import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
 import { isEmbeddingModel, isRerankModel, isTextToImageModel } from '@renderer/config/models'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { useProviders } from '@renderer/hooks/useProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { getModelUniqId } from '@renderer/services/ModelService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setQuickAssistantModel } from '@renderer/store/llm'
 import {
@@ -14,12 +15,14 @@ import {
   setQuickAssistantReasoningEffort,
   setReadClipboardAtStartup
 } from '@renderer/store/settings'
-import type { ThinkingOption } from '@renderer/types'
+import type { Model, ThinkingOption } from '@renderer/types'
 import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
-import { Select, Switch, Tooltip } from 'antd'
+import { Button, Select, Switch, Tooltip } from 'antd'
+import { PlusIcon } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import styled from 'styled-components'
 
 import {
   SettingContainer,
@@ -74,47 +77,27 @@ const QuickAssistantSettings: FC = () => {
   } = useSettings()
   const dispatch = useAppDispatch()
   const { quickAssistantModel } = useAppSelector((state) => state.llm)
-  const { providers } = useProviders()
-
-  // 可用模型列表（排除嵌入/重排/绘图模型）
-  const modelOptions = useMemo(() => {
-    return providers.flatMap((provider) =>
-      provider.models
-        .filter((model) => !isEmbeddingModel(model) && !isRerankModel(model) && !isTextToImageModel(model))
-        .map((model) => ({
-          value: getModelUniqId(model),
-          label: `${model.name} | ${provider.name}`
-        }))
-    )
-  }, [providers])
-
-  const quickAssistantModelValue = useMemo(
-    () => (quickAssistantModel ? getModelUniqId(quickAssistantModel) : undefined),
-    [quickAssistantModel]
+  // 与"默认模型设置"（AssistantModelSettings）同款：弹窗选模型；排除嵌入/重排/绘图
+  const modelFilter = useCallback(
+    (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model) && !isTextToImageModel(model),
+    []
   )
 
-  const handleModelChange = useCallback(
-    (value: string) => {
-      let query: { id?: string; provider?: string } | undefined
-      try {
-        query = JSON.parse(value) as { id?: string; provider?: string }
-      } catch {
-        query = undefined
+  const onSelectModel = useCallback(async () => {
+    const selected = await SelectChatModelPopup.show({ model: quickAssistantModel ?? undefined, filter: modelFilter })
+    if (selected) {
+      dispatch(setQuickAssistantModel({ model: selected }))
+      // 换模型后把档位收敛到新模型支持的选项（与原版自动纠正行为一致）
+      const options = reasoningOptionsForModel(selected)
+      if (!options.includes(quickAssistantReasoningEffort ?? 'none')) {
+        dispatch(setQuickAssistantReasoningEffort(options[0] ?? 'none'))
       }
-      const model = providers
-        .flatMap((provider) => provider.models)
-        .find((m) => m.id === query?.id && m.provider === query?.provider)
-      if (model) {
-        dispatch(setQuickAssistantModel({ model }))
-        // 换模型后把档位收敛到新模型支持的选项（与原版自动纠正行为一致）
-        const options = reasoningOptionsForModel(model)
-        if (!options.includes(quickAssistantReasoningEffort ?? 'none')) {
-          dispatch(setQuickAssistantReasoningEffort(options[0] ?? 'none'))
-        }
-      }
-    },
-    [dispatch, providers, quickAssistantReasoningEffort]
-  )
+    }
+  }, [dispatch, modelFilter, quickAssistantModel, quickAssistantReasoningEffort])
+
+  const onClearModel = useCallback(() => {
+    dispatch(setQuickAssistantModel({ model: undefined }))
+  }, [dispatch])
 
   const handleEnableQuickAssistant = async (enable: boolean) => {
     dispatch(setEnableQuickAssistant(enable))
@@ -181,16 +164,27 @@ const QuickAssistantSettings: FC = () => {
           <SettingTitle>{t('settings.quickAssistant.model_label')}</SettingTitle>
           <SettingDivider />
           <SettingRow>
-            <HStack style={{ width: '100%' }}>
-              <Select
-                value={quickAssistantModelValue}
-                style={{ width: 360 }}
-                showSearch
-                optionFilterProp="label"
-                options={modelOptions}
-                onChange={handleModelChange}
-                placeholder={t('settings.models.empty')}
-              />
+            <HStack style={{ width: '100%' }} justifyContent="flex-end">
+              <HStack alignItems="center" gap={5}>
+                <ModelSelectButton
+                  icon={
+                    quickAssistantModel ? <ModelAvatar model={quickAssistantModel} size={20} /> : <PlusIcon size={18} />
+                  }
+                  onClick={onSelectModel}>
+                  <ModelName>
+                    {quickAssistantModel ? quickAssistantModel.name : t('assistants.presets.edit.model.select.title')}
+                  </ModelName>
+                </ModelSelectButton>
+                {quickAssistantModel && (
+                  <Button
+                    color="danger"
+                    variant="filled"
+                    icon={<DeleteIcon size={14} className="lucide-custom" />}
+                    onClick={onClearModel}
+                    danger
+                  />
+                )}
+              </HStack>
             </HStack>
           </SettingRow>
           <SettingDescription>{t('settings.quickAssistant.model_description')}</SettingDescription>
@@ -213,9 +207,7 @@ const QuickAssistantSettings: FC = () => {
               />
             </HStack>
           </SettingRow>
-          <SettingDescription>
-            {t(REASONING_DESC_KEY[quickAssistantReasoningEffort ?? 'none'])}
-          </SettingDescription>
+          <SettingDescription>{t(REASONING_DESC_KEY[quickAssistantReasoningEffort ?? 'none'])}</SettingDescription>
         </SettingGroup>
       )}
       {enableQuickAssistant && (
@@ -287,5 +279,25 @@ function PromptTextarea({
     />
   )
 }
+
+/**
+ * 与"默认模型设置"（AssistantModelSettings）同款的选择按钮样式，保持风格统一。
+ */
+const ModelSelectButton = styled(Button)`
+  max-width: 300px;
+  justify-content: flex-start;
+
+  .ant-btn-icon {
+    flex-shrink: 0;
+  }
+`
+
+const ModelName = styled.span`
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+`
 
 export default QuickAssistantSettings

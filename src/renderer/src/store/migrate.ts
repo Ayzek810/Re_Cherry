@@ -3170,7 +3170,7 @@ const migrateConfig = {
     try {
       // 快捷助手独立配置：模型 + 提示词（不依赖 Assistant 对象）
       if (state.llm.quickAssistantModel === undefined) {
-        state.llm.quickAssistantModel = state.llm.quickModel ?? SYSTEM_MODELS.defaultModel[1]
+        state.llm.quickAssistantModel = state.llm.quickModel
       }
       if (typeof state.settings.quickAssistantPrompt !== 'string') {
         state.settings.quickAssistantPrompt = ''
