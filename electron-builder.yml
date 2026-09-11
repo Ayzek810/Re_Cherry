@@ -20,29 +20,22 @@ protocols:
 files:
   - "**/*"
   - "!**/{.vscode,.yarn,.yarn-lock,.github,.cursorrules,.prettierrc}"
-  - "!electron.vite.config.{js,ts,mjs,cjs}}"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
   - "!.*"
-  - "!components.json"
-  - "!**/{.eslintignore,.eslintrc.js,.eslintrc.json,.eslintcache,root.eslint.config.js,eslint.config.js,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,eslint.config.mjs,dev-app-update.yml,CHANGELOG.md,README.md,biome.jsonc}"
+  - "!**/{.eslintignore,.eslintrc.js,.eslintrc.json,.eslintcache,root.eslint.config.js,eslint.config.js,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,eslint.config.mjs,CHANGELOG.md,README.md,biome.jsonc}"
   - "!**/{.env,.env.*,.npmrc,pnpm-lock.yaml}"
   - "!**/{tsconfig.json,tsconfig.tsbuildinfo,tsconfig.node.json,tsconfig.web.json}"
   - "!**/{.editorconfig,.jekyll-metadata}"
   - "!src"
-  - "!config"
   - "!patches"
-  - "!app-upgrade-config.json"
   - "!**/node_modules/**/*.cpp"
   - "!**/node_modules/node-addon-api/**"
   - "!**/node_modules/prebuild-install/**"
   - "!scripts"
-  - "!local"
   - "!docs"
   - "!packages"
-  - "!.swc"
-  - "!.bin"
   - "!._*"
   - "!*.log"
-  - "!stats.html"
   - "!*.md"
   - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
   - "!**/*.{map,ts,tsx,jsx,less,scss,sass,css.d.ts,d.cts,d.mts,md,markdown,yaml,yml}"
@@ -57,10 +50,6 @@ files:
   - "!**/{.DS_Store,Thumbs.db,thumbs.db,__pycache__}"
   - "!**/{LICENSE,license,LICENSE.*,*.LICENSE.txt,NOTICE.txt,README.md,readme.md,CHANGELOG.md}"
   - "!node_modules/rollup-plugin-visualizer"
-  - "!node_modules/js-tiktoken"
-  - "!node_modules/@tavily/core/node_modules/js-tiktoken"
-  - "!node_modules/pdf-parse/lib/pdf.js/{v1.9.426,v1.10.88,v2.0.550}"
-  - "!node_modules/mammoth/{mammoth.browser.js,mammoth.browser.min.js}"
   - "!**/*.{h,iobj,ipdb,tlog,recipe,vcxproj,vcxproj.filters,Makefile,*.Makefile}" # filter .node build files
   - "resources/**/*" # include all files in resources, and unpack them from asar for runtime access
 asarUnpack:
@@ -123,9 +112,6 @@ rpm:
   # Workaround for electron build issue on rpm package:
   # https://github.com/electron/forge/issues/3594
   fpm: ["--rpm-rpmbuild-define=_build_id_links none"]
-publish:
-  provider: generic
-  url: https://releases.cherry-ai.com
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 beforePack: scripts/before-pack.js

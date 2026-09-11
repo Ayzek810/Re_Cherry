@@ -193,11 +193,6 @@ export const oauthWithAiOnly = async (setKey) => {
   window.addEventListener('message', messageHandler)
 }
 
-export interface NewApiOAuthConfig {
-  oauthServer: string
-  apiHost?: string
-}
-
 export const providerCharge = async (provider: string) => {
   const chargeUrlMap = {
     silicon: {

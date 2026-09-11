@@ -26,11 +26,6 @@ export enum IpcChannel {
   App_IsNotEmptyDir = 'app:is-not-empty-dir',
   App_RelaunchApp = 'app:relaunch-app',
   App_ResetData = 'app:reset-data',
-  App_IsBinaryExist = 'app:is-binary-exist',
-  App_GetBinaryPath = 'app:get-binary-path',
-  App_InstallUvBinary = 'app:install-uv-binary',
-  App_InstallBunBinary = 'app:install-bun-binary',
-  App_InstallOvmsBinary = 'app:install-ovms-binary',
   App_LogToMain = 'app:log-to-main',
   App_SaveData = 'app:save-data',
   App_GetDiskInfo = 'app:get-disk-info',
@@ -40,15 +35,11 @@ export enum IpcChannel {
   App_GetIpCountry = 'app:get-ip-country',
   APP_CrashRenderProcess = 'app:crash-render-process',
 
-  App_MacIsProcessTrusted = 'app:mac-is-process-trusted',
-  App_MacRequestProcessTrust = 'app:mac-request-process-trust',
-
   App_QuoteToMain = 'app:quote-to-main',
   App_SetDisableHardwareAcceleration = 'app:set-disable-hardware-acceleration',
   App_SetUseSystemTitleBar = 'app:set-use-system-title-bar',
 
   Notification_Send = 'notification:send',
-  Notification_OnClick = 'notification:on-click',
 
   Webview_SetOpenLinkExternal = 'webview:set-open-link-external',
   Webview_SetSpellCheckEnabled = 'webview:set-spell-check-enabled',
@@ -61,16 +52,10 @@ export enum IpcChannel {
   Open_Website = 'open:website',
 
   Config_Set = 'config:set',
-  Config_Get = 'config:get',
 
-  MiniWindow_Show = 'miniwindow:show',
   MiniWindow_Hide = 'miniwindow:hide',
   MiniWindow_Close = 'miniwindow:close',
-  MiniWindow_Toggle = 'miniwindow:toggle',
   MiniWindow_SetPin = 'miniwindow:set-pin',
-
-  // Python
-  Python_Execute = 'python:execute',
 
   // nutstore
   Nutstore_GetSsoUrl = 'nutstore:get-sso-url',
@@ -78,7 +63,6 @@ export enum IpcChannel {
   Nutstore_GetDirectoryContents = 'nutstore:get-directory-contents',
 
   //aes
-  Aes_Encrypt = 'aes:encrypt',
   Aes_Decrypt = 'aes:decrypt',
 
   Windows_ResetMinimumSize = 'window:reset-minimum-size',
@@ -133,7 +117,6 @@ export enum IpcChannel {
   File_ListDirectory = 'file:listDirectory',
   File_GetDirectoryStructure = 'file:getDirectoryStructure',
   File_CheckFileName = 'file:checkFileName',
-  File_ValidateNotesDirectory = 'file:validateNotesDirectory',
   File_StartWatcher = 'file:startWatcher',
   File_StopWatcher = 'file:stopWatcher',
   File_PauseWatcher = 'file:pauseWatcher',
@@ -163,17 +146,11 @@ export enum IpcChannel {
   Backup_DeleteLocalBackupFile = 'backup:deleteLocalBackupFile',
 
   // zip
-  Zip_Compress = 'zip:compress',
   Zip_Decompress = 'zip:decompress',
 
   // system
   System_GetDeviceType = 'system:getDeviceType',
   System_GetHostname = 'system:getHostname',
-  System_GetCpuName = 'system:getCpuName',
-  System_CheckGitBash = 'system:checkGitBash',
-  System_GetGitBashPath = 'system:getGitBashPath',
-  System_GetGitBashPathInfo = 'system:getGitBashPathInfo',
-  System_SetGitBashPath = 'system:setGitBashPath',
 
   // DevTools
   System_ToggleDevTools = 'system:toggleDevTools',
@@ -185,14 +162,10 @@ export enum IpcChannel {
 
   FullscreenStatusChanged = 'fullscreen-status-changed',
 
-  HideMiniWindow = 'hide-mini-window',
   ShowMiniWindow = 'show-mini-window',
 
-  ReduxStoreReady = 'redux-store-ready',
 
   // Search Window
-  SearchWindow_Open = 'search-window:open',
-  SearchWindow_Close = 'search-window:close',
   SearchWindow_OpenUrl = 'search-window:open-url',
 
   //Store Sync
@@ -218,7 +191,6 @@ export enum IpcChannel {
   TRACE_SAVE_DATA = 'trace:saveData',
   TRACE_GET_DATA = 'trace:getData',
   TRACE_SAVE_ENTITY = 'trace:saveEntity',
-  TRACE_GET_ENTITY = 'trace:getEntity',
   TRACE_BIND_TOPIC = 'trace:bindTopic',
   TRACE_CLEAN_TOPIC = 'trace:cleanTopic',
   TRACE_TOKEN_USAGE = 'trace:tokenUsage',
@@ -236,12 +208,9 @@ export enum IpcChannel {
   Analytics_TrackTokenUsage = 'analytics:track-token-usage',
 
   // provider key 加密存储（v0.2.4 K 线）
-  ProviderKeys_Get = 'provider-keys:get',
   ProviderKeys_GetAll = 'provider-keys:get-all',
   ProviderKeys_Set = 'provider-keys:set',
-  ProviderKeys_SetMany = 'provider-keys:set-many',
   ProviderKeys_Remove = 'provider-keys:remove',
-  ProviderKeys_Has = 'provider-keys:has',
 
   // dsh kernel
   Dsh_SyncProviders = 'dsh:sync-providers',

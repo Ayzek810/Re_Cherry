@@ -20,7 +20,6 @@ import type {
   UnsupportedFunctionalityError
 } from 'ai'
 
-import type { ProviderSpecificError } from './provider-specific-error'
 import type { Serializable } from './serialize'
 
 /** i18n key used when a streaming response is paused/aborted by the user. */
@@ -304,7 +303,6 @@ export type AiSdkErrorUnion =
   | NoSuchModelError
   | NoSuchProviderError
   | NoSuchToolError
-  | ProviderSpecificError
   | RetryError
   | ToolCallRepairError
   | TypeValidationError

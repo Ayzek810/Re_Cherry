@@ -34,21 +34,6 @@ export const SILICON_ANTHROPIC_COMPATIBLE_MODELS: readonly string[] = [
  */
 const SILICON_ANTHROPIC_COMPATIBLE_MODEL_SET = new Set(SILICON_ANTHROPIC_COMPATIBLE_MODELS)
 
-/**
- * Checks if a model ID is compatible with Anthropic API on Silicon provider.
- *
- * @param modelId - The model ID to check
- * @returns true if the model supports Anthropic API endpoint
- */
-export function isSiliconAnthropicCompatibleModel(modelId: string): boolean {
-  return SILICON_ANTHROPIC_COMPATIBLE_MODEL_SET.has(modelId)
-}
-
-/**
- * Silicon provider's Anthropic API host URL.
- */
-export const SILICON_ANTHROPIC_API_HOST = 'https://api.siliconflow.cn'
-
 export const CLAUDE_OFFICIAL_SUPPORTED_PROVIDERS = [
   'deepseek',
   'moonshot',

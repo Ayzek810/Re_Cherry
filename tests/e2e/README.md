@@ -12,15 +12,11 @@ tests/e2e/
 ├── fixtures/
 │   └── electron.fixture.ts   # Electron 应用启动 fixture
 ├── utils/
-│   ├── wait-helpers.ts       # 等待辅助函数
-│   └── index.ts              # 工具导出
+│   └── wait-helpers.ts       # 等待辅助函数
 ├── pages/                    # Page Object Model
 │   ├── base.page.ts          # 基础页面对象类
 │   ├── sidebar.page.ts       # 侧边栏导航
-│   ├── home.page.ts          # 首页/聊天页
-│   ├── settings.page.ts      # 设置页
-│   ├── chat.page.ts          # 聊天交互
-│   └── index.ts              # 页面对象导出
+│   └── settings.page.ts      # 设置页
 └── specs/                    # 测试用例
     ├── app-launch.spec.ts    # 应用启动测试
     ├── navigation.spec.ts    # 页面导航测试

@@ -12,13 +12,11 @@ import {
   updateProvider,
   updateProviders
 } from '@renderer/store/llm'
-import type { Assistant, Model, Provider } from '@renderer/types'
+import type { Model, Provider } from '@renderer/types'
 import { isSystemProvider } from '@renderer/types'
 import { withoutTrailingSlash } from '@renderer/utils/api'
 import { isNewApiProvider } from '@renderer/utils/provider'
 import { useCallback, useMemo } from 'react'
-
-import { useDefaultModel } from './useAssistant'
 
 /**
  * Normalizes provider apiHost by removing trailing slashes.
@@ -94,14 +92,6 @@ export function useProviders() {
   }
 }
 
-export function useSystemProviders() {
-  return useAppSelector(selectSystemProviders)
-}
-
-export function useUserProviders() {
-  return useAppSelector(selectUserProviders)
-}
-
 export function useAllProviders() {
   return useAppSelector(selectAllProviders)
 }
@@ -145,9 +135,3 @@ export function useProvider(id: string) {
   }
 }
 
-export function useProviderByAssistant(assistant: Assistant) {
-  const { defaultModel } = useDefaultModel()
-  const model = assistant.model || defaultModel
-  const { provider } = useProvider(model.provider)
-  return provider
-}

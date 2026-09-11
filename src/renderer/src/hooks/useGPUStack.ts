@@ -9,10 +9,3 @@ export function useGPUStackSettings() {
   return { ...settings, setKeepAliveTime: (time: number) => dispatch(setGPUStackKeepAliveTime(time)) }
 }
 
-export function getGPUStackSettings() {
-  return store.getState().llm.settings.gpustack
-}
-
-export function getGPUStackKeepAliveTime() {
-  return store.getState().llm.settings.gpustack.keepAliveTime + 'm'
-}

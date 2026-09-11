@@ -118,10 +118,13 @@ function syncTranslations() {
     .readdirSync(localesDir)
     .filter((file) => file.endsWith('.json') && file !== baseFileName)
     .map((filename) => path.join(localesDir, filename))
-  const translateFiles = fs
-    .readdirSync(translateDir)
-    .filter((file) => file.endsWith('.json') && file !== baseFileName)
-    .map((filename) => path.join(translateDir, filename))
+  // v0.2.4-1：机翻语言包目录已移除，缺失时跳过（不再报错）
+  const translateFiles = fs.existsSync(translateDir)
+    ? fs
+        .readdirSync(translateDir)
+        .filter((file) => file.endsWith('.json') && file !== baseFileName)
+        .map((filename) => path.join(translateDir, filename))
+    : []
   const files = [...localeFiles, ...translateFiles]
 
   // Sync keys

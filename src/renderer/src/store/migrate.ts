@@ -38,8 +38,7 @@ import {
   isSupportDeveloperRoleProvider,
   isSupportStreamOptionsProvider
 } from '@renderer/utils/provider'
-import { API_SERVER_DEFAULTS } from '@shared/config/constant'
-import { defaultByPassRules, UpgradeChannel } from '@shared/config/constant'
+import { defaultByPassRules } from '@shared/config/constant'
 import { isEmpty } from 'lodash'
 import { createMigrate } from 'redux-persist'
 
@@ -1565,7 +1564,7 @@ const migrateConfig = {
   },
   '110': (state: RootState) => {
     try {
-      state.settings.testPlan = false
+      // v0.2.4-1: settings.testPlan 随“测试计划/Beta 通道”功能移除，不再写入历史默认值
       return state
     } catch (error) {
       logger.error('migrate 110 error', error as Error)
@@ -1667,9 +1666,7 @@ const migrateConfig = {
         // @ts-ignore eslint-disable-next-line
         delete (state as any).websearch.contentLimit
       }
-      if (state.settings) {
-        state.settings.testChannel = UpgradeChannel.LATEST
-      }
+      // v0.2.4-1: settings.testChannel 随测试通道功能移除，不再写入历史默认值
 
       return state
     } catch (error) {
@@ -1899,10 +1896,7 @@ const migrateConfig = {
 
       addProvider(state, 'aws-bedrock')
 
-      // 初始化 awsBedrock 设置
-      if (!state.llm.settings.awsBedrock) {
-        state.llm.settings.awsBedrock = llmInitialState.settings.awsBedrock
-      }
+      // v0.2.4-1: llm.settings.awsBedrock 随 aws-bedrock provider 移除，不再写入历史默认值
 
       return state
     } catch (error) {
@@ -1912,15 +1906,7 @@ const migrateConfig = {
   },
   '125': (state: RootState) => {
     try {
-      // Initialize API server configuration if not present
-      if (!state.settings.apiServer) {
-        state.settings.apiServer = {
-          enabled: false,
-          host: API_SERVER_DEFAULTS.HOST,
-          port: API_SERVER_DEFAULTS.PORT,
-          apiKey: `cs-sk-${uuid()}`
-        }
-      }
+      // v0.2.4-1: settings.apiServer 随 apiServer 后端移除，不再写入历史默认值
       return state
     } catch (error) {
       logger.error('migrate 125 error', error as Error)
@@ -2460,18 +2446,7 @@ const migrateConfig = {
       // Ensure aws-bedrock provider exists
       addProvider(state, 'aws-bedrock')
 
-      // Ensure awsBedrock settings exist and have all required fields
-      if (!state.llm.settings.awsBedrock) {
-        state.llm.settings.awsBedrock = llmInitialState.settings.awsBedrock
-      } else {
-        // For users who have awsBedrock but missing new fields (authType and apiKey)
-        if (!state.llm.settings.awsBedrock.authType) {
-          state.llm.settings.awsBedrock.authType = 'iam'
-        }
-        if (state.llm.settings.awsBedrock.apiKey === undefined) {
-          state.llm.settings.awsBedrock.apiKey = ''
-        }
-      }
+      // v0.2.4-1: llm.settings.awsBedrock 随 aws-bedrock provider 移除，不再写入历史默认值
       return state
     } catch (error) {
       logger.error('migrate 171 error', error as Error)
@@ -2756,9 +2731,7 @@ const migrateConfig = {
   },
   '186': (state: RootState) => {
     try {
-      if (state.settings.apiServer) {
-        state.settings.apiServer.host = API_SERVER_DEFAULTS.HOST
-      }
+      // v0.2.4-1: settings.apiServer 随 apiServer 后端移除，不再写回 host
       // @ts-expect-error
       if (state.settings.openAI.summaryText === 'undefined') {
         state.settings.openAI.summaryText = undefined

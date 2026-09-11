@@ -8,9 +8,8 @@ import { isEmbeddingModel } from '@renderer/config/models'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import { getEmbeddingDimensions } from '@renderer/services/embedding'
-import type { Assistant, Model, Provider } from '@renderer/types'
+import type { Model, Provider } from '@renderer/types'
 import { isSystemProvider } from '@renderer/types'
-import { type Chunk, ChunkType } from '@renderer/types/chunk'
 import type { Message } from '@renderer/types/newMessage'
 import { formatApiHost, getDefaultGroupName, removeSpecialCharactersForTopicName } from '@renderer/utils'
 import { getErrorMessage } from '@renderer/utils/error'
@@ -127,75 +126,6 @@ async function editImages(
     results.push(...(data.data ?? []).map((item) => item.b64_json ?? item.url ?? '').filter(Boolean))
   }
   return results
-}
-
-/**
- * 独立的图像生成函数
- * 专用于 DALL-E、GPT-Image-1 等专用图像生成模型
- * （内核替换后保留此功能，供后续重新挂回聊天流）
- */
-export async function fetchImageGeneration({
-  messages,
-  assistant,
-  onChunkReceived
-}: {
-  messages: Message[]
-  assistant: Assistant
-  onChunkReceived: (chunk: Chunk) => void
-}) {
-  const baseProvider = getProviderByModel(assistant.model || getDefaultModel())
-  const provider = {
-    ...baseProvider,
-    apiKey: getRotatedApiKey(baseProvider)
-  }
-
-  onChunkReceived({ type: ChunkType.LLM_RESPONSE_CREATED })
-  onChunkReceived({ type: ChunkType.IMAGE_CREATED })
-
-  const startTime = Date.now()
-
-  try {
-    const lastUserMessage = messages.findLast((m) => m.role === 'user')
-    const lastAssistantMessage = messages.findLast((m) => m.role === 'assistant')
-
-    if (!lastUserMessage) {
-      throw new Error('No user message found for image generation.')
-    }
-
-    const prompt = getMainTextContent(lastUserMessage)
-    const inputImages = await collectImagesFromMessages(lastUserMessage, lastAssistantMessage)
-    const imageSize = '1024x1024'
-    const batchSize = 1
-    const modelId = assistant.model!.id
-
-    let images: string[]
-    if (inputImages.length > 0) {
-      images = await editImages(provider, modelId, prompt || '', inputImages, imageSize)
-    } else {
-      images = await generateImages(provider, modelId, prompt || '', imageSize, batchSize)
-    }
-
-    // 发送结果 chunks
-    const imageType = images[0]?.startsWith('data:') ? 'base64' : 'url'
-    onChunkReceived({
-      type: ChunkType.IMAGE_COMPLETE,
-      image: { type: imageType, images }
-    })
-
-    const imageResponse = {
-      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-      metrics: {
-        completion_tokens: 0,
-        time_first_token_millsec: 0,
-        time_completion_millsec: Date.now() - startTime
-      }
-    }
-    onChunkReceived({ type: ChunkType.BLOCK_COMPLETE, response: imageResponse })
-    onChunkReceived({ type: ChunkType.LLM_RESPONSE_COMPLETE, response: imageResponse })
-  } catch (error) {
-    onChunkReceived({ type: ChunkType.ERROR, error: error as Error })
-    throw error
-  }
 }
 
 export async function fetchMessagesSummary({
@@ -505,12 +435,6 @@ export async function fetchProviderModelList(provider: Provider): Promise<Provid
   } catch (error) {
     return fallbackError(error)
   }
-}
-
-/** 兼容薄封装：只取模型数组；失败返回空数组（调用方应改用 fetchProviderModelList 以获得错误）。 */
-export async function fetchModels(provider: Provider): Promise<Model[]> {
-  const result = await fetchProviderModelList(provider)
-  return result.models
 }
 
 export function checkApiProvider(provider: Provider): void {

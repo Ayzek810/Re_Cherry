@@ -33,7 +33,3 @@ export function loadConversationTree(rootTopicId: string, signature: string): Pr
   return promise
 }
 
-/** 使某根的缓存失效（删除/重建家族后调用可选）。 */
-export function invalidateConversationTree(rootTopicId: string): void {
-  cache.delete(rootTopicId)
-}

@@ -49,14 +49,6 @@ export function getDataPath(subPath?: string) {
   return dataPath
 }
 
-export function getInstanceName(baseURL: string) {
-  try {
-    return new URL(baseURL).host.split('.')[0]
-  } catch (error) {
-    return ''
-  }
-}
-
 export function debounce(func: (...args: any[]) => void, wait: number, immediate: boolean = false) {
   let timeout: NodeJS.Timeout | null = null
   return function (...args: any[]) {
@@ -105,10 +97,3 @@ export async function calculateDirectorySize(directoryPath: string): Promise<num
   return totalSize
 }
 
-export const removeEnvProxy = (env: Record<string, string>) => {
-  delete env.HTTPS_PROXY
-  delete env.HTTP_PROXY
-  delete env.grpc_proxy
-  delete env.http_proxy
-  delete env.https_proxy
-}

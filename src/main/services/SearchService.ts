@@ -35,25 +35,6 @@ export class SearchService {
     return newWindow
   }
 
-  public async openSearchWindow(uid: string, show: boolean = false): Promise<void> {
-    const existingWindow = this.searchWindows[uid]
-
-    if (existingWindow) {
-      show && existingWindow.show()
-      return
-    }
-
-    await this.createNewSearchWindow(uid, show)
-  }
-
-  public async closeSearchWindow(uid: string): Promise<void> {
-    const window = this.searchWindows[uid]
-    if (window) {
-      window.close()
-      delete this.searchWindows[uid]
-    }
-  }
-
   public async openUrlInSearchWindow(uid: string, url: string): Promise<any> {
     let window = this.searchWindows[uid]
     logger.debug(`Searching with URL: ${url}`)

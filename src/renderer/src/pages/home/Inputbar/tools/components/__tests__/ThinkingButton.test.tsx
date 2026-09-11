@@ -11,7 +11,6 @@ const mockUseQuickPanel = vi.fn()
 const mockUseAssistant = vi.fn()
 
 // Utility function mocks
-const mockGetThinkModelType = vi.fn()
 const mockIsFixedReasoningModel = vi.fn()
 const mockIsGPT5SeriesReasoningModel = vi.fn()
 const mockIsOpenAIWebSearchModel = vi.fn()
@@ -40,7 +39,6 @@ vi.mock('@renderer/hooks/useAssistant', () => ({
 
 // Mock reasoning.ts utility functions
 vi.mock('@renderer/config/models', () => ({
-  getThinkModelType: (...args: any[]) => mockGetThinkModelType(...args),
   isFixedReasoningModel: (...args: any[]) => mockIsFixedReasoningModel(...args),
   isGPT5SeriesReasoningModel: (...args: any[]) => mockIsGPT5SeriesReasoningModel(...args),
   isOpenAIWebSearchModel: (...args: any[]) => mockIsOpenAIWebSearchModel(...args),
@@ -252,7 +250,6 @@ const renderComponent = (
     useAssistantReturn?: ReturnType<typeof createUseAssistantReturn>
     useQuickPanelReturn?: ReturnType<typeof createUseQuickPanelReturn>
     useTranslationReturn?: ReturnType<typeof createUseTranslationReturn>
-    modelType?: string
     isFixedReasoning?: boolean
     isOpenAIWebSearchModel?: boolean
     isGPT5SeriesReasoningModel?: boolean
@@ -268,7 +265,6 @@ const renderComponent = (
     useAssistantReturn = createUseAssistantReturn(),
     useQuickPanelReturn = createUseQuickPanelReturn(),
     useTranslationReturn = createUseTranslationReturn(),
-    modelType = 'gpt5',
     isFixedReasoning = false,
     isOpenAIWebSearchModel = false,
     isGPT5SeriesReasoningModel = false,
@@ -294,7 +290,6 @@ const renderComponent = (
   })
   mockUseQuickPanel.mockReturnValue(useQuickPanelReturn)
   mockUseTranslation.mockReturnValue(useTranslationReturn)
-  mockGetThinkModelType.mockReturnValue(modelType)
   mockIsFixedReasoningModel.mockReturnValue(isFixedReasoning)
   mockIsOpenAIWebSearchModel.mockReturnValue(isOpenAIWebSearchModel)
   mockIsGPT5SeriesReasoningModel.mockReturnValue(isGPT5SeriesReasoningModel)
@@ -320,7 +315,6 @@ describe('ThinkingButton', () => {
     mockUseTranslation.mockReturnValue(createUseTranslationReturn())
     mockUseQuickPanel.mockReturnValue(createUseQuickPanelReturn())
     mockUseAssistant.mockReturnValue(createUseAssistantReturn())
-    mockGetThinkModelType.mockReturnValue('gpt5')
     mockIsFixedReasoningModel.mockReturnValue(false)
     mockIsGPT5SeriesReasoningModel.mockReturnValue(false)
     mockIsOpenAIWebSearchModel.mockReturnValue(false)
@@ -355,7 +349,6 @@ describe('ThinkingButton', () => {
 
       testCases.forEach(({ option, expectedTestId }) => {
         const { unmount } = renderComponent({
-          modelType: 'gpt5_2',
           reasoningEffort: option
         })
         expect(getIconByTestId(expectedTestId)).toBeInTheDocument()
@@ -370,7 +363,6 @@ describe('ThinkingButton', () => {
       const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
       renderComponent({
-        modelType: 'gpt5',
         model: modelPresets.gpt5(),
         reasoningEffort: 'high',
         useQuickPanelReturn
@@ -388,7 +380,6 @@ describe('ThinkingButton', () => {
       const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
       renderComponent({
-        modelType: 'gpt5pro',
         model: modelPresets.gpt5pro(),
         reasoningEffort: 'high',
         useQuickPanelReturn
@@ -404,7 +395,6 @@ describe('ThinkingButton', () => {
       const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
       renderComponent({
-        modelType: 'gemini2_flash',
         model: modelPresets.gemini2Flash(),
         reasoningEffort: 'high',
         useQuickPanelReturn
@@ -422,7 +412,6 @@ describe('ThinkingButton', () => {
       })
 
       renderComponent({
-        modelType: 'doubao',
         model: modelPresets.doubaoAuto(),
         reasoningEffort: 'high',
         useAssistantReturn,
@@ -442,7 +431,6 @@ describe('ThinkingButton', () => {
       const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
       renderComponent({
-        modelType: 'doubao_after_251015',
         model: modelPresets.doubaoNoAuto(),
         reasoningEffort: 'high',
         useQuickPanelReturn,
@@ -461,7 +449,6 @@ describe('ThinkingButton', () => {
         const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
         renderComponent({
-          modelType: 'gpt5',
           reasoningEffort: 'none',
           useQuickPanelReturn
         })
@@ -475,7 +462,6 @@ describe('ThinkingButton', () => {
         const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
         renderComponent({
-          modelType: 'gpt5',
           reasoningEffort: 'high',
           useQuickPanelReturn
         })
@@ -493,7 +479,6 @@ describe('ThinkingButton', () => {
         })
 
         renderComponent({
-          modelType: 'gpt5',
           reasoningEffort: 'high',
           useQuickPanelReturn
         })
@@ -509,7 +494,6 @@ describe('ThinkingButton', () => {
         const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
         renderComponent({
-          modelType: 'gpt5pro',
           reasoningEffort: 'none',
           useQuickPanelReturn
         })
@@ -525,7 +509,6 @@ describe('ThinkingButton', () => {
         const useQuickPanelReturn = createUseQuickPanelReturn({ open: mockOpen })
 
         renderComponent({
-          modelType: 'gpt5pro',
           reasoningEffort: 'high',
           useQuickPanelReturn
         })
@@ -565,7 +548,6 @@ describe('ThinkingButton', () => {
     it('should always show "Reasoning Effort" for multi-level models', () => {
       // Thinking enabled
       const { unmount: unmount1 } = renderComponent({
-        modelType: 'gpt5',
         reasoningEffort: 'high'
       })
       expect(getActionIconButton()).toHaveAttribute('aria-label', 'Reasoning Effort')
@@ -573,7 +555,6 @@ describe('ThinkingButton', () => {
 
       // Thinking disabled
       const { unmount: unmount2 } = renderComponent({
-        modelType: 'gpt5',
         reasoningEffort: 'none'
       })
       expect(getActionIconButton()).toHaveAttribute('aria-label', 'Reasoning Effort')
@@ -582,7 +563,6 @@ describe('ThinkingButton', () => {
 
     it('should show "Close" for single-level models when thinking enabled', () => {
       renderComponent({
-        modelType: 'gpt5pro',
         reasoningEffort: 'high'
       })
 
@@ -591,7 +571,6 @@ describe('ThinkingButton', () => {
 
     it('should show "Reasoning Effort" for single-level models when thinking disabled', () => {
       renderComponent({
-        modelType: 'gpt5pro',
         reasoningEffort: 'none'
       })
 
@@ -623,7 +602,6 @@ describe('ThinkingButton', () => {
 
       testCases.forEach(({ option, expectedTestId }) => {
         const { unmount } = renderComponent({
-          modelType: 'gpt5_2',
           reasoningEffort: option
         })
         expect(getIconByTestId(expectedTestId)).toBeInTheDocument()
@@ -673,7 +651,6 @@ describe('ThinkingButton', () => {
       renderComponent({
         isOpenAIWebSearchModel: true,
         isGPT5SeriesReasoningModel: true,
-        modelType: 'gpt5',
         useAssistantReturn
       })
 
@@ -699,7 +676,6 @@ describe('ThinkingButton', () => {
 
     it('should handle unsupported model types', () => {
       renderComponent({
-        modelType: 'default',
         reasoningEffort: 'none'
       })
 

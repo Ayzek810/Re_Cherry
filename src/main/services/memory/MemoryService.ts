@@ -22,16 +22,6 @@ import { MemoryQueries } from './queries'
 
 const logger = loggerService.withContext('MemoryService')
 
-export interface EmbeddingOptions {
-  model: string
-  provider: string
-  apiKey: string
-  apiVersion?: string
-  baseURL: string
-  dimensions?: number
-  batchSize?: number
-}
-
 export interface VectorSearchOptions {
   limit?: number
   threshold?: number

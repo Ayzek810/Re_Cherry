@@ -135,20 +135,6 @@ export const VStack = styled(Stack)<StackProps>`
   flex-direction: column;
 `
 
-export const BaseTypography = styled(Box)<{
-  fontSize?: number
-  lineHeight?: string
-  fontWeigth?: number | string
-  color?: string
-  textAlign?: string
-}>`
-  font-size: ${(props) => (props.fontSize ? getElementValue(props.fontSize) : '16px')};
-  line-height: ${(props) => (props.lineHeight ? getElementValue(props.lineHeight) : 'normal')};
-  font-weight: ${(props) => props.fontWeigth || 'normal'};
-  color: ${(props) => props.color || '#fff'};
-  text-align: ${(props) => props.textAlign || 'left'};
-`
-
 export const Container = styled.main<ContainerProps>`
   display: flex;
   flex-direction: column;

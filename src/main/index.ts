@@ -31,7 +31,6 @@ import { TrayService } from './services/TrayService'
 import { versionService } from './services/VersionService'
 import { windowService } from './services/WindowService'
 import { initWebviewHotkeys } from './services/WebviewService'
-import { extractRtkBinaries } from './utils/rtk'
 
 const logger = loggerService.withContext('MainEntry')
 
@@ -155,20 +154,30 @@ if (!app.requestSingleInstanceLock()) {
       }
     })
 
-    new TrayService()
+    // 关键接线优先：快捷键与 IPC 是应用可用性的底线，必须排在一切"外观类"初始化之前。
+    // 依据（真实事故）：本文件曾把 `new TrayService()` 放在这两行之前，托盘构造抛错
+    // （i18n 命名空间被误删 → trayLocale 为 undefined）后，registerShortcuts/registerIpc
+    // 被整体跳过，表现为 Ctrl+Space 快捷助手失效、窗口关闭按钮失灵、以及大量
+    // "No handler registered" 报错。外观类失败绝不能带走应用的基本可用性。
+    registerShortcuts(mainWindow)
+    await registerIpc(mainWindow, app)
+
+    // 托盘与 macOS 应用菜单：失败仅告警，不影响应用启动（与内核启动同策略）
+    try {
+      new TrayService()
+    } catch (error) {
+      logger.error('Failed to create tray service', error instanceof Error ? error : new Error(String(error)))
+    }
 
     // Setup macOS application menu
-    appMenuService?.setupApplicationMenu()
+    try {
+      appMenuService?.setupApplicationMenu()
+    } catch (error) {
+      logger.error('Failed to setup application menu', error instanceof Error ? error : new Error(String(error)))
+    }
 
     nodeTraceService.init()
     analyticsService.init()
-
-    // Extract bundled rtk binary to ~/.re_cherry/bin/ on first run
-    extractRtkBinaries().catch((error) => {
-      logger.warn('Failed to extract rtk binaries (non-fatal)', {
-        error: error instanceof Error ? error.message : String(error)
-      })
-    })
 
     app.on('activate', function () {
       const mainWindow = windowService.getMainWindow()
@@ -179,19 +188,22 @@ if (!app.requestSingleInstanceLock()) {
       }
     })
 
-    registerShortcuts(mainWindow)
-
-    await registerIpc(mainWindow, app)
-
     replaceDevtoolsFont(mainWindow)
 
     // Setup deep link for AppImage on Linux
     await setupAppImageDeepLink()
 
     if (isDev) {
-      installExtension([REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS])
-        .then((name) => logger.info(`Added Extension:  ${name}`))
-        .catch((err) => logger.error('An error occurred: ', err))
+      // v0.2.4-1：改为按需安装。默认关闭——该扩展从 Chrome 应用商店下载，网络受限环境下
+      // 会重试 5 次并抛出 net::ERR_CONNECTION_TIMED_OUT（每次启动白等约 60s 且刷 ERROR 日志）。
+      // 需要 React/Redux DevTools 时设置 RC_DEVTOOLS=1（可写入 .env）即可恢复原行为。
+      if (process.env.RC_DEVTOOLS === '1') {
+        installExtension([REDUX_DEVTOOLS, REACT_DEVELOPER_TOOLS])
+          .then((name) => logger.info(`Added Extension:  ${name}`))
+          .catch((err) => logger.warn('devtools extension install failed (non-fatal)', err))
+      } else {
+        logger.debug('devtools extensions skipped (set RC_DEVTOOLS=1 to enable)')
+      }
     }
   })
 

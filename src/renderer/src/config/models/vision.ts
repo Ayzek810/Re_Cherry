@@ -184,7 +184,6 @@ export function isDedicatedImageModel(model: Model): boolean {
 }
 
 // Backward compatible aliases
-export const isDedicatedImageGenerationModel = isDedicatedImageModel
 
 export const isAutoEnableImageGenerationModel = (model: Model): boolean => {
   if (!model) return false
@@ -243,15 +242,6 @@ export function isPureGenerateImageModel(model: Model): boolean {
 
 // Backward compatible alias - now uses unified dedicated image model detection
 export const isTextToImageModel = isDedicatedImageModel
-
-/**
- * 判断模型是否支持图片增强（包括编辑、增强、修复等）
- * @param model
- */
-export function isImageEnhancementModel(model: Model): boolean {
-  const modelId = getLowerBaseModelName(model.id)
-  return IMAGE_ENHANCEMENT_MODELS_REGEX.test(modelId)
-}
 
 export function isVisionModel(model: Model): boolean {
   if (!model || isEmbeddingModel(model) || isRerankModel(model)) {

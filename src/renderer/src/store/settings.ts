@@ -19,7 +19,6 @@ import { createSlice } from '@reduxjs/toolkit'
 import { DEFAULT_STREAM_OPTIONS_INCLUDE_USAGE, isMac, LATEST_PRIVACY_POLICY_VERSION } from '@renderer/config/constant'
 import { DEFAULT_SIDEBAR_ICONS } from '@renderer/config/sidebar'
 import type {
-  ApiServerConfig,
   AssistantsSortType,
   CodeStyleVarious,
   LanguageVarious,
@@ -36,17 +35,12 @@ import type {
   OpenAIReasoningSummary,
   OpenAIVerbosity
 } from '@renderer/types/aiCoreTypes'
-import { API_SERVER_DEFAULTS, UpgradeChannel } from '@shared/config/constant'
 import { v4 as uuid } from 'uuid'
-
-import type { RemoteSyncState } from './backup'
 
 export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter' | 'Alt+Enter'
 
 // Re-export for backward compatibility
 export { DEFAULT_SIDEBAR_ICONS }
-
-export interface NutstoreSyncRuntime extends RemoteSyncState {}
 
 export type AssistantIconType = 'model' | 'emoji' | 'none'
 
@@ -68,7 +62,6 @@ export interface SettingsState {
   userName: string
   userId: string
   showPrompt: boolean
-  showMessageDivider: boolean
   messageFont: 'system' | 'serif'
   showInputEstimatedTokens: boolean
   launchOnBoot: boolean
@@ -87,8 +80,6 @@ export interface SettingsState {
   pasteLongTextThreshold: number
   clickAssistantToShowTopic: boolean
   autoCheckUpdate: boolean
-  testPlan: boolean
-  testChannel: UpgradeChannel
   renderInputMessageAsMarkdown: boolean
   // 代码执行
   codeExecution: {
@@ -175,7 +166,6 @@ export interface SettingsState {
   joplinToken: string | null
   joplinUrl: string | null
   joplinExportReasoning: boolean
-  defaultObsidianVault: string | null
   /** This state is actaully default assistant preset */
   defaultAgent: string | null
   // 思源笔记配置
@@ -242,8 +232,6 @@ export interface SettingsState {
   enableDeveloperMode: boolean
   // UI
   navbarPosition: 'left' | 'top'
-  // API Server
-  apiServer: ApiServerConfig
   showMessageOutline: boolean
 }
 
@@ -261,7 +249,6 @@ export const initialState: SettingsState = {
   userName: '',
   userId: uuid(),
   showPrompt: true,
-  showMessageDivider: true,
   messageFont: 'system',
   showInputEstimatedTokens: false,
   launchOnBoot: false,
@@ -284,8 +271,6 @@ export const initialState: SettingsState = {
   pasteLongTextThreshold: 1500,
   clickAssistantToShowTopic: true,
   autoCheckUpdate: true,
-  testPlan: false,
-  testChannel: UpgradeChannel.LATEST,
   renderInputMessageAsMarkdown: false,
   codeExecution: {
     enabled: false,
@@ -363,7 +348,6 @@ export const initialState: SettingsState = {
   joplinToken: '',
   joplinUrl: '',
   joplinExportReasoning: false,
-  defaultObsidianVault: null,
   defaultAgent: null,
   siyuanApiUrl: null,
   siyuanToken: null,
@@ -437,13 +421,6 @@ export const initialState: SettingsState = {
   enableDeveloperMode: false,
   // UI
   navbarPosition: 'top',
-  // API Server
-  apiServer: {
-    enabled: false,
-    host: API_SERVER_DEFAULTS.HOST,
-    port: API_SERVER_DEFAULTS.PORT,
-    apiKey: `cs-sk-${uuid()}`
-  },
   showMessageOutline: false
 }
 
@@ -486,9 +463,6 @@ const settingsSlice = createSlice({
     },
     setShowPrompt: (state, action: PayloadAction<boolean>) => {
       state.showPrompt = action.payload
-    },
-    setShowMessageDivider: (state, action: PayloadAction<boolean>) => {
-      state.showMessageDivider = action.payload
     },
     setMessageFont: (state, action: PayloadAction<'system' | 'serif'>) => {
       state.messageFont = action.payload
@@ -540,12 +514,6 @@ const settingsSlice = createSlice({
     },
     setAutoCheckUpdate: (state, action: PayloadAction<boolean>) => {
       state.autoCheckUpdate = action.payload
-    },
-    setTestPlan: (state, action: PayloadAction<boolean>) => {
-      state.testPlan = action.payload
-    },
-    setTestChannel: (state, action: PayloadAction<UpgradeChannel>) => {
-      state.testChannel = action.payload
     },
     setRenderInputMessageAsMarkdown: (state, action: PayloadAction<boolean>) => {
       state.renderInputMessageAsMarkdown = action.payload
@@ -761,12 +729,6 @@ const settingsSlice = createSlice({
     setMessageNavigation: (state, action: PayloadAction<'none' | 'buttons' | 'anchor'>) => {
       state.messageNavigation = action.payload
     },
-    setDefaultObsidianVault: (state, action: PayloadAction<string>) => {
-      state.defaultObsidianVault = action.payload
-    },
-    setDefaultAgent: (state, action: PayloadAction<string>) => {
-      state.defaultAgent = action.payload
-    },
     setSiyuanApiUrl: (state, action: PayloadAction<string>) => {
       state.siyuanApiUrl = action.payload
     },
@@ -778,9 +740,6 @@ const settingsSlice = createSlice({
     },
     setSiyuanRootPath: (state, action: PayloadAction<string>) => {
       state.siyuanRootPath = action.payload
-    },
-    setAgentssubscribeUrl: (state, action: PayloadAction<string>) => {
-      state.agentssubscribeUrl = action.payload
     },
     setMinappsOpenLinkExternal: (state, action: PayloadAction<boolean>) => {
       state.minappsOpenLinkExternal = action.payload
@@ -846,36 +805,11 @@ const settingsSlice = createSlice({
     setLocalBackupSkipBackupFile: (state, action: PayloadAction<boolean>) => {
       state.localBackupSkipBackupFile = action.payload
     },
-    setS3: (state, action: PayloadAction<S3Config>) => {
-      state.s3 = action.payload
-    },
-    setS3Partial: (state, action: PayloadAction<Partial<S3Config>>) => {
-      state.s3 = { ...state.s3, ...action.payload }
-    },
     setEnableDeveloperMode: (state, action: PayloadAction<boolean>) => {
       state.enableDeveloperMode = action.payload
     },
     setNavbarPosition: (state, action: PayloadAction<'left' | 'top'>) => {
       state.navbarPosition = action.payload
-    },
-    // API Server actions
-    setApiServerEnabled: (state, action: PayloadAction<boolean>) => {
-      state.apiServer = {
-        ...state.apiServer,
-        enabled: action.payload
-      }
-    },
-    setApiServerPort: (state, action: PayloadAction<number>) => {
-      state.apiServer = {
-        ...state.apiServer,
-        port: action.payload
-      }
-    },
-    setApiServerApiKey: (state, action: PayloadAction<string>) => {
-      state.apiServer = {
-        ...state.apiServer,
-        apiKey: action.payload
-      }
     },
     setShowMessageOutline: (state, action: PayloadAction<boolean>) => {
       state.showMessageOutline = action.payload
@@ -898,7 +832,6 @@ export const {
   setProxyBypassRules,
   setUserName,
   setShowPrompt,
-  setShowMessageDivider,
   setMessageFont,
   setShowInputEstimatedTokens,
   setLaunchOnBoot,
@@ -915,8 +848,6 @@ export const {
   setAssistantIconType,
   setPasteLongTextAsFile,
   setAutoCheckUpdate,
-  setTestPlan,
-  setTestChannel,
   setRenderInputMessageAsMarkdown,
   setClickAssistantToShowTopic,
   setSkipBackupFile,
@@ -972,12 +903,9 @@ export const {
   setJoplinUrl,
   setJoplinExportReasoning,
   setMessageNavigation,
-  setDefaultObsidianVault,
-  setDefaultAgent,
   setSiyuanApiUrl,
   setSiyuanToken,
   setSiyuanBoxId,
-  setAgentssubscribeUrl,
   setSiyuanRootPath,
   setMinappsOpenLinkExternal,
   setEnableDataCollection,
@@ -1000,15 +928,9 @@ export const {
   setLocalBackupSyncInterval,
   setLocalBackupMaxBackups,
   setLocalBackupSkipBackupFile,
-  setS3,
-  setS3Partial,
   setEnableDeveloperMode,
   setNavbarPosition,
-  setShowMessageOutline,
-  // API Server actions
-  setApiServerEnabled,
-  setApiServerPort,
-  setApiServerApiKey
+  setShowMessageOutline
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

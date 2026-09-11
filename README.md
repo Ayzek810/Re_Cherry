@@ -1,10 +1,10 @@
 # Re_Cherry
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/Ayzek810/Re_Cherry/blob/main/LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/Ayzek810/Re_Cherry/blob/main/package.json)
+[![Version](https://img.shields.io/badge/version-0.2.4-orange.svg)](https://github.com/Ayzek810/Re_Cherry/blob/main/package.json)
 
 > 一个基于 [Cherry Studio](https://github.com/CherryHQ/cherry-studio) 修改而来的个人化 AI 助手客户端。
-> 当前版本（v0.1.0）基于 Cherry Studio v1.9.11 精简改造。
+> 当前版本（v0.2.4）基于 Cherry Studio v1.9.11 精简改造，消息路径已统一到内嵌的 DSH（DeepSeek Harness）内核。
 
 ## 项目介绍
 

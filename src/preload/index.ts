@@ -2,7 +2,6 @@ import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import type { SpanContext } from '@opentelemetry/api'
-import type { GitBashPathInfo } from '@shared/config/constant'
 import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
 import type { FileChangeEvent, WebviewKeyEvent } from '@shared/config/types'
 import type { ExternalAppInfo } from '@shared/externalApp/types'
@@ -122,28 +121,17 @@ const api = {
   getSystemFonts: (): Promise<string[]> => ipcRenderer.invoke(IpcChannel.App_GetSystemFonts),
   getIpCountry: (): Promise<string> => ipcRenderer.invoke(IpcChannel.App_GetIpCountry),
   mockCrashRenderProcess: () => ipcRenderer.invoke(IpcChannel.APP_CrashRenderProcess),
-  mac: {
-    isProcessTrusted: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.App_MacIsProcessTrusted),
-    requestProcessTrust: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.App_MacRequestProcessTrust)
-  },
   notification: {
     send: (notification: Notification) => ipcRenderer.invoke(IpcChannel.Notification_Send, notification)
   },
   system: {
     getDeviceType: () => ipcRenderer.invoke(IpcChannel.System_GetDeviceType),
-    getHostname: () => ipcRenderer.invoke(IpcChannel.System_GetHostname),
-    getCpuName: () => ipcRenderer.invoke(IpcChannel.System_GetCpuName),
-    checkGitBash: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.System_CheckGitBash),
-    getGitBashPath: (): Promise<string | null> => ipcRenderer.invoke(IpcChannel.System_GetGitBashPath),
-    getGitBashPathInfo: (): Promise<GitBashPathInfo> => ipcRenderer.invoke(IpcChannel.System_GetGitBashPathInfo),
-    setGitBashPath: (newPath: string | null): Promise<boolean> =>
-      ipcRenderer.invoke(IpcChannel.System_SetGitBashPath, newPath)
+    getHostname: () => ipcRenderer.invoke(IpcChannel.System_GetHostname)
   },
   devTools: {
     toggle: () => ipcRenderer.invoke(IpcChannel.System_ToggleDevTools)
   },
   zip: {
-    compress: (text: string) => ipcRenderer.invoke(IpcChannel.Zip_Compress, text),
     decompress: (text: Buffer) => ipcRenderer.invoke(IpcChannel.Zip_Decompress, text)
   },
   backup: {
@@ -281,29 +269,21 @@ const api = {
   },
   config: {
     set: (key: string, value: any, isNotify: boolean = false) =>
-      ipcRenderer.invoke(IpcChannel.Config_Set, key, value, isNotify),
-    get: (key: string) => ipcRenderer.invoke(IpcChannel.Config_Get, key)
+      ipcRenderer.invoke(IpcChannel.Config_Set, key, value, isNotify)
   },
   miniWindow: {
-    show: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Show),
     hide: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Hide),
     close: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Close),
-    toggle: () => ipcRenderer.invoke(IpcChannel.MiniWindow_Toggle),
     setPin: (isPinned: boolean) => ipcRenderer.invoke(IpcChannel.MiniWindow_SetPin, isPinned)
   },
   aes: {
-    encrypt: (text: string, secretKey: string, iv: string) =>
-      ipcRenderer.invoke(IpcChannel.Aes_Encrypt, text, secretKey, iv),
     decrypt: (encryptedData: string, iv: string, secretKey: string) =>
       ipcRenderer.invoke(IpcChannel.Aes_Decrypt, encryptedData, iv, secretKey)
   },
   providerKeys: {
-    get: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Get, providerId),
     getAll: () => ipcRenderer.invoke(IpcChannel.ProviderKeys_GetAll),
     set: (providerId: string, apiKey: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Set, providerId, apiKey),
-    setMany: (entries: Record<string, string>) => ipcRenderer.invoke(IpcChannel.ProviderKeys_SetMany, entries),
-    remove: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Remove, providerId),
-    has: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Has, providerId)
+    remove: (providerId: string) => ipcRenderer.invoke(IpcChannel.ProviderKeys_Remove, providerId)
   },
   shell: {
     openExternal: (url: string, options?: Electron.OpenExternalOptions) => {
@@ -341,8 +321,6 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Nutstore_GetDirectoryContents, token, path)
   },
   searchService: {
-    openSearchWindow: (uid: string, show?: boolean) => ipcRenderer.invoke(IpcChannel.SearchWindow_Open, uid, show),
-    closeSearchWindow: (uid: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_Close, uid),
     openUrlInSearchWindow: (uid: string, url: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_OpenUrl, uid, url)
   },
   webview: {
@@ -376,7 +354,6 @@ const api = {
     getData: (topicId: string, traceId: string, modelName?: string) =>
       ipcRenderer.invoke(IpcChannel.TRACE_GET_DATA, topicId, traceId, modelName),
     saveEntity: (entity: SpanEntity) => ipcRenderer.invoke(IpcChannel.TRACE_SAVE_ENTITY, entity),
-    getEntity: (spanId: string) => ipcRenderer.invoke(IpcChannel.TRACE_GET_ENTITY, spanId),
     bindTopic: (topicId: string, traceId: string) => ipcRenderer.invoke(IpcChannel.TRACE_BIND_TOPIC, topicId, traceId),
     tokenUsage: (spanId: string, usage: TokenUsage) => ipcRenderer.invoke(IpcChannel.TRACE_TOKEN_USAGE, spanId, usage),
     cleanHistory: (topicId: string, traceId: string, modelName?: string) =>

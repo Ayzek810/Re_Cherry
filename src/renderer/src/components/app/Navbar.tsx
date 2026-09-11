@@ -46,15 +46,6 @@ export const NavbarRight: FC<Props> = ({ children, ...props }) => {
   )
 }
 
-export const NavbarMain: FC<Props> = ({ children, ...props }) => {
-  const isFullscreen = useFullscreen()
-  return (
-    <NavbarMainContainer {...props} $isFullscreen={isFullscreen}>
-      {children}
-    </NavbarMainContainer>
-  )
-}
-
 export const NavbarHeader: FC<Props> = ({ children, ...props }) => {
   return <NavbarHeaderContent {...props}>{children}</NavbarHeaderContent>
 }

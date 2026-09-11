@@ -5,9 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isEmbeddingModel, isRerankModel } from '../embedding'
 import {
   isAutoEnableImageGenerationModel,
-  isDedicatedImageGenerationModel,
   isGenerateImageModel,
-  isImageEnhancementModel,
   isPureGenerateImageModel,
   isTextToImageModel,
   isVisionModel
@@ -120,18 +118,11 @@ describe('vision helpers', () => {
       expect(isTextToImageModel(createModel({ id: 'gpt-4o' }))).toBe(false)
     })
 
-    it('detects models with restricted image size support and enhancement', () => {
-      expect(isImageEnhancementModel(createModel({ id: 'qwen-image-edit' }))).toBe(true)
-      expect(isImageEnhancementModel(createModel({ id: 'gpt-4o' }))).toBe(false)
-    })
-
-    it('identifies dedicated and auto-enabled image generation models', () => {
-      expect(isDedicatedImageGenerationModel(createModel({ id: 'grok-2-image-1212' }))).toBe(true)
+    it('auto-enables image generation for supported models', () => {
       expect(isAutoEnableImageGenerationModel(createModel({ id: 'gemini-2.5-flash-image-ultra' }))).toBe(true)
     })
 
-    it('returns false when models are not in dedicated or auto-enable sets', () => {
-      expect(isDedicatedImageGenerationModel(createModel({ id: 'gpt-4o' }))).toBe(false)
+    it('returns false when models are not in the auto-enable set', () => {
       expect(isAutoEnableImageGenerationModel(createModel({ id: 'gpt-4o' }))).toBe(false)
     })
   })

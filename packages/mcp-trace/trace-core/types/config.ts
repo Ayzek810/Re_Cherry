@@ -26,11 +26,6 @@ export interface TraceConfig extends TelemetryConfig {
   maxAttributesPerSpan?: number
 }
 
-export interface TraceEntity {
-  id: string
-  name: string
-}
-
 export interface TokenUsage {
   prompt_tokens: number
   completion_tokens: number

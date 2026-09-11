@@ -9,10 +9,3 @@ export function useLMStudioSettings() {
   return { ...settings, setKeepAliveTime: (time: number) => dispatch(setLMStudioKeepAliveTime(time)) }
 }
 
-export function getLMStudioSettings() {
-  return store.getState().llm.settings.lmstudio
-}
-
-export function getLMStudioKeepAliveTime() {
-  return store.getState().llm.settings.lmstudio.keepAliveTime + 'm'
-}

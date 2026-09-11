@@ -108,18 +108,6 @@ export function getFileType(ext: string): FileType {
   return fileTypeMap.get(ext) || FILE_TYPE.OTHER
 }
 
-export function getFileDir(filePath: string) {
-  return path.dirname(filePath)
-}
-
-export function getFileName(filePath: string) {
-  return path.basename(filePath)
-}
-
-export function getFileExt(filePath: string) {
-  return path.extname(filePath)
-}
-
 export function getAllFiles(dirPath: string, arrayOfFiles: FileMetadata[] = []): FileMetadata[] {
   const files = fs.readdirSync(dirPath)
 
@@ -186,14 +174,6 @@ export function getCacheDir() {
   return path.join(app.getPath('userData'), 'Cache')
 }
 
-export function getAppConfigDir(name: string) {
-  return path.join(getConfigDir(), name)
-}
-
-export function getMcpDir() {
-  return path.join(os.homedir(), HOME_CHERRY_DIR, 'mcp')
-}
-
 /**
  * 读取文件内容并自动检测编码格式进行解码
  * @param filePath - 文件路径
@@ -224,70 +204,6 @@ export async function readTextFileWithAutoEncoding(filePath: string): Promise<st
 
   logger.error(`File ${filePath} failed to decode with all possible encodings, trying UTF-8 encoding`)
   return iconv.decode(data, 'UTF-8')
-}
-
-export async function writeWithLock(
-  filePath: string,
-  data: string | NodeJS.ArrayBufferView,
-  options: (fs.ObjectEncodingOptions & { mode?: number; flag?: string }) & {
-    atomic?: boolean
-    tempPath?: string
-    lockFilePath?: string
-    retries?: number
-    retryDelayMs?: number
-    lockStaleMs?: number
-  } = {}
-): Promise<void> {
-  const {
-    atomic = false,
-    tempPath,
-    lockFilePath = `${filePath}.lock`,
-    retries = 50,
-    retryDelayMs = 50,
-    lockStaleMs = 30_000,
-    ...writeOptions
-  } = options
-
-  const finalTempPath = tempPath ?? `${filePath}.tmp`
-
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    try {
-      const handle = await fs.promises.open(lockFilePath, 'wx')
-      await handle.close()
-
-      try {
-        if (atomic) {
-          await fs.promises.writeFile(finalTempPath, data, writeOptions)
-          await fs.promises.rename(finalTempPath, filePath)
-        } else {
-          await fs.promises.writeFile(filePath, data, writeOptions)
-        }
-      } finally {
-        await fs.promises.unlink(lockFilePath).catch(() => undefined)
-      }
-
-      return
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException
-      if (nodeError.code !== 'EEXIST' || attempt >= retries) {
-        throw error
-      }
-
-      if (lockStaleMs > 0) {
-        try {
-          const stats = await fs.promises.stat(lockFilePath)
-          if (Date.now() - stats.mtimeMs > lockStaleMs) {
-            await fs.promises.unlink(lockFilePath)
-            continue
-          }
-        } catch {
-          // Ignore stale checks if lock file disappears or stat fails
-        }
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
-    }
-  }
 }
 
 export async function base64Image(file: FileMetadata): Promise<{ mime: string; base64: string; data: string }> {
@@ -520,18 +436,6 @@ export function sanitizeFilename(fileName: string, replacement = '_'): string {
   }
 
   return sanitized
-}
-
-/**
- * Check if a directory exists at the given path
- */
-export async function directoryExists(dirPath: string): Promise<boolean> {
-  try {
-    const stats = await fs.promises.stat(dirPath)
-    return stats.isDirectory()
-  } catch {
-    return false
-  }
 }
 
 /**

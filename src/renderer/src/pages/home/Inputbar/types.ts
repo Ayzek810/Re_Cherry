@@ -49,14 +49,6 @@ export type ToolActionMap = Pick<InputbarToolsContextValue, ToolActionKeys>
 export type ToolStateKey = keyof ToolStateMap
 export type ToolActionKey = keyof ToolActionMap
 
-/**
- * Tool dependencies configuration
- */
-export interface ToolDependencies {
-  state?: ToolStateKeys[]
-  actions?: ToolActionKeys[]
-}
-
 export interface ToolContext {
   scope: InputbarScope
   assistant: Assistant

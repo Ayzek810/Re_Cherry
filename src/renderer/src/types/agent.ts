@@ -1,7 +1,5 @@
 import * as z from 'zod'
 
-export type AgentType = 'claude-code'
-
 export type AgentServerError = {
   error: {
     message: string

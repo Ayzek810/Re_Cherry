@@ -607,15 +607,6 @@ export function stopAutoSync(type?: BackupType) {
   }
 }
 
-export async function getBackupData() {
-  return JSON.stringify({
-    time: new Date().getTime(),
-    version: 5,
-    localStorage,
-    indexedDB: await backupDatabase()
-  })
-}
-
 /************************************* Backup Utils ************************************** */
 export async function handleData(data: Record<string, any>) {
   if (data.version === 1) {
