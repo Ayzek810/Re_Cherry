@@ -16,7 +16,6 @@
  */
 import { loggerService } from '@logger'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
-import { IpcChannel } from '@shared/IpcChannel'
 import { useDispatch, useSelector, useStore } from 'react-redux'
 import {
   createTransform,
@@ -79,7 +78,6 @@ const stripProviderApiKeys = createTransform<any, any>(
     if (key !== 'llm') return outboundState
     const llm = outboundState as {
       providers?: Array<Record<string, unknown>>
-      settings?: Record<string, unknown>
     } | null
     if (!llm || typeof llm !== 'object' || !Array.isArray(llm.providers)) return outboundState
     let changed = false
@@ -92,21 +90,8 @@ const stripProviderApiKeys = createTransform<any, any>(
       }
       return p
     })
-    const settings = llm.settings
-    const awsBedrock = settings?.awsBedrock as Record<string, unknown> | undefined
-    if (
-      awsBedrock &&
-      typeof awsBedrock === 'object' &&
-      typeof awsBedrock.apiKey === 'string' &&
-      awsBedrock.apiKey.length > 0
-    ) {
-      changed = true
-      const rest = { ...awsBedrock }
-      delete (rest as { apiKey?: unknown }).apiKey
-      return { ...llm, providers, settings: { ...settings, awsBedrock: rest } }
-    }
     if (!changed) return outboundState
-    return { ...llm, providers, settings }
+    return { ...llm, providers }
   }
 )
 
@@ -154,11 +139,10 @@ export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
 
 export const persistor = persistStore(store, undefined, () => {
-  // Notify main process that Redux store is ready
-  void window.electron?.ipcRenderer?.invoke(IpcChannel.ReduxStoreReady)
+  // v0.2.4-1：原 ReduxStoreReady invoke 已删除（main 侧 handler 随 ReduxService 一并移除）
   // v0.2.4 K4：rehydrate 完成后从 main 加密存储回填 provider key（本地持久层已不再落明文）
   void backfillProviderKeysFromVault()
-  logger.info('Redux store ready, notified main process')
+  logger.info('Redux store ready')
 })
 
 /** v0.2.4 K4：启动回填 —— main 加密存储（ProviderKeyStore）是 key 的持久真源。

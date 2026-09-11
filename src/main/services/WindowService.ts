@@ -594,10 +594,6 @@ export class WindowService {
       this.miniWindow = null
     })
 
-    this.miniWindow.on('hide', () => {
-      this.miniWindow?.webContents.send(IpcChannel.HideMiniWindow)
-    })
-
     this.miniWindow.on('show', () => {
       this.miniWindow?.webContents.send(IpcChannel.ShowMiniWindow)
     })

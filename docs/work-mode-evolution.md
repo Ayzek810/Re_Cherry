@@ -1,5 +1,9 @@
 # 统一会话界面演进：工作模式（Agent 能力可开关）
 
+> ⚠️ **v0.2.4-1 更正（实施前必读）**：本文 §3 的 D7 与 §4.4 都把 `AssistantSettings.toolUseMode` 列为"删除的死字段"——**这条已作废**。引用链实测它是**活字段**：`utils/assistant.ts:isToolUseModeFunction` → `UrlContextbutton.tsx:36`（URL context 按钮的语义取决于它）；UI 在 `AssistantModelSettings.tsx:483-489` 与 `DefaultAssistantSettings.tsx:315-322`；`AssistantService.ts:43,176` 提供默认值；`store/migrate.ts` 有 7 处历史分支直接读写它。**Phase 0 只删 `mcpMode`/`mcpServers`/`maxToolCalls`/`enableMaxToolCalls`，不要碰 `toolUseMode`。**
+> 同理更正：`anthropicApiHost` 也不是死字段（渲染层 UI/配置活，仅内核零消费）。
+> 其余设计（D1-D6、D8、§5 状态机、§6 投影映射、§7 分期）经引用链复核仍然成立。
+
 > 状态：设计定稿，待实施
 > 日期：2026-02（v0.2.2 之后）
 > 唯一用户制：不做老用户兼容与词表迁就；仅保证已有话题数据"不崩、能开"
@@ -28,7 +32,7 @@ Re_Cherry 已完成：Cherry Studio v1.9.11 精简 + 消息路径统一为 DSH �
 | D4 | 切换语义：**下一轮生效**（step 边界原子提交） | 与 dsh plan-mode 同构；执行中的工具调用不断刀，保证 tool/call ↔ tool/result 配对 |
 | D5 | 模式状态 = 会话日志 log-only 事件 + pre-step 折叠 | resume/fork/重启自动恢复；无需并行存储 |
 | D6 | 审批三档直接采用 dsh 沙箱词表 | 唯一用户，无需迁就 v1 的 Claude Code 词表 |
-| D7 | 删除死字段 `mcpMode`/`mcpServers`/`toolUseMode`/`maxToolCalls` | 死字段是 schema 的谎言；唯一用户无需迁移 |
+| D7 | 删除死字段 `mcpMode`/`mcpServers`/`maxToolCalls`/`enableMaxToolCalls`（**`toolUseMode` 已更正为活字段，不删**） | 死字段是 schema 的谎言；唯一用户无需迁移。`toolUseMode` 被 `isToolUseModeFunction`（UrlContextbutton）与 7 处 migrate 分支使用 |
 | D8 | 分期按"依赖 × 风险"排序，投影链路用无害工具先验证 | approval 往返是最大未知数；fs 先于 bash（爆炸半径） |
 
 ## 4. 设置合并设计
@@ -56,7 +60,8 @@ Re_Cherry 已完成：Cherry Studio v1.9.11 精简 + 消息路径统一为 DSH �
 
 ### 4.4 删除的死字段
 
-`Assistant.mcpMode`、`Assistant.mcpServers`、`AssistantSettings.toolUseMode`、`AssistantSettings.maxToolCalls` 及其全部引用。
+`Assistant.mcpMode`、`Assistant.mcpServers`、`AssistantSettings.maxToolCalls`、`AssistantSettings.enableMaxToolCalls` 及其全部引用。
+（**`AssistantSettings.toolUseMode` 不在此列——见文首更正**。）
 
 ## 5. 工作模式状态机（范式A：plan-mode 同构）
 

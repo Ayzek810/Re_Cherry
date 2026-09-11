@@ -123,42 +123,6 @@ export function isWebSearchModel(model: Model): boolean {
   return false
 }
 
-export function isMandatoryWebSearchModel(model: Model): boolean {
-  if (!model) {
-    return false
-  }
-
-  const provider = getProviderByModel(model)
-
-  if (!provider) {
-    return false
-  }
-
-  const modelId = getLowerBaseModelName(model.id)
-
-  if (provider.id === 'perplexity' || provider.id === 'openrouter') {
-    return PERPLEXITY_SEARCH_MODELS.includes(modelId)
-  }
-
-  return false
-}
-
-export function isOpenRouterBuiltInWebSearchModel(model: Model): boolean {
-  if (!model) {
-    return false
-  }
-
-  const provider = getProviderByModel(model)
-
-  if (provider.id !== 'openrouter') {
-    return false
-  }
-
-  const modelId = getLowerBaseModelName(model.id)
-
-  return isOpenAIWebSearchChatCompletionOnlyModel(model) || modelId.includes('sonar')
-}
-
 export function isOpenAIWebSearchChatCompletionOnlyModel(model: Model): boolean {
   const modelId = getLowerBaseModelName(model.id)
   return modelId.includes('gpt-4o-search-preview') || modelId.includes('gpt-4o-mini-search-preview')
@@ -178,16 +142,3 @@ export function isOpenAIWebSearchModel(model: Model): boolean {
   )
 }
 
-export function isHunyuanSearchModel(model?: Model): boolean {
-  if (!model) {
-    return false
-  }
-
-  const modelId = getLowerBaseModelName(model.id)
-
-  if (model.provider === 'hunyuan') {
-    return modelId !== 'hunyuan-lite'
-  }
-
-  return false
-}

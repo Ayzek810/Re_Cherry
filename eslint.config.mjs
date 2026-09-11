@@ -55,17 +55,10 @@ export default defineConfig([
     ignores: [
       'node_modules/**',
       'build/**',
-      'dist/**',
       'out/**',
-      'local/**',
       'tests/**',
-      '.yarn/**',
       '.gitignore',
-      '.conductor/**',
-      'scripts/cloudflare-worker.js',
       'src/main/integration/nutstore/sso/lib/**',
-      'src/main/integration/nutstore/sso/lib/**',
-      'src/renderer/src/ui/**',
       'packages/**/dist'
     ]
   },
@@ -83,7 +76,7 @@ export default defineConfig([
         {
           selector: 'CallExpression[callee.object.name="console"]',
           message:
-            '❗CherryStudio uses unified LoggerService: 📖 docs/en/guides/logging.md\n❗CherryStudio 使用统一的日志服务：📖 docs/zh/guides/logging.md\n\n'
+            '❗Re_Cherry uses unified LoggerService: use loggerService.withContext(...) instead of console\n❗Re_Cherry 使用统一的日志服务：请用 loggerService.withContext(...) 代替 console\n\n'
         }
       ]
     }

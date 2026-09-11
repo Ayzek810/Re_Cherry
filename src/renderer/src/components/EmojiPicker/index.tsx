@@ -5,27 +5,14 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import type { LanguageVarious } from '@renderer/types'
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 // i18n translations from emoji-picker-element
-import de from 'emoji-picker-element/i18n/de'
 import en from 'emoji-picker-element/i18n/en'
-import es from 'emoji-picker-element/i18n/es'
-import fr from 'emoji-picker-element/i18n/fr'
-import ja from 'emoji-picker-element/i18n/ja'
-import pt_PT from 'emoji-picker-element/i18n/pt_PT'
-import ru_RU from 'emoji-picker-element/i18n/ru_RU'
 import zh_CN from 'emoji-picker-element/i18n/zh_CN'
 import type Picker from 'emoji-picker-element/picker'
 import type { EmojiClickEvent } from 'emoji-picker-element/shared'
 // Emoji data from emoji-picker-element-data (local, no CDN)
-// Using CLDR format for full multi-language search support (28 languages)
-import dataDE from 'emoji-picker-element-data/de/cldr/data.json?url'
+// Using CLDR format for full multi-language search support
 import dataEN from 'emoji-picker-element-data/en/cldr/data.json?url'
-import dataES from 'emoji-picker-element-data/es/cldr/data.json?url'
-import dataFR from 'emoji-picker-element-data/fr/cldr/data.json?url'
-import dataJA from 'emoji-picker-element-data/ja/cldr/data.json?url'
-import dataPT from 'emoji-picker-element-data/pt/cldr/data.json?url'
-import dataRU from 'emoji-picker-element-data/ru/cldr/data.json?url'
 import dataZH from 'emoji-picker-element-data/zh/cldr/data.json?url'
-import dataZH_HANT from 'emoji-picker-element-data/zh-hant/cldr/data.json?url'
 import type { FC } from 'react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,51 +24,21 @@ interface Props {
 // Mapping from app locale to emoji-picker-element i18n
 const i18nMap: Record<LanguageVarious, typeof en> = {
   'en-US': en,
-  'zh-CN': zh_CN,
-  'zh-TW': zh_CN, // Closest available
-  'de-DE': de,
-  'el-GR': en, // No Greek available, fallback to English
-  'es-ES': es,
-  'fr-FR': fr,
-  'ja-JP': ja,
-  'pt-PT': pt_PT,
-  'ro-RO': en, // No Romanian available, fallback to English
-  'ru-RU': ru_RU,
-  'vi-VN': en // No Vietnamese available, fallback to English
+  'zh-CN': zh_CN
 }
 
 // Mapping from app locale to emoji data URL
 // Using CLDR format provides native language search support for all locales
 const dataSourceMap: Record<LanguageVarious, string> = {
   'en-US': dataEN,
-  'zh-CN': dataZH,
-  'zh-TW': dataZH_HANT,
-  'de-DE': dataDE,
-  'el-GR': dataEN, // No Greek CLDR available, fallback to English
-  'es-ES': dataES,
-  'fr-FR': dataFR,
-  'ja-JP': dataJA,
-  'pt-PT': dataPT,
-  'ro-RO': dataEN, // No Romanian CLDR available, fallback to English
-  'ru-RU': dataRU,
-  'vi-VN': dataEN // No Vietnamese CLDR available, fallback to English
+  'zh-CN': dataZH
 }
 
 // Mapping from app locale to emoji-picker-element locale string
 // Must match the data source locale for proper IndexedDB caching
 const localeMap: Record<LanguageVarious, string> = {
   'en-US': 'en',
-  'zh-CN': 'zh',
-  'zh-TW': 'zh-hant',
-  'de-DE': 'de',
-  'el-GR': 'en',
-  'es-ES': 'es',
-  'fr-FR': 'fr',
-  'ja-JP': 'ja',
-  'pt-PT': 'pt',
-  'ro-RO': 'en',
-  'ru-RU': 'ru',
-  'vi-VN': 'en'
+  'zh-CN': 'zh'
 }
 
 const EmojiPicker: FC<Props> = ({ onEmojiClick }) => {

@@ -12,15 +12,6 @@ export function getProviderName(model?: Model) {
   return getFancyProviderName(provider)
 }
 
-export function getProviderNameById(pid: string) {
-  const provider = getStoreProviders().find((p) => p.id === pid)
-  if (provider) {
-    return getFancyProviderName(provider)
-  } else {
-    return 'Unknown Provider'
-  }
-}
-
 //FIXME: 和 AssistantService.ts 中的同名函数冲突
 export function getProviderByModel(model?: Model) {
   const id = model?.provider
@@ -31,11 +22,6 @@ export function getProviderByModel(model?: Model) {
 
 export function isProviderSupportAuth(provider: Provider) {
   const supportProviders = ['302ai', 'silicon', 'aihubmix', 'ppio', 'tokenflux', 'aionly']
-  return supportProviders.includes(provider.id)
-}
-
-export function isProviderSupportCharge(provider: Provider) {
-  const supportProviders = ['302ai', 'silicon', 'aihubmix', 'ppio']
   return supportProviders.includes(provider.id)
 }
 

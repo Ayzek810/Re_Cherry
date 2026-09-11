@@ -61,17 +61,11 @@ const tabsSlice = createSlice({
         }
       }
     },
-    updateTab: (state, action: PayloadAction<{ id: string; updates: Partial<Tab> }>) => {
-      const tab = state.tabs.find((tab) => tab.id === action.payload.id)
-      if (tab) {
-        Object.assign(tab, action.payload.updates)
-      }
-    },
     setActiveTab: (state, action: PayloadAction<string>) => {
       state.activeTabId = action.payload
     }
   }
 })
 
-export const { setTabs, addTab, removeTab, setActiveTab, updateTab } = tabsSlice.actions
+export const { setTabs, addTab, removeTab, setActiveTab } = tabsSlice.actions
 export default tabsSlice.reducer

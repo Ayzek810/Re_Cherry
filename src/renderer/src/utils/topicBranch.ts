@@ -126,7 +126,3 @@ export function shouldShowTopicRow(topic: Topic, kernelRoots: Set<string> | null
   return new Date(topic.updatedAt).getTime() >= BOOT_TIME
 }
 
-/** 话题增删（fork/截断取代）后使内核根集合缓存失效，下次查询重新拉取。 */
-export function invalidateKernelTopicRootIds(): void {
-  kernelRootIdsCache = null
-}

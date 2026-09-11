@@ -8,7 +8,6 @@ import {
   isGPT5SeriesReasoningModel,
   isGPT51SeriesModel,
   isOpenAIChatCompletionOnlyModel,
-  isOpenAILLMModel,
   isOpenAIModel,
   isOpenAIOpenWeightModel,
   isSupportNoneReasoningEffortModel,
@@ -39,30 +38,6 @@ const createModel = (overrides: Partial<Model> = {}): Model => ({
 })
 
 describe('OpenAI Model Detection', () => {
-  describe('isOpenAILLMModel', () => {
-    it('returns false for undefined model', () => {
-      expect(isOpenAILLMModel(undefined as unknown as Model)).toBe(false)
-    })
-
-    it('returns false for image generation models', () => {
-      expect(isOpenAILLMModel(createModel({ id: 'gpt-4o-image' }))).toBe(false)
-    })
-
-    it('returns true for reasoning models', () => {
-      expect(isOpenAILLMModel(createModel({ id: 'o1-preview' }))).toBe(true)
-    })
-
-    it('returns true for GPT-prefixed models', () => {
-      expect(isOpenAILLMModel(createModel({ id: 'GPT-5-turbo' }))).toBe(true)
-    })
-
-    it('returns false for GPTQ quantized models', () => {
-      expect(isOpenAILLMModel(createModel({ id: 'Qwen3.5-122B-A10B-GPTQ' }))).toBe(false)
-      expect(isOpenAILLMModel(createModel({ id: 'Qwen/Qwen3.5-122B-Instruct-GPTQ-Int4' }))).toBe(false)
-      expect(isOpenAILLMModel(createModel({ id: 'llama-3-70b-gptq' }))).toBe(false)
-    })
-  })
-
   describe('isOpenAIModel', () => {
     it('returns false for undefined model', () => {
       expect(isOpenAIModel(undefined as unknown as Model)).toBe(false)

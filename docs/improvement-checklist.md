@@ -1,7 +1,15 @@
 # Re_Cherry 改进清单
 
+> ⚠️ **v0.2.4-1 清理后更正（2026-09）**：本清单成稿于 v0.2.4 之前，部分清单项经引用链复核后**判定错误**，勿照单执行：
+> - `AssistantSettings.toolUseMode` **不是死字段**（`utils/assistant.ts:isToolUseModeFunction` 活用于 UrlContextbutton；UI 在 AssistantModelSettings / DefaultAssistantSettings；migrate 有 7 处分支）。**不能删**。
+> - `anthropicApiHost` **不是零消费**（ProviderSetting UI + providerHost.ts + isAnthropicSupportedProvider 均活）；只有**内核**零消费。**不能删**。
+> - trace/OpenTelemetry 全链与 Pyodide 是**活功能**，勿按“MCP 已砍”推断删除。
+> - 本文件内所有 TODO/FIXME 行号在 v0.2.4-1 大规模清理后已大量漂移，定位请重新 grep。
+> - v0.2.4-1 已完成的主要清理：见工作区 `docs/v0.2.4-1_doc.md`。
+> - 开头的 `agent-assistant-fields-report.md` 在仓库与工作区均不存在（已被删除的中间产物）。
+
 > 整理日期：2026-09-04
-> 基于：`docs/work-mode-evolution.md`、`agent-assistant-fields-report.md`、代码 TODO/FIXME 扫描、核心源码阅读
+> 基于：`docs/work-mode-evolution.md`、代码 TODO/FIXME 扫描、核心源码阅读（原列出的 `agent-assistant-fields-report.md` 已不存在，见上方更正）
 
 ---
 
@@ -24,7 +32,7 @@
 这是当前最大的待实施功能，目标是在单一聊天页实现 Agent 能力的可开关化。
 
 #### Phase 0：地基（Schema 改造）
-- [ ] **删除死字段**：`Assistant.mcpMode`、`Assistant.mcpServers`、`AssistantSettings.toolUseMode`、`AssistantSettings.maxToolCalls` 及全部引用
+- [ ] **删除死字段**：`Assistant.mcpMode`、`Assistant.mcpServers`、`AssistantSettings.maxToolCalls`、`AssistantSettings.enableMaxToolCalls` 及全部引用（**`toolUseMode` 不删——见文首更正，它是活字段**）
 - [ ] **Assistant 新增字段**：
   - `workModeDefault: boolean` — 新话题默认是否开启工作模式
   - `accessiblePaths: string[]` — 默认工作区路径列表

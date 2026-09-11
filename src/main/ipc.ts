@@ -4,9 +4,8 @@ import path from 'node:path'
 
 import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { loggerService } from '@logger'
-import { isLinux, isMac, isPortable, isWin } from '@main/constant'
+import { isLinux, isPortable, isWin } from '@main/constant'
 import { getIpCountry } from '@main/utils/ipService'
-import { autoDiscoverGitBash, getGitBashPathInfo, validateGitBashPath } from '@main/utils/process'
 import { handleZoomFactor } from '@main/utils/zoom'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
@@ -15,13 +14,13 @@ import { extractPdfText } from '@shared/utils/pdf'
 import type { Notification, Shortcut, ThemeMode } from '@types'
 import checkDiskSpace from 'check-disk-space'
 import type { ProxyConfig } from 'electron'
-import { BrowserWindow, dialog, ipcMain, session, shell, systemPreferences, webContents } from 'electron'
+import { BrowserWindow, dialog, ipcMain, session, shell, webContents } from 'electron'
 import fontList from 'font-list'
 
 import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
 import BackupManager from './services/BackupManager'
-import { ConfigKeys, configManager } from './services/ConfigManager'
+import { configManager } from './services/ConfigManager'
 import { ExportService } from './services/ExportService'
 import { externalAppsService } from './services/ExternalAppsService'
 import { fileStorage as fileManager } from './services/FileStorage'
@@ -42,7 +41,6 @@ import {
   cleanHistoryTrace,
   cleanLocalData,
   cleanTopic,
-  getEntity,
   getSpans,
   saveEntity,
   saveSpans,
@@ -53,7 +51,7 @@ import { themeService } from './services/ThemeService'
 import { setOpenLinkExternal } from './services/WebviewService'
 import { windowService } from './services/WindowService'
 import { calculateDirectorySize, getResourcePath } from './utils'
-import { decrypt, encrypt } from './utils/aes'
+import { decrypt } from './utils/aes'
 import {
   getCacheDir,
   getConfigDir,
@@ -64,8 +62,8 @@ import {
   untildify
 } from './utils/file'
 import { updateAppDataConfig } from './utils/init'
-import { getCpuName, getDeviceType, getHostname } from './utils/system'
-import { compress, decompress } from './utils/zip'
+import { getDeviceType, getHostname } from './utils/system'
+import { decompress } from './utils/zip'
 
 const logger = loggerService.withContext('IPC')
 
@@ -168,18 +166,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     configManager.setTrayOnClose(isActive)
   })
 
-  // only for mac
-  if (isMac) {
-    ipcMain.handle(IpcChannel.App_MacIsProcessTrusted, (): boolean => {
-      return systemPreferences.isTrustedAccessibilityClient(false)
-    })
-
-    //return is only the current state, not the new state
-    ipcMain.handle(IpcChannel.App_MacRequestProcessTrust, (): boolean => {
-      return systemPreferences.isTrustedAccessibilityClient(true)
-    })
-  }
-
   ipcMain.handle(IpcChannel.App_SetFullScreen, (_, value: boolean): void => {
     mainWindow.setFullScreen(value)
   })
@@ -206,10 +192,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 
   ipcMain.handle(IpcChannel.Config_Set, (_, key: string, value: any, isNotify: boolean = false) => {
     configManager.set(key, value, isNotify)
-  })
-
-  ipcMain.handle(IpcChannel.Config_Get, (_, key: string) => {
-    return configManager.get(key)
   })
 
   // theme
@@ -391,77 +373,13 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Notification_Send, async (_, notification: Notification) => {
     await notificationService.sendNotification(notification)
   })
-  ipcMain.handle(IpcChannel.Notification_OnClick, (_, notification: Notification) => {
-    mainWindow.webContents.send('notification-click', notification)
-  })
 
   // zip
-  ipcMain.handle(IpcChannel.Zip_Compress, (_, text: string) => compress(text))
   ipcMain.handle(IpcChannel.Zip_Decompress, (_, text: Buffer) => decompress(text))
 
   // system
   ipcMain.handle(IpcChannel.System_GetDeviceType, getDeviceType)
   ipcMain.handle(IpcChannel.System_GetHostname, getHostname)
-  ipcMain.handle(IpcChannel.System_GetCpuName, getCpuName)
-  ipcMain.handle(IpcChannel.System_CheckGitBash, () => {
-    if (!isWin) {
-      return true // Non-Windows systems don't need Git Bash
-    }
-
-    try {
-      // Use autoDiscoverGitBash to handle auto-discovery and persistence
-      const bashPath = autoDiscoverGitBash()
-      if (bashPath) {
-        logger.info('Git Bash is available', { path: bashPath })
-        return true
-      }
-
-      logger.warn('Git Bash not found. Please install Git for Windows from https://git-scm.com/downloads/win')
-      return false
-    } catch (error) {
-      logger.error('Unexpected error checking Git Bash', error as Error)
-      return false
-    }
-  })
-
-  ipcMain.handle(IpcChannel.System_GetGitBashPath, () => {
-    if (!isWin) {
-      return null
-    }
-
-    const customPath = configManager.get(ConfigKeys.GitBashPath) as string | undefined
-    return customPath ?? null
-  })
-
-  // Returns { path, source } where source is 'manual' | 'auto' | null
-  ipcMain.handle(IpcChannel.System_GetGitBashPathInfo, () => {
-    return getGitBashPathInfo()
-  })
-
-  ipcMain.handle(IpcChannel.System_SetGitBashPath, (_, newPath: string | null) => {
-    if (!isWin) {
-      return false
-    }
-
-    if (!newPath) {
-      // Clear manual setting and re-run auto-discovery
-      configManager.set(ConfigKeys.GitBashPath, null)
-      configManager.set(ConfigKeys.GitBashPathSource, null)
-      // Re-run auto-discovery to restore auto-discovered path if available
-      autoDiscoverGitBash()
-      return true
-    }
-
-    const validated = validateGitBashPath(newPath)
-    if (!validated) {
-      return false
-    }
-
-    // Set path with 'manual' source
-    configManager.set(ConfigKeys.GitBashPath, validated)
-    configManager.set(ConfigKeys.GitBashPathSource, 'manual')
-    return true
-  })
 
   ipcMain.handle(IpcChannel.System_ToggleDevTools, (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
@@ -535,18 +453,13 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Fs_ReadText, FileService.readTextFileWithAutoEncoding.bind(FileService))
 
   // provider key 加密存储（v0.2.4 K 线）
-  ipcMain.handle(IpcChannel.ProviderKeys_Get, (_e, providerId: string) => providerKeyStore.get(providerId))
   ipcMain.handle(IpcChannel.ProviderKeys_GetAll, () => providerKeyStore.getAll())
   ipcMain.handle(IpcChannel.ProviderKeys_Set, (_e, providerId: string, apiKey: string) => {
     providerKeyStore.set(providerId, apiKey)
   })
-  ipcMain.handle(IpcChannel.ProviderKeys_SetMany, (_e, entries: Record<string, string>) => {
-    providerKeyStore.setMany(entries)
-  })
   ipcMain.handle(IpcChannel.ProviderKeys_Remove, (_e, providerId: string) => {
     providerKeyStore.remove(providerId)
   })
-  ipcMain.handle(IpcChannel.ProviderKeys_Has, (_e, providerId: string) => providerKeyStore.has(providerId))
 
   // export
   ipcMain.handle(IpcChannel.Export_Word, exportService.exportToWord.bind(exportService))
@@ -646,16 +559,11 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 
   // VertexAI
   // mini window
-  ipcMain.handle(IpcChannel.MiniWindow_Show, () => windowService.showMiniWindow())
   ipcMain.handle(IpcChannel.MiniWindow_Hide, () => windowService.hideMiniWindow())
   ipcMain.handle(IpcChannel.MiniWindow_Close, () => windowService.closeMiniWindow())
-  ipcMain.handle(IpcChannel.MiniWindow_Toggle, () => windowService.toggleMiniWindow())
   ipcMain.handle(IpcChannel.MiniWindow_SetPin, (_, isPinned) => windowService.setPinMiniWindow(isPinned))
 
   // aes
-  ipcMain.handle(IpcChannel.Aes_Encrypt, (_, text: string, secretKey: string, iv: string) =>
-    encrypt(text, secretKey, iv)
-  )
   ipcMain.handle(IpcChannel.Aes_Decrypt, (_, encryptedData: string, iv: string, secretKey: string) =>
     decrypt(encryptedData, iv, secretKey)
   )
@@ -668,12 +576,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   )
 
   // search window
-  ipcMain.handle(IpcChannel.SearchWindow_Open, async (_, uid: string, show?: boolean) => {
-    await searchService.openSearchWindow(uid, show)
-  })
-  ipcMain.handle(IpcChannel.SearchWindow_Close, async (_, uid: string) => {
-    await searchService.closeSearchWindow(uid)
-  })
   ipcMain.handle(IpcChannel.SearchWindow_OpenUrl, async (_, uid: string, url: string) => {
     return await searchService.openUrlInSearchWindow(uid, url)
   })
@@ -715,7 +617,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     getSpans(topicId, traceId, modelName)
   )
   ipcMain.handle(IpcChannel.TRACE_SAVE_ENTITY, (_, entity: SpanEntity) => saveEntity(entity))
-  ipcMain.handle(IpcChannel.TRACE_GET_ENTITY, (_, spanId: string) => getEntity(spanId))
   ipcMain.handle(IpcChannel.TRACE_BIND_TOPIC, (_, topicId: string, traceId: string) => bindTopic(traceId, topicId))
   ipcMain.handle(IpcChannel.TRACE_CLEAN_TOPIC, (_, topicId: string, traceId?: string) => cleanTopic(topicId, traceId))
   ipcMain.handle(IpcChannel.TRACE_TOKEN_USAGE, (_, spanId: string, usage: TokenUsage) => tokenUsage(spanId, usage))

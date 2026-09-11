@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import type { McpError } from '@modelcontextprotocol/sdk/types.js'
 import type { AgentServerError } from '@renderer/types'
 import { AgentServerErrorSchema } from '@renderer/types'
 import type {
@@ -87,11 +86,6 @@ export function getErrorMessage(error: unknown): string {
   }
 }
 
-export function formatErrorMessageWithPrefix(error: unknown, prefix: string): string {
-  const msg = getErrorMessage(error)
-  return `${prefix}: ${msg}`
-}
-
 export const isTimeoutError = (error: any): boolean => {
   if (error instanceof DOMException && error.name === 'TimeoutError') {
     return true
@@ -135,11 +129,6 @@ export const isAbortError = (error: any): boolean => {
   }
 
   return false
-}
-
-// TODO: format
-export const formatMcpError = (error: McpError) => {
-  return error.message
 }
 
 const getBaseError = (error: Error) => {

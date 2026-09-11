@@ -1,5 +1,5 @@
 import { isLinux, isMac, isWin } from '@main/constant'
-import { locales } from '@main/utils/locales'
+import { getLocale } from '@main/utils/locales'
 import type { MenuItemConstructorOptions } from 'electron'
 import { app, Menu, nativeImage, nativeTheme, Tray } from 'electron'
 
@@ -69,7 +69,7 @@ export class TrayService {
   }
 
   private updateContextMenu() {
-    const locale = locales[configManager.getLanguage()]
+    const locale = getLocale()
     const { tray: trayLocale } = locale.translation
 
     const quickAssistantEnabled = configManager.getEnableQuickAssistant()

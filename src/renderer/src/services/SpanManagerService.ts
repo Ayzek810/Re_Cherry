@@ -1,5 +1,3 @@
-import { MessageStream } from '@anthropic-ai/sdk/resources/messages/messages'
-import { Stream } from '@cherrystudio/openai/streaming'
 import { loggerService } from '@logger'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { cleanContext, endContext, getContext, startContext } from '@mcp-trace/trace-web'
@@ -8,9 +6,6 @@ import { context, SpanStatusCode, trace } from '@opentelemetry/api'
 import { getEnableDeveloperMode } from '@renderer/hooks/useSettings'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import store from '@renderer/store'
-import { handleResult } from '@renderer/trace/dataHandler/CommonResultHandler'
-import { handleMessageStream } from '@renderer/trace/dataHandler/MessageStreamHandler'
-import { handleStream } from '@renderer/trace/dataHandler/StreamHandler'
 import type { EndSpanParams, StartSpanParams } from '@renderer/trace/types/ModelSpanEntity'
 import { ModelSpanEntity } from '@renderer/trace/types/ModelSpanEntity'
 import type { Model, Topic } from '@renderer/types'
@@ -308,69 +303,12 @@ class SpanManagerService {
   }
 }
 
-/**
- * Wraps a function and executes it within a span, returning the function's result instead of the wrapped function.
- * @param fn The function to execute.
- * @param name The span name.
- * @param tags The span tags.
- * @param getTopicId Function to get topicId from arguments.
- * @returns The result of the executed function.
- */
-export function withSpanResult<F extends (...args: any) => any>(
-  fn: F,
-  params: StartSpanParams,
-  ...args: Parameters<F>
-): ReturnType<F> {
-  if (!params.topicId || params.topicId === '') {
-    return fn(...args)
-  }
-  const span = addSpan({
-    topicId: params.topicId,
-    name: params.name,
-    tag: params.tag,
-    inputs: args,
-    parentSpanId: params.parentSpanId,
-    modelName: params.modelName
-  })
-  try {
-    const result = fn(...args)
-    if (result instanceof Promise) {
-      return result
-        .then((data) => {
-          if (!data || typeof data !== 'object') {
-            endSpan({ topicId: params.topicId, outputs: data, span, modelName: params.modelName })
-            return data
-          }
-
-          if (data instanceof Stream) {
-            return handleStream(data, span, params.topicId, params.modelName)
-          } else if (data instanceof MessageStream) {
-            return handleMessageStream(data, span, params.topicId, params.modelName)
-          } else {
-            return handleResult(data, span, params.topicId, params.modelName)
-          }
-        })
-        .catch((err) => {
-          endSpan({ topicId: params.topicId, error: err, span, modelName: params.modelName })
-          throw err
-        }) as ReturnType<F>
-    } else {
-      endSpan({ topicId: params.topicId, outputs: result, span, modelName: params.modelName })
-      return result
-    }
-  } catch (err) {
-    endSpan({ topicId: params.topicId, error: err as Error, span, modelName: params.modelName })
-    throw err
-  }
-}
-
 export const spanManagerService = new SpanManagerService()
 export const webTracer = trace.getTracer('CherryStudio', '1.0.0')
 export const addSpan = spanManagerService.addSpan.bind(spanManagerService)
 export const startTrace = spanManagerService.startTrace.bind(spanManagerService)
 export const endTrace = spanManagerService.endTrace.bind(spanManagerService)
 export const endSpan = spanManagerService.endSpan.bind(spanManagerService)
-export const currentSpan = spanManagerService.getCurrentSpan.bind(spanManagerService)
 export const addTokenUsage = spanManagerService.addTokenUsage.bind(spanManagerService)
 export const pauseTrace = spanManagerService.finishModelTrace.bind(spanManagerService)
 export const appendTrace = spanManagerService.appendTrace.bind(spanManagerService)

@@ -26,7 +26,6 @@ export interface RemoteSyncState {
 export interface BackupState {
   webdavSync: RemoteSyncState
   localBackupSync: RemoteSyncState
-  s3Sync: RemoteSyncState
 }
 
 const initialState: BackupState = {
@@ -36,11 +35,6 @@ const initialState: BackupState = {
     lastSyncError: null
   },
   localBackupSync: {
-    lastSyncTime: null,
-    syncing: false,
-    lastSyncError: null
-  },
-  s3Sync: {
     lastSyncTime: null,
     syncing: false,
     lastSyncError: null
@@ -56,12 +50,9 @@ const backupSlice = createSlice({
     },
     setLocalBackupSyncState: (state, action: PayloadAction<Partial<RemoteSyncState>>) => {
       state.localBackupSync = { ...state.localBackupSync, ...action.payload }
-    },
-    setS3SyncState: (state, action: PayloadAction<Partial<RemoteSyncState>>) => {
-      state.s3Sync = { ...state.s3Sync, ...action.payload }
     }
   }
 })
 
-export const { setWebDAVSyncState, setLocalBackupSyncState, setS3SyncState } = backupSlice.actions
+export const { setWebDAVSyncState, setLocalBackupSyncState } = backupSlice.actions
 export default backupSlice.reducer

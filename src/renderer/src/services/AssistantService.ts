@@ -73,21 +73,6 @@ export function getDefaultAssistant(): Assistant {
   }
 }
 
-/**
- * Gets the CURRENT SETTINGS of the default assistant.
- *
- * **Important**: This returns the actual current settings of the default assistant (user-configured),
- * NOT the DEFAULT_ASSISTANT_SETTINGS template. The settings may have been modified by the user
- * from their initial default values.
- *
- * To get the template of default values, use DEFAULT_ASSISTANT_SETTINGS directly.
- *
- * @returns Current settings of the default assistant from store state
- */
-export function getDefaultAssistantSettings() {
-  return store.getState().assistants.defaultAssistant.settings
-}
-
 export function getDefaultTopic(assistantId: string): Topic {
   return {
     id: uuid(),
@@ -130,13 +115,6 @@ export function getProviderByModel(model?: Model): Provider {
   }
 
   return provider
-}
-
-// FIXME: This function may return undefined but as Provider
-export function getProviderByModelId(modelId?: string) {
-  const providers = getStoreProviders()
-  const _modelId = modelId || getDefaultModel().id
-  return providers.find((p) => p.models.find((m) => m.id === _modelId)) as Provider
 }
 
 /**

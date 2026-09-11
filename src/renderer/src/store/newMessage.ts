@@ -82,12 +82,6 @@ interface RemoveMessagesByAskIdPayload {
   askId: string
 }
 
-// Payload for removing multiple messages by ID
-interface RemoveMessagesPayload {
-  topicId: string
-  messageIds: string[]
-}
-
 // Payload for remapping a message id（本地 uuid → 内核回执后的 kernel-<topic>-<seq>）
 interface ReplaceMessageIdPayload {
   topicId: string
@@ -121,9 +115,6 @@ export const messagesSlice = createSlice({
     setTopicFulfilled(state, action: PayloadAction<SetTopicFulfilledPayload>) {
       const { topicId, fulfilled } = action.payload
       state.fulfilledByTopic[topicId] = fulfilled
-    },
-    setDisplayCount(state, action: PayloadAction<number>) {
-      state.displayCount = action.payload
     },
     messagesReceived(state, action: PayloadAction<MessagesReceivedPayload>) {
       const { topicId, messages } = action.payload
@@ -232,15 +223,6 @@ export const messagesSlice = createSlice({
         messagesAdapter.removeMany(state, idsToRemove)
         state.messageIdsByTopic[topicId] = currentTopicIds.filter((id) => !idsToRemove.includes(id))
       }
-    },
-    removeMessages(state, action: PayloadAction<RemoveMessagesPayload>) {
-      const { topicId, messageIds } = action.payload
-      const currentTopicIds = state.messageIdsByTopic[topicId]
-      const idsToRemoveSet = new Set(messageIds)
-      if (currentTopicIds) {
-        state.messageIdsByTopic[topicId] = currentTopicIds.filter((id) => !idsToRemoveSet.has(id))
-      }
-      messagesAdapter.removeMany(state, messageIds)
     },
     upsertBlockReference(state, action: PayloadAction<UpsertBlockReferencePayload>) {
       const { messageId, blockId, status, blockType } = action.payload

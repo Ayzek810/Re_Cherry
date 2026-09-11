@@ -2,11 +2,6 @@ import type { Model } from '@renderer/types'
 import type { ReactNode } from 'react'
 
 /**
- * 滚动触发来源类型
- */
-export type ScrollTrigger = 'initial' | 'search' | 'keyboard' | 'none'
-
-/**
  * 列表项分类，组名也作为列表项
  */
 export type ListItemType = 'group' | 'model'

@@ -118,7 +118,8 @@ describe('classifyError', () => {
   it('classifies embedding error as knowledge', () => {
     const result = classifyError(makeError({ message: 'embedding model failed' }))
     expect(result.category).toBe('knowledge')
-    expect(result.navTarget).toBe('/knowledge')
+    // v0.2.4-1：knowledge 页面已从本 fork 移除，生产侧返回 null（v0.3.2 加回页面时同步恢复此断言）
+    expect(result.navTarget).toBeNull()
   })
 
   it('classifies knowledge base error as knowledge', () => {
@@ -142,7 +143,8 @@ describe('classifyError', () => {
   it('classifies mcp server error', () => {
     const result = classifyError(makeError({ message: 'MCP server failed to start' }))
     expect(result.category).toBe('mcp')
-    expect(result.navTarget).toBe('/settings/mcp/servers')
+    // v0.2.4-1：MCP 设置页已从本 fork 移除，生产侧返回 null（v0.3.2 加回时同步恢复）
+    expect(result.navTarget).toBeNull()
   })
 
   it('classifies mcp connection error', () => {

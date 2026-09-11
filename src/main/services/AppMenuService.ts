@@ -1,6 +1,6 @@
 import { isMac } from '@main/constant'
 import { windowService } from '@main/services/WindowService'
-import { locales } from '@main/utils/locales'
+import { getLocale } from '@main/utils/locales'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { MenuItemConstructorOptions } from 'electron'
 import { app, Menu, shell } from 'electron'
@@ -25,7 +25,7 @@ export class AppMenuService {
   }
 
   public setupApplicationMenu(): void {
-    const locale = locales[configManager.getLanguage()]
+    const locale = getLocale()
     const { appMenu } = locale.translation
 
     const template: MenuItemConstructorOptions[] = [

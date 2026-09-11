@@ -1,7 +1,6 @@
 import 'reflect-metadata'
 
 import { SpanStatusCode, trace } from '@opentelemetry/api'
-import { context as traceContext } from '@opentelemetry/api'
 
 import { defaultConfig } from '../types/config'
 
@@ -107,52 +106,6 @@ export function TraceProperty(traced: SpanDecoratorOptions) {
       }
     }
   }
-}
-
-export function withSpanFunc<F extends (...args: any[]) => any>(
-  name: string,
-  tag: string,
-  fn: F,
-  args: Parameters<F>
-): ReturnType<F> {
-  const traceName = defaultConfig.defaultTracerName || 'default'
-  const tracer = trace.getTracer(traceName)
-  const _name = name || fn.name || 'anonymousFunction'
-  return traceContext.with(traceContext.active(), () =>
-    tracer.startActiveSpan(
-      _name,
-      {
-        attributes: {
-          tags: tag || '',
-          inputs: JSON.stringify(args)
-        }
-      },
-      (span) => {
-        // 在这里调用原始函数
-        const result = fn(...args)
-        if (result instanceof Promise) {
-          return result
-            .then((res) => {
-              span.setStatus({ code: SpanStatusCode.OK })
-              span.setAttribute('outputs', convertToString(res))
-              return res
-            })
-            .catch((error) => {
-              const err = error instanceof Error ? error : new Error(String(error))
-              span.setStatus({ code: SpanStatusCode.ERROR, message: err.message })
-              span.recordException(err)
-              throw error
-            })
-            .finally(() => span.end())
-        } else {
-          span.setStatus({ code: SpanStatusCode.OK })
-          span.setAttribute('outputs', convertToString(result))
-          span.end()
-        }
-        return result
-      }
-    )
-  )
 }
 
 function convertToString(args: any | any[]): string | boolean | number {

@@ -57,7 +57,7 @@ export const initialState: MemoryState = {
  * dispatch(updateMemoryConfig(newConfig))
  *
  * // Getting the memory config
- * const config = useSelector(getMemoryConfig)
+ * const config = useSelector(selectMemoryConfig)
  * ```
  */
 const memorySlice = createSlice({
@@ -89,37 +89,11 @@ const memorySlice = createSlice({
     setGlobalMemoryEnabled: (state, action: PayloadAction<boolean>) => {
       state.globalMemoryEnabled = action.payload
     }
-  },
-  selectors: {
-    /**
-     * Selector to get the current memory configuration
-     * @param state - Memory state
-     * @returns The current MemoryConfig or undefined if not set
-     */
-    getMemoryConfig: (state) => state.memoryConfig,
-    /**
-     * Selector to get the current user ID
-     * @param state - Memory state
-     * @returns The current user ID
-     */
-    getCurrentUserId: (state) => state.currentUserId,
-    /**
-     * Selector to get the global memory enabled state
-     * @param state - Memory state
-     * @returns The global memory enabled state
-     */
-    getGlobalMemoryEnabled: (state) => state.globalMemoryEnabled
   }
 })
 
 // Export action creators
 export const { updateMemoryConfig, setCurrentUserId, setGlobalMemoryEnabled } = memorySlice.actions
-
-// Export selectors
-export const { getMemoryConfig, getCurrentUserId, getGlobalMemoryEnabled } = memorySlice.selectors
-
-// Type-safe selector for accessing this slice from the root state
-export const selectMemory = (state: { memory: MemoryState }) => state.memory
 
 // Root state selector for memory config with safety check
 export const selectMemoryConfig = (state: { memory?: MemoryState }) => state.memory?.memoryConfig || defaultMemoryConfig

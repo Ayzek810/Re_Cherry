@@ -93,12 +93,10 @@ export default defineConfig({
         '@types': resolve('src/renderer/src/types'),
         '@logger': resolve('src/renderer/src/services/LoggerService'),
         '@mcp-trace/trace-core': resolve('packages/mcp-trace/trace-core'),
-        '@mcp-trace/trace-web': resolve('packages/mcp-trace/trace-web'),
-        '@cherrystudio/extension-table-plus': resolve('packages/extension-table-plus/src')
+        '@mcp-trace/trace-web': resolve('packages/mcp-trace/trace-web')
       }
     },
     optimizeDeps: {
-      exclude: ['pyodide'],
       esbuildOptions: {
         target: 'esnext' // for dev
       }

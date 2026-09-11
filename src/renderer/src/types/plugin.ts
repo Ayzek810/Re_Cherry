@@ -34,10 +34,3 @@ export const PluginMetadataSchema = z.object({
   packageVersion: z.string().optional() // Package version from plugin.json
 })
 
-export type PluginMetadata = z.infer<typeof PluginMetadataSchema>
-
-// Error handling types (used by markdownParser)
-export type PluginError =
-  | { type: 'FILE_NOT_FOUND'; path: string; message?: string }
-  | { type: 'INVALID_METADATA'; reason: string; path: string }
-  | { type: 'READ_FAILED'; path: string; reason: string }

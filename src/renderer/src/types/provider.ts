@@ -59,23 +59,9 @@ export const OpenAIServiceTiers = {
   priority: 'priority'
 } as const satisfies Record<NonNullable<OpenAIServiceTier>, OpenAIServiceTier>
 
-export function isOpenAIServiceTier(tier: string | null | undefined): tier is OpenAIServiceTier {
-  return tier === null || tier === undefined || Object.hasOwn(OpenAIServiceTiers, tier)
-}
-
 // https://console.groq.com/docs/api-reference#responses
 // null is not used.
 export type GroqServiceTier = 'auto' | 'on_demand' | 'flex' | undefined | null
-
-export const GroqServiceTiers = {
-  auto: 'auto',
-  on_demand: 'on_demand',
-  flex: 'flex'
-} as const satisfies Record<string, GroqServiceTier>
-
-export function isGroqServiceTier(tier: string | undefined | null): tier is GroqServiceTier {
-  return tier === null || tier === undefined || Object.hasOwn(GroqServiceTiers, tier)
-}
 
 export type ServiceTier = OpenAIServiceTier | GroqServiceTier
 
@@ -83,21 +69,6 @@ export type AnthropicCacheControlSettings = {
   tokenThreshold: number
   cacheSystemMessage: boolean
   cacheLastNMessages: number
-}
-
-export function isServiceTier(tier: string | null | undefined): tier is ServiceTier {
-  return isGroqServiceTier(tier) || isOpenAIServiceTier(tier)
-}
-
-export const AwsBedrockAuthTypes = {
-  iam: 'iam',
-  apiKey: 'apiKey'
-} as const
-
-export type AwsBedrockAuthType = keyof typeof AwsBedrockAuthTypes
-
-export function isAwsBedrockAuthType(type: string): type is AwsBedrockAuthType {
-  return Object.hasOwn(AwsBedrockAuthTypes, type)
 }
 
 export type Provider = {
@@ -300,10 +271,6 @@ export const isSystemProvider = (provider: Provider): provider is SystemProvider
 export type GroqSystemProvider = Provider & {
   id: SystemProviderIdTypeMap['groq']
   isSystem: true
-}
-
-export type NotGroqProvider = Provider & {
-  id: Exclude<string, SystemProviderIdTypeMap['groq']>
 }
 
 export const isGroqSystemProvider = (provider: Provider): provider is GroqSystemProvider => {

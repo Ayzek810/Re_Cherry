@@ -43,20 +43,6 @@ export function getLanguageByExtension(extension: string): string {
 }
 
 /**
- * 根据文件路径获取语言名称
- * @param filePath 文件路径
- * @returns 语言名称
- */
-export function getLanguageByFilePath(filePath: string): string {
-  if (!filePath) return 'text'
-
-  const ext = filePath.split('.').pop()
-  if (!ext) return 'text'
-
-  return getLanguageByExtension(ext)
-}
-
-/**
  * 根据语言名称获取文件扩展名
  * - 先精确匹配，再忽略大小写，最后匹配别名
  * - 返回第一个扩展名

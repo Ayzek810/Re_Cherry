@@ -19,7 +19,7 @@ import { createSlice } from '@reduxjs/toolkit'
 import { isLocalAi } from '@renderer/config/env'
 import { SYSTEM_MODELS } from '@renderer/config/models'
 import { INITIAL_STATE_EXCLUDED_PROVIDER_IDS, SYSTEM_PROVIDERS_CONFIG } from '@renderer/config/providers'
-import type { AwsBedrockAuthType, Model, Provider } from '@renderer/types'
+import type { Model, Provider } from '@renderer/types'
 import { omit, uniqBy } from 'lodash'
 
 type LlmSettings = {
@@ -39,13 +39,6 @@ type LlmSettings = {
     }
     projectId: string
     location: string
-  }
-  awsBedrock: {
-    authType: AwsBedrockAuthType
-    accessKeyId: string
-    secretAccessKey: string
-    apiKey: string
-    region: string
   }
 }
 
@@ -82,13 +75,6 @@ export const initialState: LlmState = {
       },
       projectId: '',
       location: ''
-    },
-    awsBedrock: {
-      authType: 'iam',
-      accessKeyId: '',
-      secretAccessKey: '',
-      apiKey: '',
-      region: ''
     }
   }
 }
@@ -199,33 +185,6 @@ const llmSlice = createSlice({
     setGPUStackKeepAliveTime: (state, action: PayloadAction<number>) => {
       state.settings.gpustack.keepAliveTime = action.payload
     },
-    setVertexAIProjectId: (state, action: PayloadAction<string>) => {
-      state.settings.vertexai.projectId = action.payload
-    },
-    setVertexAILocation: (state, action: PayloadAction<string>) => {
-      state.settings.vertexai.location = action.payload
-    },
-    setVertexAIServiceAccountPrivateKey: (state, action: PayloadAction<string>) => {
-      state.settings.vertexai.serviceAccount.privateKey = action.payload
-    },
-    setVertexAIServiceAccountClientEmail: (state, action: PayloadAction<string>) => {
-      state.settings.vertexai.serviceAccount.clientEmail = action.payload
-    },
-    setAwsBedrockAuthType: (state, action: PayloadAction<AwsBedrockAuthType>) => {
-      state.settings.awsBedrock.authType = action.payload
-    },
-    setAwsBedrockAccessKeyId: (state, action: PayloadAction<string>) => {
-      state.settings.awsBedrock.accessKeyId = action.payload
-    },
-    setAwsBedrockSecretAccessKey: (state, action: PayloadAction<string>) => {
-      state.settings.awsBedrock.secretAccessKey = action.payload
-    },
-    setAwsBedrockApiKey: (state, action: PayloadAction<string>) => {
-      state.settings.awsBedrock.apiKey = action.payload
-    },
-    setAwsBedrockRegion: (state, action: PayloadAction<string>) => {
-      state.settings.awsBedrock.region = action.payload
-    },
     updateModel: (
       state,
       action: PayloadAction<{
@@ -257,15 +216,6 @@ export const {
   setOllamaKeepAliveTime,
   setLMStudioKeepAliveTime,
   setGPUStackKeepAliveTime,
-  setVertexAIProjectId,
-  setVertexAILocation,
-  setVertexAIServiceAccountPrivateKey,
-  setVertexAIServiceAccountClientEmail,
-  setAwsBedrockAuthType,
-  setAwsBedrockAccessKeyId,
-  setAwsBedrockSecretAccessKey,
-  setAwsBedrockApiKey,
-  setAwsBedrockRegion,
   updateModel
 } = llmSlice.actions
 

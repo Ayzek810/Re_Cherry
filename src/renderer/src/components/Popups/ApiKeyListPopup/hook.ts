@@ -2,8 +2,7 @@ import { loggerService } from '@logger'
 import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
 import SelectProviderModelPopup from '@renderer/pages/settings/ProviderSettings/SelectProviderModelPopup'
 import { checkApi } from '@renderer/services/ApiService'
-import type { Model, PreprocessProvider, Provider } from '@renderer/types'
-import { isPreprocessProviderId } from '@renderer/types'
+import type { Model, Provider } from '@renderer/types'
 import type { ApiKeyConnectivity, ApiKeyWithStatus } from '@renderer/types/healthCheck'
 import { HealthStatus } from '@renderer/types/healthCheck'
 import { formatApiKeys, splitApiKeyString } from '@renderer/utils/api'
@@ -278,12 +277,6 @@ export function useApiKeys({ provider, updateProvider }: UseApiKeysProps) {
 
 export function isLlmProvider(provider: ApiProvider): provider is Provider {
   return 'models' in provider
-}
-
-export function isPreprocessProvider(provider: ApiProvider): provider is PreprocessProvider {
-  // NOTE: mistral 同时提供预处理和llm服务，所以其llm provier可能被误判为预处理provider
-  // 后面需要使用更严格的判断方式
-  return isPreprocessProviderId(provider.id) && !isLlmProvider(provider)
 }
 
 // 获取模型用于检查

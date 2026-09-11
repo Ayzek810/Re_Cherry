@@ -167,39 +167,6 @@ export interface CMProblem {
   index: number
 }
 
-/** 不变量校验：共享段必须解析到祖先自身轮；自有段必须归属本会话。 */
-export function validateFamily(family: CMFamily): CMProblem[] {
-  const problems: CMProblem[] = []
-  for (const session of family.sessions) {
-    if (session.shared > session.turns.length) {
-      problems.push({ sessionId: session.id, kind: 'shared-overflow', index: session.shared })
-    }
-    for (let i = 0; i < session.shared; i += 1) {
-      if (originOf(family, session.id, i) === null) {
-        problems.push({ sessionId: session.id, kind: 'dangling-share', index: i })
-      }
-    }
-    for (let i = session.shared; i < session.turns.length; i += 1) {
-      if (originOf(family, session.id, i) !== session.id + ':' + i) {
-        problems.push({ sessionId: session.id, kind: 'self-mis', index: i })
-      }
-    }
-  }
-  return problems
-}
-
-/** 会话在合并树里的自身叶子路径（origin id 序列）：图渲染与删除锚点都用它。 */
-export function pathOf(family: CMFamily, sessionId: string): CMOriginId[] {
-  const session = family.byId.get(sessionId)
-  if (!session) return []
-  const path: CMOriginId[] = []
-  for (let i = 0; i < session.turns.length; i += 1) {
-    const origin = originOf(family, sessionId, i)
-    if (origin) path.push(origin)
-  }
-  return path
-}
-
 /** ---------------------------------------------------------------------------
  * 页码指示器：把分叉图（合并树）的成组逻辑投影为可切换的 <k/n>。
  *

@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readTextFileWithAutoEncoding, resolveAndValidatePath } from '../file'
 import {
   getAllFiles,
-  getAppConfigDir,
   getConfigDir,
   getFilesDir,
   getFileType,
@@ -241,18 +240,6 @@ describe('file', () => {
     it('should return correct config directory path', () => {
       const configDir = getConfigDir()
       expect(configDir).toBe('/mock/home/.re_cherry/config')
-    })
-  })
-
-  describe('getAppConfigDir', () => {
-    it('should return correct app config directory path', () => {
-      const appConfigDir = getAppConfigDir('test-app')
-      expect(appConfigDir).toBe('/mock/home/.re_cherry/config/test-app')
-    })
-
-    it('should handle empty app name', () => {
-      const appConfigDir = getAppConfigDir('')
-      expect(appConfigDir).toBe('/mock/home/.re_cherry/config/')
     })
   })
 

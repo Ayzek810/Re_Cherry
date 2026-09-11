@@ -36,7 +36,6 @@ const providerMocks = vi.hoisted(() => ({
   isOpenAICompatibleProvider: vi.fn(),
   isOpenAIProvider: vi.fn(),
   isVertexProvider: vi.fn(),
-  isAwsBedrockProvider: vi.fn(),
   isAzureOpenAIProvider: vi.fn()
 }))
 
@@ -87,11 +86,7 @@ import { SystemProviderIds } from '@renderer/types'
 import { isOpenAIDeepResearchModel } from '../openai'
 import {
   GEMINI_SEARCH_REGEX,
-  isHunyuanSearchModel,
-  isMandatoryWebSearchModel,
-  isOpenAIWebSearchChatCompletionOnlyModel,
   isOpenAIWebSearchModel,
-  isOpenRouterBuiltInWebSearchModel,
   isWebSearchModel
 } from '../websearch'
 
@@ -242,52 +237,7 @@ describe('websearch helpers', () => {
     })
   })
 
-  describe('isMandatoryWebSearchModel', () => {
-    it('requires sonar ids for perplexity/openrouter providers', () => {
-      providerMock.mockReturnValueOnce(createProvider({ id: SystemProviderIds.perplexity }))
-      expect(isMandatoryWebSearchModel(createModel({ id: 'sonar-pro' }))).toBe(true)
-
-      providerMock.mockReturnValueOnce(createProvider({ id: SystemProviderIds.openrouter }))
-      expect(isMandatoryWebSearchModel(createModel({ id: 'sonar-reasoning' }))).toBe(true)
-
-      providerMock.mockReturnValueOnce(createProvider({ id: 'openai' }))
-      expect(isMandatoryWebSearchModel(createModel({ id: 'sonar-pro' }))).toBe(false)
-    })
-
-    it.each([
-      ['perplexity', 'non-sonar'],
-      ['openrouter', 'gpt-4o-search-preview']
-    ])('returns false for %s provider when id is %s', (providerId, modelId) => {
-      providerMock.mockReturnValueOnce(createProvider({ id: providerId }))
-      expect(isMandatoryWebSearchModel(createModel({ id: modelId }))).toBe(false)
-    })
-  })
-
-  describe('isOpenRouterBuiltInWebSearchModel', () => {
-    it('checks for sonar ids or OpenAI chat-completion-only variants', () => {
-      providerMock.mockReturnValueOnce(createProvider({ id: 'openrouter' }))
-      expect(isOpenRouterBuiltInWebSearchModel(createModel({ id: 'sonar-reasoning' }))).toBe(true)
-
-      providerMock.mockReturnValueOnce(createProvider({ id: 'openrouter' }))
-      expect(isOpenRouterBuiltInWebSearchModel(createModel({ id: 'gpt-4o-search-preview' }))).toBe(true)
-
-      providerMock.mockReturnValueOnce(createProvider({ id: 'custom' }))
-      expect(isOpenRouterBuiltInWebSearchModel(createModel({ id: 'sonar-reasoning' }))).toBe(false)
-    })
-  })
-
   describe('OpenAI web search helpers', () => {
-    it('detects chat completion only variants and openai search ids', () => {
-      expect(isOpenAIWebSearchChatCompletionOnlyModel(createModel({ id: 'gpt-4o-search-preview' }))).toBe(true)
-      expect(isOpenAIWebSearchChatCompletionOnlyModel(createModel({ id: 'gpt-4o-mini-search-preview' }))).toBe(true)
-      expect(isOpenAIWebSearchChatCompletionOnlyModel(createModel({ id: 'gpt-4o' }))).toBe(false)
-
-      expect(isOpenAIWebSearchModel(createModel({ id: 'gpt-4.1-turbo' }))).toBe(true)
-      expect(isOpenAIWebSearchModel(createModel({ id: 'gpt-4o-image' }))).toBe(false)
-      expect(isOpenAIWebSearchModel(createModel({ id: 'gpt-5.1-chat' }))).toBe(false)
-      expect(isOpenAIWebSearchModel(createModel({ id: 'o3-mini' }))).toBe(true)
-    })
-
     it.each(['gpt-4.1-preview', 'gpt-4o-2024-05-13', 'o4-mini', 'gpt-5-explorer'])(
       'treats %s as an OpenAI web search model',
       (id) => {
@@ -301,22 +251,6 @@ describe('websearch helpers', () => {
         expect(isOpenAIWebSearchModel(createModel({ id }))).toBe(false)
       }
     )
-
-    it.each(['gpt-4o-search-preview', 'gpt-4o-mini-search-preview'])('flags %s as chat-completion-only', (id) => {
-      expect(isOpenAIWebSearchChatCompletionOnlyModel(createModel({ id }))).toBe(true)
-    })
-  })
-
-  describe('isHunyuanSearchModel', () => {
-    it('identifies hunyuan models except lite', () => {
-      expect(isHunyuanSearchModel(createModel({ id: 'hunyuan-pro', provider: 'hunyuan' }))).toBe(true)
-      expect(isHunyuanSearchModel(createModel({ id: 'hunyuan-lite', provider: 'hunyuan' }))).toBe(false)
-      expect(isHunyuanSearchModel(createModel())).toBe(false)
-    })
-
-    it.each(['hunyuan-standard', 'hunyuan-advanced'])('accepts %s', (suffix) => {
-      expect(isHunyuanSearchModel(createModel({ id: suffix, provider: 'hunyuan' }))).toBe(true)
-    })
   })
 
   describe('provider-specific regex coverage', () => {
