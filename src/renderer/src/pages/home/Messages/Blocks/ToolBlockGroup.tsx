@@ -1,10 +1,8 @@
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useAppSelector } from '@renderer/store'
 import type { ToolPermissionEntry } from '@renderer/store/toolPermissions'
-import type { MCPToolResponseStatus } from '@renderer/types'
 import type { Message, MessageBlock, ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { isToolPending } from '@renderer/utils/userConfirmation'
 import { Collapse, type CollapseProps } from 'antd'
 import { ChevronRight, Wrench } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -13,9 +11,10 @@ import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import { useToolApproval } from '../Tools/hooks/useToolApproval'
-import { getEffectiveStatus, type ToolStatus } from '../Tools/MessageAgentTools/GenericTools'
+import { type ToolStatus } from '../Tools/MessageAgentTools/GenericTools'
 import MessageTools from '../Tools/MessageTools'
 import ToolApprovalActionsComponent from '../Tools/ToolApprovalActions'
+import { askUserToolName, mapBlockStatusToToolStatus } from '../Tools/toolDisplay'
 import ToolHeader from '../Tools/ToolHeader'
 import BlockErrorFallback from './BlockErrorFallback'
 import MainTextBlock from './MainTextBlock'
@@ -163,10 +162,6 @@ interface Props {
   role?: Message['role']
 }
 
-function isCompletedStatus(status: MCPToolResponseStatus | undefined): boolean {
-  return status === 'done' || status === 'error' || status === 'cancelled'
-}
-
 function isCompletedBlockStatus(status: MessageBlockStatus): boolean {
   return (
     status === MessageBlockStatus.SUCCESS || status === MessageBlockStatus.ERROR || status === MessageBlockStatus.PAUSED
@@ -174,39 +169,31 @@ function isCompletedBlockStatus(status: MessageBlockStatus): boolean {
 }
 
 function isCompletedToolBlock(block: ToolMessageBlock): boolean {
-  const responseStatus = block.metadata?.rawMcpToolResponse?.status
-
-  if (responseStatus) {
-    return isCompletedStatus(responseStatus)
-  }
-
   return isCompletedBlockStatus(block.status)
 }
 
-// Calculate actual waiting state for a block (not depending on hooks)
-function getBlockIsWaiting(block: ToolMessageBlock, agentPermissions: Record<string, ToolPermissionEntry>): boolean {
-  const toolResponse = block.metadata?.rawMcpToolResponse
-  if (!toolResponse || toolResponse.status !== 'pending') return false
-
-  const tool = toolResponse.tool
-  if (tool?.type === 'mcp') {
-    // MCP tools: check the global confirmation queue
-    return isToolPending(toolResponse.id)
-  } else {
-    // Agent tools: check Redux store for pending permission
-    const permission = Object.values(agentPermissions).find((p) => p.toolCallId === toolResponse.toolCallId)
-    return permission?.status === 'pending'
+// Calculate actual waiting state for a block (approval or ask_user_question roundtrip)
+function getBlockIsWaiting(
+  block: ToolMessageBlock,
+  agentPermissions: Record<string, ToolPermissionEntry>,
+  pendingQuestions: Record<string, { callId?: string }>
+): boolean {
+  const permission = Object.values(agentPermissions).find((p) => p.toolCallId === block.toolId)
+  if (permission?.status === 'pending') return true
+  if (block.toolName === askUserToolName) {
+    return Object.values(pendingQuestions).some((entry) => entry.callId === block.toolId)
   }
+  return false
 }
 
 // Get effective UI status for a block
 function getBlockEffectiveStatus(
   block: ToolMessageBlock,
-  agentPermissions: Record<string, ToolPermissionEntry>
+  agentPermissions: Record<string, ToolPermissionEntry>,
+  pendingQuestions: Record<string, { callId?: string }>
 ): ToolStatus {
-  const toolResponse = block.metadata?.rawMcpToolResponse
-  const isWaiting = getBlockIsWaiting(block, agentPermissions)
-  return getEffectiveStatus(toolResponse?.status, isWaiting)
+  const isWaiting = getBlockIsWaiting(block, agentPermissions, pendingQuestions)
+  return mapBlockStatusToToolStatus(block.status, isWaiting)
 }
 
 // Animation variants for smooth header transitions
@@ -225,13 +212,16 @@ interface WaitingToolHeaderProps {
 
 const WaitingToolHeader = React.memo(({ block }: WaitingToolHeaderProps) => {
   const approval = useToolApproval(block)
-  const toolResponse = block.metadata?.rawMcpToolResponse
-  const effectiveStatus = getEffectiveStatus(toolResponse?.status, approval.isWaiting)
+  const agentPermissions = useAppSelector((state) => state.toolPermissions.requests)
+  const pendingQuestions = useAppSelector((state) => state.userQuestions.pending)
+  const effectiveStatus = getBlockEffectiveStatus(block, agentPermissions, pendingQuestions)
+  // 问答卡的"允许/拒绝"按钮无意义：作答在卡片内容里完成，头部只显示等待状态
+  const isQuestion = block.toolName === askUserToolName
 
   return (
     <HeaderWithActions>
       <ToolHeader block={block} variant="collapse-label" status={effectiveStatus} />
-      {(approval.isWaiting || approval.isExecuting) && <ToolApprovalActionsComponent {...approval} compact />}
+      {!isQuestion && (approval.isWaiting || approval.isExecuting) && <ToolApprovalActionsComponent {...approval} compact />}
     </HeaderWithActions>
   )
 })
@@ -245,6 +235,7 @@ interface GroupHeaderContentProps {
 const GroupHeaderContent = React.memo(({ blocks, allCompleted }: GroupHeaderContentProps) => {
   const { t } = useTranslation()
   const agentPermissions = useAppSelector((state) => state.toolPermissions.requests)
+  const pendingQuestions = useAppSelector((state) => state.userQuestions.pending)
   const toolBlocks = blocks.filter((block): block is ToolMessageBlock => block.type === MessageBlockType.TOOL)
   const thinkingBlockCount = blocks.filter((block) => block.type === MessageBlockType.THINKING).length
   const messageBlockCount = blocks.filter((block) => block.type === MessageBlockType.MAIN_TEXT).length
@@ -274,7 +265,7 @@ const GroupHeaderContent = React.memo(({ blocks, allCompleted }: GroupHeaderCont
   }
 
   // Find blocks actually waiting for approval (using effective status)
-  const waitingBlocks = toolBlocks.filter((block) => getBlockEffectiveStatus(block, agentPermissions) === 'waiting')
+  const waitingBlocks = toolBlocks.filter((block) => getBlockEffectiveStatus(block, agentPermissions, pendingQuestions) === 'waiting')
 
   // Prioritize showing waiting blocks that need approval
   const lastWaitingBlock = waitingBlocks[waitingBlocks.length - 1]
@@ -295,7 +286,7 @@ const GroupHeaderContent = React.memo(({ blocks, allCompleted }: GroupHeaderCont
 
   // Find running blocks (invoking or streaming)
   const runningBlocks = toolBlocks.filter((block) => {
-    const status = getBlockEffectiveStatus(block, agentPermissions)
+    const status = getBlockEffectiveStatus(block, agentPermissions, pendingQuestions)
     return status === 'invoking' || status === 'streaming'
   })
 
@@ -366,7 +357,7 @@ const ToolListContent = React.memo(({ blocks, allCompleted, role, scrollRef }: T
       return (
         <ToolItem key={block.id} data-block-id={block.id} $isCompleted={isCompletedToolBlock(block)}>
           <ErrorBoundary fallbackComponent={BlockErrorFallback}>
-            <MessageTools block={block} />
+            <MessageTools block={block} variant="inline" />
           </ErrorBoundary>
         </ToolItem>
       )
@@ -382,6 +373,7 @@ const ToolBlockGroup: React.FC<Props> = ({ blocks, role = 'assistant' }) => {
   const scrollRef = useRef<HTMLDivElement>(null)
   const wasAllCompletedRef = useRef(false)
   const agentPermissions = useAppSelector((state) => state.toolPermissions.requests)
+  const pendingQuestions = useAppSelector((state) => state.userQuestions.pending)
   const toolBlocks = useMemo(
     () => blocks.filter((block): block is ToolMessageBlock => block.type === MessageBlockType.TOOL),
     [blocks]
@@ -396,8 +388,19 @@ const ToolBlockGroup: React.FC<Props> = ({ blocks, role = 'assistant' }) => {
   }, [toolBlocks])
 
   const hasWaitingTool = useMemo(() => {
-    return toolBlocks.some((block) => getBlockEffectiveStatus(block, agentPermissions) === 'waiting')
-  }, [toolBlocks, agentPermissions])
+    return toolBlocks.some((block) => getBlockIsWaiting(block, agentPermissions, pendingQuestions))
+  }, [toolBlocks, agentPermissions, pendingQuestions])
+
+  // 问答未决时自动展开组：作答 UI 在卡片内容里，收起状态会让用户无处作答
+  useEffect(() => {
+    if (
+      hasWaitingTool &&
+      toolBlocks.some((block) => block.toolName === askUserToolName) &&
+      !activeKey.includes('tool-group')
+    ) {
+      setActiveKey(['tool-group'])
+    }
+  }, [hasWaitingTool, toolBlocks, activeKey])
 
   useEffect(() => {
     if (activeKey.includes('tool-group') && currentRunningBlock && scrollRef.current) {

@@ -1,23 +1,40 @@
 import { join } from 'node:path'
+import { mkdir } from 'node:fs/promises'
 
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
+import * as fsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
+import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import LlmRuntime, { BlockAssembler, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import * as piAiPlugin from '@deepseek-ai/dsh-llm-pi-ai'
+import SandboxPwshExecutor from '@deepseek-ai/dsh-pwsh-sandbox'
+import LocalSandboxProvider from '@deepseek-ai/dsh-sandbox-local'
+import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SqliteSessionPersistence from '@deepseek-ai/dsh-session-persistence-sqlite'
 import SessionTitleService from '@deepseek-ai/dsh-session-title'
 import { registerSessionTitleLlmProvider } from '@deepseek-ai/dsh-session-title-llm'
+import * as shellEnv from '@deepseek-ai/dsh-shell-env'
 import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
+import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import ApprovalService from '@deepseek-ai/dsh-user-approval'
+import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { loggerService } from '@logger'
+import { WORK_MODE_APPROVAL_TIERS } from '@shared/config/workMode'
 import { IpcChannel } from '@shared/IpcChannel'
+import type {
+  KernelApprovalDecisionPayload,
+  KernelQuestionAnswerPayload
+} from '@shared/interaction/types'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { CherryCredentialProvider } from './credentials'
+import { KernelInteractionHub, registerInteractionHost } from './interaction'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { clearLiveHandles, getTopic, initTopics, listTopicBranches, listTopics, searchSessions } from './topics'
@@ -45,6 +62,7 @@ function reasoning(ctx: Context): {
 }
 
 let kernelContext: Context | undefined
+let interactionHub: KernelInteractionHub | undefined
 
 /** 已启动的内核上下文；未启动或已销毁时为 undefined。 */
 export function getKernel(): Context | undefined {
@@ -60,6 +78,8 @@ export async function stopKernel(): Promise<void> {
   const ctx = kernelContext
   if (ctx === undefined) return
   kernelContext = undefined
+  interactionHub?.disposeAll()
+  interactionHub = undefined
   clearLiveHandles()
 
   const runtimes = [...ctx.registry.values()]
@@ -109,6 +129,33 @@ export async function bootKernel(): Promise<Context> {
     })
     await ctx.plugin(ToolRuntime, { mode: 'native' })
 
+    // 审批与问答（Step 2）：审批服务（ask 档 → answerer 链）+ 问答服务缝。
+    // ask_user_question 工具改为 agent 作用域挂载（topics.ts，按助手"内置工具"开关，
+    // 见 @shared/config/agentTools）——根部常驻会让纯对话请求永远携带工具 schema。
+    await ctx.plugin(ApprovalService, { policy: 'ask' })
+    await ctx.plugin(UserQuestionService)
+
+    // 沙箱与文件系统（Step 3）：策略服务（部署默认 read-only；工作区回退根 = 数据文件夹下的 .agent 围栏
+    // ——助手未设工作目录的会话以此为本，围栏外读写一律拒绝或走审批升级，不再放宽到用户主目录）
+    // + 沙箱化 fs 后端 + 观察策略（edit 前必须先读）+ 子进程运行时（glob/grep 的 rg 通道）。
+    // 工具本体在 agent setup 时按话题工作模式作用域挂载（topics.ts ensureAgent），关闭 = 纯对话。
+    const agentWorkspaceRoot = join(app.getPath('userData'), '.agent')
+    await mkdir(agentWorkspaceRoot, { recursive: true })
+    await ctx.plugin(SandboxPolicyService, {
+      mode: 'read-only',
+      workspaceRoot: agentWorkspaceRoot
+    })
+    await ctx.plugin(SandboxedFileSystem, {})
+    await ctx.plugin(fsObservationPolicy)
+    await ctx.plugin(LocalSubprocessRuntime)
+
+    // 命令行与后台作业（Step 4）：shell-env 环境注册表（DSH_* 托管变量）+ 沙箱 runner
+    // + 沙箱化 pwsh 执行器（ctx.shell，按会话 sandbox/mode 收敛）+ 进程内作业注册表（ctx.jobs）。
+    await ctx.plugin(shellEnv, { dshHome: join(kernelDir) })
+    await ctx.plugin(LocalSandboxProvider, {})
+    await ctx.plugin(SandboxPwshExecutor, {})
+    await ctx.plugin(LocalJobRegistry, {})
+
     // 会话层：内存 store + SQLite 持久化 + 自动标题
     await ctx.plugin(SessionStore)
     await ctx.plugin(SqliteSessionPersistence, {
@@ -142,8 +189,15 @@ export async function bootKernel(): Promise<Context> {
     registerAppServiceSeams(ctx)
 
     await initTopics(ctx)
-    registerKernelIpc()
     registerEventForwarding(ctx)
+
+    // 审批/问答往返：请求帧推给所有窗口，回执经 IPC 回来（未决请求随内核停机作废）
+    interactionHub = registerInteractionHost(ctx, (message) => {
+      const { kind, payload } = message as { kind: 'approval' | 'question'; payload: unknown }
+      if (kind === 'approval') broadcast(IpcChannel.Dsh_ApprovalRequest, payload)
+      else if (kind === 'question') broadcast(IpcChannel.Dsh_QuestionRequest, payload)
+    })
+    registerKernelIpc()
 
     kernelContext = ctx
     logger.info('dsh kernel booted')
@@ -381,6 +435,7 @@ function registerKernelIpc(): void {
         maxTokens?: number
         systemPrompt?: string
         reasoningEffort?: string
+        workingDir?: string
       }
     ) => {
       return { topic: await topicTree(requireKernel()).create(input) }
@@ -413,10 +468,61 @@ function registerKernelIpc(): void {
     return { topics: listTopicBranches(rootTopicId) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicSend, async (_event, id: string, text: string, reasoningEffort?: string) => {
-    await topicTree(requireKernel()).send(id, text, reasoningEffort)
-    return { ok: true }
-  })
+  ipcMain.handle(
+    IpcChannel.Dsh_TopicSend,
+    async (
+      _event,
+      id: string,
+      text: string,
+      options?: {
+        reasoningEffort?: string
+        workMode?: boolean
+        workModeTier?: string
+        builtinTools?: string[]
+        externalTools?: string[]
+      }
+    ) => {
+      const cleanOptions: {
+        reasoningEffort?: string
+        workMode?: boolean
+        workModeTier?: string
+        builtinTools?: string[]
+        externalTools?: string[]
+      } = {}
+      if (options?.reasoningEffort !== undefined) {
+        if (typeof options.reasoningEffort !== 'string') {
+          throw new Error('kernel: invalid reasoningEffort in topic send options')
+        }
+        cleanOptions.reasoningEffort = options.reasoningEffort
+      }
+      if (options?.workMode !== undefined) {
+        if (typeof options.workMode !== 'boolean') {
+          throw new Error('kernel: invalid workMode in topic send options')
+        }
+        cleanOptions.workMode = options.workMode
+      }
+      if (options?.workModeTier !== undefined) {
+        if (typeof options.workModeTier !== 'string' || !WORK_MODE_APPROVAL_TIERS.includes(options.workModeTier)) {
+          throw new Error('kernel: invalid workModeTier in topic send options')
+        }
+        cleanOptions.workModeTier = options.workModeTier
+      }
+      if (options?.builtinTools !== undefined) {
+        if (!Array.isArray(options.builtinTools) || options.builtinTools.some((toolId) => typeof toolId !== 'string')) {
+          throw new Error('kernel: invalid builtinTools in topic send options')
+        }
+        cleanOptions.builtinTools = options.builtinTools
+      }
+      if (options?.externalTools !== undefined) {
+        if (!Array.isArray(options.externalTools) || options.externalTools.some((toolId) => typeof toolId !== 'string')) {
+          throw new Error('kernel: invalid externalTools in topic send options')
+        }
+        cleanOptions.externalTools = options.externalTools
+      }
+      await topicTree(requireKernel()).send(id, text, cleanOptions)
+      return { ok: true }
+    }
+  )
 
   ipcMain.handle(IpcChannel.Dsh_TopicStop, (_event, id: string) => {
     topicTree(requireKernel()).stop(id)
@@ -442,5 +548,31 @@ function registerKernelIpc(): void {
 
   ipcMain.handle(IpcChannel.Dsh_SearchMessages, async (_event, terms: string[]) => {
     return { hits: await searchSessions(requireKernel(), terms) }
+  })
+
+  // ---- 审批/问答回执（Step 2）----
+
+  ipcMain.handle(IpcChannel.Dsh_ApprovalDecide, (_event, decision: KernelApprovalDecisionPayload) => {
+    if (
+      decision === null ||
+      typeof decision !== 'object' ||
+      typeof decision.requestId !== 'string' ||
+      (decision.behavior !== 'allow' && decision.behavior !== 'deny')
+    ) {
+      throw new Error('kernel: invalid approval decision payload')
+    }
+    return { ok: interactionHub?.decideApproval(decision) ?? false }
+  })
+
+  ipcMain.handle(IpcChannel.Dsh_QuestionAnswer, (_event, answer: KernelQuestionAnswerPayload) => {
+    if (
+      answer === null ||
+      typeof answer !== 'object' ||
+      typeof answer.requestId !== 'string' ||
+      !Array.isArray(answer.answers)
+    ) {
+      throw new Error('kernel: invalid question answer payload')
+    }
+    return { ok: interactionHub?.answerQuestion(answer) ?? false }
   })
 }

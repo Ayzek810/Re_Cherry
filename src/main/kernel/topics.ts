@@ -4,13 +4,23 @@ import { dirname, join } from 'node:path'
 
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import { effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
+import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import * as toolFs from '@deepseek-ai/dsh-tool-fs'
+import * as toolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
+import * as toolJobs from '@deepseek-ai/dsh-tool-jobs'
+import * as toolPwsh from '@deepseek-ai/dsh-tool-pwsh'
+import * as toolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { type SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { loggerService } from '@logger'
+import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
 import { KERNEL_REASONING_LEVELS, type KernelReasoningLevel } from '@shared/config/reasoning'
 import { app } from 'electron'
+
+import * as askUserTool from './askUserTool'
 
 const logger = loggerService.withContext('KernelTopics')
 
@@ -32,6 +42,8 @@ export interface KernelTopic {
   parentTopicId?: string
   /** 截断删除后被取代：值为替代它的新会话 id；可见层与清扫只认新会话。 */
   supersededByTopicId?: string
+  /** 工作目录（会话创建时写入 session header.cwd，绝对路径；仅新建话题生效）。 */
+  workingDir?: string
 }
 
 export interface KernelTopicInput {
@@ -42,6 +54,8 @@ export interface KernelTopicInput {
   maxTokens?: number
   systemPrompt?: string
   reasoningEffort?: string
+  /** 新话题的工作目录（= dsh 会话 header.cwd；仅新建话题生效）。 */
+  workingDir?: string
 }
 
 interface TopicRegistryFile {
@@ -50,6 +64,28 @@ interface TopicRegistryFile {
 
 let topics = new Map<string, KernelTopic>()
 const liveHandles = new Map<string, AgentHandle>()
+/** 活体 agent 的工具面挂载状态（工作模式开关 + 内置/外置工具 id 集）；随活体生命周期同步增删。 */
+interface MountedToolsState {
+  workMode: boolean
+  builtins: string[]
+  externals: string[]
+}
+const mountedTools = new Map<string, MountedToolsState>()
+
+function idListEquals(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((id, index) => id === b[index])
+}
+
+function mountedStateEquals(
+  mounted: MountedToolsState | undefined,
+  workMode: boolean,
+  builtins: string[],
+  externals: string[]
+): boolean {
+  if (mounted === undefined) return false
+  return mounted.workMode === workMode && idListEquals(mounted.builtins, builtins) && idListEquals(mounted.externals, externals)
+}
 
 /**
  * provider/model → 该模型在 dsh/pi-ai 侧实际可用的思考档位（空数组 = 不支持思考控制）。
@@ -282,6 +318,8 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
       ? { reasoningEffort: existing.reasoningEffort }
       : {}),
     ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+    ...(existing?.workingDir !== undefined && existing.workingDir.length > 0 ? { workingDir: existing.workingDir } : {}),
+    ...(input.workingDir === undefined ? {} : { workingDir: input.workingDir }),
     // upsert 保留分支血缘（fork 子会话在每次发送前会被 createTopic 幂等更新）
     ...(existing?.parentTopicId !== undefined ? { parentTopicId: existing.parentTopicId } : {})
   }
@@ -292,15 +330,6 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
   return topic
 }
 
-/** 更新话题运行时配置（目前仅思考档位），持久化注册表。 */
-export async function updateTopicConfig(id: string, patch: { reasoningEffort?: string }): Promise<KernelTopic> {
-  const topic = topics.get(id)
-  if (topic === undefined) throw new Error(`kernel: topic "${id}" not found`)
-  if (patch.reasoningEffort !== undefined) topic.reasoningEffort = patch.reasoningEffort
-  topic.updatedAt = Date.now()
-  await persistRegistry()
-  return topic
-}
 
 /** 改名（用户显式重命名；自动标题回写走 session/event 监听）。 */
 export async function renameTopic(id: string, name: string): Promise<KernelTopic> {
@@ -312,11 +341,15 @@ export async function renameTopic(id: string, name: string): Promise<KernelTopic
   return topic
 }
 
-/** 打开话题：确保 agent 已加载（未加载则从持久化恢复或新建）。 */
-export async function openTopic(ctx: Context, id: string): Promise<Agent> {
+/** 打开话题：确保 agent 已加载（未加载则从持久化恢复或新建）。mounted 指定本轮工具面挂载状态（缺省 = 维持现状）。 */
+export async function openTopic(
+  ctx: Context,
+  id: string,
+  mounted?: { workMode?: boolean; builtins?: string[]; externals?: string[] }
+): Promise<Agent> {
   const topic = topics.get(id)
   if (topic === undefined) throw new Error(`kernel: topic "${id}" not found`)
-  return ensureAgent(ctx, topic)
+  return ensureAgent(ctx, topic, mounted)
 }
 
 /**
@@ -367,6 +400,7 @@ export async function forkTopic(
     ...(sourceTopic.reasoningEffort === undefined || sourceTopic.reasoningEffort.length === 0
       ? {}
       : { reasoningEffort: sourceTopic.reasoningEffort }),
+    ...(sourceTopic.workingDir === undefined ? {} : { workingDir: sourceTopic.workingDir }),
     parentTopicId: sourceTopic.id
   }
   topics.set(child.id, child)
@@ -398,6 +432,7 @@ async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<strin
   if (handle !== undefined) {
     await handle.dispose()
     liveHandles.delete(id)
+    mountedTools.delete(id)
   }
   topics.delete(id)
   await persistRegistry()
@@ -679,6 +714,7 @@ export async function destroyTurns(
     if (handle !== undefined) {
       await handle.dispose()
       liveHandles.delete(owner.id)
+      mountedTools.delete(owner.id)
     }
     await truncateSessionEvents(owner.id, cutoff)
     const row = topics.get(owner.id)
@@ -703,12 +739,32 @@ export async function sendMessage(
   ctx: Context,
   id: string,
   text: string,
-  options?: { reasoningEffort?: string }
+  options?: {
+    reasoningEffort?: string
+    workMode?: boolean
+    workModeTier?: WorkModeApprovalTier
+    /** 本轮启用的内置工具 id 列表（助手 builtinTools 的开集，见 @shared/config/agentTools）。 */
+    builtinTools?: string[]
+    /** 本轮启用的外置工具 id 列表（助手 externalTools 的开集，仅工作模式开启时使用）。 */
+    externalTools?: string[]
+  }
 ): Promise<void> {
-  const agent = await openTopic(ctx, id)
+  const workMode = options?.workMode === true
+  const builtins = [...new Set(options?.builtinTools ?? [])].sort()
+  const externals = [...new Set(options?.externalTools ?? [])].sort()
+  // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
+  //（会话已持久化）并按新状态重挂——工具的挂/撤都发生在下一轮开始之前。
+  const handle = liveHandles.get(id)
+  if (handle !== undefined && !mountedStateEquals(mountedTools.get(id), workMode, builtins, externals)) {
+    await handle.dispose()
+    liveHandles.delete(id)
+    mountedTools.delete(id)
+  }
+  const agent = await openTopic(ctx, id, { workMode, builtins, externals })
   const topic = topics.get(id)
   if (topic !== undefined) {
     if (options?.reasoningEffort !== undefined) topic.reasoningEffort = options.reasoningEffort
+    if (workMode) applyWorkModeTier(agent, options?.workModeTier ?? 'read-only')
     topic.updatedAt = Date.now()
   }
   const message = createUserMessage({
@@ -803,6 +859,7 @@ async function sweepOrphanSessions(ctx: Context): Promise<void> {
 
 export function clearLiveHandles(): void {
   liveHandles.clear()
+  mountedTools.clear()
 }
 
 /** 中止当前回合。 */
@@ -890,7 +947,7 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
 async function ensureAgent(
   ctx: Context,
   topic: KernelTopic,
-  options?: { seed?: readonly SessionEvent[]; parentSessionId?: string }
+  options?: { seed?: readonly SessionEvent[]; parentSessionId?: string; workMode?: boolean; builtins?: string[]; externals?: string[] }
 ): Promise<Agent> {
   const existing = liveHandles.get(topic.id)
   if (existing !== undefined) return existing.agent
@@ -899,12 +956,21 @@ async function ensureAgent(
   const live = ctx.agents.get(sessionId)
   if (live !== undefined) return live
 
+  // 工具面跟轮走：显式指定（本轮发送的能力状态）优先，否则维持上一次挂载状态。
+  const previous = mountedTools.get(topic.id)
+  const workModeMounted = options?.workMode ?? previous?.workMode ?? false
+  const builtinsMounted = options?.builtins ?? previous?.builtins ?? []
+  const externalsMounted = options?.externals ?? previous?.externals ?? []
+
   const agentOptions = {
     provider: topic.provider,
     model: topic.model,
     ...(topic.maxTokens === undefined ? {} : { maxTokens: topic.maxTokens })
   }
-  const setup = (agentCtx: Context): void => {
+  // 工具面（Step 3/工具页）：全部在 agent 作用域内挂载（ToolRegistry 按作用域分层，
+  // agentCtx 注册只对本 agent 可见）。内置工具按助手开关（ask 等，两种模式都可用）；
+  // 外置工具组随工作模式开启、按助手外置开关逐件挂载，关闭 = 纯对话。
+  const setup = async (agentCtx: Context): Promise<void> => {
     if (topic.systemPrompt !== undefined && topic.systemPrompt.length > 0) {
       agentCtx.systemPrompt.section({
         name: 'cherry:assistant',
@@ -913,6 +979,28 @@ async function ensureAgent(
       })
     }
     attachReasoningEffortListener(agentCtx, topic.id)
+    if (builtinsMounted.includes('ask_user_question')) {
+      await agentCtx.plugin(askUserTool)
+    }
+    if (workModeMounted) {
+      // tool-fs-search 的 sampleOverCapGlobResults 是必填无默认配置（schema fail-loud），
+      // 不传会在 resume 重建时 ValidationError；true = glob 超限时采样截断并提示（而非报错）。
+      if (externalsMounted.includes('fs')) await agentCtx.plugin(toolFs)
+      if (externalsMounted.includes('fsSearch')) await agentCtx.plugin(toolFsSearch, { sampleOverCapGlobResults: true })
+      if (externalsMounted.includes('editor')) await agentCtx.plugin(toolStrReplaceEditor)
+      if (externalsMounted.includes('pwsh')) await agentCtx.plugin(toolPwsh)
+      if (externalsMounted.includes('jobs')) await agentCtx.plugin(toolJobs)
+      logger.info(
+        `kernel: work-mode tools mounted for topic "${topic.id}" externals=[${externalsMounted.join(',') || '(none)'}]`
+      )
+    }
+  }
+
+  // 工作目录：仅会话创建时可写入 header.cwd（持久化、不可变）；resume 路径沿用已存值。
+  const meta = {
+    ...(options?.seed !== undefined ? { seedLength: options.seed.length } : {}),
+    ...(options?.parentSessionId !== undefined ? { parentSessionId: SessionId(options.parentSessionId) } : {}),
+    ...(topic.workingDir !== undefined && topic.workingDir.length > 0 ? { cwd: topic.workingDir } : {})
   }
 
   let handle: AgentHandle
@@ -921,10 +1009,7 @@ async function ensureAgent(
     handle = await ctx.agents.create({
       sessionId,
       seed: options.seed as SessionEvent[],
-      meta: {
-        ...(options.parentSessionId === undefined ? {} : { parentSessionId: options.parentSessionId }),
-        seedLength: options.seed.length
-      },
+      meta,
       agentOptions,
       setup
     })
@@ -937,9 +1022,27 @@ async function ensureAgent(
         `kernel: resume session "${topic.id}" failed, creating fresh`,
         error instanceof Error ? error : new Error(String(error))
       )
-      handle = await ctx.agents.create({ sessionId, agentOptions, setup })
+      handle = await ctx.agents.create({ sessionId, meta, agentOptions, setup })
     }
   }
   liveHandles.set(topic.id, handle)
+  mountedTools.set(topic.id, { workMode: workModeMounted, builtins: builtinsMounted, externals: externalsMounted })
   return handle.agent
+}
+
+/**
+ * 发送前把本轮的工作模式档位落到会话（Step 3 三档生效）：
+ * 档位 = dsh 沙箱模式名（read-only / workspace-write / danger-full-access），
+ * 审批档位 = read-only 问、其余 never。折叠值与目标一致时不重复追加事件。
+ */
+function applyWorkModeTier(agent: Agent, tier: WorkModeApprovalTier): void {
+  if (!WORK_MODE_APPROVAL_TIERS.includes(tier)) return
+  const session = agent.session
+  if (effectiveSandboxMode(session.events) !== tier) {
+    setSandboxMode(session, tier)
+  }
+  const desiredApproval = tier === 'read-only' ? 'ask' : 'never'
+  if (effectiveApprovalPolicy(session.events) !== desiredApproval) {
+    setApprovalPolicy(session, desiredApproval)
+  }
 }

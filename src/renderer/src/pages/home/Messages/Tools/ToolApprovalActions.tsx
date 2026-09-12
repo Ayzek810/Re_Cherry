@@ -72,7 +72,7 @@ export const ToolApprovalActionsComponent: FC<ToolApprovalActionsProps> = ({
         disabled={isSubmitting}
         onClick={(e) => handleClick(e, cancel)}>
         <Ban size={compact ? 13 : 14} className="lucide-custom" />
-        {!compact && t('common.cancel')}
+        {!compact && t('message.tools.reject')}
       </Button>
 
       {autoApprove ? (
@@ -93,12 +93,12 @@ export const ToolApprovalActionsComponent: FC<ToolApprovalActionsProps> = ({
             ]
           }}>
           <CirclePlay size={compact ? 13 : 15} className="lucide-custom" />
-          {t('settings.mcp.tools.run', 'Run')}
+          {t('message.tools.approve')}
         </StyledDropdownButton>
       ) : (
         <Button size="small" type="primary" disabled={isSubmitting} onClick={(e) => handleClick(e, confirm)}>
           <CirclePlay size={compact ? 13 : 15} className="lucide-custom" />
-          {t('settings.mcp.tools.run', 'Run')}
+          {t('message.tools.approve')}
         </Button>
       )}
     </ActionsContainer>

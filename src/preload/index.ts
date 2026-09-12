@@ -66,12 +66,39 @@ const api = {
   dshTopicFork: (topicId: string, anchorUserMessageSeq: number) =>
     ipcRenderer.invoke(IpcChannel.Dsh_TopicFork, topicId, anchorUserMessageSeq),
   dshTopicBranches: (rootTopicId: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicBranches, rootTopicId),
-  dshTopicSend: (id: string, text: string, reasoningEffort?: string) =>
-    ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, reasoningEffort),
+  dshTopicSend: (
+    id: string,
+    text: string,
+    options?: {
+      reasoningEffort?: string
+      workMode?: boolean
+      workModeTier?: string
+      builtinTools?: string[]
+      externalTools?: string[]
+    }
+  ) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, options),
   dshTopicStop: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicStop, id),
   dshTopicRunning: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRunning, id),
   dshTopicEvents: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicEvents, id),
   dshTopicGet: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicGet, id),
+  dshApprovalDecide: (decision: { requestId: string; behavior: 'allow' | 'deny' }) =>
+    ipcRenderer.invoke(IpcChannel.Dsh_ApprovalDecide, decision),
+  dshQuestionAnswer: (answer: { requestId: string; answers: { id: string; selected: string[]; custom?: string }[] }) =>
+    ipcRenderer.invoke(IpcChannel.Dsh_QuestionAnswer, answer),
+  dshOnApprovalRequest: (callback: (payload: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => {
+      callback(data)
+    }
+    ipcRenderer.on(IpcChannel.Dsh_ApprovalRequest, listener)
+    return () => ipcRenderer.off(IpcChannel.Dsh_ApprovalRequest, listener)
+  },
+  dshOnQuestionRequest: (callback: (payload: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => {
+      callback(data)
+    }
+    ipcRenderer.on(IpcChannel.Dsh_QuestionRequest, listener)
+    return () => ipcRenderer.off(IpcChannel.Dsh_QuestionRequest, listener)
+  },
   dshSearchMessages: (terms: string[]) => ipcRenderer.invoke(IpcChannel.Dsh_SearchMessages, terms),
   dshOnSessionEvent: (callback: (payload: unknown) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: unknown) => {

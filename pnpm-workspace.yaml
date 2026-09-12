@@ -40,13 +40,16 @@ patchedDependencies:
   'libsql@0.4.7': patches/libsql-npm-0.4.7-444e260fb1.patch
 
 onlyBuiltDependencies:
+  - '@deepseek-ai/dsh-subprocess-local'
   - '@kangfenmao/keyv-storage'
   - '@scarf/scarf'
   - '@swc/core'
   - 'electron'
   - 'electron-winstaller'
   - 'esbuild'
+  - 'koffi'
   - 'msw'
+  - 'node-pty'
   - 'protobufjs'
   - 'registry-js'
   - 'zipfile'

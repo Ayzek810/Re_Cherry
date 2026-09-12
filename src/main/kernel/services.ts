@@ -24,8 +24,7 @@ import {
   sendMessage,
   sessionEvents,
   stopTopic,
-  supportedReasoningLevels,
-  updateTopicConfig
+  supportedReasoningLevels
 } from './topics'
 
 const logger = loggerService.withContext('KernelAppServices')
@@ -43,15 +42,25 @@ export interface TopicTreeService {
     maxTokens?: number
     systemPrompt?: string
     reasoningEffort?: string
+    workingDir?: string
   }) => Promise<import('./topics').KernelTopic>
   rename: (id: string, name: string) => Promise<import('./topics').KernelTopic>
-  updateConfig: (id: string, patch: { reasoningEffort?: string }) => Promise<import('./topics').KernelTopic>
   open: (id: string) => Promise<import('@deepseek-ai/dsh-agent').Agent>
   delete: (id: string) => Promise<void>
   /** 消息级删除引擎：锚点集合计算 + 物理截断/清盘 + 焦点推导，一次事务内核权威。 */
   destroyTurns: (topicId: string, anchorUserSeqs: number[]) => Promise<import('./topics').DestroyTurnsResult>
   fork: (sourceTopicId: string, anchorUserMessageSeq: number) => Promise<import('./topics').KernelTopic>
-  send: (id: string, text: string, reasoningEffort?: string) => Promise<void>
+  send: (
+    id: string,
+    text: string,
+    options?: {
+      reasoningEffort?: string
+      workMode?: boolean
+      workModeTier?: string
+      builtinTools?: string[]
+      externalTools?: string[]
+    }
+  ) => Promise<void>
   stop: (id: string) => void
   isRunning: (id: string) => boolean
   events: (id: string) => readonly import('@deepseek-ai/dsh-session').SessionEvent[]
@@ -87,14 +96,24 @@ export function registerAppServiceSeams(ctx: Context): void {
       maxTokens?: number
       systemPrompt?: string
       reasoningEffort?: string
+      workingDir?: string
     }) => createTopic(ctx, input),
     rename: (id: string, name: string) => renameTopic(id, name),
-    updateConfig: (id: string, patch: { reasoningEffort?: string }) => updateTopicConfig(id, patch),
     open: (id: string) => openTopic(ctx, id),
     delete: (id: string) => deleteTopic(ctx, id),
     destroyTurns: (topicId: string, anchorUserSeqs: number[]) => destroyTurns(ctx, topicId, anchorUserSeqs),
     fork: (sourceTopicId: string, anchorUserMessageSeq: number) => forkTopic(ctx, sourceTopicId, anchorUserMessageSeq),
-    send: (id: string, text: string, reasoningEffort?: string) => sendMessage(ctx, id, text, { reasoningEffort }),
+    send: (
+      id: string,
+      text: string,
+      options?: {
+        reasoningEffort?: string
+        workMode?: boolean
+        workModeTier?: string
+        builtinTools?: string[]
+        externalTools?: string[]
+      }
+    ) => sendMessage(ctx, id, text, options),
     stop: (id: string) => stopTopic(ctx, id),
     isRunning: (id: string) => isTopicRunning(ctx, id),
     events: (id: string) => sessionEvents(ctx, id)

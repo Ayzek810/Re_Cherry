@@ -28,6 +28,7 @@ import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMes
 import { addAbortController } from '@renderer/utils/abortController'
 import { createAssistantMessage, resetAssistantMessage } from '@renderer/utils/messageUtils/create'
 import { getTopicQueue, waitForTopicQueue } from '@renderer/utils/queue'
+import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
 import { t } from 'i18next'
 import { isEmpty, throttle } from 'lodash'
 import { LRUCache } from 'lru-cache'
@@ -282,8 +283,15 @@ const fetchAndProcessAssistantResponseImpl = async (
       if (text.length === 0) {
         logger.warn('kernelChat: user message has no text content, nothing to send')
       }
-      const reasoningEffort = kernelChat.assistantReasoningLevel(assistant)
-      await kernelChat.sendToKernel(topicId, text, assistantMsgId, reasoningEffort, triggeringUserMessage.id)
+      // 能力状态随发送参数生效（拨动下一轮才生效）：工作模式开关 = 话题镜像、档位 = 助手配置、
+      // 内置/外置工具 = 助手开关（稀疏 map 缺省 = 开，见 @shared/config/agentTools）
+      await kernelChat.sendToKernel(topicId, text, assistantMsgId, triggeringUserMessage.id, {
+        reasoningEffort: kernelChat.assistantReasoningLevel(assistant),
+        workMode: topic?.workMode === true,
+        workModeTier: assistant.workMode?.approval,
+        builtinTools: BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false),
+        externalTools: EXTERNAL_TOOL_IDS.filter((toolId) => assistant.externalTools?.[toolId] !== false)
+      })
     } else {
       logger.error('kernelChat: triggering user message not found, skipping send')
     }

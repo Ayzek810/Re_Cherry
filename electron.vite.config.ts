@@ -72,10 +72,11 @@ export default defineConfig({
     }
   },
   renderer: {
-    // 5173 在本机落在 Windows Hyper-V 保留端口段(5141-5240)内，绑定报 EACCES；
-    // dev server 改到保留段之外的固定端口（仅开发环境生效，生产构建不使用 server 配置）。
+    // Hyper-V/WSL 的保留端口段会随重启漂移：5173 曾落在 5141-5240，5270 后来又落进 5245-5344
+    // （`netsh interface <ipv4|ipv6> show excludedportrange protocol=tcp` 可查）。
+    // 默认端口选在保留段之外，并可用 DSH_DEV_PORT 覆盖；仅开发环境生效，生产构建不使用 server 配置。
     server: {
-      port: 5270,
+      port: Number(process.env.DSH_DEV_PORT) || 5870,
       strictPort: true
     },
     plugins: [

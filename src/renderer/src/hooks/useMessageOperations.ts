@@ -105,7 +105,9 @@ export function useMessageOperations(topic: Topic) {
         updatedAt: new Date(forked.updatedAt ?? Date.now()).toISOString(),
         messages: [],
         parentTopicId: topic.id,
-        branchKind: kind
+        branchKind: kind,
+        // 分支继承源话题的工作模式开关状态（B6：跟话题走，随 redux-persist 持久化）
+        ...(topic.workMode === true ? { workMode: true } : {})
       }
       dispatch(addTopic({ assistantId: assistant.id, topic: childTopic }))
 
@@ -472,7 +474,12 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('[startParallelAnswer] anchor question has no text content, skip')
         return false
       }
-      // TODO(v0.3.0 工作模式)：工作模式 active（含工具上下文）时禁用此入口
+      // 工作模式激活（话题级开关，B6）时禁用旁答：旁答子会话共享前缀但拿不到本话题的工作模式状态，
+      // 且工具回合的卡片组语义与多模型旁答冲突（v0.3.0 计划书 §7 Step 5）。
+      if (topic.workMode === true) {
+        logger.warn('[startParallelAnswer] work mode is active on this topic, parallel answer is disabled')
+        return false
+      }
       const forked = await forkBranchToKernel(topic.id, anchor)
       if (forked === null) return false
 
