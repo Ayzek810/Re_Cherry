@@ -121,10 +121,13 @@ export async function bootKernel(): Promise<Context> {
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(piAiPlugin, { providers: {} })
 
-    // 提示词与工具层（tools 空注册：MCP 已砍，占位满足 agent-loop 的 inject）
+    // 提示词与工具层（tools 空注册：MCP 已砍，占位满足 agent-loop 的 inject）。
+    // includeRuntimeContext 必须开：RuntimeContextProjection 靠它把动态上下文（工具面
+    // 快照 cherry:tool-face-state、沙箱/审批档位）在渲染值变化时投影成会话内消息——
+    // 关着会把所有 context 压空（root suppressor 全局生效），模型就只剩历史锚定。
     await ctx.plugin(SystemPrompt, {
       includeHarnessIdentity: false,
-      includeRuntimeContext: false,
+      includeRuntimeContext: true,
       persona: ''
     })
     await ctx.plugin(ToolRuntime, { mode: 'native' })

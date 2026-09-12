@@ -686,6 +686,13 @@ function projectEventsToMessages(
   for (const event of events) {
     switch (event.type) {
       case 'user/message': {
+        // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
+        // 面向模型、不是用户发言——不投影为聊天气泡（直播路径的回执登记对它们无害：
+        // 无本地 uuid 可配对）。
+        const messageSource = event.data.message?.source
+        if (messageSource !== undefined && messageSource.kind === 'plugin') {
+          break
+        }
         closeReply()
         const messageId = kernelMessageId(topicId, event.seq)
         lastUserMessageId = messageId

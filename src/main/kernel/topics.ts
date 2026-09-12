@@ -16,6 +16,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { type SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { loggerService } from '@logger'
+import { EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
 import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
 import { KERNEL_REASONING_LEVELS, type KernelReasoningLevel } from '@shared/config/reasoning'
 import { app } from 'electron'
@@ -64,12 +65,37 @@ interface TopicRegistryFile {
 
 let topics = new Map<string, KernelTopic>()
 const liveHandles = new Map<string, AgentHandle>()
-/** 活体 agent 的工具面挂载状态（内置/外置工具 id 集）；随活体生命周期同步增删。 */
+/**
+ * 活体 agent 的工具面挂载状态（内置/外置工具 id 集）；随活体生命周期同步增删。
+ * 铁律：任何机制都不得按“面 id 比对工具注册名”运作——一个插件注册几个工具、
+ * 叫什么名是插件的内部事务。开关 = 挂载单元（插件级）：开 = 挂（schema 出现），
+ * 关 = 撤（schema 消失）；关闭期间模型仍试图调用的，由 DSML 修复补丁转成真调用
+ * 后落到 dsh 原生 unknown tool 结构化回执（带内反馈，不会静默成功）。
+ */
 interface MountedToolsState {
   builtins: string[]
   externals: string[]
 }
 const mountedTools = new Map<string, MountedToolsState>()
+
+/**
+ * 工具面挂载注册表（数据驱动，新增工具零逻辑改动）：id（@shared/config/agentTools 的
+ * BUILTIN_TOOL_IDS / EXTERNAL_TOOL_IDS）→ 挂载单元。一个挂载单元可以在插件里展开成
+ * 任意数量的工具（如 fs 展开 read/write/edit/read_image），挂载逻辑只认 id 不认工具名。
+ */
+const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => Promise<unknown> }> = [
+  { id: 'ask_user_question', mount: (agentCtx) => agentCtx.plugin(askUserTool) }
+]
+
+const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => Promise<unknown> }> = [
+  // tool-fs-search 的 sampleOverCapGlobResults 是必填无默认配置（schema fail-loud），
+  // 不传会在 resume 重建时 ValidationError；true = glob 超限时采样截断并提示（而非报错）。
+  { id: 'fs', mount: (agentCtx) => agentCtx.plugin(toolFs) },
+  { id: 'fsSearch', mount: (agentCtx) => agentCtx.plugin(toolFsSearch, { sampleOverCapGlobResults: true }) },
+  { id: 'editor', mount: (agentCtx) => agentCtx.plugin(toolStrReplaceEditor) },
+  { id: 'pwsh', mount: (agentCtx) => agentCtx.plugin(toolPwsh) },
+  { id: 'jobs', mount: (agentCtx) => agentCtx.plugin(toolJobs) }
+]
 
 /** 外置工具 id → 模型可读的能力短语（工具面说明段用；与 @shared/config/agentTools 的 id 一一对应）。 */
 const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
@@ -81,36 +107,29 @@ const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
 }
 
 /**
- * 工具面说明段（chatbox 四层机制的 instructions 层，数据拼装而非静态文本）：
- * 由本轮挂载状态生成——可用/缺席都明说（缺席是一等公民）、"本请求的工具清单即环境全部事实"
- * 杀幻觉先验（不存在的工具、界面按钮）、禁止在正文写调用标记（DSML 泄漏只变文本）、
- * 行为规范（要调用就真调用 + 调用前一句短说明）。注册在 agent setup：工具面任何变化都会
- * 触发活体重建并重跑 setup，本段随之自动刷新，未来新增工具零改动。
+ * 工具面说明段（chatbox 四层机制的 instructions 层，按挂载状态数据拼装，零工具特判）：
+ * 可用/缺席都明说（缺席是一等公民）、"本请求的工具清单即环境全部事实"杀幻觉先验、
+ * 开关随时可变以本段为准、禁止正文写调用标记（DSML 泄漏只变文本）、调用前一句短说明。
+ * 具体工具的使用时机在各工具自身 description 里（不在此处逐工具写死）。
  */
 function buildToolFaceSection(builtins: string[], externals: string[]): string {
   const lines = [
-    '## Tool Availability (this turn)',
-    'The tools declared in THIS request are the complete truth of this environment. ' +
-      'Everything not listed here does not exist: there are no hidden tools, plugins, or UI features you can invoke by mentioning them.'
+    '## Tool Face (this turn)',
+    'The tool schemas in THIS request are the complete truth of this environment. ' +
+      'Everything not listed here does not exist: there are no hidden tools, plugins, or UI features you can invoke by mentioning them. ' +
+      'The user can toggle tool availability between turns; this section is the current truth for THIS turn.'
   ]
-  if (builtins.includes('ask_user_question')) {
-    lines.push(
-      '- ask_user_question is available. When you need a decision, a choice, or missing information from the user, invoke it directly; ' +
-        'do not merely describe the call, ask for permission, or write tool-call syntax in your reply text.'
-    )
+  if (builtins.length > 0) {
+    lines.push(`- Interactive built-in tools available this turn: ${builtins.join(', ')}.`)
   } else {
-    lines.push(
-      '- ask_user_question is NOT available this turn. If you need a decision or missing information from the user, ask in plain text within your reply.'
-    )
+    lines.push('- No interactive built-in tools this turn; ask the user in plain text within your reply.')
   }
-  if (externals.length > 0) {
-    const capabilities = externals
-      .map((id) => EXTERNAL_TOOL_CAPABILITIES[id])
-      .filter((capability): capability is string => capability !== undefined)
-      .map((capability) => `- ${capability}`)
-    if (capabilities.length > 0) {
-      lines.push('- File and command tools available this turn:', ...capabilities)
-    }
+  const enabled = EXTERNAL_TOOL_IDS.filter((id) => externals.includes(id))
+  if (enabled.length > 0) {
+    lines.push(
+      '- File and command tools available this turn:',
+      ...enabled.flatMap((id) => (EXTERNAL_TOOL_CAPABILITIES[id] === undefined ? [] : [`  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`]))
+    )
   } else {
     lines.push(
       '- You have NO file or command tools this turn. Do not simulate reading, writing, or executing anything; ' +
@@ -799,7 +818,7 @@ export async function sendMessage(
   const builtins = [...new Set(options?.builtinTools ?? [])].sort()
   const externals = [...new Set(options?.externalTools ?? [])].sort()
   // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
-  //（会话已持久化）并按新状态重挂——工具的挂/撤都发生在下一轮开始之前。
+  //（会话已持久化）并按新状态重挂——开关随时可切，生效点永远在下一轮开始之前。
   const handle = liveHandles.get(id)
   if (handle !== undefined && !mountedStateEquals(mountedTools.get(id), builtins, externals)) {
     await handle.dispose()
@@ -1012,9 +1031,9 @@ async function ensureAgent(
     model: topic.model,
     ...(topic.maxTokens === undefined ? {} : { maxTokens: topic.maxTokens })
   }
-  // 工具面（Step 3/工具页）：全部在 agent 作用域内挂载（ToolRegistry 按作用域分层，
-  // agentCtx 注册只对本 agent 可见）。内置工具按助手开关（ask 等，两种模式都可用）；
-  // 外置工具按助手外置开关逐件挂载；清单为空 = 纯对话。
+  // 工具面（Step 3/工具页）：按挂载注册表在 agent 作用域挂载（ToolRegistry 按作用域分层，
+  // agentCtx 注册只对本 agent 可见）。挂载单元数据驱动（BUILTIN_MOUNTS / EXTERNAL_MOUNTS），
+  // 一个单元可在插件内展开任意数量的工具；开关只增删挂载单元，逻辑不认工具名。
   const setup = async (agentCtx: Context): Promise<void> => {
     if (topic.systemPrompt !== undefined && topic.systemPrompt.length > 0) {
       agentCtx.systemPrompt.section({
@@ -1028,18 +1047,21 @@ async function ensureAgent(
       order: 1,
       text: buildToolFaceSection(builtinsMounted, externalsMounted)
     })
+    // 工具面运行时快照（dsh RuntimeContextProjection 原生机制）：system 说明段管规则（远因），
+    // 这里的动态上下文管每轮状态——渲染值变化时 dsh 自动把快照投影成会话内消息（排在当轮
+    // 用户消息之后，最近因位置），状态变化即被模型以最高新鲜度看到，压掉它对自己历史回答
+    // 的锚定（真机实锤：挂载/schema 全对，模型仍连续复读旧状态）。面没变不注入（dsh 去重）。
+    agentCtx.systemPrompt.context({
+      name: 'cherry:tool-face-state',
+      order: 0,
+      text: `Tools available THIS turn: ${[...builtinsMounted, ...externalsMounted].join(', ') || 'none (all tools disabled by the user)'}.`
+    })
     attachReasoningEffortListener(agentCtx, topic.id)
-    if (builtinsMounted.includes('ask_user_question')) {
-      await agentCtx.plugin(askUserTool)
+    for (const entry of BUILTIN_MOUNTS) {
+      if (builtinsMounted.includes(entry.id)) await entry.mount(agentCtx)
     }
-    if (externalsMounted.length > 0) {
-      // tool-fs-search 的 sampleOverCapGlobResults 是必填无默认配置（schema fail-loud），
-      // 不传会在 resume 重建时 ValidationError；true = glob 超限时采样截断并提示（而非报错）。
-      if (externalsMounted.includes('fs')) await agentCtx.plugin(toolFs)
-      if (externalsMounted.includes('fsSearch')) await agentCtx.plugin(toolFsSearch, { sampleOverCapGlobResults: true })
-      if (externalsMounted.includes('editor')) await agentCtx.plugin(toolStrReplaceEditor)
-      if (externalsMounted.includes('pwsh')) await agentCtx.plugin(toolPwsh)
-      if (externalsMounted.includes('jobs')) await agentCtx.plugin(toolJobs)
+    for (const entry of EXTERNAL_MOUNTS) {
+      if (externalsMounted.includes(entry.id)) await entry.mount(agentCtx)
     }
     logger.info(
       `kernel: tools mounted for topic "${topic.id}" builtins=[${builtinsMounted.join(',') || '(none)'}] externals=[${externalsMounted.join(',') || '(none)'}]`
