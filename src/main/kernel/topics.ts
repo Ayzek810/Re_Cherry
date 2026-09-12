@@ -64,27 +64,74 @@ interface TopicRegistryFile {
 
 let topics = new Map<string, KernelTopic>()
 const liveHandles = new Map<string, AgentHandle>()
-/** 活体 agent 的工具面挂载状态（工作模式开关 + 内置/外置工具 id 集）；随活体生命周期同步增删。 */
+/** 活体 agent 的工具面挂载状态（内置/外置工具 id 集）；随活体生命周期同步增删。 */
 interface MountedToolsState {
-  workMode: boolean
   builtins: string[]
   externals: string[]
 }
 const mountedTools = new Map<string, MountedToolsState>()
+
+/** 外置工具 id → 模型可读的能力短语（工具面说明段用；与 @shared/config/agentTools 的 id 一一对应）。 */
+const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
+  fs: 'reading, writing and moving files inside the sandbox workspace (read / write / move)',
+  fsSearch: 'searching the workspace by filename pattern and content keywords (glob / grep)',
+  editor: 'structured file editing via exact string replacement (str_replace_editor)',
+  pwsh: 'running PowerShell commands inside the sandbox (pwsh)',
+  jobs: 'tracking long-running background jobs (jobs)'
+}
+
+/**
+ * 工具面说明段（chatbox 四层机制的 instructions 层，数据拼装而非静态文本）：
+ * 由本轮挂载状态生成——可用/缺席都明说（缺席是一等公民）、"本请求的工具清单即环境全部事实"
+ * 杀幻觉先验（不存在的工具、界面按钮）、禁止在正文写调用标记（DSML 泄漏只变文本）、
+ * 行为规范（要调用就真调用 + 调用前一句短说明）。注册在 agent setup：工具面任何变化都会
+ * 触发活体重建并重跑 setup，本段随之自动刷新，未来新增工具零改动。
+ */
+function buildToolFaceSection(builtins: string[], externals: string[]): string {
+  const lines = [
+    '## Tool Availability (this turn)',
+    'The tools declared in THIS request are the complete truth of this environment. ' +
+      'Everything not listed here does not exist: there are no hidden tools, plugins, or UI features you can invoke by mentioning them.'
+  ]
+  if (builtins.includes('ask_user_question')) {
+    lines.push(
+      '- ask_user_question is available. When you need a decision, a choice, or missing information from the user, invoke it directly; ' +
+        'do not merely describe the call, ask for permission, or write tool-call syntax in your reply text.'
+    )
+  } else {
+    lines.push(
+      '- ask_user_question is NOT available this turn. If you need a decision or missing information from the user, ask in plain text within your reply.'
+    )
+  }
+  if (externals.length > 0) {
+    const capabilities = externals
+      .map((id) => EXTERNAL_TOOL_CAPABILITIES[id])
+      .filter((capability): capability is string => capability !== undefined)
+      .map((capability) => `- ${capability}`)
+    if (capabilities.length > 0) {
+      lines.push('- File and command tools available this turn:', ...capabilities)
+    }
+  } else {
+    lines.push(
+      '- You have NO file or command tools this turn. Do not simulate reading, writing, or executing anything; ' +
+        'if the task requires them, say so plainly and let the user decide.'
+    )
+  }
+  lines.push(
+    '- Never include tool-call syntax or markup in your reply text: it is never executed and only pollutes the answer. To call a tool, issue a real tool call.',
+    '- When you are about to call one or more tools, first include one short sentence (in the user\'s language) explaining what you will do next.'
+  )
+  return lines.join('\n')
+}
 
 function idListEquals(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
   return a.every((id, index) => id === b[index])
 }
 
-function mountedStateEquals(
-  mounted: MountedToolsState | undefined,
-  workMode: boolean,
-  builtins: string[],
-  externals: string[]
-): boolean {
+function mountedStateEquals(mounted: MountedToolsState | undefined, builtins: string[], externals: string[]): boolean {
   if (mounted === undefined) return false
-  return mounted.workMode === workMode && idListEquals(mounted.builtins, builtins) && idListEquals(mounted.externals, externals)
+  return idListEquals(mounted.builtins, builtins) && idListEquals(mounted.externals, externals)
 }
 
 /**
@@ -345,7 +392,7 @@ export async function renameTopic(id: string, name: string): Promise<KernelTopic
 export async function openTopic(
   ctx: Context,
   id: string,
-  mounted?: { workMode?: boolean; builtins?: string[]; externals?: string[] }
+  mounted?: { builtins?: string[]; externals?: string[] }
 ): Promise<Agent> {
   const topic = topics.get(id)
   if (topic === undefined) throw new Error(`kernel: topic "${id}" not found`)
@@ -741,30 +788,29 @@ export async function sendMessage(
   text: string,
   options?: {
     reasoningEffort?: string
-    workMode?: boolean
-    workModeTier?: WorkModeApprovalTier
     /** 本轮启用的内置工具 id 列表（助手 builtinTools 的开集，见 @shared/config/agentTools）。 */
     builtinTools?: string[]
-    /** 本轮启用的外置工具 id 列表（助手 externalTools 的开集，仅工作模式开启时使用）。 */
+    /** 本轮启用的外置工具 id 列表（助手 externalTools 的开集；话题工作模式开关 = 该清单的宏）。 */
     externalTools?: string[]
+    /** 外置工具的权限档位（沙箱/审批预设）；仅外置清单非空时落位。 */
+    tier?: WorkModeApprovalTier
   }
 ): Promise<void> {
-  const workMode = options?.workMode === true
   const builtins = [...new Set(options?.builtinTools ?? [])].sort()
   const externals = [...new Set(options?.externalTools ?? [])].sort()
   // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
   //（会话已持久化）并按新状态重挂——工具的挂/撤都发生在下一轮开始之前。
   const handle = liveHandles.get(id)
-  if (handle !== undefined && !mountedStateEquals(mountedTools.get(id), workMode, builtins, externals)) {
+  if (handle !== undefined && !mountedStateEquals(mountedTools.get(id), builtins, externals)) {
     await handle.dispose()
     liveHandles.delete(id)
     mountedTools.delete(id)
   }
-  const agent = await openTopic(ctx, id, { workMode, builtins, externals })
+  const agent = await openTopic(ctx, id, { builtins, externals })
   const topic = topics.get(id)
   if (topic !== undefined) {
     if (options?.reasoningEffort !== undefined) topic.reasoningEffort = options.reasoningEffort
-    if (workMode) applyWorkModeTier(agent, options?.workModeTier ?? 'read-only')
+    if (externals.length > 0) applyWorkModeTier(agent, options?.tier ?? 'read-only')
     topic.updatedAt = Date.now()
   }
   const message = createUserMessage({
@@ -947,7 +993,7 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
 async function ensureAgent(
   ctx: Context,
   topic: KernelTopic,
-  options?: { seed?: readonly SessionEvent[]; parentSessionId?: string; workMode?: boolean; builtins?: string[]; externals?: string[] }
+  options?: { seed?: readonly SessionEvent[]; parentSessionId?: string; builtins?: string[]; externals?: string[] }
 ): Promise<Agent> {
   const existing = liveHandles.get(topic.id)
   if (existing !== undefined) return existing.agent
@@ -958,7 +1004,6 @@ async function ensureAgent(
 
   // 工具面跟轮走：显式指定（本轮发送的能力状态）优先，否则维持上一次挂载状态。
   const previous = mountedTools.get(topic.id)
-  const workModeMounted = options?.workMode ?? previous?.workMode ?? false
   const builtinsMounted = options?.builtins ?? previous?.builtins ?? []
   const externalsMounted = options?.externals ?? previous?.externals ?? []
 
@@ -969,7 +1014,7 @@ async function ensureAgent(
   }
   // 工具面（Step 3/工具页）：全部在 agent 作用域内挂载（ToolRegistry 按作用域分层，
   // agentCtx 注册只对本 agent 可见）。内置工具按助手开关（ask 等，两种模式都可用）；
-  // 外置工具组随工作模式开启、按助手外置开关逐件挂载，关闭 = 纯对话。
+  // 外置工具按助手外置开关逐件挂载；清单为空 = 纯对话。
   const setup = async (agentCtx: Context): Promise<void> => {
     if (topic.systemPrompt !== undefined && topic.systemPrompt.length > 0) {
       agentCtx.systemPrompt.section({
@@ -978,11 +1023,16 @@ async function ensureAgent(
         text: topic.systemPrompt
       })
     }
+    agentCtx.systemPrompt.section({
+      name: 'cherry:tool-face',
+      order: 1,
+      text: buildToolFaceSection(builtinsMounted, externalsMounted)
+    })
     attachReasoningEffortListener(agentCtx, topic.id)
     if (builtinsMounted.includes('ask_user_question')) {
       await agentCtx.plugin(askUserTool)
     }
-    if (workModeMounted) {
+    if (externalsMounted.length > 0) {
       // tool-fs-search 的 sampleOverCapGlobResults 是必填无默认配置（schema fail-loud），
       // 不传会在 resume 重建时 ValidationError；true = glob 超限时采样截断并提示（而非报错）。
       if (externalsMounted.includes('fs')) await agentCtx.plugin(toolFs)
@@ -990,10 +1040,10 @@ async function ensureAgent(
       if (externalsMounted.includes('editor')) await agentCtx.plugin(toolStrReplaceEditor)
       if (externalsMounted.includes('pwsh')) await agentCtx.plugin(toolPwsh)
       if (externalsMounted.includes('jobs')) await agentCtx.plugin(toolJobs)
-      logger.info(
-        `kernel: work-mode tools mounted for topic "${topic.id}" externals=[${externalsMounted.join(',') || '(none)'}]`
-      )
     }
+    logger.info(
+      `kernel: tools mounted for topic "${topic.id}" builtins=[${builtinsMounted.join(',') || '(none)'}] externals=[${externalsMounted.join(',') || '(none)'}]`
+    )
   }
 
   // 工作目录：仅会话创建时可写入 header.cwd（持久化、不可变）；resume 路径沿用已存值。
@@ -1026,12 +1076,12 @@ async function ensureAgent(
     }
   }
   liveHandles.set(topic.id, handle)
-  mountedTools.set(topic.id, { workMode: workModeMounted, builtins: builtinsMounted, externals: externalsMounted })
+  mountedTools.set(topic.id, { builtins: builtinsMounted, externals: externalsMounted })
   return handle.agent
 }
 
 /**
- * 发送前把本轮的工作模式档位落到会话（Step 3 三档生效）：
+ * 发送前把本轮权限档位落到会话（三档生效；随外置工具挂载触发）：
  * 档位 = dsh 沙箱模式名（read-only / workspace-write / danger-full-access），
  * 审批档位 = read-only 问、其余 never。折叠值与目标一致时不重复追加事件。
  */

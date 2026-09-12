@@ -55,10 +55,9 @@ export interface TopicTreeService {
     text: string,
     options?: {
       reasoningEffort?: string
-      workMode?: boolean
-      workModeTier?: string
       builtinTools?: string[]
       externalTools?: string[]
+      tier?: string
     }
   ) => Promise<void>
   stop: (id: string) => void
@@ -108,10 +107,9 @@ export function registerAppServiceSeams(ctx: Context): void {
       text: string,
       options?: {
         reasoningEffort?: string
-        workMode?: boolean
-        workModeTier?: string
         builtinTools?: string[]
         externalTools?: string[]
+        tier?: string
       }
     ) => sendMessage(ctx, id, text, options),
     stop: (id: string) => stopTopic(ctx, id),

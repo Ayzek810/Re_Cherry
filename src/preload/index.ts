@@ -71,10 +71,9 @@ const api = {
     text: string,
     options?: {
       reasoningEffort?: string
-      workMode?: boolean
-      workModeTier?: string
       builtinTools?: string[]
       externalTools?: string[]
+      tier?: string
     }
   ) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, options),
   dshTopicStop: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicStop, id),
