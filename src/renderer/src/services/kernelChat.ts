@@ -263,7 +263,7 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
   })
 }
 
-/** 发送一条消息到内核；流式回复经由事件流投影回 Redux。工作模式与内置工具随发送参数生效（拨动下一轮生效）。 */
+/** 发送一条消息到内核；流式回复经由事件流投影回 Redux。工具面（内置/外置）与权限档位随发送参数生效（拨动下一轮生效）。 */
 export async function sendToKernel(
   topicId: string,
   text: string,
@@ -271,10 +271,9 @@ export async function sendToKernel(
   userMessageId?: string,
   options?: {
     reasoningEffort?: string
-    workMode?: boolean
-    workModeTier?: string
     builtinTools?: string[]
     externalTools?: string[]
+    tier?: string
   }
 ): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)

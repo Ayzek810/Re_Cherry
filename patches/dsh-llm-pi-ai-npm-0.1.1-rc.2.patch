@@ -1,0 +1,73 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1333,7 +1333,7 @@ function mapStopReason(message, contextWindow) {
+ * @returns the harness chunks, ending with `usage` then `finish`; throws
+ *   `LlmError` (`STREAM_CLOSED`) if the source ends without a terminal event.
+ */
+-async function* toStreamChunks(events, contextWindow) {
++async function* toStreamChunksRaw(events, contextWindow) {
+ 	const toolIds = /* @__PURE__ */ new Map();
+ 	for await (const event of events) switch (event.type) {
+ 		case "start": break;
+@@ -1447,6 +1447,60 @@ async function* toStreamChunks(events, contextWindow) {
+ 	}
+ 	throw new LlmError("pi-ai event stream ended without done/error", "STREAM_CLOSED");
+ }
++
++/**
++ * cherry fork patch: response-side tool-call repair (always on, not gated by any switch).
++ * DeepSeek serving stacks extract the model's DSML tool-call markup into structured
++ * tool calls, but the extraction is unreliable: the same session may parse one turn
++ * and leak the very same markup into a plain text block the next. The turn then
++ * completes with zero feedback and the model keeps believing its call executed.
++ * Repair mechanically at the harness boundary: convert well-formed markup into real
++ * tool-call blocks so the normal loop dispatches them — mounted tools execute
++ * normally, and disabled ones come back as a structured `unknown tool` error result,
++ * so the model learns in-band instead of succeeding silently.
++ * Malformed markup or non-JSON arguments are left untouched (fail-safe).
++ */
++const DSML_INVOKE_PATTERN = /<｜DSML｜invoke name="([^"]+)">\s*<｜DSML｜parameter name="arguments"[^>]*>([\s\S]*?)<\/｜DSML｜parameter>\s*<\/｜DSML｜invoke>/g;
++function repairDsmlToolCallText(event) {
++	const text = event.block.text;
++	if (!text.includes('<｜DSML｜invoke name="')) return void 0;
++	const calls = [];
++	const repairedText = text.replace(DSML_INVOKE_PATTERN, (match, name, argumentsRaw) => {
++		try {
++			const parsedArguments = JSON.parse(argumentsRaw);
++			calls.push({ name, parsedArguments });
++			return '';
++		} catch {
++			return match;
++		}
++	});
++	if (calls.length === 0) return void 0;
++	const stripped = repairedText.replace(/<\/?｜DSML｜tool_calls>/g, '').replace(/\n{3,}/g, '\n\n');
++	let nextIndex = event.index + 1;
++	const repairedEvents = [{ type: "block-end", index: event.index, block: { type: "text", text: stripped } }];
++	for (const call of calls) {
++		const callId = CallId(`dsml-repair-${Date.now()}-${nextIndex}`);
++		const argumentsJson = JSON.stringify(call.parsedArguments);
++		repairedEvents.push({ type: "block-start", index: nextIndex, blockType: "tool-call" });
++		repairedEvents.push({ type: "tool-call-delta", index: nextIndex, id: callId, name: call.name, argumentsDelta: argumentsJson });
++		repairedEvents.push({ type: "block-end", index: nextIndex, block: { type: "tool-call", id: callId, name: call.name, arguments: argumentsJson } });
++		nextIndex++;
++	}
++	return repairedEvents;
++}
++async function* toStreamChunks(events, contextWindow) {
++	for await (const event of toStreamChunksRaw(events, contextWindow)) {
++		if (event?.type === "block-end" && event.block?.type === "text" && typeof event.block.text === "string" && event.block.text.includes('<｜DSML｜invoke name="')) {
++			const repairedEvents = repairDsmlToolCallText(event);
++			if (repairedEvents !== void 0) {
++				for (const repairedEvent of repairedEvents) yield repairedEvent;
++				continue;
++			}
++		}
++		yield event;
++	}
++}
++
+ //#endregion
+ //#region lib/types/adapter.js
+ /**

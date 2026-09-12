@@ -476,18 +476,16 @@ function registerKernelIpc(): void {
       text: string,
       options?: {
         reasoningEffort?: string
-        workMode?: boolean
-        workModeTier?: string
         builtinTools?: string[]
         externalTools?: string[]
+        tier?: string
       }
     ) => {
       const cleanOptions: {
         reasoningEffort?: string
-        workMode?: boolean
-        workModeTier?: string
         builtinTools?: string[]
         externalTools?: string[]
+        tier?: string
       } = {}
       if (options?.reasoningEffort !== undefined) {
         if (typeof options.reasoningEffort !== 'string') {
@@ -495,17 +493,11 @@ function registerKernelIpc(): void {
         }
         cleanOptions.reasoningEffort = options.reasoningEffort
       }
-      if (options?.workMode !== undefined) {
-        if (typeof options.workMode !== 'boolean') {
-          throw new Error('kernel: invalid workMode in topic send options')
+      if (options?.tier !== undefined) {
+        if (typeof options.tier !== 'string' || !WORK_MODE_APPROVAL_TIERS.includes(options.tier)) {
+          throw new Error('kernel: invalid tier in topic send options')
         }
-        cleanOptions.workMode = options.workMode
-      }
-      if (options?.workModeTier !== undefined) {
-        if (typeof options.workModeTier !== 'string' || !WORK_MODE_APPROVAL_TIERS.includes(options.workModeTier)) {
-          throw new Error('kernel: invalid workModeTier in topic send options')
-        }
-        cleanOptions.workModeTier = options.workModeTier
+        cleanOptions.tier = options.tier
       }
       if (options?.builtinTools !== undefined) {
         if (!Array.isArray(options.builtinTools) || options.builtinTools.some((toolId) => typeof toolId !== 'string')) {

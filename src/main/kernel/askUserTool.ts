@@ -13,6 +13,8 @@ export const inject = ['tools', 'userQuestions']
 
 const description =
   'Ask the user a concise question when you need confirmation, a choice, or missing information before proceeding. ' +
+  'When you decide to ask, invoke this tool immediately — do not describe the call, ask for permission, or write tool-call ' +
+  'syntax in your reply text (such text is never executed). ' +
   'Send one or more questions, each with a stable id that will be echoed in the answer.'
 
 export function apply(ctx: Context): void {
