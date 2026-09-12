@@ -33,7 +33,7 @@ export interface CMSession {
   turns: CMUserTurn[]
   /** 每轮 user/message 的 seq（可选；页码卡片定位用，下标与 turns 对齐）。 */
   userSeqs?: number[]
-  /** 每轮有文本 assistant/message 的 seq 列表（可选；与 turns[i].replies 对齐）。 */
+  /** 每轮回答的 canonical seq（= 该轮第一条 assistant/message 的 seq，多 step 合并回答的卡片 id 与之一致；与 turns[i].replies 对齐）。 */
   replySeqs?: number[][]
 }
 
@@ -71,6 +71,10 @@ export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: st
   const turns: CMUserTurn[] = []
   const userSeqs: number[] = []
   const replySeqs: number[][] = []
+  // 本轮第一条 assistant/message 的 seq。带工具的一轮会有多个 step、多条 assistant/message，
+  // 投影层把它们合并成一条回答卡，卡片 canonical id 取本轮第一条的 seq —— replySeqs 必须记录
+  // 同一个 seq，页码定位（ResendPageBar 的 indexOf）才能命中。
+  let pendingReplySeq: number | undefined
   for (const e of events) {
     if (e.type === 'user/message') {
       if (endSeedSeq !== undefined && e.seq < endSeedSeq) userBefore += 1
@@ -78,6 +82,7 @@ export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: st
       turns.push({ text: textOf(content), replies: [] })
       userSeqs.push(e.seq)
       replySeqs.push([])
+      pendingReplySeq = undefined
     } else if (e.type === 'assistant/message') {
       const message = (
         e.data as
@@ -89,15 +94,25 @@ export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: st
             }
           | undefined
       )?.message
+      if (pendingReplySeq === undefined) pendingReplySeq = e.seq
       const text = textOf(message?.content)
       if (turns.length > 0 && text.length > 0) {
         const source = message?.source
-        turns[turns.length - 1].replies.push({
-          text,
-          ...(source?.model !== undefined ? { modelId: source.model } : {}),
-          ...(source?.provider !== undefined ? { provider: source.provider } : {})
-        })
-        replySeqs[replySeqs.length - 1].push(e.seq)
+        const turnReplies = turns[turns.length - 1].replies
+        const lastReply = turnReplies[turnReplies.length - 1]
+        if (lastReply !== undefined) {
+          // 同一轮的后续 assistant/message（工具多 step 的分段说话）：并入同一条回答（B8：一轮=一条回答）
+          lastReply.text = lastReply.text + '\n' + text
+          if (lastReply.modelId === undefined && source?.model !== undefined) lastReply.modelId = source.model
+          if (lastReply.provider === undefined && source?.provider !== undefined) lastReply.provider = source.provider
+        } else {
+          turnReplies.push({
+            text,
+            ...(source?.model !== undefined ? { modelId: source.model } : {}),
+            ...(source?.provider !== undefined ? { provider: source.provider } : {})
+          })
+          replySeqs[replySeqs.length - 1].push(pendingReplySeq)
+        }
       }
     }
   }

@@ -53,7 +53,7 @@ The agent sandbox for this project normally has **no `node_modules`** and **cann
 ## Development Commands (run on the user's real machine)
 
 - **Install**: `pnpm install` — requires Node ≥24.11.1, pnpm 10.27.0
-- **Development**: `pnpm dev` — Electron app in dev mode with hot reload (dev server port 5270). Dev mode does **not** install React/Redux DevTools unless `RC_DEVTOOLS=1` is set (the download from the Chrome Web Store retries 5× and takes ~60s when the network is restricted).
+- **Development**: `pnpm dev` — Electron app in dev mode with hot reload (dev server port 5870, override with `DSH_DEV_PORT`; Hyper-V reserved port ranges drift across reboots — if EACCES, check `netsh interface ipv4 show excludedportrange protocol=tcp`). Dev mode does **not** install React/Redux DevTools unless `RC_DEVTOOLS=1` is set (the download from the Chrome Web Store retries 5× and takes ~60s when the network is restricted).
 - **Debug**: `pnpm debug` — attach via `chrome://inspect` on port 9222
 - **Typecheck**: `pnpm typecheck` — concurrent `tsgo` node + web checks
 - **Full Build**: `pnpm build` — typecheck + electron-vite build

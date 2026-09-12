@@ -1134,6 +1134,7 @@
     },
     "tools": {
       "approvalRequired": "工具 \"{{tool}}\" 需要审批",
+      "approve": "允许",
       "autoApproveEnabled": "此工具已启用自动批准",
       "cancelled": "已取消",
       "completed": "已完成",
@@ -1143,11 +1144,15 @@
       "groupHeaderThinking": "{{count}} 次思考",
       "invoking": "调用中",
       "labels": {
+        "askUser": "向用户提问",
         "bash": "执行命令",
         "edit": "编辑",
         "exitPlanMode": "退出计划模式",
         "glob": "文件匹配",
         "grep": "搜索",
+        "jobKill": "终止后台作业",
+        "jobList": "后台作业列表",
+        "jobOutput": "后台作业输出",
         "multiEdit": "批量编辑",
         "notebookEdit": "笔记本编辑",
         "readFile": "读取文件",
@@ -1160,6 +1165,11 @@
         "write": "写入"
       },
       "pending": "等待中",
+      "question": {
+        "customPlaceholder": "或输入自定义回答…",
+        "submit": "提交"
+      },
+      "reject": "拒绝",
       "streaming": "流式传输中",
       "truncated": "输出已截断（原始大小：{{size}}）"
     },
@@ -1179,6 +1189,11 @@
       "rag": "正在执行 RAG...",
       "rag_complete": "保留 {{countBefore}} 个结果中的 {{countAfter}} 个...",
       "rag_failed": "RAG 失败，返回空结果..."
+    },
+    "workMode": {
+      "disabled": "工作模式已关闭",
+      "enabled": "工作模式已开启",
+      "toggle": "工作模式"
     }
   },
   "minapp": {
@@ -1485,6 +1500,73 @@
     },
     "advanced": {
       "auto_switch_to_topics": "自动切换到话题"
+    },
+    "agentSettings": {
+      "advance": {
+        "empty": "暂无可配置项",
+        "tab": "高级设置"
+      },
+      "chatSettings": {
+        "title": "聊天设置"
+      },
+      "essential": "基础设置",
+      "permissionMode": {
+        "fullAccessWarning": "危险：该档位下所有操作不经审批直接执行，请谨慎使用",
+        "tab": "权限模式",
+        "tiers": {
+          "danger-full-access": {
+            "description": "不受沙箱限制，所有操作直接执行、不做审批",
+            "title": "完全访问"
+          },
+          "read-only": {
+            "description": "沙箱只读，模型每次要动手的调用都会先请求您批准",
+            "title": "只读"
+          },
+          "workspace-write": {
+            "description": "工作目录内可自由读写，越界操作由沙箱拦截，不弹审批",
+            "title": "工作区可写"
+          }
+        },
+        "title": "权限模式"
+      },
+      "skills": {
+        "empty": "技能功能将在后续版本提供",
+        "tab": "技能"
+      },
+      "tools": {
+        "builtinTitle": "内置工具",
+        "builtins": {
+          "ask": {
+            "name": "提问（ask_user_question）"
+          }
+        },
+        "externalTitle": "外置工具",
+        "externals": {
+          "editor": {
+            "name": "结构化编辑（str_replace_editor）"
+          },
+          "fs": {
+            "name": "文件读写（read / write / move）"
+          },
+          "fsSearch": {
+            "name": "文件搜索（glob / grep）"
+          },
+          "jobs": {
+            "name": "后台作业（jobs）"
+          },
+          "pwsh": {
+            "name": "命令行（pwsh）"
+          }
+        },
+        "placeholder": "完整的逐工具管理将在后续版本提供",
+        "tab": "工具"
+      },
+      "workDir": {
+        "hint": "沙箱允许读写的边界；留空使用默认位置",
+        "invalid": "请输入绝对路径",
+        "label": "工作目录",
+        "placeholder": "输入绝对路径，如 D:\\Workspace"
+      }
     },
     "assistant": {
       "icon": {

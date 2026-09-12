@@ -1134,6 +1134,7 @@
     },
     "tools": {
       "approvalRequired": "Tool \"{{tool}}\" requires approval",
+      "approve": "Allow",
       "autoApproveEnabled": "Auto-approve enabled for this tool",
       "cancelled": "Cancelled",
       "completed": "Completed",
@@ -1143,11 +1144,15 @@
       "groupHeaderThinking": "{{count}} thoughts",
       "invoking": "Invoking",
       "labels": {
+        "askUser": "Ask User",
         "bash": "Bash",
         "edit": "Edit",
         "exitPlanMode": "ExitPlanMode",
         "glob": "Glob",
         "grep": "Grep",
+        "jobKill": "Kill Background Job",
+        "jobList": "Background Jobs",
+        "jobOutput": "Job Output",
         "multiEdit": "MultiEdit",
         "notebookEdit": "NotebookEdit",
         "readFile": "Read File",
@@ -1160,6 +1165,11 @@
         "write": "Write"
       },
       "pending": "Pending",
+      "question": {
+        "customPlaceholder": "Or type a custom answer…",
+        "submit": "Submit"
+      },
+      "reject": "Reject",
       "streaming": "Streaming",
       "truncated": "Output truncated (original: {{size}})"
     },
@@ -1179,6 +1189,11 @@
       "rag": "Executing RAG...",
       "rag_complete": "Keeping {{countAfter}} out of {{countBefore}} results...",
       "rag_failed": "RAG failed, returning empty results..."
+    },
+    "workMode": {
+      "disabled": "Work mode off",
+      "enabled": "Work mode on",
+      "toggle": "Work mode"
     }
   },
   "minapp": {
@@ -1485,6 +1500,73 @@
     },
     "advanced": {
       "auto_switch_to_topics": "Auto switch to topic"
+    },
+    "agentSettings": {
+      "advance": {
+        "empty": "Nothing to configure yet",
+        "tab": "Advanced"
+      },
+      "chatSettings": {
+        "title": "Chat Settings"
+      },
+      "essential": "General",
+      "permissionMode": {
+        "fullAccessWarning": "Danger: all actions run directly without approval in this tier. Use with caution.",
+        "tab": "Permission Mode",
+        "tiers": {
+          "danger-full-access": {
+            "description": "No sandbox restrictions; every action runs directly without approval",
+            "title": "Full Access"
+          },
+          "read-only": {
+            "description": "Read-only sandbox; the model asks for your approval before any hands-on call",
+            "title": "Read Only"
+          },
+          "workspace-write": {
+            "description": "Free read/write inside the working directory; out-of-bounds actions are blocked by the sandbox",
+            "title": "Workspace Write"
+          }
+        },
+        "title": "Permission Mode"
+      },
+      "skills": {
+        "empty": "Skills will be available in a future version",
+        "tab": "Skills"
+      },
+      "tools": {
+        "builtinTitle": "Built-in Tools",
+        "builtins": {
+          "ask": {
+            "name": "Ask (ask_user_question)"
+          }
+        },
+        "externalTitle": "External Tools",
+        "externals": {
+          "editor": {
+            "name": "Structured Editor (str_replace_editor)"
+          },
+          "fs": {
+            "name": "File I/O (read / write / move)"
+          },
+          "fsSearch": {
+            "name": "File Search (glob / grep)"
+          },
+          "jobs": {
+            "name": "Background Jobs (jobs)"
+          },
+          "pwsh": {
+            "name": "Command Line (pwsh)"
+          }
+        },
+        "placeholder": "Per-tool management will be available in a future version",
+        "tab": "Tools"
+      },
+      "workDir": {
+        "hint": "The sandbox read/write boundary; leave empty to use the default",
+        "invalid": "Please enter an absolute path",
+        "label": "Working Directory",
+        "placeholder": "Enter an absolute path, e.g. D:\\Workspace"
+      }
     },
     "assistant": {
       "icon": {
