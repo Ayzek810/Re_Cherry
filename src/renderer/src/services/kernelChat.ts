@@ -315,6 +315,13 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
   const { topicId, event } = payload
   switch (event.type) {
     case 'user/message': {
+      // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
+      // 不是用户发言：不参与回执配对（否则会消耗 FIFO 队列里真实发送的配对名额，把
+      // 本地用户消息的回执 seq 记到注入事件上，fork 锚点随之错乱——分支控制混乱的根因
+      // 之一），也不投影。user/message 事件的 data 就是消息本体（source 直接挂 data 上）。
+      if (event.data.source?.kind === 'plugin') {
+        break
+      }
       // 回执登记：本地 uuid user 消息 → 内核 seq（供以后对该消息 fork 用）
       const localUserId = recordUserMessageSeq(topicId, event.seq)
       // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）
@@ -687,12 +694,11 @@ function projectEventsToMessages(
     switch (event.type) {
       case 'user/message': {
         // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
-        // 面向模型、不是用户发言——不投影为聊天气泡（直播路径的回执登记对它们无害：
-        // 无本地 uuid 可配对）。
-        const messageSource = event.data.message?.source
-        if (messageSource !== undefined && messageSource.kind === 'plugin') {
-          break
-        }
+        // 不是用户发言——不投影为聊天气泡（user/message 事件的 data 就是消息本体，source
+        // 直接挂 data 上，没有 .message 包裹——assistant/message 才有）。刻意不 closeReply：
+        // 注入只出现在 step 边界（审批档位变更在轮内、快照在 user 后 assistant 前且彼时
+        // reply 已被真实 user 消息 close），同轮的 step 间切断会把一轮回答误拆成两条。
+        if (event.data.source?.kind === 'plugin') break
         closeReply()
         const messageId = kernelMessageId(topicId, event.seq)
         lastUserMessageId = messageId

@@ -64,7 +64,7 @@ export function useTopicManageMode(): TopicManageModeState {
   }
 }
 
-import { listRootTopics, loadKernelTopicRootIds, shouldShowTopicRow } from '@renderer/utils/topicBranch'
+import { listRootTopics, loadKernelTopicRootIds, recallLastViewedBranch, shouldShowTopicRow } from '@renderer/utils/topicBranch'
 
 interface TopicManagePanelProps {
   assistant: Assistant
@@ -215,7 +215,8 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
 
       // Switch to first remaining topic if current topic was moved
       if (selectedIds.has(activeTopic.id)) {
-        setActiveTopic(remainingTopics[0])
+        // 进话题落点统一走家族浏览记忆恢复（与侧栏点击/切助手一致）
+        setActiveTopic(recallLastViewedBranch(remainingTopics[0], assistant.topics ?? []))
       }
 
       window.toast.success(t('chat.topics.manage.move.success', { count: movedCount }))

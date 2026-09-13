@@ -6,8 +6,9 @@ import { useShowAssistants, useShowTopics } from '@renderer/hooks/useStore'
 import { useActiveTopic } from '@renderer/hooks/useTopic'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import NavigationService from '@renderer/services/NavigationService'
+import { updateTopic as updateTopicAction } from '@renderer/store/assistants'
 import { newMessagesActions } from '@renderer/store/newMessage'
-import { TOPIC_SWITCH_REQUEST, listRootTopics } from '@renderer/utils/topicBranch'
+import { TOPIC_SWITCH_REQUEST, listRootTopics, recallLastViewedBranch, rootTopicOf } from '@renderer/utils/topicBranch'
 import type { Assistant, Topic } from '@renderer/types'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
@@ -76,18 +77,34 @@ const HomePage: FC = () => {
     void EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR)
   })
 
+  // 家族浏览记忆：把"正在看哪个分支"记到根话题行上（进分支记分支 id，回主分支清掉，
+  // 同值跳过）。恢复点：侧栏点击 / 切助手 / useTopic 兜底（recallLastViewedBranch）。
+  // allTopics 由调用方显式传入——切助手场景闭包里的 activeAssistant 还是旧助手。
+  const recordTopicView = useCallback(
+    (viewed: Topic, allTopics: Topic[] = activeAssistant?.topics ?? []) => {
+      const root = rootTopicOf(viewed, allTopics)
+      const next = root.id === viewed.id ? undefined : viewed.id
+      if (root.lastViewedBranchId !== next) {
+        dispatch(updateTopicAction({ assistantId: root.assistantId, topic: { ...root, lastViewedBranchId: next } }))
+      }
+    },
+    [dispatch, activeAssistant]
+  )
+
   const setActiveAssistant = useCallback(
     (newAssistant: Assistant) => {
       if (newAssistant.id === activeAssistant?.id) return
       startTransition(() => {
         _setActiveAssistant(newAssistant)
-        // 同步更新 active topic，避免不必要的重新渲染
+        // 同步更新 active topic，避免不必要的重新渲染；进话题恢复上次浏览的分支
         const rootTopics = listRootTopics(newAssistant.topics ?? [])
-        const newTopic = rootTopics[0] ?? newAssistant.topics?.[0]
+        const fallbackRoot = rootTopics[0] ?? newAssistant.topics?.[0]
+        const newTopic = fallbackRoot !== undefined ? recallLastViewedBranch(fallbackRoot, newAssistant.topics ?? []) : undefined
         _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        if (newTopic !== undefined) recordTopicView(newTopic, newAssistant.topics ?? [])
       })
     },
-    [_setActiveTopic, activeAssistant?.id]
+    [_setActiveTopic, activeAssistant?.id, recordTopicView]
   )
 
   const setActiveTopic = useCallback(
@@ -95,9 +112,10 @@ const HomePage: FC = () => {
       startTransition(() => {
         _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
         dispatch(newMessagesActions.setTopicFulfilled({ topicId: newTopic.id, fulfilled: false }))
+        recordTopicView(newTopic)
       })
     },
-    [_setActiveTopic, dispatch]
+    [_setActiveTopic, dispatch, recordTopicView]
   )
 
   useEffect(() => {
