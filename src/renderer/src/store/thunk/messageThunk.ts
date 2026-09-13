@@ -162,7 +162,7 @@ export const cleanupMultipleBlocks = (dispatch: AppDispatch, blockIds: string[])
         (block) =>
           block &&
           (block.type === MessageBlockType.FILE || block.type === MessageBlockType.IMAGE) &&
-          (block as FileMessageBlock | ImageMessageBlock).file !== undefined
+          block.file !== undefined
       )
       .map((block) => (block as FileMessageBlock | ImageMessageBlock).file)
       .filter((file): file is FileMetadata => file !== undefined)
@@ -299,7 +299,9 @@ const fetchAndProcessAssistantResponseImpl = async (
         reasoningEffort: kernelChat.assistantReasoningLevel(assistant),
         builtinTools: BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false),
         externalTools:
-          topic?.workMode === true ? EXTERNAL_TOOL_IDS.filter((toolId) => assistant.externalTools?.[toolId] !== false) : [],
+          topic?.workMode === true
+            ? EXTERNAL_TOOL_IDS.filter((toolId) => assistant.externalTools?.[toolId] !== false)
+            : [],
         tier: assistant.workMode?.approval
       })
     } else {

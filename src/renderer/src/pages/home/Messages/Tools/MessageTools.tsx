@@ -8,15 +8,14 @@
  */
 import type { ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus } from '@renderer/types/newMessage'
-
 import React from 'react'
 import styled from 'styled-components'
 
+import { useToolApproval } from './hooks/useToolApproval'
 import ToolApprovalActionsComponent from './ToolApprovalActions'
 import ToolContent from './ToolContent'
-import ToolHeader from './ToolHeader'
-import { useToolApproval } from './hooks/useToolApproval'
 import { mapBlockStatusToToolStatus } from './toolDisplay'
+import ToolHeader from './ToolHeader'
 
 interface Props {
   block: ToolMessageBlock
@@ -65,7 +64,12 @@ const MessageTools: React.FC<Props> = ({ block, variant = 'standalone' }) => {
   if (variant === 'inline') {
     return (
       <InlineCard>
-        <ToolHeader block={block} variant="collapse-label" status={status} hasError={block.status === MessageBlockStatus.ERROR} />
+        <ToolHeader
+          block={block}
+          variant="collapse-label"
+          status={status}
+          hasError={block.status === MessageBlockStatus.ERROR}
+        />
         <ToolContent block={block} />
       </InlineCard>
     )

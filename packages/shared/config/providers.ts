@@ -29,11 +29,6 @@ export const SILICON_ANTHROPIC_COMPATIBLE_MODELS: readonly string[] = [
   'baidu/ERNIE-4.5-300B-A47B'
 ]
 
-/**
- * Creates a Set for efficient lookup of silicon Anthropic-compatible model IDs.
- */
-const SILICON_ANTHROPIC_COMPATIBLE_MODEL_SET = new Set(SILICON_ANTHROPIC_COMPATIBLE_MODELS)
-
 export const CLAUDE_OFFICIAL_SUPPORTED_PROVIDERS = [
   'deepseek',
   'moonshot',

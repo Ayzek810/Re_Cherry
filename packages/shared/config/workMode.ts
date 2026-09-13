@@ -11,3 +11,11 @@
 export const WORK_MODE_APPROVAL_TIERS = ['read-only', 'workspace-write', 'danger-full-access'] as const
 
 export type WorkModeApprovalTier = (typeof WORK_MODE_APPROVAL_TIERS)[number]
+
+/**
+ * 运行时校验 + 类型守卫二合一：IPC 载荷等不可信边界收到 string 档位后，
+ * 用它窄化为 WorkModeApprovalTier（includes 调用不会产生类型守卫，勿散写）。
+ */
+export function isWorkModeApprovalTier(value: unknown): value is WorkModeApprovalTier {
+  return typeof value === 'string' && (WORK_MODE_APPROVAL_TIERS as readonly string[]).includes(value)
+}

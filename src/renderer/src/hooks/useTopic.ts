@@ -25,7 +25,9 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
   const [activeTopic, setActiveTopic] = useState(
     topic ||
       _activeTopic ||
-      (rootTopics[0] !== undefined ? recallLastViewedBranch(rootTopics[0], assistant?.topics ?? []) : assistant?.topics?.[0])
+      (rootTopics[0] !== undefined
+        ? recallLastViewedBranch(rootTopics[0], assistant?.topics ?? [])
+        : assistant?.topics?.[0])
   )
 
   _activeTopic = activeTopic

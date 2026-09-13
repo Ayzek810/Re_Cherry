@@ -2,8 +2,7 @@
  * dsh 工具名 → 图标与文案的统一映射（内核真实工具名：read / write / pwsh / ask_user_question …）。
  * 统一工具卡（MessageTools）与 ToolHeader 共用；未登记的名字回退为扳手图标 + 原名。
  */
-import type { ReactNode } from 'react'
-
+import { MessageBlockStatus } from '@renderer/types/newMessage'
 import {
   FileEdit,
   FileSearch,
@@ -14,8 +13,7 @@ import {
   SquareTerminal,
   Wrench
 } from 'lucide-react'
-
-import { MessageBlockStatus } from '@renderer/types/newMessage'
+import type { ReactNode } from 'react'
 
 import type { ToolStatus } from './MessageAgentTools/GenericTools'
 

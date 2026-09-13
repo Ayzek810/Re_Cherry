@@ -41,6 +41,9 @@ patchedDependencies:
   libsql@0.4.7:
     hash: f3ec6f70dc903a98a92db446653d30dcd6586439c80c4ba0703e9da84d8d9a78
     path: patches/libsql-npm-0.4.7-444e260fb1.patch
+  node-pty@1.2.0-beta.15:
+    hash: cedc5597c1a4b2d1f2e97949d6d5589a86ec022326a34bd36e8a6679f5c02caf
+    path: patches/node-pty@1.2.0-beta.15.patch
 
 importers:
 
@@ -10810,7 +10813,7 @@ snapshots:
       '@deepseek-ai/dsh-subprocess': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.2))
       '@deepseek-ai/dsh-timeout': 0.1.1-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.2))
       koffi: 3.2.1
-      node-pty: 1.2.0-beta.15
+      node-pty: 1.2.0-beta.15(patch_hash=cedc5597c1a4b2d1f2e97949d6d5589a86ec022326a34bd36e8a6679f5c02caf)
 
   '@deepseek-ai/dsh-subprocess@0.1.1-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.1-rc.2(@deepseek-ai/cordis@4.0.2))':
     dependencies:
@@ -17662,7 +17665,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  node-pty@1.2.0-beta.15:
+  node-pty@1.2.0-beta.15(patch_hash=cedc5597c1a4b2d1f2e97949d6d5589a86ec022326a34bd36e8a6679f5c02caf):
     dependencies:
       node-addon-api: 7.1.1
 

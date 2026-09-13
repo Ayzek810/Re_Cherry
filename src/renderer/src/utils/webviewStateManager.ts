@@ -72,4 +72,3 @@ export const onWebviewStateChange = (appId: string, listener: WebviewStateListen
     if (listeners.size === 0) appListeners.delete(appId)
   }
 }
-

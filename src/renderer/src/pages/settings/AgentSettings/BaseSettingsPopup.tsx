@@ -46,7 +46,6 @@ export const BaseSettingsPopup: React.FC<BaseSettingsPopupProps> = ({
       onOk={handleClose}
       onCancel={handleClose}
       afterClose={afterClose}
-      maskClosable={menu !== 'prompt'}
       footer={null}
       title={titleContent}
       transitionName="animation-move-down"

@@ -1,4 +1,3 @@
-import { loggerService } from '@logger'
 import type {
   ExternalToolResult,
   GenerateImageResponse,
@@ -8,9 +7,7 @@ import type {
 } from '@renderer/types'
 import type { ProviderMetadata } from '@renderer/types/chunk'
 import type { Response } from '@renderer/types/newMessage'
-import { AssistantMessageStatus } from '@renderer/types/newMessage'
-
-const logger = loggerService.withContext('StreamProcessingService')
+import type { AssistantMessageStatus } from '@renderer/types/newMessage'
 
 // Define the structure for the callbacks that the StreamProcessor will invoke
 export interface StreamProcessorCallbacks {
@@ -60,4 +57,3 @@ export interface StreamProcessorCallbacks {
   // Called when raw data is received (e.g., session_id updates from Agent SDK)
   onRawData?: (content: unknown, metadata?: Record<string, any>) => void
 }
-

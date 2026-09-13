@@ -64,7 +64,12 @@ export function useTopicManageMode(): TopicManageModeState {
   }
 }
 
-import { listRootTopics, loadKernelTopicRootIds, recallLastViewedBranch, shouldShowTopicRow } from '@renderer/utils/topicBranch'
+import {
+  listRootTopics,
+  loadKernelTopicRootIds,
+  recallLastViewedBranch,
+  shouldShowTopicRow
+} from '@renderer/utils/topicBranch'
 
 interface TopicManagePanelProps {
   assistant: Assistant
@@ -109,9 +114,10 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   // Topics that can be selected (non-pinned, and filtered when in search mode)
   const selectableTopics = useMemo(() => {
     const baseTopics = isSearchMode ? filteredTopics : listRootTopics(assistant.topics ?? [])
-    const known = kernelRoots === null ? baseTopics : baseTopics.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
+    const known =
+      kernelRoots === null ? baseTopics : baseTopics.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
     return known.filter((topic) => !topic.pinned)
-  }, [assistant.topics, filteredTopics, isSearchMode])
+  }, [assistant.topics, filteredTopics, isSearchMode, kernelRoots])
 
   // Check if all selectable topics are selected
   const isAllSelected = useMemo(() => {

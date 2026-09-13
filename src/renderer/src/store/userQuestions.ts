@@ -4,7 +4,6 @@
  */
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
-
 import type { KernelQuestionRequestPayload } from '@shared/interaction/types'
 
 export type UserQuestionEntry = KernelQuestionRequestPayload

@@ -4,9 +4,10 @@
  * 唯一差异：execute 把 exec.callId 带进 ctx.userQuestions.ask 的请求对象（上游 provider 契约没有该
  * 字段，服务原样透传请求对象；渲染层凭 callId 把问答 UI 挂到对应的工具卡上）。
  */
+import '@deepseek-ai/dsh-user-questions'
+
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import '@deepseek-ai/dsh-user-questions'
 
 export const name = 'tool-ask-user'
 export const inject = ['tools', 'userQuestions']

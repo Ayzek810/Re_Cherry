@@ -3,26 +3,26 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // 类型副作用导入：加载 dsh-session-title 对 SessionEventMap 的声明合并（session/title 事件）
 import type {} from '@deepseek-ai/dsh-session-title'
 import { loggerService } from '@logger'
+import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
 import store from '@renderer/store'
 import { updateTopic, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { toolPermissionsActions } from '@renderer/store/toolPermissions'
-import { userQuestionsActions, type UserQuestionEntry } from '@renderer/store/userQuestions'
+import { type UserQuestionEntry, userQuestionsActions } from '@renderer/store/userQuestions'
 import type { Assistant, Model } from '@renderer/types'
 import {
   AssistantMessageStatus,
-  type MainTextMessageBlock,
   type Message,
   type MessageBlock,
   MessageBlockStatus,
   MessageBlockType,
   type ToolMessageBlock
 } from '@renderer/types/newMessage'
-import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
 import { renameAbortController } from '@renderer/utils/abortController'
 import { createMainTextBlock, createThinkingBlock, createToolBlock } from '@renderer/utils/messageUtils/create'
 import { kernelReasoningEffortsForModel, kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
+import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
 const logger = loggerService.withContext('KernelChat')
 
@@ -141,10 +141,7 @@ export interface DestroyTurnsResponse {
 }
 
 /** 消息级删除：受影响集合/物理/焦点全部由内核一次事务算完（kernel/topics.ts destroyTurns）。 */
-export async function destroyTurnsInKernel(
-  topicId: string,
-  anchorUserSeqs: number[]
-): Promise<DestroyTurnsResponse> {
+export async function destroyTurnsInKernel(topicId: string, anchorUserSeqs: number[]): Promise<DestroyTurnsResponse> {
   return (await window.api.dshTopicDestroyTurns(topicId, anchorUserSeqs)) as DestroyTurnsResponse
 }
 
@@ -273,7 +270,7 @@ export async function sendToKernel(
     reasoningEffort?: string
     builtinTools?: string[]
     externalTools?: string[]
-    tier?: string
+    tier?: WorkModeApprovalTier
   }
 ): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)
@@ -484,10 +481,7 @@ function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void
  * 回合状态保留（不删 streams / pendingStubs）——同一轮的后续 step 继续往同一条消息归并，
  * 直到 turn/end 才整体收尾。这是"修掉直播丢内容"的关键（B8：一轮 = 一条回答）。
  */
-function finalizeStep(
-  topicId: string,
-  event: Extract<SessionEvent, { type: 'assistant/message' }>
-): void {
+function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'assistant/message' }>): void {
   const state = streams.get(topicId)
   if (state === undefined) return
   const data = event.data
@@ -582,8 +576,7 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
     return
   }
   const text = (resultBlock.content ?? [])
-    .filter((b) => b.type === 'text' && typeof b.text === 'string')
-    .map((b) => b.text as string)
+    .flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []))
     .join('\n')
   const failed = resultBlock.isError === true || event.data.error !== undefined
   store.dispatch(
@@ -608,7 +601,11 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
     logger.error(`kernelChat: turn failed for topic "${topicId}": ${reason.error?.message ?? 'unknown'}`)
   }
   // 只收尾仍处于流式/进行中的块（已终态的块保持其成功/失败原样）
-  const settleStatus = failed ? MessageBlockStatus.ERROR : aborted ? MessageBlockStatus.PAUSED : MessageBlockStatus.SUCCESS
+  const settleStatus = failed
+    ? MessageBlockStatus.ERROR
+    : aborted
+      ? MessageBlockStatus.PAUSED
+      : MessageBlockStatus.SUCCESS
   const entities = store.getState().messageBlocks.entities
   for (const blockId of state.blockIds) {
     const block = entities[blockId]
@@ -790,12 +787,13 @@ function projectEventsToMessages(
         if (resultBlock === undefined) break
         const toolBlock = reply.toolBlocks.get(resultBlock.toolCallId)
         if (toolBlock === undefined) {
-          logger.warn(`kernelChat: tool result without a tracked call (${resultBlock.toolCallId}) in topic "${topicId}"`)
+          logger.warn(
+            `kernelChat: tool result without a tracked call (${resultBlock.toolCallId}) in topic "${topicId}"`
+          )
           break
         }
         const text = (resultBlock.content ?? [])
-          .filter((b) => b.type === 'text' && typeof b.text === 'string')
-          .map((b) => b.text as string)
+          .flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []))
           .join('\n')
         const failed = resultBlock.isError === true || event.data.error !== undefined
         toolBlock.content = text
@@ -868,7 +866,7 @@ export function extractTextFromUserMessage(message: Message): string {
   for (const blockId of blockIds) {
     const block = state.messageBlocks.entities[blockId]
     if (block !== undefined && block.type === MessageBlockType.MAIN_TEXT) {
-      texts.push((block as MainTextMessageBlock).content)
+      texts.push(block.content)
     }
   }
   return texts.join('\n')

@@ -1,5 +1,5 @@
-import { updateTopic } from '@renderer/store/assistants'
 import store, { useAppDispatch, useAppSelector } from '@renderer/store'
+import { updateTopic } from '@renderer/store/assistants'
 import type { Topic } from '@renderer/types'
 import { Switch, Tooltip } from 'antd'
 import type { FC } from 'react'
@@ -30,10 +30,11 @@ const WorkModeSwitch: FC<Props> = ({ assistantId, topic: topicProp }) => {
   const topicId = topicProp.id
 
   // 话题开关镜像：undefined = 未拨过（未持久化状态，可按助手默认播种）
-  const mirror = useAppSelector((state) =>
-    state.assistants.assistants
-      .find((assistant) => assistant.id === assistantId)
-      ?.topics.find((topicItem) => topicItem.id === topicId)?.workMode
+  const mirror = useAppSelector(
+    (state) =>
+      state.assistants.assistants
+        .find((assistant) => assistant.id === assistantId)
+        ?.topics.find((topicItem) => topicItem.id === topicId)?.workMode
   )
   const defaultEnabled = useAppSelector(
     (state) => state.assistants.assistants.find((assistant) => assistant.id === assistantId)?.workMode?.defaultEnabled

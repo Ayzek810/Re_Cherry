@@ -8,7 +8,6 @@ import { setExportState } from '@renderer/store/runtime'
 import type { Topic } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import { removeSpecialCharactersForFileName } from '@renderer/utils/file'
-import { captureScrollableAsBlob, captureScrollableAsDataURL } from '@renderer/utils/image'
 import { convertMathFormula, markdownToPlainText } from '@renderer/utils/markdown'
 import { getCitationContent, getMainTextContent, getThinkingContent } from '@renderer/utils/messageUtils/find'
 import { markdownToBlocks } from '@tryfabric/martian'
@@ -745,51 +744,6 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
   }
 }
 
-/**
- * 生成Obsidian文件名,源自 Obsidian  Web Clipper 官方实现,修改了一些细节
- * @param fileName
- * @returns
- */
-function transformObsidianFileName(fileName: string): string {
-  const platform = window.navigator.userAgent
-  const isWin = /win/i.test(platform)
-  const isMac = /mac/i.test(platform)
-
-  // 删除Obsidian 全平台无效字符
-  let sanitized = fileName.replace(/[#|\\^\\[\]]/g, '')
-
-  if (isWin) {
-    // Windows 的清理
-    sanitized = sanitized
-      .replace(/[<>:"\\/\\|?*]/g, '') // 移除无效字符
-      .replace(/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i, '_$1$2') // 避免保留名称
-      .replace(/[\s.]+$/, '') // 移除结尾的空格和句点
-  } else if (isMac) {
-    // Mac 的清理
-    sanitized = sanitized
-      .replace(/[<>:"\\/\\|?*]/g, '') // 移除无效字符
-      .replace(/^\./, '_') // 避免以句点开头
-  } else {
-    // Linux 或其他系统
-    sanitized = sanitized
-      .replace(/[<>:"\\/\\|?*]/g, '') // 移除无效字符
-      .replace(/^\./, '_') // 避免以句点开头
-  }
-
-  // 所有平台的通用操作
-  sanitized = sanitized
-    .replace(/^\.+/, '') // 移除开头的句点
-    .trim() // 移除前后空格
-    .slice(0, 245) // 截断为 245 个字符，留出空间以追加 ' 1.md'
-
-  // 确保文件名不为空
-  if (sanitized.length === 0) {
-    sanitized = 'Untitled'
-  }
-
-  return sanitized
-}
-
 export const exportMarkdownToJoplin = async (
   title: string,
   contentOrMessages: string | Message | Message[]
@@ -966,66 +920,3 @@ async function createSiyuanDoc(
 
   return data.data
 }
-
-const exportNoteAsMarkdown = async (noteName: string, content: string): Promise<void> => {
-  const markdown = `# ${noteName}\n\n${content}`
-  const fileName = removeSpecialCharactersForFileName(noteName) + '.md'
-  const result = await window.api.file.save(fileName, markdown)
-  if (result) {
-    window.toast.success(i18n.t('message.success.markdown.export.specified'))
-  }
-}
-
-const getScrollableElement = (): HTMLElement | null => {
-  const notesPage = document.querySelector('#notes-page')
-  if (!notesPage) return null
-
-  const allDivs = notesPage.querySelectorAll('div')
-  for (const div of Array.from(allDivs)) {
-    const style = window.getComputedStyle(div)
-    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-      if (div.querySelector('.ProseMirror')) {
-        return div as HTMLElement
-      }
-    }
-  }
-  return null
-}
-
-const getScrollableRef = (): { current: HTMLElement } | null => {
-  const element = getScrollableElement()
-  if (!element) {
-    window.toast.warning(i18n.t('notes.no_content_to_copy'))
-    return null
-  }
-  return { current: element }
-}
-
-const exportNoteAsImageToClipboard = async (): Promise<void> => {
-  const scrollableRef = getScrollableRef()
-  if (!scrollableRef) return
-
-  await captureScrollableAsBlob(scrollableRef, async (blob) => {
-    if (blob) {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      window.toast.success(i18n.t('common.copied'))
-    }
-  })
-}
-
-const exportNoteAsImageFile = async (noteName: string): Promise<void> => {
-  const scrollableRef = getScrollableRef()
-  if (!scrollableRef) return
-
-  const dataUrl = await captureScrollableAsDataURL(scrollableRef)
-  if (dataUrl) {
-    const fileName = removeSpecialCharactersForFileName(noteName)
-    await window.api.file.saveImage(fileName, dataUrl)
-  }
-}
-
-interface NoteExportOptions {
-  node: { name: string; externalPath: string }
-  platform: 'markdown' | 'docx' | 'notion' | 'yuque' | 'obsidian' | 'joplin' | 'siyuan' | 'copyImage' | 'exportImage'
-}
-

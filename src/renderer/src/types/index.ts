@@ -384,20 +384,8 @@ export enum ThemeMode {
   system = 'system'
 }
 
-/** 有限的UI语言 */
-export type LanguageVarious =
-  | 'zh-CN'
-  | 'zh-TW'
-  | 'de-DE'
-  | 'el-GR'
-  | 'en-US'
-  | 'es-ES'
-  | 'fr-FR'
-  | 'ja-JP'
-  | 'pt-PT'
-  | 'ro-RO'
-  | 'ru-RU'
-  | 'vi-VN'
+/** 有限的UI语言（v0.2.4-1 i18n 收敛为 zh-CN / en-US，其余语言包已删） */
+export type LanguageVarious = 'zh-CN' | 'en-US'
 
 export type CodeStyleVarious = 'auto' | string
 

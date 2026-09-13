@@ -1,8 +1,8 @@
 import type { Assistant } from '@renderer/types'
 import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
+import { Switch } from 'antd'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Switch } from 'antd'
 import styled from 'styled-components'
 
 import { SettingsContainer, SettingsItem, SettingsTitle } from '../shared'
@@ -36,7 +36,7 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
   const isEnabled = (map: Record<string, boolean> | undefined, toolId: string): boolean => map?.[toolId] !== false
 
   const handleToggle = (field: 'builtinTools' | 'externalTools', toolId: string, enabled: boolean) => {
-    updateAssistant({ [field]: { ...(assistant[field] ?? {}), [toolId]: enabled } })
+    updateAssistant({ [field]: { ...assistant[field], [toolId]: enabled } })
   }
 
   const renderToolGrid = (

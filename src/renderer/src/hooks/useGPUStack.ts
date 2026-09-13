@@ -1,4 +1,4 @@
-import store, { useAppSelector } from '@renderer/store'
+import { useAppSelector } from '@renderer/store'
 import { setGPUStackKeepAliveTime } from '@renderer/store/llm'
 import { useDispatch } from 'react-redux'
 
@@ -8,4 +8,3 @@ export function useGPUStackSettings() {
 
   return { ...settings, setKeepAliveTime: (time: number) => dispatch(setGPUStackKeepAliveTime(time)) }
 }
-

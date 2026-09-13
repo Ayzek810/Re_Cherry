@@ -78,7 +78,7 @@ export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: st
   let endSeedSeq: number | undefined
   if (seedSeqs.length > 0) {
     const below = seedSeqs.filter((seq) => seq < userMaxSeq)
-    endSeedSeq = below.length > 0 ? (below[below.length - 1] as number) : (seedSeqs[seedSeqs.length - 1] as number)
+    endSeedSeq = below.length > 0 ? below[below.length - 1] : seedSeqs[seedSeqs.length - 1]
   }
   let userBefore = 0
   const turns: CMUserTurn[] = []
@@ -266,13 +266,13 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
     for (let index = 0; index < session.turns.length; index += 1) {
       if (index < shared && parentChain?.[index] !== undefined) {
         // 复制轮：引用祖先 unit，不重复建节点
-        chain.push(parentChain[index] as CMPageUnit)
+        chain.push(parentChain[index])
         continue
       }
       let ownerUser: string
       if (index === shared && isRegenerate && parentChain !== undefined && parentChain[index] !== undefined) {
         // regenerate：提问并入祖先提问节点，回复挂在祖先提问下
-        ownerUser = (parentChain[index] as CMPageUnit).userId
+        ownerUser = parentChain[index].userId
       } else {
         ownerUser = session.id + ':u:' + index
         if (!isParallel) userOwnerOf.set(ownerUser, session.id)
@@ -292,9 +292,9 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
       // 链边：前一 unit 的最后回复（无回复则用前一提问）→ 本提问；仅源是回复节点时构成"提问页"
       // （parallel 会话的自有轮不产生链边 = 不占任何提问页）
       if (index > 0 && !isParallel) {
-        const prev = chain[index - 1] as CMPageUnit
+        const prev = chain[index - 1]
         if (prev.userId !== unit.userId) {
-          const source = prev.replyIds.length > 0 ? (prev.replyIds[prev.replyIds.length - 1] as string) : prev.userId
+          const source = prev.replyIds.length > 0 ? prev.replyIds[prev.replyIds.length - 1] : prev.userId
           if (source.indexOf(':a:') !== -1) {
             pushUnique(questionsOf, source, unit.userId)
             userPageParentOf.set(unit.userId, source)

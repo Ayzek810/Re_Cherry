@@ -5,7 +5,6 @@ import store from '@renderer/store'
 import { removeManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import type { FileMetadata } from '@renderer/types'
-import type { FileMessageBlock, ImageMessageBlock } from '@renderer/types/newMessage'
 import dayjs from 'dayjs'
 
 // 排序相关
@@ -56,11 +55,11 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
       .filter((block) => {
         if (!block) return false
         if (block.type === 'file' || block.type === 'image') {
-          return (block as FileMessageBlock | ImageMessageBlock).file?.id === fileId
+          return block.file?.id === fileId
         }
         return false
       })
-      .map((block) => block!.id)
+      .map((block) => block.id)
 
     if (relatedBlockIds.length === 0) {
       return

@@ -6,8 +6,12 @@
  * 默认实现仍是 topics.ts 的业务函数 —— 这里只建立服务 seam 与可替换边界，不做行为迁移。
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { loggerService } from '@logger'
+import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
+import type { DestroyTurnsResult, KernelTopic } from './topics'
 import {
   createTopic,
   deleteTopic,
@@ -31,9 +35,9 @@ const logger = loggerService.withContext('KernelAppServices')
 
 /** ctx.topicTree 服务面（结构性操作唯一出口；插件可整体替换默认实现）。 */
 export interface TopicTreeService {
-  listRoots: () => import('./topics').KernelTopic[]
-  listBranches: (rootTopicId: string) => import('./topics').KernelTopic[]
-  get: (id: string) => import('./topics').KernelTopic | undefined
+  listRoots: () => KernelTopic[]
+  listBranches: (rootTopicId: string) => KernelTopic[]
+  get: (id: string) => KernelTopic | undefined
   create: (input: {
     id: string
     name?: string
@@ -43,13 +47,13 @@ export interface TopicTreeService {
     systemPrompt?: string
     reasoningEffort?: string
     workingDir?: string
-  }) => Promise<import('./topics').KernelTopic>
-  rename: (id: string, name: string) => Promise<import('./topics').KernelTopic>
-  open: (id: string) => Promise<import('@deepseek-ai/dsh-agent').Agent>
+  }) => Promise<KernelTopic>
+  rename: (id: string, name: string) => Promise<KernelTopic>
+  open: (id: string) => Promise<Agent>
   delete: (id: string) => Promise<void>
   /** 消息级删除引擎：锚点集合计算 + 物理截断/清盘 + 焦点推导，一次事务内核权威。 */
-  destroyTurns: (topicId: string, anchorUserSeqs: number[]) => Promise<import('./topics').DestroyTurnsResult>
-  fork: (sourceTopicId: string, anchorUserMessageSeq: number) => Promise<import('./topics').KernelTopic>
+  destroyTurns: (topicId: string, anchorUserSeqs: number[]) => Promise<DestroyTurnsResult>
+  fork: (sourceTopicId: string, anchorUserMessageSeq: number) => Promise<KernelTopic>
   send: (
     id: string,
     text: string,
@@ -57,12 +61,12 @@ export interface TopicTreeService {
       reasoningEffort?: string
       builtinTools?: string[]
       externalTools?: string[]
-      tier?: string
+      tier?: WorkModeApprovalTier
     }
   ) => Promise<void>
   stop: (id: string) => void
   isRunning: (id: string) => boolean
-  events: (id: string) => readonly import('@deepseek-ai/dsh-session').SessionEvent[]
+  events: (id: string) => readonly SessionEvent[]
 }
 
 /** ctx.sessionGC 服务面（物理清盘；插件可接管）。 */
@@ -109,7 +113,7 @@ export function registerAppServiceSeams(ctx: Context): void {
         reasoningEffort?: string
         builtinTools?: string[]
         externalTools?: string[]
-        tier?: string
+        tier?: WorkModeApprovalTier
       }
     ) => sendMessage(ctx, id, text, options),
     stop: (id: string) => stopTopic(ctx, id),

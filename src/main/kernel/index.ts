@@ -1,11 +1,11 @@
-import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import * as fsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
+import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import LlmRuntime, { BlockAssembler, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
@@ -17,24 +17,22 @@ import SessionStore from '@deepseek-ai/dsh-session'
 import SqliteSessionPersistence from '@deepseek-ai/dsh-session-persistence-sqlite'
 import SessionTitleService from '@deepseek-ai/dsh-session-title'
 import { registerSessionTitleLlmProvider } from '@deepseek-ai/dsh-session-title-llm'
-import * as shellEnv from '@deepseek-ai/dsh-shell-env'
 import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
+import * as shellEnv from '@deepseek-ai/dsh-shell-env'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { loggerService } from '@logger'
-import { WORK_MODE_APPROVAL_TIERS } from '@shared/config/workMode'
+import { isWorkModeApprovalTier, type WorkModeApprovalTier } from '@shared/config/workMode'
+import type { KernelApprovalDecisionPayload, KernelQuestionAnswerPayload } from '@shared/interaction/types'
 import { IpcChannel } from '@shared/IpcChannel'
-import type {
-  KernelApprovalDecisionPayload,
-  KernelQuestionAnswerPayload
-} from '@shared/interaction/types'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { CherryCredentialProvider } from './credentials'
-import { KernelInteractionHub, registerInteractionHost } from './interaction'
+import type { KernelInteractionHub } from './interaction'
+import { registerInteractionHost } from './interaction'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { clearLiveHandles, getTopic, initTopics, listTopicBranches, listTopics, searchSessions } from './topics'
@@ -481,14 +479,14 @@ function registerKernelIpc(): void {
         reasoningEffort?: string
         builtinTools?: string[]
         externalTools?: string[]
-        tier?: string
+        tier?: WorkModeApprovalTier
       }
     ) => {
       const cleanOptions: {
         reasoningEffort?: string
         builtinTools?: string[]
         externalTools?: string[]
-        tier?: string
+        tier?: WorkModeApprovalTier
       } = {}
       if (options?.reasoningEffort !== undefined) {
         if (typeof options.reasoningEffort !== 'string') {
@@ -497,7 +495,7 @@ function registerKernelIpc(): void {
         cleanOptions.reasoningEffort = options.reasoningEffort
       }
       if (options?.tier !== undefined) {
-        if (typeof options.tier !== 'string' || !WORK_MODE_APPROVAL_TIERS.includes(options.tier)) {
+        if (!isWorkModeApprovalTier(options.tier)) {
           throw new Error('kernel: invalid tier in topic send options')
         }
         cleanOptions.tier = options.tier
@@ -509,7 +507,10 @@ function registerKernelIpc(): void {
         cleanOptions.builtinTools = options.builtinTools
       }
       if (options?.externalTools !== undefined) {
-        if (!Array.isArray(options.externalTools) || options.externalTools.some((toolId) => typeof toolId !== 'string')) {
+        if (
+          !Array.isArray(options.externalTools) ||
+          options.externalTools.some((toolId) => typeof toolId !== 'string')
+        ) {
           throw new Error('kernel: invalid externalTools in topic send options')
         }
         cleanOptions.externalTools = options.externalTools

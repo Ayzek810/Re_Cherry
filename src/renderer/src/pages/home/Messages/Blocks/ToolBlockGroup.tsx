@@ -221,7 +221,9 @@ const WaitingToolHeader = React.memo(({ block }: WaitingToolHeaderProps) => {
   return (
     <HeaderWithActions>
       <ToolHeader block={block} variant="collapse-label" status={effectiveStatus} />
-      {!isQuestion && (approval.isWaiting || approval.isExecuting) && <ToolApprovalActionsComponent {...approval} compact />}
+      {!isQuestion && (approval.isWaiting || approval.isExecuting) && (
+        <ToolApprovalActionsComponent {...approval} compact />
+      )}
     </HeaderWithActions>
   )
 })
@@ -265,7 +267,9 @@ const GroupHeaderContent = React.memo(({ blocks, allCompleted }: GroupHeaderCont
   }
 
   // Find blocks actually waiting for approval (using effective status)
-  const waitingBlocks = toolBlocks.filter((block) => getBlockEffectiveStatus(block, agentPermissions, pendingQuestions) === 'waiting')
+  const waitingBlocks = toolBlocks.filter(
+    (block) => getBlockEffectiveStatus(block, agentPermissions, pendingQuestions) === 'waiting'
+  )
 
   // Prioritize showing waiting blocks that need approval
   const lastWaitingBlock = waitingBlocks[waitingBlocks.length - 1]

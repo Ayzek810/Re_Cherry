@@ -1,4 +1,7 @@
+import { loggerService } from '@logger'
 import { type Topic, TopicType } from '@renderer/types'
+
+const logger = loggerService.withContext('topicBranch')
 
 /** 是否为根话题（普通话题，非 fork 分支）。 */
 export function isRootTopic(topic: Topic): boolean {
@@ -33,7 +36,8 @@ export function recallLastViewedBranch(root: Topic, allTopics: Topic[]): Topic {
 }
 
 /** 沿内核血缘（dshTopicGet.parentTopicId）求某会话的家族根 id；失败返回 null。 */
-export async function kernelRootTopicId(topicId: string): Promise<string | null> {  const seen = new Set<string>()
+export async function kernelRootTopicId(topicId: string): Promise<string | null> {
+  const seen = new Set<string>()
   let id = topicId
   while (!seen.has(id)) {
     seen.add(id)
@@ -99,7 +103,10 @@ export async function materializeKernelTopicRow(params: {
       created: true
     }
   } catch (error) {
-    console.warn('[topicBranch] failed to materialize kernel topic row ' + sessionId, error)
+    logger.warn(
+      '[topicBranch] failed to materialize kernel topic row ' + sessionId,
+      error instanceof Error ? error : new Error(String(error))
+    )
     return null
   }
 }
@@ -117,7 +124,10 @@ export function loadKernelTopicRootIds(): Promise<Set<string> | null> {
       if (!topics) return null
       return new Set(topics.map((topic) => topic.id))
     } catch (error) {
-      console.warn('[topicBranch] failed to list kernel topics', error)
+      logger.warn(
+        '[topicBranch] failed to list kernel topics',
+        error instanceof Error ? error : new Error(String(error))
+      )
       return null
     }
   })()
@@ -133,4 +143,3 @@ export function shouldShowTopicRow(topic: Topic, kernelRoots: Set<string> | null
   if (kernelRoots.has(topic.id)) return true
   return new Date(topic.updatedAt).getTime() >= BOOT_TIME
 }
-

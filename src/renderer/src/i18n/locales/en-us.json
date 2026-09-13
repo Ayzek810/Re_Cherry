@@ -1192,6 +1192,8 @@
       "rag_failed": "RAG failed, returning empty results..."
     },
     "workMode": {
+      "defaultWorkspace": "Default workspace",
+      "defaultWorkspaceHint": "No custom working directory; using the .agent fence under the data folder. Click to configure it on the permission mode page.",
       "disabled": "Work mode off",
       "enabled": "Work mode on",
       "toggle": "Work mode"
@@ -2480,14 +2482,14 @@
     "quickAssistant": {
       "click_tray_to_show": "Click the tray icon to start",
       "enable_quick_assistant": "Enable Quick Assistant",
+      "model_description": "Model used by the quick assistant, independent from chat and topic-naming models.",
+      "model_label": "Model",
+      "prompt_description": "System prompt for the quick assistant. Leave empty to use the model default behavior.",
+      "prompt_label": "Prompt",
+      "prompt_placeholder": "Enter the quick assistant system prompt…",
       "read_clipboard_at_startup": "Read clipboard at startup",
       "title": "Quick Assistant",
-      "use_shortcut_to_show": "Right-click the tray icon or use shortcuts to start",
-      "model_label": "Model",
-      "model_description": "Model used by the quick assistant, independent from chat and topic-naming models.",
-      "prompt_label": "Prompt",
-      "prompt_description": "System prompt for the quick assistant. Leave empty to use the model default behavior.",
-      "prompt_placeholder": "Enter the quick assistant system prompt…"
+      "use_shortcut_to_show": "Right-click the tray icon or use shortcuts to start"
     },
     "quickPanel": {
       "back": "Back",
@@ -2758,11 +2760,6 @@
       "title": "Page Zoom"
     }
   },
-  "tray": {
-    "quit": "Quit",
-    "show_mini_window": "Quick Assistant",
-    "show_window": "Show Window"
-  },
   "title": {
     "apps": "Apps",
     "files": "Files",
@@ -2785,6 +2782,11 @@
     "tag": "Tag",
     "tokenUsage": "Token Usage",
     "traceWindow": "Call Chain Window"
+  },
+  "tray": {
+    "quit": "Quit",
+    "show_mini_window": "Quick Assistant",
+    "show_window": "Show Window"
   },
   "update": {
     "install": "Install",

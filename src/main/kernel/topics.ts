@@ -2,23 +2,23 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
-import { effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
+import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import { type SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import * as toolFs from '@deepseek-ai/dsh-tool-fs'
 import * as toolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
 import * as toolJobs from '@deepseek-ai/dsh-tool-jobs'
 import * as toolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import * as toolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
-import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
-import { type SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import { effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { loggerService } from '@logger'
 import { EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
-import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
 import { KERNEL_REASONING_LEVELS, type KernelReasoningLevel } from '@shared/config/reasoning'
+import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
 import { app } from 'electron'
 
 import * as askUserTool from './askUserTool'
@@ -85,11 +85,11 @@ const mountedTools = new Map<string, MountedToolsState>()
  * BUILTIN_TOOL_IDS / EXTERNAL_TOOL_IDS）→ 挂载单元。一个挂载单元可以在插件里展开成
  * 任意数量的工具（如 fs 展开 read/write/edit/read_image），挂载逻辑只认 id 不认工具名。
  */
-const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => Promise<unknown> }> = [
+const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
   { id: 'ask_user_question', mount: (agentCtx) => agentCtx.plugin(askUserTool) }
 ]
 
-const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => Promise<unknown> }> = [
+const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
   // tool-fs-search 的 sampleOverCapGlobResults 是必填无默认配置（schema fail-loud），
   // 不传会在 resume 重建时 ValidationError；true = glob 超限时采样截断并提示（而非报错）。
   { id: 'fs', mount: (agentCtx) => agentCtx.plugin(toolFs) },
@@ -130,7 +130,9 @@ function buildToolFaceSection(builtins: string[], externals: string[]): string {
   if (enabled.length > 0) {
     lines.push(
       '- File and command tools available this turn:',
-      ...enabled.flatMap((id) => (EXTERNAL_TOOL_CAPABILITIES[id] === undefined ? [] : [`  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`]))
+      ...enabled.flatMap((id) =>
+        EXTERNAL_TOOL_CAPABILITIES[id] === undefined ? [] : [`  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`]
+      )
     )
   } else {
     lines.push(
@@ -140,7 +142,7 @@ function buildToolFaceSection(builtins: string[], externals: string[]): string {
   }
   lines.push(
     '- Never include tool-call syntax or markup in your reply text: it is never executed and only pollutes the answer. To call a tool, issue a real tool call.',
-    '- When you are about to call one or more tools, first include one short sentence (in the user\'s language) explaining what you will do next.',
+    "- When you are about to call one or more tools, first include one short sentence (in the user's language) explaining what you will do next.",
     // 快照压制：RuntimeContextProjection 的注入消息（"Current runtime context" 开头的 user 角色
     // 消息）是内核状态标注，不是用户发言——真机实测模型会在元问题里把整段复述给用户看。
     // 要求遵守但沉默：状态已由本段与本轮 schema 表达，回复里不引用不复述不提及。
@@ -390,7 +392,9 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
       ? { reasoningEffort: existing.reasoningEffort }
       : {}),
     ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
-    ...(existing?.workingDir !== undefined && existing.workingDir.length > 0 ? { workingDir: existing.workingDir } : {}),
+    ...(existing?.workingDir !== undefined && existing.workingDir.length > 0
+      ? { workingDir: existing.workingDir }
+      : {}),
     ...(input.workingDir === undefined ? {} : { workingDir: input.workingDir }),
     // upsert 保留分支血缘（fork 子会话在每次发送前会被 createTopic 幂等更新）
     ...(existing?.parentTopicId !== undefined ? { parentTopicId: existing.parentTopicId } : {})
@@ -401,7 +405,6 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
   logger.info(`kernel: topic "${topic.id}" ready (${topic.provider}/${topic.model})`)
   return topic
 }
-
 
 /** 改名（用户显式重命名；自动标题回写走 session/event 监听）。 */
 export async function renameTopic(id: string, name: string): Promise<KernelTopic> {
@@ -438,7 +441,7 @@ export async function forkTopic(
   const sourceTopic = topics.get(sourceTopicId)
   if (sourceTopic === undefined) throw new Error(`kernel: source topic "${sourceTopicId}" not found`)
   const sourceAgent = await openTopic(ctx, sourceTopicId)
-  const events = sourceAgent.session.events as readonly SessionEvent[]
+  const events = sourceAgent.session.events
 
   const anchorIndex = events.findIndex((event) => event.type === 'user/message' && event.seq === anchorUserMessageSeq)
   if (anchorIndex === -1) {
@@ -668,9 +671,7 @@ export async function destroyTurns(
   if (!Array.isArray(anchorUserSeqs)) {
     throw new Error('kernel: destroyTurns requires an anchor user seq array')
   }
-  const anchors = [...new Set(anchorUserSeqs)]
-    .filter((seq) => Number.isInteger(seq) && seq >= 0)
-    .sort((a, b) => a - b)
+  const anchors = [...new Set(anchorUserSeqs)].filter((seq) => Number.isInteger(seq) && seq >= 0).sort((a, b) => a - b)
   if (anchors.length === 0) {
     throw new Error('kernel: destroyTurns requires at least one anchor user seq')
   }
@@ -703,7 +704,7 @@ export async function destroyTurns(
   // ---- 3. 活体日志对账：每个锚点必须是 owner 当前日志里的自有 user/message ----
   //       （日志若已被更早的删除截短，旧 seq 消失 → 视图过期，拒绝，待渲染层刷新重试。）
   const agent = await openTopic(ctx, owner.id)
-  const events = agent.session.events as readonly SessionEvent[]
+  const events = agent.session.events
   const cutoffs: number[] = []
   for (const anchor of anchors) {
     const anchorIndex = events.findIndex((event) => event.type === 'user/message' && event.seq === anchor)
@@ -771,7 +772,7 @@ export async function destroyTurns(
       surviving.sort((a, b) => a.t.createdAt - b.t.createdAt)
       let pick: SiblingEntry | undefined = surviving.find((entry) => entry.t.createdAt > owner.createdAt)
       if (pick === undefined && surviving.length > 0) {
-        pick = surviving[surviving.length - 1] as SiblingEntry
+        pick = surviving[surviving.length - 1]
       }
       focusTopicId = pick === undefined ? parentId : pick.t.id
     }
@@ -967,7 +968,7 @@ export function isTopicRunning(ctx: Context, id: string): boolean {
 }
 
 /** 取会话事件日志（打开话题后的初始渲染用）。 */
-export function sessionEvents(ctx: Context, id: string): readonly import('@deepseek-ai/dsh-session').SessionEvent[] {
+export function sessionEvents(ctx: Context, id: string): readonly SessionEvent[] {
   const agent = ctx.agents.get(SessionId(id))
   if (agent === undefined) throw new Error(`kernel: session "${id}" is not loaded`)
   return agent.session.events
@@ -997,7 +998,7 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
 
   for (const header of headers) {
     const topicName = getTopic(header.id)?.name ?? header.id
-    let events: readonly import('@deepseek-ai/dsh-session').SessionEvent[]
+    let events: readonly SessionEvent[]
     try {
       const inspection = await ctx.sessionPersistence.inspect(header.id)
       events = inspection.events
