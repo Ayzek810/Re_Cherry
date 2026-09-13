@@ -19,7 +19,7 @@ import { newMessagesActions } from '@renderer/store/newMessage'
 import { setGenerating } from '@renderer/store/runtime'
 import type { Assistant, Topic } from '@renderer/types'
 import { classNames, removeSpecialCharactersForFileName } from '@renderer/utils'
-import { listRootTopics, loadKernelTopicRootIds, shouldShowTopicRow } from '@renderer/utils/topicBranch'
+import { listRootTopics, loadKernelTopicRootIds, recallLastViewedBranch, shouldShowTopicRow } from '@renderer/utils/topicBranch'
 import { copyTopicAsMarkdown, copyTopicAsPlainText } from '@renderer/utils/copy'
 import {
   exportMarkdownToJoplin,
@@ -241,9 +241,10 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const onSwitchTopic = useCallback(
     async (topic: Topic) => {
       // await modelGenerating()
-      setActiveTopic(topic)
+      // 家族浏览记忆：进话题时恢复上次浏览的分支（无记忆/分支已删 → 落回点击的根话题）
+      setActiveTopic(recallLastViewedBranch(topic, assistant?.topics ?? []))
     },
-    [setActiveTopic]
+    [setActiveTopic, assistant]
   )
 
   const exportMenuOptions = useSelector((state: RootState) => state.settings.exportMenuOptions)

@@ -226,7 +226,12 @@ const fetchAndProcessAssistantResponseImpl = async (
   origAssistant: Assistant,
   assistantMessage: Message // Pass the prepared assistant message (new or reset)
 ) => {
-  const topic = origAssistant.topics.find((t) => t.id === topicId)
+  // 话题行从 store 现取：调用方（分支重发/多模型队列）持有的 assistant 引用可能早于
+  // addTopic/updateTopic——用闭包旧引用查找会拿不到新分支话题，workMode/prompt 全部
+  // 丢失（外置工具清单与档位随之恒空）。origAssistant 保留给 prompt 基底（多模型场景
+  // 的 model 覆盖在调用方变体上，不能被 store 值覆盖回去）。
+  const storedAssistant = getState().assistants.assistants.find((a) => a.id === origAssistant.id)
+  const topic = (storedAssistant ?? origAssistant).topics.find((t) => t.id === topicId)
   const assistant = topic?.prompt
     ? { ...origAssistant, prompt: `${origAssistant.prompt}\n${topic.prompt}` }
     : origAssistant

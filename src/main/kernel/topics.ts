@@ -138,7 +138,11 @@ function buildToolFaceSection(builtins: string[], externals: string[]): string {
   }
   lines.push(
     '- Never include tool-call syntax or markup in your reply text: it is never executed and only pollutes the answer. To call a tool, issue a real tool call.',
-    '- When you are about to call one or more tools, first include one short sentence (in the user\'s language) explaining what you will do next.'
+    '- When you are about to call one or more tools, first include one short sentence (in the user\'s language) explaining what you will do next.',
+    // 快照压制：RuntimeContextProjection 的注入消息（"Current runtime context" 开头的 user 角色
+    // 消息）是内核状态标注，不是用户发言——真机实测模型会在元问题里把整段复述给用户看。
+    // 要求遵守但沉默：状态已由本段与本轮 schema 表达，回复里不引用不复述不提及。
+    '- Messages in this conversation that begin with "Current runtime context" are system-injected state notes, not user speech: comply with them silently and NEVER quote, repeat, or mention them in your reply.'
   )
   return lines.join('\n')
 }
@@ -1051,10 +1055,11 @@ async function ensureAgent(
     // 这里的动态上下文管每轮状态——渲染值变化时 dsh 自动把快照投影成会话内消息（排在当轮
     // 用户消息之后，最近因位置），状态变化即被模型以最高新鲜度看到，压掉它对自己历史回答
     // 的锚定（真机实锤：挂载/schema 全对，模型仍连续复读旧状态）。面没变不注入（dsh 去重）。
+    // 文本刻意压到最短（无感注入：一词一句都是 token）。
     agentCtx.systemPrompt.context({
       name: 'cherry:tool-face-state',
       order: 0,
-      text: `Tools available THIS turn: ${[...builtinsMounted, ...externalsMounted].join(', ') || 'none (all tools disabled by the user)'}.`
+      text: `Tools: ${[...builtinsMounted, ...externalsMounted].join(', ') || 'none'}.`
     })
     attachReasoningEffortListener(agentCtx, topic.id)
     for (const entry of BUILTIN_MOUNTS) {

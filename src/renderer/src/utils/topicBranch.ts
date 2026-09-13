@@ -23,9 +23,17 @@ export function rootTopicOf(topic: Topic, allTopics: Topic[]): Topic {
   return current
 }
 
+/**
+ * 家族浏览记忆恢复：进话题时优先落在根话题行记着的"最后浏览分支"上。
+ * 记忆缺失、指向的分支行已被删除、或记的就是根自己 → 返回根（自然容错）。
+ */
+export function recallLastViewedBranch(root: Topic, allTopics: Topic[]): Topic {
+  if (root.lastViewedBranchId === undefined) return root
+  return allTopics.find((topic) => topic.id === root.lastViewedBranchId) ?? root
+}
+
 /** 沿内核血缘（dshTopicGet.parentTopicId）求某会话的家族根 id；失败返回 null。 */
-export async function kernelRootTopicId(topicId: string): Promise<string | null> {
-  const seen = new Set<string>()
+export async function kernelRootTopicId(topicId: string): Promise<string | null> {  const seen = new Set<string>()
   let id = topicId
   while (!seen.has(id)) {
     seen.add(id)
