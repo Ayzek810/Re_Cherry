@@ -245,4 +245,3 @@ You have to return the updated memory in the following JSON format:
 
 Do not return anything except the JSON format.
 `
-

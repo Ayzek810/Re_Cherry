@@ -227,17 +227,6 @@ export interface TerminalConfigWithCommand extends TerminalConfig {
   command: (directory: string, fullCommand: string) => { command: string; args: string[] }
 }
 
-// Helper function to escape strings for AppleScript
-const escapeForAppleScript = (str: string): string => {
-  // In AppleScript strings, backslashes and double quotes need to be escaped
-  // When passed through osascript -e with single quotes, we need:
-  // 1. Backslash: \ -> \\
-  // 2. Double quote: " -> \"
-  return str
-    .replace(/\\/g, '\\\\') // Escape backslashes first
-    .replace(/"/g, '\\"') // Then escape double quotes
-}
-
 // resources/scripts should be maintained manually
 export const HOME_CHERRY_DIR = '.re_cherry'
 

@@ -1,12 +1,13 @@
 import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
+import { TopicManager } from '@renderer/hooks/useTopic'
 import {
   destroyTurnsInKernel,
-  forkBranchToKernel,
-  kernelAnchorOf,
-  loadKernelTopicMessages,
   type DestroyTurnsResponse,
-  type KernelAnchor
+  forkBranchToKernel,
+  type KernelAnchor,
+  kernelAnchorOf,
+  loadKernelTopicMessages
 } from '@renderer/services/kernelChat'
 import { getUserMessage } from '@renderer/services/MessagesService'
 import { appendMessageTrace, pauseTrace, restartTrace } from '@renderer/services/SpanManagerService'
@@ -15,7 +16,6 @@ import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer
 import { addTopic, removeTopic, selectTopicsMap, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
-import { TopicManager } from '@renderer/hooks/useTopic'
 import {
   appendAssistantResponseThunk,
   loadTopicMessagesThunk,
@@ -252,16 +252,13 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('[deleteMessages] multi-select across sessions is not supported')
         return false
       }
-      const entry = [...bySession.entries()][0] as [string, Set<number>]
+      const entry = [...bySession.entries()][0]
       try {
         const result = await destroyTurnsInKernel(entry[0], [...entry[1]])
         await applyDestroyTurnsResult(result)
         return true
       } catch (error) {
-        logger.error(
-          '[deleteMessages] destroyTurns failed',
-          error instanceof Error ? error : new Error(String(error))
-        )
+        logger.error('[deleteMessages] destroyTurns failed', error instanceof Error ? error : new Error(String(error)))
         return false
       }
     },
@@ -270,8 +267,7 @@ export function useMessageOperations(topic: Topic) {
 
   /** 删除一条消息所在轮：该轮起后缀物理删除，血统上分叉子树整支清盘（焦点见内核结果）。 */
   const deleteMessage = useCallback(
-    async (id: string, _traceId?: string, _modelName?: string): Promise<boolean> =>
-      deleteMessagesByIds([id]),
+    async (id: string, _traceId?: string, _modelName?: string): Promise<boolean> => deleteMessagesByIds([id]),
     [deleteMessagesByIds]
   )
 
@@ -525,7 +521,7 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('[switchModelAnswer] parallel fork unavailable (open turn or unresolved anchor), give up')
       }
     },
-    [appendMessageTrace, startParallelAnswer, topic.id]
+    [startParallelAnswer, topic.id]
   )
 
   /**

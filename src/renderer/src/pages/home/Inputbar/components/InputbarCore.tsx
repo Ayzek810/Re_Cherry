@@ -539,10 +539,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
     if (isLoading) {
       extras.push(
         <Tooltip key="stop" placement="top" title={t('chat.input.pause')} mouseLeaveDelay={0} arrow>
-          <ActionIconButton
-            onClick={onPause}
-            aria-label={t('chat.input.pause')}
-            style={{ marginRight: -2 }}>
+          <ActionIconButton onClick={onPause} aria-label={t('chat.input.pause')} style={{ marginRight: -2 }}>
             <CirclePause size={22} color="var(--color-error)" />
           </ActionIconButton>
         </Tooltip>

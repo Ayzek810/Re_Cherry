@@ -3,16 +3,15 @@
  * 所有工具共用同一框架（一轮一条回答、所有工具共用统一卡片的三铁律之二）；
  * ask_user_question 是其中一种内容：有未决请求时渲染可作答的选项，历史/已答时渲染只读问答。
  */
+import { useAppDispatch, useAppSelector } from '@renderer/store'
+import { userQuestionsActions } from '@renderer/store/userQuestions'
+import type { ToolMessageBlock } from '@renderer/types/newMessage'
+import { MessageBlockStatus } from '@renderer/types/newMessage'
 import { Button, Input, Tag } from 'antd'
 import { CornerDownLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
-
-import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { userQuestionsActions } from '@renderer/store/userQuestions'
-import type { ToolMessageBlock } from '@renderer/types/newMessage'
-import { MessageBlockStatus } from '@renderer/types/newMessage'
 
 import { askUserToolName } from './toolDisplay'
 

@@ -1,8 +1,7 @@
 import type { ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus } from '@renderer/types/newMessage'
-
 import { Flex, Tooltip } from 'antd'
-import { ShieldCheck, Wrench } from 'lucide-react'
+import { Wrench } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'

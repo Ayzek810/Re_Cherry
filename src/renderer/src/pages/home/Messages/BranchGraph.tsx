@@ -1,6 +1,7 @@
 import '@xyflow/react/dist/style.css'
 
 import { UserOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useConversationTree } from '@renderer/hooks/useConversationTree'
@@ -21,6 +22,8 @@ import { Avatar, Empty, Spin, Tooltip } from 'antd'
 import { memo, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
+
+const logger = loggerService.withContext('BranchGraph')
 
 interface BranchGraphProps {
   rootTopicId: string
@@ -331,7 +334,7 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
         let unit: FlowUnit
         if (index < shared && parentChain && parentChain[index] !== undefined) {
           // 复制轮：直接引用祖先（内容 origin 归属）已建的单元，绝不重复建节点
-          unit = parentChain[index] as FlowUnit
+          unit = parentChain[index]
         } else if (
           index === shared &&
           parentChain !== undefined &&
@@ -339,7 +342,7 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
           parentChain[index] !== undefined
         ) {
           // 重新生成：把本条回复挂到父链同位置的"提问"节点下（该节点可能已一路合并到祖先）
-          const ownerUser = (parentChain[index] as FlowUnit).userId
+          const ownerUser = parentChain[index].userId
           const replies = session.turns[index].replies
           const replyIds = replies.map((reply, replyIndex) =>
             addReplyNode(session.id, index, replyIndex, reply, ownerUser)
@@ -349,7 +352,7 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
           // 自有轮：按内容 origin 建/取用户节点（重发等自身新轮在此开新节点）
           const origin = originOf(family, session.id, index)
           if (origin === null) {
-            console.warn('[BranchGraph] unresolved origin ' + session.id + ':' + index + ', treating as own turn')
+            logger.warn('[BranchGraph] unresolved origin ' + session.id + ':' + index + ', treating as own turn')
           }
           const userId = addUserNode(session.id, index, session.turns[index].text)
           const replies = session.turns[index].replies
@@ -360,10 +363,9 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
         }
         chain.push(unit)
         if (index > 0) {
-          const prev = chain[index - 1] as FlowUnit
+          const prev = chain[index - 1]
           if (prev.userId !== unit.userId) {
-            const prevLast =
-              prev.replyIds.length > 0 ? (prev.replyIds[prev.replyIds.length - 1] as string) : prev.userId
+            const prevLast = prev.replyIds.length > 0 ? prev.replyIds[prev.replyIds.length - 1] : prev.userId
             addEdge(prevLast, unit.userId, 'chain')
           }
         }
@@ -408,7 +410,7 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
       const cached = bottomCache.get(id)
       if (cached !== undefined) return cached
       const kids = childrenOf.get(id) ?? []
-      const bottom = kids.length > 0 ? bottomOf(kids[0] as string) : id
+      const bottom = kids.length > 0 ? bottomOf(kids[0]) : id
       bottomCache.set(id, bottom)
       return bottom
     }

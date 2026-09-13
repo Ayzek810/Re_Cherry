@@ -54,7 +54,7 @@ const PermissionModeSettings: FC<Props> = ({ assistant, updateAssistant }) => {
             return (
               <div
                 key={tier}
-                className="flex flex-col gap-2 overflow-hidden rounded-lg border p-4 transition-colors cursor-pointer"
+                className="flex cursor-pointer flex-col gap-2 overflow-hidden rounded-lg border p-4 transition-colors"
                 style={{
                   borderColor: isSelected ? 'var(--color-primary)' : 'var(--color-border)',
                   background: isSelected ? 'var(--color-background-soft)' : 'transparent'
@@ -103,12 +103,8 @@ const PermissionModeSettings: FC<Props> = ({ assistant, updateAssistant }) => {
             onBlur={handleWorkingDirBlur}
           />
         </HStack>
-        <span
-          className="text-xs"
-          style={{ color: dirInvalid ? 'var(--color-error)' : 'var(--color-text-3)' }}>
-          {dirInvalid
-            ? t('settings.agentSettings.workDir.invalid')
-            : t('settings.agentSettings.workDir.hint')}
+        <span className="text-xs" style={{ color: dirInvalid ? 'var(--color-error)' : 'var(--color-text-3)' }}>
+          {dirInvalid ? t('settings.agentSettings.workDir.invalid') : t('settings.agentSettings.workDir.hint')}
         </span>
       </SettingsItem>
     </SettingsContainer>

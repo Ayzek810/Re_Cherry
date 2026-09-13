@@ -5,14 +5,14 @@ import { defaultLanguage } from '@shared/config/constant'
 import EnUs from '../../renderer/src/i18n/locales/en-us.json'
 import ZhCn from '../../renderer/src/i18n/locales/zh-cn.json'
 
-const locales = Object.fromEntries(
-  [
-    ['en-US', EnUs],
-    ['zh-CN', ZhCn]
-  ].map(([locale, translation]) => [locale, { translation }])
-)
+const locales: Record<string, MainLocaleBundle> = {
+  'en-US': { translation: EnUs },
+  'zh-CN': { translation: ZhCn }
+}
 
-export type MainLocaleBundle = { translation: Record<string, unknown> }
+// 两语 JSON 键集由 check-i18n-parity 保证一致，取 en-us 推导键树 —— 主进程对象值访问
+// （`const { tray } = locale.translation`）由此获得真实类型，不再一树 unknown。
+export type MainLocaleBundle = { translation: typeof EnUs }
 
 /**
  * 取当前语言的文案包，**永不返回 undefined**。
@@ -29,7 +29,7 @@ function getLocale(): MainLocaleBundle {
     (locales[requested] as MainLocaleBundle | undefined) ??
     (locales[defaultLanguage] as MainLocaleBundle | undefined) ??
     (locales['en-US'] as MainLocaleBundle | undefined) ??
-    (Object.values(locales)[0] as MainLocaleBundle)
+    Object.values(locales)[0]
   )
 }
 
@@ -49,4 +49,4 @@ const t = (key: string): string => {
   return typeof result === 'string' ? result : key
 }
 
-export { locales, getLocale, t }
+export { getLocale, locales, t }

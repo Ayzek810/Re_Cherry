@@ -2,7 +2,6 @@ import type { MenuItemConstructorOptions } from 'electron'
 import { Menu } from 'electron'
 
 import { getLocale } from '../utils/locales'
-import { configManager } from './ConfigManager'
 
 class ContextMenu {
   public contextMenu(w: Electron.WebContents) {

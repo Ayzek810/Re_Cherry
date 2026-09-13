@@ -133,8 +133,8 @@ const ResendPageBar: React.FC<{ topic: Topic; scopeMessage: Message }> = ({ topi
     requestTopicSwitch(materialized.row)
   }
 
-  const prevNode = currentIndex > 0 ? (members[currentIndex - 1] as string) : undefined
-  const nextNode = currentIndex < count - 1 ? (members[currentIndex + 1] as string) : undefined
+  const prevNode = currentIndex > 0 ? members[currentIndex - 1] : undefined
+  const nextNode = currentIndex < count - 1 ? members[currentIndex + 1] : undefined
 
   return (
     <Bar>

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  parseDataUrl
-} from '../utils'
+import { parseDataUrl } from '../utils'
 
 describe('parseDataUrl', () => {
   it('parses a standard base64 image data URL', () => {

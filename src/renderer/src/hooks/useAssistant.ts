@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
-import { isSupportedThinkingTokenModel, isSupportedReasoningEffortModel } from '@renderer/config/models'
-import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
+import { isSupportedReasoningEffortModel, isSupportedThinkingTokenModel } from '@renderer/config/models'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
@@ -21,6 +20,7 @@ import {
 import { setDefaultModel, setQuickModel } from '@renderer/store/llm'
 import type { Assistant, AssistantSettings, Model, ThinkingOption, Topic } from '@renderer/types'
 import { uuid } from '@renderer/utils'
+import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -117,7 +117,9 @@ export function useAssistant(id: string) {
             // 灵活回退到支持的值
             // 注意：这里假设可用的options不会为空
             const enableThinking =
-              currentReasoningEffort !== undefined && currentReasoningEffort !== 'none' && currentReasoningEffort !== 'default'
+              currentReasoningEffort !== undefined &&
+              currentReasoningEffort !== 'none' &&
+              currentReasoningEffort !== 'default'
             fallbackOption = enableThinking ? 'low' : 'auto'
           }
 

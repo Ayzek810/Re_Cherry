@@ -4,6 +4,7 @@ import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import type { SpanContext } from '@opentelemetry/api'
 import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
 import type { FileChangeEvent, WebviewKeyEvent } from '@shared/config/types'
+import type { WorkModeApprovalTier } from '@shared/config/workMode'
 import type { ExternalAppInfo } from '@shared/externalApp/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { Notification } from '@types'
@@ -73,7 +74,7 @@ const api = {
       reasoningEffort?: string
       builtinTools?: string[]
       externalTools?: string[]
-      tier?: string
+      tier?: WorkModeApprovalTier
     }
   ) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, options),
   dshTopicStop: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicStop, id),

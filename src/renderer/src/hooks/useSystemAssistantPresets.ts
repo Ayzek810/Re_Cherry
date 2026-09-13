@@ -62,4 +62,3 @@ export function useSystemAssistantPresets() {
 
   return presets
 }
-

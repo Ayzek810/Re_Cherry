@@ -1,4 +1,4 @@
-import { loadFamily, type CMFamily } from '@renderer/utils/conversationModel'
+import { type CMFamily, loadFamily } from '@renderer/utils/conversationModel'
 
 interface Entry {
   signature: string
@@ -32,4 +32,3 @@ export function loadConversationTree(rootTopicId: string, signature: string): Pr
   cache.set(rootTopicId, { signature, promise })
   return promise
 }
-

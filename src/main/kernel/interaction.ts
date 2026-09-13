@@ -14,11 +14,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 // 类型副作用导入：加载 approval/request waterfall 事件的声明合并（否则 ctx.on 无法命名该事件）
 import type {} from '@deepseek-ai/dsh-user-approval'
-import type {
-  KernelApprovalDecisionPayload,
-  KernelQuestionAnswerPayload
-} from '@shared/interaction/types'
 import { loggerService } from '@logger'
+import type { KernelApprovalDecisionPayload, KernelQuestionAnswerPayload } from '@shared/interaction/types'
 
 const logger = loggerService.withContext('KernelInteraction')
 

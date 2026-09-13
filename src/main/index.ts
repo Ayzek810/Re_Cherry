@@ -146,13 +146,18 @@ if (!app.requestSingleInstanceLock()) {
     const mainWindow = windowService.createMainWindow()
 
     // 启动 dsh 内核（并行，不阻塞窗口创建；失败仅告警，不影响应用启动）
-    import('./kernel').then(async ({ bootKernel }) => {
-      try {
-        await bootKernel()
-      } catch (error) {
-        logger.error('Failed to boot dsh kernel', error instanceof Error ? error : new Error(String(error)))
-      }
-    })
+    import('./kernel')
+      .then(async ({ bootKernel }) => {
+        try {
+          await bootKernel()
+        } catch (error) {
+          logger.error('Failed to boot dsh kernel', error instanceof Error ? error : new Error(String(error)))
+        }
+      })
+      .catch((error) => {
+        // 模块加载本身失败（启动序列异常）：同样只告警，不让 unhandled rejection 波及进程
+        logger.error('Failed to load dsh kernel module', error instanceof Error ? error : new Error(String(error)))
+      })
 
     // 关键接线优先：快捷键与 IPC 是应用可用性的底线，必须排在一切"外观类"初始化之前。
     // 依据（真实事故）：本文件曾把 `new TrayService()` 放在这两行之前，托盘构造抛错

@@ -164,7 +164,6 @@ export enum IpcChannel {
 
   ShowMiniWindow = 'show-mini-window',
 
-
   // Search Window
   SearchWindow_OpenUrl = 'search-window:open-url',
 

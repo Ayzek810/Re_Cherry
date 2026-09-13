@@ -8,8 +8,8 @@ import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import NavigationService from '@renderer/services/NavigationService'
 import { updateTopic as updateTopicAction } from '@renderer/store/assistants'
 import { newMessagesActions } from '@renderer/store/newMessage'
-import { TOPIC_SWITCH_REQUEST, listRootTopics, recallLastViewedBranch, rootTopicOf } from '@renderer/utils/topicBranch'
 import type { Assistant, Topic } from '@renderer/types'
+import { listRootTopics, recallLastViewedBranch, rootTopicOf, TOPIC_SWITCH_REQUEST } from '@renderer/utils/topicBranch'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
 import type { FC } from 'react'
@@ -99,8 +99,11 @@ const HomePage: FC = () => {
         // 同步更新 active topic，避免不必要的重新渲染；进话题恢复上次浏览的分支
         const rootTopics = listRootTopics(newAssistant.topics ?? [])
         const fallbackRoot = rootTopics[0] ?? newAssistant.topics?.[0]
-        const newTopic = fallbackRoot !== undefined ? recallLastViewedBranch(fallbackRoot, newAssistant.topics ?? []) : undefined
-        _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        const newTopic =
+          fallbackRoot !== undefined ? recallLastViewedBranch(fallbackRoot, newAssistant.topics ?? []) : undefined
+        // newTopic 为 undefined（新助手暂无话题）时保留旧值，useTopic 的 fallback effect 会
+        // 检测 activeTopic 不在新助手并回落到其首个根话题（家族记忆恢复）
+        _setActiveTopic((prev) => (newTopic !== undefined && newTopic.id !== prev.id ? newTopic : prev))
         if (newTopic !== undefined) recordTopicView(newTopic, newAssistant.topics ?? [])
       })
     },
@@ -110,7 +113,7 @@ const HomePage: FC = () => {
   const setActiveTopic = useCallback(
     (newTopic: Topic) => {
       startTransition(() => {
-        _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        _setActiveTopic((prev) => (newTopic.id === prev.id ? prev : newTopic))
         dispatch(newMessagesActions.setTopicFulfilled({ topicId: newTopic.id, fulfilled: false }))
         recordTopicView(newTopic)
       })

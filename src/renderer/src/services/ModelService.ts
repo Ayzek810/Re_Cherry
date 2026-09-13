@@ -28,4 +28,3 @@ export function getModelName(model?: Model) {
 
   return modelName
 }
-

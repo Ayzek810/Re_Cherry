@@ -1,8 +1,7 @@
-import type { ToolMessageBlock } from '@renderer/types/newMessage'
-import { MessageBlockStatus } from '@renderer/types/newMessage'
-
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { toolPermissionsActions } from '@renderer/store/toolPermissions'
+import type { ToolMessageBlock } from '@renderer/types/newMessage'
+import { MessageBlockStatus } from '@renderer/types/newMessage'
 
 /**
  * Unified tool approval state
@@ -45,9 +44,7 @@ export function useToolApproval(
   const isWaiting = entry?.status === 'pending'
   const isSubmitting = entry?.status === 'submitting-allow' || entry?.status === 'submitting-deny'
   const isExecuting =
-    !isWaiting &&
-    !isSubmitting &&
-    (entry?.status === 'invoking' || block.status === MessageBlockStatus.PROCESSING)
+    !isWaiting && !isSubmitting && (entry?.status === 'invoking' || block.status === MessageBlockStatus.PROCESSING)
 
   const decide = async (behavior: 'allow' | 'deny'): Promise<void> => {
     if (entry === undefined) return
@@ -56,7 +53,7 @@ export function useToolApproval(
     try {
       const result = (await window.api.dshApprovalDecide({ requestId, behavior })) as { ok: boolean }
       if (result?.ok === true) {
-        dispatch(toolPermissionsActions.requestResolved({ requestId, behavior }))
+        dispatch(toolPermissionsActions.requestResolved({ requestId, behavior, reason: 'response' }))
       } else {
         // 未知请求（内核已作废/已答）——直接摘除本地未决项
         dispatch(toolPermissionsActions.removeByToolCallId({ toolCallId: entry.toolCallId }))
