@@ -9,15 +9,7 @@ import iconv from 'iconv-lite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { readTextFileWithAutoEncoding, resolveAndValidatePath } from '../file'
-import {
-  getAllFiles,
-  getConfigDir,
-  getFilesDir,
-  getFileType,
-  getTempDir,
-  isPathInside,
-  untildify
-} from '../file'
+import { getAllFiles, getConfigDir, getFilesDir, getFileType, getTempDir, isPathInside, untildify } from '../file'
 
 // Mock dependencies
 vi.mock('node:fs')

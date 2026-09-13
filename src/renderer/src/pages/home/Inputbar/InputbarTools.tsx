@@ -21,7 +21,7 @@ import type {
 import { getToolsForScope } from '@renderer/pages/home/Inputbar/types'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectToolOrderForScope, setIsCollapsed, setToolOrder } from '@renderer/store/inputTools'
-import type { Assistant, Model } from '@renderer/types'
+import type { Assistant, Model, Topic } from '@renderer/types'
 import type { InputBarToolType } from '@renderer/types/chat'
 import { classNames } from '@renderer/utils'
 import { Divider, Dropdown } from 'antd'
@@ -36,6 +36,7 @@ export interface InputbarToolsNewProps {
   scope: InputbarScope
   assistant: Assistant
   model: Model
+  topic?: Topic
   session?: ToolContext['session']
 }
 
@@ -50,7 +51,7 @@ const DraggablePortal = ({ children, isDragging }: { children: React.ReactNode; 
   return isDragging ? createPortal(children, document.body) : children
 }
 
-const InputbarTools = ({ scope, assistant, model, session }: InputbarToolsNewProps) => {
+const InputbarTools = ({ scope, assistant, model, topic, session }: InputbarToolsNewProps) => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const toolsContext = useInputbarTools()
@@ -121,6 +122,7 @@ const InputbarTools = ({ scope, assistant, model, session }: InputbarToolsNewPro
         scope,
         assistant,
         model,
+        topic,
         session,
         state,
         actions,
@@ -129,7 +131,7 @@ const InputbarTools = ({ scope, assistant, model, session }: InputbarToolsNewPro
         t
       } as ToolRenderContext<S, A>
     },
-    [assistant, model, quickPanelContext, scope, session, t, toolsContext, getQuickPanelApiForTool]
+    [assistant, model, quickPanelContext, scope, session, t, toolsContext, getQuickPanelApiForTool, topic]
   )
 
   // Build tool metadata (without rendering)

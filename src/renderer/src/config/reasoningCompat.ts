@@ -1,5 +1,5 @@
-import type { Model } from '@renderer/types'
 import { isDeepSeekHybridInferenceModel, isSupportedThinkingTokenZhipuModel } from '@renderer/config/models'
+import type { Model } from '@renderer/types'
 
 /**
  * 第三方 OpenAI 兼容网关的"思考协议"登记表。
@@ -86,7 +86,10 @@ export function matchReasoningProviderRule(provider: {
  * 给定 provider + model，返回应透传给 pi-ai 的思考协议 compat；
  * 无命中或模型家族不在 appliesTo 内 → undefined（不干预，走 pi-ai 自动探测）。
  */
-export function providerReasoningCompat(provider: { id?: string; apiHost?: string }, model: Model): ProviderReasoningCompat | undefined {
+export function providerReasoningCompat(
+  provider: { id?: string; apiHost?: string },
+  model: Model
+): ProviderReasoningCompat | undefined {
   const rule = matchReasoningProviderRule(provider)
   if (rule === undefined) return undefined
   if (rule.appliesTo !== undefined && !rule.appliesTo(model)) return undefined

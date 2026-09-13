@@ -5,12 +5,13 @@ import { modelGenerating } from '@renderer/hooks/useRuntime'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useShowAssistants, useShowTopics } from '@renderer/hooks/useStore'
+import AgentSettingsPopup from '@renderer/pages/settings/AgentSettings/AgentSettingsPopup'
 import { useAppDispatch } from '@renderer/store'
 import { setNarrowMode } from '@renderer/store/settings'
 import type { Assistant, Topic } from '@renderer/types'
 import { Tooltip } from 'antd'
 import { t } from 'i18next'
-import { Menu, PanelLeftClose, PanelRightClose, Search } from 'lucide-react'
+import { FolderOpen, Menu, PanelLeftClose, PanelRightClose, Search } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { FC } from 'react'
 import styled from 'styled-components'
@@ -98,7 +99,37 @@ const HeaderNavbar: FC<Props> = ({ activeAssistant, setActiveAssistant, activeTo
           </AnimatePresence>
         </NavbarLeft>
       )}
-      <NavbarCenter></NavbarCenter>
+      <NavbarCenter>
+        {activeTopic.workMode === true && (
+          <Tooltip
+            title={
+              activeAssistant.workMode?.workingDir
+                ? activeAssistant.workMode.workingDir
+                : t('message.workMode.defaultWorkspaceHint')
+            }
+            mouseEnterDelay={0.4}>
+            <WorkingDirChip
+              onClick={() => {
+                const dir = activeAssistant.workMode?.workingDir
+                if (dir !== undefined && dir.length > 0) {
+                  // 自定义工作目录：沙箱按会话 cwd 放行（SandboxPolicyService.resolve），直接外部打开
+                  void window.api.openPath(dir)
+                } else {
+                  // 默认围栏（数据文件夹 .agent）属内部实现：引导去权限模式页设置
+                  void AgentSettingsPopup.show({ assistant: activeAssistant, tab: 'permission-mode' })
+                }
+              }}>
+              <FolderOpen size={13} strokeWidth={1.8} />
+              <span className="truncate">
+                {activeAssistant.workMode?.workingDir
+                  ? (activeAssistant.workMode.workingDir.split(/[\\/]/).filter(Boolean).pop() ??
+                    activeAssistant.workMode.workingDir)
+                  : t('message.workMode.defaultWorkspace')}
+              </span>
+            </WorkingDirChip>
+          </Tooltip>
+        )}
+      </NavbarCenter>
       <NavbarRight
         style={{
           justifyContent: 'flex-end',
@@ -141,6 +172,32 @@ const HeaderNavbar: FC<Props> = ({ activeAssistant, setActiveAssistant, activeTo
 const NarrowIcon = styled(NavbarIcon)`
   @media (max-width: 1000px) {
     display: none;
+  }
+`
+
+/** 工作目录 chip（开放项 4）：工作模式激活时顶栏展示生效工作目录，点击外部打开或前往设置。 */
+const WorkingDirChip = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--color-border);
+  background: var(--color-background-soft);
+  color: var(--color-text-2);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  &:hover {
+    opacity: 0.75;
+  }
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 `
 

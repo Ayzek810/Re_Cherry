@@ -84,7 +84,10 @@ const BranchGraphButton: React.FC<Props> = ({ assistant, topic, onSwitchTopic })
     return map
   }, [assistantTopics])
 
-  const graphRoot = openedRoot ?? (localRoot ? { id: localRoot.id, name: localRoot.name } : undefined)
+  const graphRoot = useMemo(
+    () => openedRoot ?? (localRoot ? { id: localRoot.id, name: localRoot.name } : undefined),
+    [openedRoot, localRoot]
+  )
 
   const handleOpen = async (): Promise<void> => {
     const startId = currentTopic?.id

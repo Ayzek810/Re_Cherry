@@ -1,12 +1,13 @@
 import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
+import { TopicManager } from '@renderer/hooks/useTopic'
 import {
   destroyTurnsInKernel,
-  forkBranchToKernel,
-  kernelAnchorOf,
-  loadKernelTopicMessages,
   type DestroyTurnsResponse,
-  type KernelAnchor
+  forkBranchToKernel,
+  type KernelAnchor,
+  kernelAnchorOf,
+  loadKernelTopicMessages
 } from '@renderer/services/kernelChat'
 import { getUserMessage } from '@renderer/services/MessagesService'
 import { appendMessageTrace, pauseTrace, restartTrace } from '@renderer/services/SpanManagerService'
@@ -15,7 +16,6 @@ import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer
 import { addTopic, removeTopic, selectTopicsMap, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
-import { TopicManager } from '@renderer/hooks/useTopic'
 import {
   appendAssistantResponseThunk,
   loadTopicMessagesThunk,
@@ -105,7 +105,9 @@ export function useMessageOperations(topic: Topic) {
         updatedAt: new Date(forked.updatedAt ?? Date.now()).toISOString(),
         messages: [],
         parentTopicId: topic.id,
-        branchKind: kind
+        branchKind: kind,
+        // 分支继承源话题的工作模式开关状态（B6：跟话题走，随 redux-persist 持久化）
+        ...(topic.workMode === true ? { workMode: true } : {})
       }
       dispatch(addTopic({ assistantId: assistant.id, topic: childTopic }))
 
@@ -250,16 +252,13 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('[deleteMessages] multi-select across sessions is not supported')
         return false
       }
-      const entry = [...bySession.entries()][0] as [string, Set<number>]
+      const entry = [...bySession.entries()][0]
       try {
         const result = await destroyTurnsInKernel(entry[0], [...entry[1]])
         await applyDestroyTurnsResult(result)
         return true
       } catch (error) {
-        logger.error(
-          '[deleteMessages] destroyTurns failed',
-          error instanceof Error ? error : new Error(String(error))
-        )
+        logger.error('[deleteMessages] destroyTurns failed', error instanceof Error ? error : new Error(String(error)))
         return false
       }
     },
@@ -268,8 +267,7 @@ export function useMessageOperations(topic: Topic) {
 
   /** 删除一条消息所在轮：该轮起后缀物理删除，血统上分叉子树整支清盘（焦点见内核结果）。 */
   const deleteMessage = useCallback(
-    async (id: string, _traceId?: string, _modelName?: string): Promise<boolean> =>
-      deleteMessagesByIds([id]),
+    async (id: string, _traceId?: string, _modelName?: string): Promise<boolean> => deleteMessagesByIds([id]),
     [deleteMessagesByIds]
   )
 
@@ -472,7 +470,12 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('[startParallelAnswer] anchor question has no text content, skip')
         return false
       }
-      // TODO(v0.3.0 工作模式)：工作模式 active（含工具上下文）时禁用此入口
+      // 工作模式激活（话题级开关，B6）时禁用旁答：旁答子会话共享前缀但拿不到本话题的工作模式状态，
+      // 且工具回合的卡片组语义与多模型旁答冲突（v0.3.0 计划书 §7 Step 5）。
+      if (topic.workMode === true) {
+        logger.warn('[startParallelAnswer] work mode is active on this topic, parallel answer is disabled')
+        return false
+      }
       const forked = await forkBranchToKernel(topic.id, anchor)
       if (forked === null) return false
 
@@ -518,7 +521,7 @@ export function useMessageOperations(topic: Topic) {
         logger.warn('[switchModelAnswer] parallel fork unavailable (open turn or unresolved anchor), give up')
       }
     },
-    [appendMessageTrace, startParallelAnswer, topic.id]
+    [startParallelAnswer, topic.id]
   )
 
   /**

@@ -27,4 +27,3 @@ export async function getIpCountry(): Promise<string> {
     return 'CN'
   }
 }
-

@@ -164,7 +164,6 @@ export enum IpcChannel {
 
   ShowMiniWindow = 'show-mini-window',
 
-
   // Search Window
   SearchWindow_OpenUrl = 'search-window:open-url',
 
@@ -231,6 +230,10 @@ export enum IpcChannel {
   Dsh_TopicRunning = 'dsh:topic-running',
   Dsh_TopicEvents = 'dsh:topic-events',
   Dsh_TopicGet = 'dsh:topic-get',
+  Dsh_ApprovalRequest = 'dsh:approval-request',
+  Dsh_ApprovalDecide = 'dsh:approval-decide',
+  Dsh_QuestionRequest = 'dsh:question-request',
+  Dsh_QuestionAnswer = 'dsh:question-answer',
   Dsh_SearchMessages = 'dsh:search-messages',
   Dsh_SessionEvent = 'dsh:session-event'
 }

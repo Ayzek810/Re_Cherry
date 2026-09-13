@@ -9,7 +9,16 @@ import { getStoreProviders } from '@renderer/hooks/useStore'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import { addAssistant } from '@renderer/store/assistants'
-import type { Assistant, AssistantPreset, AssistantSettings, Model, Provider, Topic } from '@renderer/types'
+import type {
+  Assistant,
+  AssistantPreset,
+  AssistantSettings,
+  AssistantWorkModeConfig,
+  Model,
+  Provider,
+  Topic
+} from '@renderer/types'
+import { WORK_MODE_APPROVAL_TIERS } from '@shared/config/workMode'
 import { v4 as uuid } from 'uuid'
 
 /**
@@ -46,6 +55,15 @@ export const DEFAULT_ASSISTANT_SETTINGS = {
 } as const satisfies AssistantSettings
 
 /**
+ * 工作模式的助手级默认值：默认关闭，审批档位取最保守的"每次询问"（只读沙箱 + 逐调用审批）。
+ * 见 packages/shared/config/workMode.ts 的三档词汇表。
+ */
+export const DEFAULT_ASSISTANT_WORK_MODE: AssistantWorkModeConfig = {
+  defaultEnabled: false,
+  approval: WORK_MODE_APPROVAL_TIERS[0]
+}
+
+/**
  * Creates a temporary default assistant instance.
  *
  * **Important**: This creates a NEW temporary assistant instance with DEFAULT_ASSISTANT_SETTINGS,
@@ -69,7 +87,8 @@ export function getDefaultAssistant(): Assistant {
     messages: [],
     type: 'assistant',
     regularPhrases: [], // Added regularPhrases
-    settings: DEFAULT_ASSISTANT_SETTINGS
+    settings: DEFAULT_ASSISTANT_SETTINGS,
+    workMode: { ...DEFAULT_ASSISTANT_WORK_MODE }
   }
 }
 

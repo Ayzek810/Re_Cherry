@@ -15,6 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import { loggerService } from '@logger'
+import i18n from '@renderer/i18n'
 import FileManager from '@renderer/services/FileManager'
 import { BlockManager } from '@renderer/services/messageStreaming/BlockManager'
 import { createCallbacks } from '@renderer/services/messageStreaming/callbacks'
@@ -28,6 +29,7 @@ import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMes
 import { addAbortController } from '@renderer/utils/abortController'
 import { createAssistantMessage, resetAssistantMessage } from '@renderer/utils/messageUtils/create'
 import { getTopicQueue, waitForTopicQueue } from '@renderer/utils/queue'
+import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
 import { t } from 'i18next'
 import { isEmpty, throttle } from 'lodash'
 import { LRUCache } from 'lru-cache'
@@ -160,7 +162,7 @@ export const cleanupMultipleBlocks = (dispatch: AppDispatch, blockIds: string[])
         (block) =>
           block &&
           (block.type === MessageBlockType.FILE || block.type === MessageBlockType.IMAGE) &&
-          (block as FileMessageBlock | ImageMessageBlock).file !== undefined
+          block.file !== undefined
       )
       .map((block) => (block as FileMessageBlock | ImageMessageBlock).file)
       .filter((file): file is FileMetadata => file !== undefined)
@@ -225,10 +227,19 @@ const fetchAndProcessAssistantResponseImpl = async (
   origAssistant: Assistant,
   assistantMessage: Message // Pass the prepared assistant message (new or reset)
 ) => {
-  const topic = origAssistant.topics.find((t) => t.id === topicId)
+  // 话题行从 store 现取：调用方（分支重发/多模型队列）持有的 assistant 引用可能早于
+  // addTopic/updateTopic——用闭包旧引用查找会拿不到新分支话题，workMode/prompt 全部
+  // 丢失（外置工具清单与档位随之恒空）。origAssistant 保留给 prompt 基底（多模型场景
+  // 的 model 覆盖在调用方变体上，不能被 store 值覆盖回去）。
+  const storedAssistant = getState().assistants.assistants.find((a) => a.id === origAssistant.id)
+  const topic = (storedAssistant ?? origAssistant).topics.find((t) => t.id === topicId)
+  // 助手系统提示词留空 = 加载随界面语言走的默认句（i18n 实时取值，切语言下一轮生效）；
+  // 用户填了就只用用户的。话题提示词仍按既有规则叠加在基底之后。
+  const basePrompt =
+    origAssistant.prompt.trim().length > 0 ? origAssistant.prompt : i18n.t('chat.assistant.defaultSystemPrompt')
   const assistant = topic?.prompt
-    ? { ...origAssistant, prompt: `${origAssistant.prompt}\n${topic.prompt}` }
-    : origAssistant
+    ? { ...origAssistant, prompt: `${basePrompt}\n${topic.prompt}` }
+    : { ...origAssistant, prompt: basePrompt }
   const assistantMsgId = assistantMessage.id
   let callbacks: StreamProcessorCallbacks = {}
   try {
@@ -282,8 +293,17 @@ const fetchAndProcessAssistantResponseImpl = async (
       if (text.length === 0) {
         logger.warn('kernelChat: user message has no text content, nothing to send')
       }
-      const reasoningEffort = kernelChat.assistantReasoningLevel(assistant)
-      await kernelChat.sendToKernel(topicId, text, assistantMsgId, reasoningEffort, triggeringUserMessage.id)
+      // 能力状态随发送参数现算（类 buildToolsForSession，拨动下一轮生效）：
+      // 内置工具 = 助手开关；外置工具 = 话题工作模式开关（宏）× 助手外置开关；档位 = 助手权限配置
+      await kernelChat.sendToKernel(topicId, text, assistantMsgId, triggeringUserMessage.id, {
+        reasoningEffort: kernelChat.assistantReasoningLevel(assistant),
+        builtinTools: BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false),
+        externalTools:
+          topic?.workMode === true
+            ? EXTERNAL_TOOL_IDS.filter((toolId) => assistant.externalTools?.[toolId] !== false)
+            : [],
+        tier: assistant.workMode?.approval
+      })
     } else {
       logger.error('kernelChat: triggering user message not found, skipping send')
     }

@@ -3,23 +3,26 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 // 类型副作用导入：加载 dsh-session-title 对 SessionEventMap 的声明合并（session/title 事件）
 import type {} from '@deepseek-ai/dsh-session-title'
 import { loggerService } from '@logger'
+import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
 import store from '@renderer/store'
 import { updateTopic, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
+import { toolPermissionsActions } from '@renderer/store/toolPermissions'
+import { type UserQuestionEntry, userQuestionsActions } from '@renderer/store/userQuestions'
 import type { Assistant, Model } from '@renderer/types'
 import {
   AssistantMessageStatus,
-  type MainTextMessageBlock,
   type Message,
   type MessageBlock,
   MessageBlockStatus,
-  MessageBlockType
+  MessageBlockType,
+  type ToolMessageBlock
 } from '@renderer/types/newMessage'
-import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
 import { renameAbortController } from '@renderer/utils/abortController'
-import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
+import { createMainTextBlock, createThinkingBlock, createToolBlock } from '@renderer/utils/messageUtils/create'
 import { kernelReasoningEffortsForModel, kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
+import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
 const logger = loggerService.withContext('KernelChat')
 
@@ -35,18 +38,28 @@ const logger = loggerService.withContext('KernelChat')
 /** topicId → 等待内核回复的助手消息 stub id（sendMessage thunk 创建）。 */
 const pendingStubs = new Map<string, string>()
 
-/** 单个回合的投影状态。 */
-interface StreamState {
+/** 单个回合（turn）的投影状态：一轮 = 一条回答（B8），轮内多 step 的说话/工具块都归并进同一条消息。 */
+interface TurnState {
   assistantMessageId: string
   turn: number
-  step: number
-  mainBlockId: string
+  /** 当前 step（事件自带 step；换 step 即新开一段说话块）。 */
+  currentStep?: number
+  /** 当前 step 的流式说话块（text / reasoning）。 */
+  mainBlockId?: string
   mainText: string
   thinkingBlockId?: string
   thinkingText: string
+  /** 本轮块序（消息 blocks 列表的权威；按事件顺序追加，assistant/message 时替换回当前 step 的流式块）。 */
+  blockIds: string[]
+  /** callId → 工具块（tool/result 按 callId 回填同一块）。 */
+  toolBlocks: Map<string, ToolMessageBlock>
+  /** 跨 step 累计的 token 用量（每条 assistant/message 携带其 step 的用量）。 */
+  usage: { inputTokens: number; outputTokens: number }
+  /** 是否已把 stub uuid 改写为 kernel id（在本轮第一条 assistant/message 时发生，与其后历史还原一致）。 */
+  sawAssistantMessage: boolean
 }
 
-const streams = new Map<string, StreamState>()
+const streams = new Map<string, TurnState>()
 
 // --- 分支锚点簿记（最小版，无 UI） ---
 // 本地上送的 user 消息（uuid）在回执 user/message 事件到达前拿不到内核 seq；
@@ -128,16 +141,13 @@ export interface DestroyTurnsResponse {
 }
 
 /** 消息级删除：受影响集合/物理/焦点全部由内核一次事务算完（kernel/topics.ts destroyTurns）。 */
-export async function destroyTurnsInKernel(
-  topicId: string,
-  anchorUserSeqs: number[]
-): Promise<DestroyTurnsResponse> {
+export async function destroyTurnsInKernel(topicId: string, anchorUserSeqs: number[]): Promise<DestroyTurnsResponse> {
   return (await window.api.dshTopicDestroyTurns(topicId, anchorUserSeqs)) as DestroyTurnsResponse
 }
 
 let bridgeInitialized = false
 
-/** 应用启动时调用一次：订阅内核事件流。 */
+/** 应用启动时调用一次：订阅内核事件流与审批/问答请求帧。 */
 export function initKernelBridge(): void {
   if (bridgeInitialized) return
   bridgeInitialized = true
@@ -147,6 +157,49 @@ export function initKernelBridge(): void {
     } catch (error) {
       logger.error(
         'kernelChat: failed to handle session event',
+        error instanceof Error ? error : new Error(String(error))
+      )
+    }
+  })
+  // 审批请求帧 → toolPermissions 状态机（工具卡按 callId 挂上 允许/拒绝 按钮）
+  window.api.dshOnApprovalRequest((payload) => {
+    try {
+      const request = payload as {
+        requestId: string
+        topicId: string
+        toolName: string
+        callId?: string
+        reason?: string
+      }
+      store.dispatch(
+        toolPermissionsActions.requestReceived({
+          requestId: request.requestId,
+          toolName: request.toolName,
+          toolId: request.callId ?? request.requestId,
+          toolCallId: request.callId ?? request.requestId,
+          topicId: request.topicId,
+          description: request.reason,
+          requiresPermissions: true,
+          input: {},
+          inputPreview: request.reason ?? '',
+          createdAt: Date.now(),
+          suggestions: []
+        })
+      )
+    } catch (error) {
+      logger.error(
+        'kernelChat: failed to handle approval request',
+        error instanceof Error ? error : new Error(String(error))
+      )
+    }
+  })
+  // 问答请求帧 → userQuestions 状态机（ask_user_question 卡片内作答）
+  window.api.dshOnQuestionRequest((payload) => {
+    try {
+      store.dispatch(userQuestionsActions.requestReceived(payload as UserQuestionEntry))
+    } catch (error) {
+      logger.error(
+        'kernelChat: failed to handle question request',
         error instanceof Error ? error : new Error(String(error))
       )
     }
@@ -188,7 +241,7 @@ export function assistantReasoningLevel(assistant: Assistant): string | undefine
   return kernelReasoningLevelFor(assistant.model, assistant.settings?.reasoning_effort)
 }
 
-/** 确保内核侧存在该话题的 agent/session（幂等）。 */
+/** 确保内核侧存在该话题的 agent/session（幂等）。工作模式不进建册输入——它是渲染层话题开关，随发送参数生效。 */
 export async function ensureKernelTopic(topicId: string, assistant: Assistant): Promise<void> {
   const model = assistant.model
   if (model === undefined || model.provider === undefined) {
@@ -200,22 +253,30 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
     model: model.id,
     maxTokens: assistant.settings?.maxTokens,
     systemPrompt: assistant.prompt,
-    reasoningEffort: assistantReasoningLevel(assistant)
+    reasoningEffort: assistantReasoningLevel(assistant),
+    ...(assistant.workMode?.workingDir !== undefined && assistant.workMode.workingDir.length > 0
+      ? { workingDir: assistant.workMode.workingDir }
+      : {})
   })
 }
 
-/** 发送一条消息到内核；流式回复经由事件流投影回 Redux。 */
+/** 发送一条消息到内核；流式回复经由事件流投影回 Redux。工具面（内置/外置）与权限档位随发送参数生效（拨动下一轮生效）。 */
 export async function sendToKernel(
   topicId: string,
   text: string,
   assistantMessageId: string,
-  reasoningEffort?: string,
-  userMessageId?: string
+  userMessageId?: string,
+  options?: {
+    reasoningEffort?: string
+    builtinTools?: string[]
+    externalTools?: string[]
+    tier?: WorkModeApprovalTier
+  }
 ): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)
   if (userMessageId !== undefined) rememberPendingUser(topicId, userMessageId)
   try {
-    await window.api.dshTopicSend(topicId, text, reasoningEffort)
+    await window.api.dshTopicSend(topicId, text, options)
   } catch (error) {
     pendingStubs.delete(topicId)
     throw error
@@ -224,6 +285,8 @@ export async function sendToKernel(
 
 /**
  * 从内核会话日志还原一个话题的 Message/MessageBlock（打开话题的初始渲染用）。
+ * 按"轮"归并（B8：一轮 = 一条回答）：turn 内所有 assistant/message（多 step）的说话块
+ * 顺序追加进同一条回答消息；tool/call + tool/result 按 callId 配对产出统一工具块。
  * 返回 null 表示内核不可用（未启动/无此话题），调用方应回退旧路径。
  */
 export async function loadKernelTopicMessages(
@@ -249,6 +312,13 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
   const { topicId, event } = payload
   switch (event.type) {
     case 'user/message': {
+      // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
+      // 不是用户发言：不参与回执配对（否则会消耗 FIFO 队列里真实发送的配对名额，把
+      // 本地用户消息的回执 seq 记到注入事件上，fork 锚点随之错乱——分支控制混乱的根因
+      // 之一），也不投影。user/message 事件的 data 就是消息本体（source 直接挂 data 上）。
+      if (event.data.source?.kind === 'plugin') {
+        break
+      }
       // 回执登记：本地 uuid user 消息 → 内核 seq（供以后对该消息 fork 用）
       const localUserId = recordUserMessageSeq(topicId, event.seq)
       // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）
@@ -263,14 +333,20 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
       break
     }
     case 'assistant/chunk': {
-      projectChunk(topicId, event.data.chunk)
+      projectChunk(topicId, event.data.step, event.data.chunk)
       break
     }
     case 'assistant/message': {
-      const stubId = pendingStubs.get(topicId)
-      finalizeAssistantMessage(topicId, event.data)
-      // 助手消息收尾后同样把本地 stub 改写为 kernel id，保证会话内不再残留 uuid 消息
-      if (stubId) remapMessageToKernelId(topicId, stubId, event.seq)
+      // 每 step 一条 assistant/message：只收尾该 step 的块，回合状态保留到 turn/end（多 step 归并不丢内容）
+      finalizeStep(topicId, event)
+      break
+    }
+    case 'tool/call': {
+      projectToolCall(topicId, event)
+      break
+    }
+    case 'tool/result': {
+      projectToolResult(topicId, event)
       break
     }
     case 'turn/end': {
@@ -294,10 +370,13 @@ function startTurn(topicId: string, turn: number): void {
   streams.set(topicId, {
     assistantMessageId: stubId,
     turn,
-    step: 0,
     mainBlockId: mainBlock.id,
     mainText: '',
-    thinkingText: ''
+    thinkingText: '',
+    blockIds: [mainBlock.id],
+    toolBlocks: new Map(),
+    usage: { inputTokens: 0, outputTokens: 0 },
+    sawAssistantMessage: false
   })
   store.dispatch(upsertManyBlocks([mainBlock]))
   store.dispatch(
@@ -309,11 +388,40 @@ function startTurn(topicId: string, turn: number): void {
   )
 }
 
-function projectChunk(topicId: string, chunk: StreamChunk): void {
+/** 把本轮的块序列同步回消息（消息 blocks 列表的唯一写入口，保证 说话→工具→说话 的事件顺序）。 */
+function syncMessageBlocks(topicId: string, state: TurnState): void {
+  store.dispatch(
+    newMessagesActions.updateMessage({
+      topicId,
+      messageId: state.assistantMessageId,
+      updates: { blocks: [...state.blockIds] }
+    })
+  )
+}
+
+function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
   const state = streams.get(topicId)
   if (state === undefined) return
+  // 换 step：上一段说话已由 assistant/message 收尾，本段新开流式块。
+  // currentStep 未定 = 首个 step，沿用 startTurn 建好的初始块。
+  if (state.currentStep !== undefined && state.currentStep !== step) {
+    state.mainBlockId = undefined
+    state.mainText = ''
+    state.thinkingBlockId = undefined
+    state.thinkingText = ''
+  }
+  state.currentStep = step
   switch (chunk.type) {
     case 'text-delta': {
+      if (state.mainBlockId === undefined) {
+        const mainBlock = createMainTextBlock(state.assistantMessageId, '', {
+          status: MessageBlockStatus.STREAMING
+        })
+        state.mainBlockId = mainBlock.id
+        state.blockIds.push(mainBlock.id)
+        store.dispatch(upsertManyBlocks([mainBlock]))
+        syncMessageBlocks(topicId, state)
+      }
       state.mainText += chunk.text
       flushBlockUpdate(state.mainBlockId, { content: state.mainText })
       break
@@ -325,14 +433,15 @@ function projectChunk(topicId: string, chunk: StreamChunk): void {
           status: MessageBlockStatus.STREAMING
         })
         state.thinkingBlockId = thinkingBlock.id
+        // 思考块置于本段文本块之前（沿用现有展示顺序）
+        const mainIndex = state.mainBlockId !== undefined ? state.blockIds.indexOf(state.mainBlockId) : -1
+        if (mainIndex >= 0) {
+          state.blockIds.splice(mainIndex, 0, thinkingBlock.id)
+        } else {
+          state.blockIds.push(thinkingBlock.id)
+        }
         store.dispatch(upsertManyBlocks([thinkingBlock]))
-        store.dispatch(
-          newMessagesActions.updateMessage({
-            topicId,
-            messageId: state.assistantMessageId,
-            updates: { blocks: [thinkingBlock.id, state.mainBlockId] }
-          })
-        )
+        syncMessageBlocks(topicId, state)
       }
       if (state.thinkingBlockId !== undefined) {
         flushBlockUpdate(state.thinkingBlockId, { content: state.thinkingText })
@@ -340,7 +449,7 @@ function projectChunk(topicId: string, chunk: StreamChunk): void {
       break
     }
     case 'tool-call-delta':
-      // MCP 已砍：工具调用块暂不渲染，仅记录
+      // 工具调用块在 tool/call 事件落盘时创建（参数以最终 JSON 为准），流式 delta 不投影
       logger.debug(`kernelChat: tool-call chunk ignored (${chunk.name ?? chunk.id})`)
       break
     default:
@@ -367,89 +476,166 @@ function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void
   })
 }
 
-function finalizeAssistantMessage(
-  topicId: string,
-  data: {
-    message: { content: { type: string; text?: string }[] }
-    usage?: { inputTokens?: number; outputTokens?: number }
-  }
-): void {
+/**
+ * 收尾一个 step：以最终内容替换该 step 的流式说话块、累计 usage。
+ * 回合状态保留（不删 streams / pendingStubs）——同一轮的后续 step 继续往同一条消息归并，
+ * 直到 turn/end 才整体收尾。这是"修掉直播丢内容"的关键（B8：一轮 = 一条回答）。
+ */
+function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'assistant/message' }>): void {
   const state = streams.get(topicId)
   if (state === undefined) return
+  const data = event.data
 
-  const blocks: MessageBlock[] = []
-  const blockIds: string[] = []
+  // 本轮第一条 assistant/message：把 stub uuid 改写为 kernel-<topic>-<seq>（块与引用同步改写）。
+  // canonical seq = 本轮第一条 assistant/message（含无文本的纯工具 step），与历史还原和 replySeqs 对齐。
+  if (!state.sawAssistantMessage) {
+    state.sawAssistantMessage = true
+    remapMessageToKernelId(topicId, state.assistantMessageId, event.seq)
+    state.assistantMessageId = kernelMessageId(topicId, event.seq)
+  }
 
+  // 最终说话块（tool-call 块由 tool/call 事件负责，不在这里产出，避免双卡）
+  const finalBlockIds: string[] = []
+  const finalBlocks: MessageBlock[] = []
   for (const block of data.message.content) {
     if (block.type === 'text' && block.text !== undefined && block.text.length > 0) {
       const main = createMainTextBlock(state.assistantMessageId, block.text, { status: MessageBlockStatus.SUCCESS })
-      blocks.push(main)
-      blockIds.push(main.id)
+      finalBlocks.push(main)
+      finalBlockIds.push(main.id)
     } else if (block.type === 'reasoning' && block.text !== undefined && block.text.length > 0) {
       const thinking = createThinkingBlock(state.assistantMessageId, block.text, { status: MessageBlockStatus.SUCCESS })
-      blocks.push(thinking)
-      blockIds.push(thinking.id)
-    } else if (block.type === 'tool-call') {
-      logger.debug('kernelChat: assistant tool-call block not rendered (MCP cut)')
+      finalBlocks.push(thinking)
+      finalBlockIds.push(thinking.id)
     }
   }
 
-  // 以最终块为准替换流式过程中的临时块
-  if (state.mainBlockId !== undefined && !blockIds.includes(state.mainBlockId)) {
-    store.dispatch(updateOneBlock({ id: state.mainBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
+  // 从块序中摘掉当前 step 的流式块，把最终块插回原位
+  const streamedIds = [state.thinkingBlockId, state.mainBlockId].filter((id): id is string => id !== undefined)
+  if (streamedIds.length > 0) {
+    const firstIndex = state.blockIds.findIndex((id) => streamedIds.includes(id))
+    state.blockIds = state.blockIds.filter((id) => !streamedIds.includes(id))
+    const insertAt = firstIndex >= 0 ? Math.min(firstIndex, state.blockIds.length) : state.blockIds.length
+    state.blockIds.splice(insertAt, 0, ...finalBlockIds)
+  } else if (finalBlockIds.length > 0) {
+    state.blockIds.push(...finalBlockIds)
   }
-  if (state.thinkingBlockId !== undefined) {
-    store.dispatch(updateOneBlock({ id: state.thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
+  if (finalBlocks.length > 0) {
+    store.dispatch(upsertManyBlocks(finalBlocks))
   }
-  if (blocks.length > 0) {
-    store.dispatch(upsertManyBlocks(blocks))
+  // 被替换的流式块标记终态（消息 blocks 已不含它们）
+  for (const id of streamedIds) {
+    store.dispatch(updateOneBlock({ id, changes: { status: MessageBlockStatus.SUCCESS } }))
   }
 
-  const updates: Partial<Message> = {
-    status: AssistantMessageStatus.SUCCESS,
-    blocks: blockIds.length > 0 ? blockIds : state.mainBlockId !== undefined ? [state.mainBlockId] : []
-  }
+  // 累计 token 用量（每条 assistant/message 携带其 step 的用量，turn/end 时写入消息）
   if (data.usage !== undefined) {
-    const inputTokens = data.usage.inputTokens ?? 0
-    const outputTokens = data.usage.outputTokens ?? 0
-    updates.usage = {
-      prompt_tokens: inputTokens,
-      completion_tokens: outputTokens,
-      total_tokens: inputTokens + outputTokens
-    }
+    state.usage.inputTokens += data.usage.inputTokens ?? 0
+    state.usage.outputTokens += data.usage.outputTokens ?? 0
   }
-  store.dispatch(newMessagesActions.updateMessage({ topicId, messageId: state.assistantMessageId, updates }))
-  store.dispatch(updateTopicUpdatedAt({ topicId }))
-  store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
 
-  streams.delete(topicId)
-  pendingStubs.delete(topicId)
+  // 重置说话块游标：下一段说话（下一个 step）新开块
+  state.mainBlockId = undefined
+  state.mainText = ''
+  state.thinkingBlockId = undefined
+  state.thinkingText = ''
+
+  syncMessageBlocks(topicId, state)
+}
+
+/** 工具调用开始：建统一工具块（status=PROCESSING），按事件顺序追加进本轮块序。 */
+function projectToolCall(topicId: string, event: Extract<SessionEvent, { type: 'tool/call' }>): void {
+  const state = streams.get(topicId)
+  if (state === undefined) return
+  let parsedArguments: Record<string, unknown> | undefined
+  try {
+    const parsed = JSON.parse(event.data.arguments) as unknown
+    if (parsed !== null && typeof parsed === 'object') parsedArguments = parsed as Record<string, unknown>
+  } catch {
+    parsedArguments = undefined
+  }
+  const block = createToolBlock(state.assistantMessageId, event.data.callId, {
+    toolName: event.data.name,
+    ...(parsedArguments !== undefined ? { arguments: parsedArguments } : {}),
+    metadata: { rawArguments: event.data.arguments }
+  })
+  state.toolBlocks.set(event.data.callId, block)
+  state.blockIds.push(block.id)
+  store.dispatch(upsertManyBlocks([block]))
+  syncMessageBlocks(topicId, state)
+}
+
+/** 工具调用结束：按 callId 回填同一块（结果文本 + 成功/失败）。 */
+function projectToolResult(topicId: string, event: Extract<SessionEvent, { type: 'tool/result' }>): void {
+  const state = streams.get(topicId)
+  if (state === undefined) return
+  const resultBlock = event.data.message?.content?.[0]
+  if (resultBlock === undefined) return
+  const toolBlock = state.toolBlocks.get(resultBlock.toolCallId)
+  if (toolBlock === undefined) {
+    logger.warn(`kernelChat: tool result without a tracked call (${resultBlock.toolCallId}) in topic "${topicId}"`)
+    return
+  }
+  const text = (resultBlock.content ?? [])
+    .flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []))
+    .join('\n')
+  const failed = resultBlock.isError === true || event.data.error !== undefined
+  store.dispatch(
+    updateOneBlock({
+      id: toolBlock.id,
+      changes: {
+        content: text,
+        status: failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+      }
+    })
+  )
+  // 工具出结果即该调用的审批生命周期结束（'invoking' 条目随之摘除）
+  store.dispatch(toolPermissionsActions.removeByToolCallId({ toolCallId: resultBlock.toolCallId }))
 }
 
 function finishTurn(topicId: string, reason: { kind: string; error?: { message: string; code: string } }): void {
   const state = streams.get(topicId)
   if (state === undefined) return
-  if (reason.kind === 'error') {
+  const failed = reason.kind === 'error'
+  const aborted = reason.kind === 'aborted'
+  if (failed) {
     logger.error(`kernelChat: turn failed for topic "${topicId}": ${reason.error?.message ?? 'unknown'}`)
-    store.dispatch(updateOneBlock({ id: state.mainBlockId, changes: { status: MessageBlockStatus.ERROR } }))
-    store.dispatch(
-      newMessagesActions.updateMessage({
-        topicId,
-        messageId: state.assistantMessageId,
-        updates: { status: AssistantMessageStatus.ERROR }
-      })
-    )
-  } else if (reason.kind === 'aborted') {
-    store.dispatch(updateOneBlock({ id: state.mainBlockId, changes: { status: MessageBlockStatus.PAUSED } }))
-    store.dispatch(
-      newMessagesActions.updateMessage({
-        topicId,
-        messageId: state.assistantMessageId,
-        updates: { status: AssistantMessageStatus.PAUSED }
-      })
-    )
   }
+  // 只收尾仍处于流式/进行中的块（已终态的块保持其成功/失败原样）
+  const settleStatus = failed
+    ? MessageBlockStatus.ERROR
+    : aborted
+      ? MessageBlockStatus.PAUSED
+      : MessageBlockStatus.SUCCESS
+  const entities = store.getState().messageBlocks.entities
+  for (const blockId of state.blockIds) {
+    const block = entities[blockId]
+    if (
+      block !== undefined &&
+      (block.status === MessageBlockStatus.STREAMING || block.status === MessageBlockStatus.PROCESSING)
+    ) {
+      store.dispatch(updateOneBlock({ id: blockId, changes: { status: settleStatus } }))
+    }
+  }
+  const updates: Partial<Message> = {
+    status: failed
+      ? AssistantMessageStatus.ERROR
+      : aborted
+        ? AssistantMessageStatus.PAUSED
+        : AssistantMessageStatus.SUCCESS
+  }
+  if (state.usage.inputTokens > 0 || state.usage.outputTokens > 0) {
+    updates.usage = {
+      prompt_tokens: state.usage.inputTokens,
+      completion_tokens: state.usage.outputTokens,
+      total_tokens: state.usage.inputTokens + state.usage.outputTokens
+    }
+  }
+  store.dispatch(newMessagesActions.updateMessage({ topicId, messageId: state.assistantMessageId, updates }))
+  store.dispatch(updateTopicUpdatedAt({ topicId }))
   store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
+  // 兜底清理：回合结束（含错误/中断）时该话题不应再有未决审批/问答
+  store.dispatch(toolPermissionsActions.clearByTopic({ topicId }))
+  store.dispatch(userQuestionsActions.clearByTopic({ topicId }))
   streams.delete(topicId)
   pendingStubs.delete(topicId)
 }
@@ -476,58 +662,149 @@ function projectEventsToMessages(
 ): { messages: Message[]; blocks: MessageBlock[] } {
   const messages: Message[] = []
   const blocks: MessageBlock[] = []
-  let lastUserMessageId: string | undefined
-
   const assistantId = findAssistantIdForTopic(topicId)
 
+  let lastUserMessageId: string | undefined
+  // 当前轮的合并回答：turn 内所有 assistant/message（多 step）都归并进这一条消息
+  let reply: {
+    messageId: string
+    message: Message
+    blockIds: string[]
+    usage: { inputTokens: number; outputTokens: number }
+    toolBlocks: Map<string, ToolMessageBlock>
+  } | null = null
+
+  const closeReply = (): void => {
+    if (reply === null) return
+    reply.message.blocks = reply.blockIds
+    if (reply.usage.inputTokens > 0 || reply.usage.outputTokens > 0) {
+      reply.message.usage = {
+        prompt_tokens: reply.usage.inputTokens,
+        completion_tokens: reply.usage.outputTokens,
+        total_tokens: reply.usage.inputTokens + reply.usage.outputTokens
+      }
+    }
+    reply = null
+  }
+
   for (const event of events) {
-    if (event.type === 'user/message') {
-      const messageId = kernelMessageId(topicId, event.seq)
-      lastUserMessageId = messageId
-      const blockIds: string[] = []
-      for (const content of event.data.content) {
-        if (content.type === 'text' && content.text.length > 0) {
-          const block = createMainTextBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
-          blocks.push(block)
-          blockIds.push(block.id)
+    switch (event.type) {
+      case 'user/message': {
+        // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
+        // 不是用户发言——不投影为聊天气泡（user/message 事件的 data 就是消息本体，source
+        // 直接挂 data 上，没有 .message 包裹——assistant/message 才有）。刻意不 closeReply：
+        // 注入只出现在 step 边界（审批档位变更在轮内、快照在 user 后 assistant 前且彼时
+        // reply 已被真实 user 消息 close），同轮的 step 间切断会把一轮回答误拆成两条。
+        if (event.data.source?.kind === 'plugin') break
+        closeReply()
+        const messageId = kernelMessageId(topicId, event.seq)
+        lastUserMessageId = messageId
+        const blockIds: string[] = []
+        for (const content of event.data.content) {
+          if (content.type === 'text' && content.text.length > 0) {
+            const block = createMainTextBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
+            blocks.push(block)
+            blockIds.push(block.id)
+          }
         }
+        messages.push(
+          createKernelMessage(messageId, topicId, assistantId, 'user', blockIds, {
+            askId: messageId,
+            status: 'success' as AssistantMessageStatus
+          })
+        )
+        break
       }
-      messages.push(
-        createKernelMessage(messageId, topicId, assistantId, 'user', blockIds, {
-          askId: messageId,
-          status: 'success' as AssistantMessageStatus
-        })
-      )
-    } else if (event.type === 'assistant/message') {
-      const messageId = kernelMessageId(topicId, event.seq)
-      const blockIds: string[] = []
-      for (const content of event.data.message.content) {
-        if (content.type === 'text' && content.text.length > 0) {
-          const block = createMainTextBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
-          blocks.push(block)
-          blockIds.push(block.id)
-        } else if (content.type === 'reasoning' && content.text.length > 0) {
-          const block = createThinkingBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
-          blocks.push(block)
-          blockIds.push(block.id)
+      case 'assistant/message': {
+        // 回填生成该消息的模型身份（头像/显示名/重新生成都依赖 modelId/model）。
+        // source 类型上必填，但 SQLite 旧行或坏行可能缺失：缺了只退化为无头像，不让整个话题投影失败
+        const source = event.data.message.source
+        const modelFields: Partial<Message> =
+          source !== undefined && source.model !== undefined
+            ? { modelId: source.model, model: { id: source.model, provider: source.provider } as Model }
+            : {}
+        if (reply === null) {
+          // 本轮第一条 assistant/message：建立合并后的回答消息。
+          // canonical id = 本事件 seq（与直播路径的 remap 时机和 replySeqs 一致）
+          const messageId = kernelMessageId(topicId, event.seq)
+          const message = createKernelMessage(messageId, topicId, assistantId, 'assistant', [], {
+            askId: lastUserMessageId,
+            ...modelFields,
+            status: 'success' as AssistantMessageStatus
+          })
+          messages.push(message)
+          reply = {
+            messageId,
+            message,
+            blockIds: [],
+            usage: { inputTokens: 0, outputTokens: 0 },
+            toolBlocks: new Map()
+          }
         }
+        // 说话块顺序追加；tool-call 块由 tool/call + tool/result 事件负责（避免双卡）
+        for (const block of event.data.message.content) {
+          if (block.type === 'text' && block.text !== undefined && block.text.length > 0) {
+            const main = createMainTextBlock(reply.messageId, block.text, { status: MessageBlockStatus.SUCCESS })
+            blocks.push(main)
+            reply.blockIds.push(main.id)
+          } else if (block.type === 'reasoning' && block.text !== undefined && block.text.length > 0) {
+            const thinking = createThinkingBlock(reply.messageId, block.text, { status: MessageBlockStatus.SUCCESS })
+            blocks.push(thinking)
+            reply.blockIds.push(thinking.id)
+          }
+        }
+        if (event.data.usage !== undefined) {
+          reply.usage.inputTokens += event.data.usage.inputTokens ?? 0
+          reply.usage.outputTokens += event.data.usage.outputTokens ?? 0
+        }
+        break
       }
-      // 回填生成该消息的模型身份（头像/显示名/重新生成都依赖 modelId/model）。
-      // source 类型上必填，但 SQLite 旧行或坏行可能缺失：缺了只退化为无头像，不让整个话题投影失败
-      const source = event.data.message.source
-      const modelFields: Partial<Message> =
-        source !== undefined && source.model !== undefined
-          ? { modelId: source.model, model: { id: source.model, provider: source.provider } as Model }
-          : {}
-      messages.push(
-        createKernelMessage(messageId, topicId, assistantId, 'assistant', blockIds, {
-          askId: lastUserMessageId,
-          ...modelFields,
-          status: 'success' as AssistantMessageStatus
+      case 'tool/call': {
+        if (reply === null) {
+          logger.warn(`kernelChat: tool/call before any assistant message in topic "${topicId}" (seq ${event.seq})`)
+          break
+        }
+        let parsedArguments: Record<string, unknown> | undefined
+        try {
+          const parsed = JSON.parse(event.data.arguments) as unknown
+          if (parsed !== null && typeof parsed === 'object') parsedArguments = parsed as Record<string, unknown>
+        } catch {
+          parsedArguments = undefined
+        }
+        const toolBlock = createToolBlock(reply.messageId, event.data.callId, {
+          toolName: event.data.name,
+          ...(parsedArguments !== undefined ? { arguments: parsedArguments } : {}),
+          metadata: { rawArguments: event.data.arguments }
         })
-      )
+        blocks.push(toolBlock)
+        reply.blockIds.push(toolBlock.id)
+        reply.toolBlocks.set(event.data.callId, toolBlock)
+        break
+      }
+      case 'tool/result': {
+        if (reply === null) break
+        const resultBlock = event.data.message?.content?.[0]
+        if (resultBlock === undefined) break
+        const toolBlock = reply.toolBlocks.get(resultBlock.toolCallId)
+        if (toolBlock === undefined) {
+          logger.warn(
+            `kernelChat: tool result without a tracked call (${resultBlock.toolCallId}) in topic "${topicId}"`
+          )
+          break
+        }
+        const text = (resultBlock.content ?? [])
+          .flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []))
+          .join('\n')
+        const failed = resultBlock.isError === true || event.data.error !== undefined
+        toolBlock.content = text
+        toolBlock.status = failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+        break
+      }
+      default:
+        break
     }
   }
+  closeReply()
 
   return { messages, blocks }
 }
@@ -589,7 +866,7 @@ export function extractTextFromUserMessage(message: Message): string {
   for (const blockId of blockIds) {
     const block = state.messageBlocks.entities[blockId]
     if (block !== undefined && block.type === MessageBlockType.MAIN_TEXT) {
-      texts.push((block as MainTextMessageBlock).content)
+      texts.push(block.content)
     }
   }
   return texts.join('\n')

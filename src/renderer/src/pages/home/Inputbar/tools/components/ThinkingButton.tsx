@@ -10,15 +10,11 @@ import {
   MdiLightbulbQuestion
 } from '@renderer/components/Icons/SVGIcon'
 import { QuickPanelReservedSymbol, useQuickPanel } from '@renderer/components/QuickPanel'
-import {
-  isFixedReasoningModel,
-  isGPT5SeriesReasoningModel,
-  isOpenAIWebSearchModel
-} from '@renderer/config/models'
-import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
+import { isFixedReasoningModel, isGPT5SeriesReasoningModel, isOpenAIWebSearchModel } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import type { Model, ThinkingOption } from '@renderer/types'
+import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
 import { Tooltip } from 'antd'
 import type { FC, ReactElement } from 'react'
 import { useCallback, useEffect, useMemo } from 'react'

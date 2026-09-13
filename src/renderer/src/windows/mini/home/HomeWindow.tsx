@@ -12,9 +12,9 @@ import type { Assistant, Topic } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { AssistantMessageStatus, MessageBlockStatus } from '@renderer/types/newMessage'
 import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
-import { kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { replacePromptVariables } from '@renderer/utils/prompt'
+import { kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
 import { defaultLanguage } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { Divider } from 'antd'
@@ -447,12 +447,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
       const pending = messageIds
         .map((id) => state.messages.entities[id])
-        .find(
-          (m) =>
-            m !== undefined &&
-            m.role === 'assistant' &&
-            (m.askId === requestUser || m.id === requestUser)
-        )
+        .find((m) => m !== undefined && m.role === 'assistant' && (m.askId === requestUser || m.id === requestUser))
       if (pending) {
         // 保留内容，仅把流式中的块与消息置为 PAUSED，停掉“该条消息下”的生成中动画
         for (const blockId of pending.blocks ?? []) {
@@ -503,7 +498,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         setUserInputText('')
       }
     }
-  }, [isLoading, route, handleCloseWindow, currentAssistant.id, handlePause])
+  }, [isLoading, route, handleCloseWindow, handlePause])
 
   const handleCopy = useCallback(() => {
     if (!currentTopic.current) return

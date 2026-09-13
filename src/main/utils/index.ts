@@ -96,4 +96,3 @@ export async function calculateDirectorySize(directoryPath: string): Promise<num
   }
   return totalSize
 }
-

@@ -80,7 +80,7 @@ class SpanManagerService {
       _models = topicMessageIds
         .map((id) => state.messages.entities[id])
         .filter((m) => m && m.role === 'assistant' && m.askId === message.id)
-        .map((m) => m!.model)
+        .map((m) => m.model)
     } else {
       _models = [message.model]
       await window.api.trace.cleanHistory(message.topicId, message.traceId || '', message.model?.name)

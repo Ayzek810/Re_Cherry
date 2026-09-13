@@ -187,7 +187,9 @@ const assistantsSlice = createSlice({
           }
           return parent !== undefined && incomingIds.has(parent.id)
         })
-        const normalizedIncoming = incoming.map((topic) => (isEmpty(topic.messages) ? topic : { ...topic, messages: [] }))
+        const normalizedIncoming = incoming.map((topic) =>
+          isEmpty(topic.messages) ? topic : { ...topic, messages: [] }
+        )
         const merged = uniqBy([...normalizedIncoming, ...keptChildren], 'id')
         return { ...assistant, topics: merged }
       })

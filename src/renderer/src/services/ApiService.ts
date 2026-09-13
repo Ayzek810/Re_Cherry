@@ -37,8 +37,11 @@ const logger = loggerService.withContext('ApiService')
 /**
  * 从消息中收集图像（用于图像编辑）
  * 收集用户消息中上传的图像和助手消息中生成的图像
+ *
+ * 识图/图像批次预置实现（v0.3.0 复核九勘察、案底遗留节登记）：当前消息路径未接线，
+ * 待识图批次启用（渲染层图片引用随 sendToKernel 的收集层）。
  */
-async function collectImagesFromMessages(userMessage: Message, assistantMessage?: Message): Promise<string[]> {
+export async function collectImagesFromMessages(userMessage: Message, assistantMessage?: Message): Promise<string[]> {
   const images: string[] = []
 
   // 收集用户消息中的图像
@@ -73,8 +76,8 @@ async function collectImagesFromMessages(userMessage: Message, assistantMessage?
   return images
 }
 
-/** OpenAI 兼容图像生成：POST {apiHost}/images/generations。 */
-async function generateImages(
+/** OpenAI 兼容图像生成：POST {apiHost}/images/generations。识图/图像批次预置（未接线）。 */
+export async function generateImages(
   provider: Provider,
   model: string,
   prompt: string,
@@ -97,8 +100,8 @@ async function generateImages(
   return (data.data ?? []).map((item) => item.b64_json ?? item.url ?? '').filter(Boolean)
 }
 
-/** OpenAI 兼容图像编辑：POST {apiHost}/images/edits（multipart，逐张编辑）。 */
-async function editImages(
+/** OpenAI 兼容图像编辑：POST {apiHost}/images/edits（multipart，逐张编辑）。识图/图像批次预置（未接线）。 */
+export async function editImages(
   provider: Provider,
   model: string,
   prompt: string,

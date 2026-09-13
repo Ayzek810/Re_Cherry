@@ -4,7 +4,7 @@ import type {
   QuickPanelListItem,
   QuickPanelReservedSymbol
 } from '@renderer/components/QuickPanel'
-import { type Assistant, type Model, type ThinkingOption, TopicType } from '@renderer/types'
+import { type Assistant, type Model, type ThinkingOption, type Topic, TopicType } from '@renderer/types'
 import type { InputBarToolType } from '@renderer/types/chat'
 import type { TFunction } from 'i18next'
 import React from 'react'
@@ -53,6 +53,8 @@ export interface ToolContext {
   scope: InputbarScope
   assistant: Assistant
   model: Model
+  /** 当前激活话题（mini-window 等作用域没有话题，为 undefined）。 */
+  topic?: Topic
   // Session data for Agent Session scope (only available when scope is TopicType.Session)
   session?: {
     agentId?: string

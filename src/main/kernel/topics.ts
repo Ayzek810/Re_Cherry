@@ -2,15 +2,26 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
+import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import { type SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import * as toolFs from '@deepseek-ai/dsh-tool-fs'
+import * as toolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
+import * as toolJobs from '@deepseek-ai/dsh-tool-jobs'
+import * as toolPwsh from '@deepseek-ai/dsh-tool-pwsh'
+import * as toolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
+import { effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { loggerService } from '@logger'
+import { EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
 import { KERNEL_REASONING_LEVELS, type KernelReasoningLevel } from '@shared/config/reasoning'
+import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
 import { app } from 'electron'
+
+import * as askUserTool from './askUserTool'
 
 const logger = loggerService.withContext('KernelTopics')
 
@@ -32,6 +43,8 @@ export interface KernelTopic {
   parentTopicId?: string
   /** 截断删除后被取代：值为替代它的新会话 id；可见层与清扫只认新会话。 */
   supersededByTopicId?: string
+  /** 工作目录（会话创建时写入 session header.cwd，绝对路径；仅新建话题生效）。 */
+  workingDir?: string
 }
 
 export interface KernelTopicInput {
@@ -42,6 +55,8 @@ export interface KernelTopicInput {
   maxTokens?: number
   systemPrompt?: string
   reasoningEffort?: string
+  /** 新话题的工作目录（= dsh 会话 header.cwd；仅新建话题生效）。 */
+  workingDir?: string
 }
 
 interface TopicRegistryFile {
@@ -50,6 +65,101 @@ interface TopicRegistryFile {
 
 let topics = new Map<string, KernelTopic>()
 const liveHandles = new Map<string, AgentHandle>()
+/**
+ * 活体 agent 的工具面挂载状态（内置/外置工具 id 集）；随活体生命周期同步增删。
+ * 铁律：任何机制都不得按“面 id 比对工具注册名”运作——一个插件注册几个工具、
+ * 叫什么名是插件的内部事务。开关 = 挂载单元（插件级）：开 = 挂（schema 出现），
+ * 关 = 撤（schema 消失）；关闭期间模型仍试图调用的，由 DSML 修复补丁转成真调用
+ * 后落到 dsh 原生 unknown tool 结构化回执（带内反馈，不会静默成功）。
+ */
+interface MountedToolsState {
+  builtins: string[]
+  externals: string[]
+  /** setup 时的 topic.systemPrompt 快照（闭包持行对象，行被 createTopic 换新后旧值不变）。 */
+  systemPrompt: string
+}
+const mountedTools = new Map<string, MountedToolsState>()
+
+/**
+ * 工具面挂载注册表（数据驱动，新增工具零逻辑改动）：id（@shared/config/agentTools 的
+ * BUILTIN_TOOL_IDS / EXTERNAL_TOOL_IDS）→ 挂载单元。一个挂载单元可以在插件里展开成
+ * 任意数量的工具（如 fs 展开 read/write/edit/read_image），挂载逻辑只认 id 不认工具名。
+ */
+const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
+  { id: 'ask_user_question', mount: (agentCtx) => agentCtx.plugin(askUserTool) }
+]
+
+const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
+  // tool-fs-search 的 sampleOverCapGlobResults 是必填无默认配置（schema fail-loud），
+  // 不传会在 resume 重建时 ValidationError；true = glob 超限时采样截断并提示（而非报错）。
+  { id: 'fs', mount: (agentCtx) => agentCtx.plugin(toolFs) },
+  { id: 'fsSearch', mount: (agentCtx) => agentCtx.plugin(toolFsSearch, { sampleOverCapGlobResults: true }) },
+  { id: 'editor', mount: (agentCtx) => agentCtx.plugin(toolStrReplaceEditor) },
+  { id: 'pwsh', mount: (agentCtx) => agentCtx.plugin(toolPwsh) },
+  { id: 'jobs', mount: (agentCtx) => agentCtx.plugin(toolJobs) }
+]
+
+/** 外置工具 id → 模型可读的能力短语（工具面说明段用；与 @shared/config/agentTools 的 id 一一对应）。 */
+const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
+  fs: 'reading, writing and moving files inside the sandbox workspace (read / write / move)',
+  fsSearch: 'searching the workspace by filename pattern and content keywords (glob / grep)',
+  editor: 'structured file editing via exact string replacement (str_replace_editor)',
+  pwsh: 'running PowerShell commands inside the sandbox (pwsh)',
+  jobs: 'tracking long-running background jobs (jobs)'
+}
+
+/**
+ * 工具面说明段（chatbox 四层机制的 instructions 层，按挂载状态数据拼装，零工具特判）：
+ * 可用/缺席都明说（缺席是一等公民）、"本请求的工具清单即环境全部事实"杀幻觉先验、
+ * 开关随时可变以本段为准、禁止正文写调用标记（DSML 泄漏只变文本）、调用前一句短说明。
+ * 具体工具的使用时机在各工具自身 description 里（不在此处逐工具写死）。
+ */
+function buildToolFaceSection(builtins: string[], externals: string[]): string {
+  const lines = [
+    '## Tool Face (this turn)',
+    'The tool schemas in THIS request are the complete truth of this environment. ' +
+      'Everything not listed here does not exist: there are no hidden tools, plugins, or UI features you can invoke by mentioning them. ' +
+      'The user can toggle tool availability between turns; this section is the current truth for THIS turn.'
+  ]
+  if (builtins.length > 0) {
+    lines.push(`- Interactive built-in tools available this turn: ${builtins.join(', ')}.`)
+  } else {
+    lines.push('- No interactive built-in tools this turn; ask the user in plain text within your reply.')
+  }
+  const enabled = EXTERNAL_TOOL_IDS.filter((id) => externals.includes(id))
+  if (enabled.length > 0) {
+    lines.push(
+      '- File and command tools available this turn:',
+      ...enabled.flatMap((id) =>
+        EXTERNAL_TOOL_CAPABILITIES[id] === undefined ? [] : [`  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`]
+      )
+    )
+  } else {
+    lines.push(
+      '- You have NO file or command tools this turn. Do not simulate reading, writing, or executing anything; ' +
+        'if the task requires them, say so plainly and let the user decide.'
+    )
+  }
+  lines.push(
+    '- Never include tool-call syntax or markup in your reply text: it is never executed and only pollutes the answer. To call a tool, issue a real tool call.',
+    "- When you are about to call one or more tools, first include one short sentence (in the user's language) explaining what you will do next.",
+    // 快照压制：RuntimeContextProjection 的注入消息（"Current runtime context" 开头的 user 角色
+    // 消息）是内核状态标注，不是用户发言——真机实测模型会在元问题里把整段复述给用户看。
+    // 要求遵守但沉默：状态已由本段与本轮 schema 表达，回复里不引用不复述不提及。
+    '- Messages in this conversation that begin with "Current runtime context" are system-injected state notes, not user speech: comply with them silently and NEVER quote, repeat, or mention them in your reply.'
+  )
+  return lines.join('\n')
+}
+
+function idListEquals(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((id, index) => id === b[index])
+}
+
+function mountedStateEquals(mounted: MountedToolsState | undefined, builtins: string[], externals: string[]): boolean {
+  if (mounted === undefined) return false
+  return idListEquals(mounted.builtins, builtins) && idListEquals(mounted.externals, externals)
+}
 
 /**
  * provider/model → 该模型在 dsh/pi-ai 侧实际可用的思考档位（空数组 = 不支持思考控制）。
@@ -282,6 +392,10 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
       ? { reasoningEffort: existing.reasoningEffort }
       : {}),
     ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+    ...(existing?.workingDir !== undefined && existing.workingDir.length > 0
+      ? { workingDir: existing.workingDir }
+      : {}),
+    ...(input.workingDir === undefined ? {} : { workingDir: input.workingDir }),
     // upsert 保留分支血缘（fork 子会话在每次发送前会被 createTopic 幂等更新）
     ...(existing?.parentTopicId !== undefined ? { parentTopicId: existing.parentTopicId } : {})
   }
@@ -289,16 +403,6 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
   await ensureAgent(ctx, topic)
   await persistRegistry()
   logger.info(`kernel: topic "${topic.id}" ready (${topic.provider}/${topic.model})`)
-  return topic
-}
-
-/** 更新话题运行时配置（目前仅思考档位），持久化注册表。 */
-export async function updateTopicConfig(id: string, patch: { reasoningEffort?: string }): Promise<KernelTopic> {
-  const topic = topics.get(id)
-  if (topic === undefined) throw new Error(`kernel: topic "${id}" not found`)
-  if (patch.reasoningEffort !== undefined) topic.reasoningEffort = patch.reasoningEffort
-  topic.updatedAt = Date.now()
-  await persistRegistry()
   return topic
 }
 
@@ -312,11 +416,15 @@ export async function renameTopic(id: string, name: string): Promise<KernelTopic
   return topic
 }
 
-/** 打开话题：确保 agent 已加载（未加载则从持久化恢复或新建）。 */
-export async function openTopic(ctx: Context, id: string): Promise<Agent> {
+/** 打开话题：确保 agent 已加载（未加载则从持久化恢复或新建）。mounted 指定本轮工具面挂载状态（缺省 = 维持现状）。 */
+export async function openTopic(
+  ctx: Context,
+  id: string,
+  mounted?: { builtins?: string[]; externals?: string[] }
+): Promise<Agent> {
   const topic = topics.get(id)
   if (topic === undefined) throw new Error(`kernel: topic "${id}" not found`)
-  return ensureAgent(ctx, topic)
+  return ensureAgent(ctx, topic, mounted)
 }
 
 /**
@@ -333,7 +441,7 @@ export async function forkTopic(
   const sourceTopic = topics.get(sourceTopicId)
   if (sourceTopic === undefined) throw new Error(`kernel: source topic "${sourceTopicId}" not found`)
   const sourceAgent = await openTopic(ctx, sourceTopicId)
-  const events = sourceAgent.session.events as readonly SessionEvent[]
+  const events = sourceAgent.session.events
 
   const anchorIndex = events.findIndex((event) => event.type === 'user/message' && event.seq === anchorUserMessageSeq)
   if (anchorIndex === -1) {
@@ -367,6 +475,7 @@ export async function forkTopic(
     ...(sourceTopic.reasoningEffort === undefined || sourceTopic.reasoningEffort.length === 0
       ? {}
       : { reasoningEffort: sourceTopic.reasoningEffort }),
+    ...(sourceTopic.workingDir === undefined ? {} : { workingDir: sourceTopic.workingDir }),
     parentTopicId: sourceTopic.id
   }
   topics.set(child.id, child)
@@ -398,6 +507,7 @@ async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<strin
   if (handle !== undefined) {
     await handle.dispose()
     liveHandles.delete(id)
+    mountedTools.delete(id)
   }
   topics.delete(id)
   await persistRegistry()
@@ -561,9 +671,7 @@ export async function destroyTurns(
   if (!Array.isArray(anchorUserSeqs)) {
     throw new Error('kernel: destroyTurns requires an anchor user seq array')
   }
-  const anchors = [...new Set(anchorUserSeqs)]
-    .filter((seq) => Number.isInteger(seq) && seq >= 0)
-    .sort((a, b) => a - b)
+  const anchors = [...new Set(anchorUserSeqs)].filter((seq) => Number.isInteger(seq) && seq >= 0).sort((a, b) => a - b)
   if (anchors.length === 0) {
     throw new Error('kernel: destroyTurns requires at least one anchor user seq')
   }
@@ -596,7 +704,7 @@ export async function destroyTurns(
   // ---- 3. 活体日志对账：每个锚点必须是 owner 当前日志里的自有 user/message ----
   //       （日志若已被更早的删除截短，旧 seq 消失 → 视图过期，拒绝，待渲染层刷新重试。）
   const agent = await openTopic(ctx, owner.id)
-  const events = agent.session.events as readonly SessionEvent[]
+  const events = agent.session.events
   const cutoffs: number[] = []
   for (const anchor of anchors) {
     const anchorIndex = events.findIndex((event) => event.type === 'user/message' && event.seq === anchor)
@@ -664,7 +772,7 @@ export async function destroyTurns(
       surviving.sort((a, b) => a.t.createdAt - b.t.createdAt)
       let pick: SiblingEntry | undefined = surviving.find((entry) => entry.t.createdAt > owner.createdAt)
       if (pick === undefined && surviving.length > 0) {
-        pick = surviving[surviving.length - 1] as SiblingEntry
+        pick = surviving[surviving.length - 1]
       }
       focusTopicId = pick === undefined ? parentId : pick.t.id
     }
@@ -679,6 +787,7 @@ export async function destroyTurns(
     if (handle !== undefined) {
       await handle.dispose()
       liveHandles.delete(owner.id)
+      mountedTools.delete(owner.id)
     }
     await truncateSessionEvents(owner.id, cutoff)
     const row = topics.get(owner.id)
@@ -703,12 +812,52 @@ export async function sendMessage(
   ctx: Context,
   id: string,
   text: string,
-  options?: { reasoningEffort?: string }
+  options?: {
+    reasoningEffort?: string
+    /** 本轮启用的内置工具 id 列表（助手 builtinTools 的开集，见 @shared/config/agentTools）。 */
+    builtinTools?: string[]
+    /** 本轮启用的外置工具 id 列表（助手 externalTools 的开集；话题工作模式开关 = 该清单的宏）。 */
+    externalTools?: string[]
+    /** 外置工具的权限档位（沙箱/审批预设）；仅外置清单非空时落位。 */
+    tier?: WorkModeApprovalTier
+  }
 ): Promise<void> {
-  const agent = await openTopic(ctx, id)
+  const builtins = [...new Set(options?.builtinTools ?? [])].sort()
+  const externals = [...new Set(options?.externalTools ?? [])].sort()
+  // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
+  //（会话已持久化）并按新状态重挂——开关随时可切，生效点永远在下一轮开始之前。
+  // systemPrompt 同判：assistant section 是 setup 时的静态文本，行被 createTopic 覆盖后
+  // 活体若不重建，模型永远收到旧提示词（用户改提示词/默认句随语言切换都靠这里生效）。
+  const mountedState = mountedTools.get(id)
+  const desiredPrompt = topics.get(id)?.systemPrompt ?? ''
+  const handle = liveHandles.get(id)
+  if (
+    handle !== undefined &&
+    (mountedState === undefined ||
+      !mountedStateEquals(mountedState, builtins, externals) ||
+      mountedState.systemPrompt !== desiredPrompt)
+  ) {
+    await handle.dispose()
+    liveHandles.delete(id)
+    mountedTools.delete(id)
+  }
+  const agent = await openTopic(ctx, id, { builtins, externals })
   const topic = topics.get(id)
   if (topic !== undefined) {
     if (options?.reasoningEffort !== undefined) topic.reasoningEffort = options.reasoningEffort
+    if (externals.length > 0) {
+      applyWorkModeTier(agent, options?.tier ?? 'read-only')
+    } else {
+      // 关闭态清档位残留：外置清单为空 = 没有任何文件/命令执行体，沙箱档位无消费路径
+      //（实际完全隔离）；落词汇表最严档 + 免审批，防止上一轮档位事件残留并被运行时
+      // 快照报给模型（模型嘴上带"我有写权限"的锚定源）。折叠一致时不重复追加事件。
+      if (effectiveSandboxMode(agent.session.events) !== 'read-only') {
+        setSandboxMode(agent.session, 'read-only')
+      }
+      if (effectiveApprovalPolicy(agent.session.events) !== 'never') {
+        setApprovalPolicy(agent.session, 'never')
+      }
+    }
     topic.updatedAt = Date.now()
   }
   const message = createUserMessage({
@@ -803,6 +952,7 @@ async function sweepOrphanSessions(ctx: Context): Promise<void> {
 
 export function clearLiveHandles(): void {
   liveHandles.clear()
+  mountedTools.clear()
 }
 
 /** 中止当前回合。 */
@@ -818,7 +968,7 @@ export function isTopicRunning(ctx: Context, id: string): boolean {
 }
 
 /** 取会话事件日志（打开话题后的初始渲染用）。 */
-export function sessionEvents(ctx: Context, id: string): readonly import('@deepseek-ai/dsh-session').SessionEvent[] {
+export function sessionEvents(ctx: Context, id: string): readonly SessionEvent[] {
   const agent = ctx.agents.get(SessionId(id))
   if (agent === undefined) throw new Error(`kernel: session "${id}" is not loaded`)
   return agent.session.events
@@ -848,7 +998,7 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
 
   for (const header of headers) {
     const topicName = getTopic(header.id)?.name ?? header.id
-    let events: readonly import('@deepseek-ai/dsh-session').SessionEvent[]
+    let events: readonly SessionEvent[]
     try {
       const inspection = await ctx.sessionPersistence.inspect(header.id)
       events = inspection.events
@@ -890,7 +1040,7 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
 async function ensureAgent(
   ctx: Context,
   topic: KernelTopic,
-  options?: { seed?: readonly SessionEvent[]; parentSessionId?: string }
+  options?: { seed?: readonly SessionEvent[]; parentSessionId?: string; builtins?: string[]; externals?: string[] }
 ): Promise<Agent> {
   const existing = liveHandles.get(topic.id)
   if (existing !== undefined) return existing.agent
@@ -899,12 +1049,20 @@ async function ensureAgent(
   const live = ctx.agents.get(sessionId)
   if (live !== undefined) return live
 
+  // 工具面跟轮走：显式指定（本轮发送的能力状态）优先，否则维持上一次挂载状态。
+  const previous = mountedTools.get(topic.id)
+  const builtinsMounted = options?.builtins ?? previous?.builtins ?? []
+  const externalsMounted = options?.externals ?? previous?.externals ?? []
+
   const agentOptions = {
     provider: topic.provider,
     model: topic.model,
     ...(topic.maxTokens === undefined ? {} : { maxTokens: topic.maxTokens })
   }
-  const setup = (agentCtx: Context): void => {
+  // 工具面（Step 3/工具页）：按挂载注册表在 agent 作用域挂载（ToolRegistry 按作用域分层，
+  // agentCtx 注册只对本 agent 可见）。挂载单元数据驱动（BUILTIN_MOUNTS / EXTERNAL_MOUNTS），
+  // 一个单元可在插件内展开任意数量的工具；开关只增删挂载单元，逻辑不认工具名。
+  const setup = async (agentCtx: Context): Promise<void> => {
     if (topic.systemPrompt !== undefined && topic.systemPrompt.length > 0) {
       agentCtx.systemPrompt.section({
         name: 'cherry:assistant',
@@ -912,7 +1070,38 @@ async function ensureAgent(
         text: topic.systemPrompt
       })
     }
+    agentCtx.systemPrompt.section({
+      name: 'cherry:tool-face',
+      order: 1,
+      text: buildToolFaceSection(builtinsMounted, externalsMounted)
+    })
+    // 工具面运行时快照（dsh RuntimeContextProjection 原生机制）：system 说明段管规则（远因），
+    // 这里的动态上下文管每轮状态——渲染值变化时 dsh 自动把快照投影成会话内消息（排在当轮
+    // 用户消息之后，最近因位置），状态变化即被模型以最高新鲜度看到，压掉它对自己历史回答
+    // 的锚定（真机实锤：挂载/schema 全对，模型仍连续复读旧状态）。面没变不注入（dsh 去重）。
+    // 文本刻意压到最短（无感注入：一词一句都是 token）。
+    agentCtx.systemPrompt.context({
+      name: 'cherry:tool-face-state',
+      order: 0,
+      text: `Tools: ${[...builtinsMounted, ...externalsMounted].join(', ') || 'none'}.`
+    })
     attachReasoningEffortListener(agentCtx, topic.id)
+    for (const entry of BUILTIN_MOUNTS) {
+      if (builtinsMounted.includes(entry.id)) await entry.mount(agentCtx)
+    }
+    for (const entry of EXTERNAL_MOUNTS) {
+      if (externalsMounted.includes(entry.id)) await entry.mount(agentCtx)
+    }
+    logger.info(
+      `kernel: tools mounted for topic "${topic.id}" builtins=[${builtinsMounted.join(',') || '(none)'}] externals=[${externalsMounted.join(',') || '(none)'}]`
+    )
+  }
+
+  // 工作目录：仅会话创建时可写入 header.cwd（持久化、不可变）；resume 路径沿用已存值。
+  const meta = {
+    ...(options?.seed !== undefined ? { seedLength: options.seed.length } : {}),
+    ...(options?.parentSessionId !== undefined ? { parentSessionId: SessionId(options.parentSessionId) } : {}),
+    ...(topic.workingDir !== undefined && topic.workingDir.length > 0 ? { cwd: topic.workingDir } : {})
   }
 
   let handle: AgentHandle
@@ -921,10 +1110,7 @@ async function ensureAgent(
     handle = await ctx.agents.create({
       sessionId,
       seed: options.seed as SessionEvent[],
-      meta: {
-        ...(options.parentSessionId === undefined ? {} : { parentSessionId: options.parentSessionId }),
-        seedLength: options.seed.length
-      },
+      meta,
       agentOptions,
       setup
     })
@@ -937,9 +1123,31 @@ async function ensureAgent(
         `kernel: resume session "${topic.id}" failed, creating fresh`,
         error instanceof Error ? error : new Error(String(error))
       )
-      handle = await ctx.agents.create({ sessionId, agentOptions, setup })
+      handle = await ctx.agents.create({ sessionId, meta, agentOptions, setup })
     }
   }
   liveHandles.set(topic.id, handle)
+  mountedTools.set(topic.id, {
+    builtins: builtinsMounted,
+    externals: externalsMounted,
+    systemPrompt: topic.systemPrompt ?? ''
+  })
   return handle.agent
+}
+
+/**
+ * 发送前把本轮权限档位落到会话（三档生效；随外置工具挂载触发）：
+ * 档位 = dsh 沙箱模式名（read-only / workspace-write / danger-full-access），
+ * 审批档位 = read-only 问、其余 never。折叠值与目标一致时不重复追加事件。
+ */
+function applyWorkModeTier(agent: Agent, tier: WorkModeApprovalTier): void {
+  if (!WORK_MODE_APPROVAL_TIERS.includes(tier)) return
+  const session = agent.session
+  if (effectiveSandboxMode(session.events) !== tier) {
+    setSandboxMode(session, tier)
+  }
+  const desiredApproval = tier === 'read-only' ? 'ask' : 'never'
+  if (effectiveApprovalPolicy(session.events) !== desiredApproval) {
+    setApprovalPolicy(session, desiredApproval)
+  }
 }

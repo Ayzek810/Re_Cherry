@@ -7,11 +7,11 @@ import { loadTopicMessagesThunk } from '@renderer/store/thunk/messageThunk'
 import type { Assistant, FileMetadata, Topic } from '@renderer/types'
 import type { FileMessageBlock, ImageMessageBlock, Message } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
+import { listRootTopics, recallLastViewedBranch } from '@renderer/utils/topicBranch'
 import { find } from 'lodash'
 import { useEffect, useState } from 'react'
 
 import { useAssistant } from './useAssistant'
-import { listRootTopics } from '@renderer/utils/topicBranch'
 
 let _activeTopic: Topic
 
@@ -20,7 +20,15 @@ const logger = loggerService.withContext('useTopic')
 export function useActiveTopic(assistantId: string, topic?: Topic) {
   const { assistant } = useAssistant(assistantId)
   const rootTopics = assistant ? listRootTopics(assistant.topics ?? []) : []
-  const [activeTopic, setActiveTopic] = useState(topic || _activeTopic || rootTopics[0] || assistant?.topics?.[0])
+  // 初始落点也走家族浏览记忆：重载/重启后首次挂载时恢复上次浏览的分支（fallback effect
+  // 只兜"activeTopic 不在本助手"的场景，初始落点命中 topics 时不触发，必须在这里 recall）。
+  const [activeTopic, setActiveTopic] = useState(
+    topic ||
+      _activeTopic ||
+      (rootTopics[0] !== undefined
+        ? recallLastViewedBranch(rootTopics[0], assistant?.topics ?? [])
+        : assistant?.topics?.[0])
+  )
 
   _activeTopic = activeTopic
 
@@ -42,7 +50,9 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
       !find(assistant.topics, { id: activeTopic?.id })
     ) {
       const roots = listRootTopics(assistant.topics)
-      setActiveTopic(roots[0] ?? assistant.topics[0])
+      const fallback = roots[0] ?? assistant.topics[0]
+      // 家族浏览记忆：兜底落点也恢复上次浏览的分支（无记忆/分支已删 → 落回根）
+      setActiveTopic(fallback !== undefined ? recallLastViewedBranch(fallback, assistant.topics) : fallback)
     }
   }, [activeTopic?.id, assistant])
 
