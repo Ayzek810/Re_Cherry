@@ -19,7 +19,6 @@ import { newMessagesActions } from '@renderer/store/newMessage'
 import { setGenerating } from '@renderer/store/runtime'
 import type { Assistant, Topic } from '@renderer/types'
 import { classNames, removeSpecialCharactersForFileName } from '@renderer/utils'
-import { listRootTopics, loadKernelTopicRootIds, shouldShowTopicRow } from '@renderer/utils/topicBranch'
 import { copyTopicAsMarkdown, copyTopicAsPlainText } from '@renderer/utils/copy'
 import {
   exportMarkdownToJoplin,
@@ -29,6 +28,12 @@ import {
   exportTopicToNotion,
   topicToMarkdown
 } from '@renderer/utils/export'
+import {
+  listRootTopics,
+  loadKernelTopicRootIds,
+  recallLastViewedBranch,
+  shouldShowTopicRow
+} from '@renderer/utils/topicBranch'
 import type { MenuProps } from 'antd'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType, MenuItemType } from 'antd/es/menu/interface'
@@ -84,7 +89,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     const base = listRootTopics(assistant?.topics ?? [])
     // 内核确认存在（或当前正激活/暂无内核结果时）才展示，避免历史遗留孤儿行污染列表
     return base.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
-  }, [assistant?.topics, kernelRoots, activeTopic?.id])
+  }, [assistant?.topics, kernelRoots])
   const { showTopicTime, pinTopicsToTop, setTopicPosition, topicPosition } = useSettings()
 
   const renamingTopics = useSelector((state: RootState) => state.runtime.chat.renamingTopics)
@@ -175,7 +180,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       removeTopic(topic)
       setDeletingTopicId(null)
     },
-    [activeTopic.id, addTopic, assistant.id, assistant.topics, removeTopic, setActiveTopic]
+    [activeTopic.id, addTopic, assistant.id, assistant.topics, removeTopic, rootTopics, setActiveTopic]
   )
 
   const onPinTopic = useCallback(
@@ -213,7 +218,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       const updatedTopic = { ...topic, pinned: !topic.pinned }
       updateTopic(updatedTopic)
     },
-    [assistant.topics, updateTopic, updateTopics, pinTopicsToTop]
+    [assistant.topics, updateTopic, updateTopics, pinTopicsToTop, rootTopics]
   )
 
   const onDeleteTopic = useCallback(
@@ -225,7 +230,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       }
       removeTopic(topic)
     },
-    [assistant.topics, removeTopic, setActiveTopic, activeTopic]
+    [assistant.topics, removeTopic, rootTopics, setActiveTopic, activeTopic]
   )
 
   const onMoveTopic = useCallback(
@@ -235,15 +240,16 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       setActiveTopic(rootTopics[index + 1 === rootTopics.length ? 0 : index + 1])
       moveTopic(topic, toAssistant)
     },
-    [assistant.topics, moveTopic, setActiveTopic]
+    [assistant.topics, moveTopic, rootTopics, setActiveTopic]
   )
 
   const onSwitchTopic = useCallback(
     async (topic: Topic) => {
       // await modelGenerating()
-      setActiveTopic(topic)
+      // 家族浏览记忆：进话题时恢复上次浏览的分支（无记忆/分支已删 → 落回点击的根话题）
+      setActiveTopic(recallLastViewedBranch(topic, assistant?.topics ?? []))
     },
-    [setActiveTopic]
+    [setActiveTopic, assistant]
   )
 
   const exportMenuOptions = useSelector((state: RootState) => state.settings.exportMenuOptions)
@@ -506,7 +512,8 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     onClearMessages,
     setTopicPosition,
     onMoveTopic,
-    onDeleteTopic
+    onDeleteTopic,
+    rootTopics.length
   ])
 
   // Sort topics based on pinned status if pinTopicsToTop is enabled

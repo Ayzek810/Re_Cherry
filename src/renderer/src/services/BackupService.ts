@@ -645,17 +645,6 @@ export async function handleData(data: Record<string, any>) {
   window.toast.error(i18n.t('error.backup.file_format'))
 }
 
-async function backupDatabase() {
-  const tables = db.tables
-  const backup = {}
-
-  for (const table of tables) {
-    backup[table.name] = await table.toArray()
-  }
-
-  return backup
-}
-
 async function restoreDatabase(backup: Record<string, any>) {
   // Dexie 已废弃：只恢复当前存在的表（旧备份中的 topics/message_blocks 数据跳过）
   const existingTables = new Set(db.tables.map((table) => table.name))

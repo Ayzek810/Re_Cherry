@@ -13,7 +13,6 @@ import {
   updateProviders
 } from '@renderer/store/llm'
 import type { Model, Provider } from '@renderer/types'
-import { isSystemProvider } from '@renderer/types'
 import { withoutTrailingSlash } from '@renderer/utils/api'
 import { isNewApiProvider } from '@renderer/utils/provider'
 import { useCallback, useMemo } from 'react'
@@ -33,14 +32,6 @@ const selectProviders = (state: RootState) => state.llm.providers
 
 const selectEnabledProviders = createSelector(selectProviders, (providers) =>
   providers.map(normalizeProvider).filter((p) => p.enabled)
-)
-
-const selectSystemProviders = createSelector(selectProviders, (providers) =>
-  providers.filter((p) => isSystemProvider(p)).map(normalizeProvider)
-)
-
-const selectUserProviders = createSelector(selectProviders, (providers) =>
-  providers.filter((p) => !isSystemProvider(p)).map(normalizeProvider)
 )
 
 const selectAllProviders = createSelector(selectProviders, (providers) => providers.map(normalizeProvider))
@@ -134,4 +125,3 @@ export function useProvider(id: string) {
     updateModel: (model: Model) => dispatch(updateModel({ providerId: id, model }))
   }
 }
-

@@ -23,6 +23,8 @@ export type ToolPermissionRequestPayload = {
   toolName: string
   toolId: string
   toolCallId: string
+  /** 发起审批的话题（内核审批往返按话题区分归属）。 */
+  topicId?: string
   description?: string
   requiresPermissions: boolean
   input: Record<string, unknown>
@@ -105,6 +107,14 @@ const toolPermissionsSlice = createSlice({
         delete state.requests[entryId]
       }
       delete state.resolvedInputs[toolCallId]
+    },
+    /** 回合结束/话题删除时作废该话题的未决审批（abort 路径的兜底清理）。 */
+    clearByTopic: (state, action: PayloadAction<{ topicId: string }>) => {
+      for (const [key, entry] of Object.entries(state.requests)) {
+        if (entry.topicId === action.payload.topicId) {
+          delete state.requests[key]
+        }
+      }
     },
     clearAll: (state) => {
       state.requests = {}

@@ -51,6 +51,7 @@ import KnowledgeBaseInput from './KnowledgeBaseInput'
 import MentionModelsInput from './MentionModelsInput'
 import { getInputbarConfig } from './registry'
 import TokenCount from './TokenCount'
+import WorkModeSwitch from './tools/components/WorkModeSwitch'
 
 const logger = loggerService.withContext('Inputbar')
 
@@ -440,7 +441,12 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   )
 
   // leftToolbar: 左侧工具栏
-  const leftToolbar = config.showTools ? <InputbarTools scope={scope} assistant={assistant} model={model} /> : null
+  const leftToolbar = config.showTools ? (
+    <InputbarTools scope={scope} assistant={assistant} model={model} topic={topic} />
+  ) : null
+
+  // rightToolbar: 右侧工具栏（发送键左边）：工作模式滑动开关（仅内核聊天话题；mini 窗口无内核会话不显示）
+  const workModeSwitch = scope === TopicType.Chat ? <WorkModeSwitch assistantId={assistant.id} topic={topic} /> : null
 
   // rightToolbar: 右侧工具栏
   const rightToolbar = (
@@ -452,6 +458,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
           contextCount={tokenCountProps.contextCount}
         />
       )}
+      {workModeSwitch}
     </>
   )
 

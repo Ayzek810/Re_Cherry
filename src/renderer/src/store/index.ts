@@ -47,6 +47,7 @@ import settings from './settings'
 import shortcuts from './shortcuts'
 import tabs from './tabs'
 import toolPermissions from './toolPermissions'
+import userQuestions from './userQuestions'
 
 const logger = loggerService.withContext('Store')
 
@@ -65,7 +66,8 @@ const rootReducer = combineReducers({
   messages: newMessagesReducer,
   messageBlocks: messageBlocksReducer,
   inputTools: inputToolsReducer,
-  toolPermissions
+  toolPermissions,
+  userQuestions
 })
 
 // v0.2.4 K3：写盘前剥离非空 provider apiKey（明文不落 localStorage）。
@@ -100,7 +102,7 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
     key: 'cherry-studio',
     storage,
     version: 213,
-    blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions'],
+    blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions'],
     transforms: [stripProviderApiKeys],
     migrate
   },

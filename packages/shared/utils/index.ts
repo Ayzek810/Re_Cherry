@@ -89,4 +89,3 @@ export const SENSITIVE_ENV_KEYS = ['API_KEY', 'APIKEY', 'AUTHORIZATION', 'TOKEN'
 
 // Keys that don't represent functional configuration content
 export const NON_FUNCTIONAL_KEYS = ['$schema']
-

@@ -84,11 +84,7 @@ import type { Model, Provider } from '@renderer/types'
 import { SystemProviderIds } from '@renderer/types'
 
 import { isOpenAIDeepResearchModel } from '../openai'
-import {
-  GEMINI_SEARCH_REGEX,
-  isOpenAIWebSearchModel,
-  isWebSearchModel
-} from '../websearch'
+import { GEMINI_SEARCH_REGEX, isOpenAIWebSearchModel, isWebSearchModel } from '../websearch'
 
 const createModel = (overrides: Partial<Model> = {}): Model => ({
   id: 'gpt-4o',

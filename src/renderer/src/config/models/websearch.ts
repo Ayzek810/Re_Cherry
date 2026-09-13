@@ -141,4 +141,3 @@ export function isOpenAIWebSearchModel(model: Model): boolean {
     (modelId.includes('gpt-5') && !modelId.includes('chat'))
   )
 }
-

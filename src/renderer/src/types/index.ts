@@ -2,6 +2,7 @@ import type { LanguageModelV3Source } from '@ai-sdk/provider'
 import type { WebSearchResultBlock } from '@anthropic-ai/sdk/resources'
 import type OpenAI from '@cherrystudio/openai'
 import type { GroundingMetadata, PersonGeneration } from '@google/genai'
+import type { WorkModeApprovalTier } from '@shared/config/workMode'
 import type { CSSProperties } from 'react'
 
 export * from './file'
@@ -24,6 +25,19 @@ export * from './provider'
 export * from './serialize'
 
 export type McpMode = 'disabled' | 'auto' | 'manual'
+
+/**
+ * 工作模式的助手级默认配置（Step 0 数据层；Step 5 起在智能体设置的"基础/权限模式"页编辑）。
+ * 话题各自的开关状态跟话题走（Topic.workMode，随 redux-persist 持久化），未拨过的新话题取这里的 defaultEnabled 播种。
+ */
+export type AssistantWorkModeConfig = {
+  /** 新话题的初始开关状态。 */
+  defaultEnabled: boolean
+  /** 工作目录＝沙箱允许读写的边界；空 = 未设置（Step 3 接入真工具时生效）。 */
+  workingDir?: string
+  /** 审批档位（dsh 权限预设名，与沙箱模式 1:1，见 @shared/config/workMode）。 */
+  approval: WorkModeApprovalTier
+}
 
 export type Assistant = {
   id: string
@@ -52,6 +66,20 @@ export type Assistant = {
   regularPhrases?: QuickPhrase[] // Added for regular phrase
   tags?: string[] // 助手标签
   enableMemory?: boolean
+  /** 工作模式默认配置（新话题开关的播种来源；工作目录与审批档位的助手级默认值）。 */
+  workMode?: AssistantWorkModeConfig
+  /**
+   * 内置工具开关（稀疏 map，缺省 = 开，默认全开；工具页"内置工具"区编辑）。
+   * 内置工具 = 未开启工作模式也可用的模型工具（见 @shared/config/agentTools），
+   * 随发送参数进内核按开关挂载，拨动下一轮生效。
+   */
+  builtinTools?: Record<string, boolean>
+  /**
+   * 外置工具开关（稀疏 map，缺省 = 开，默认全开；工具页"外置工具"区编辑）。
+   * 外置工具 = 工作模式开启时才挂载的文件/命令工具（见 @shared/config/agentTools），
+   * 随发送参数进内核按开关挂载，拨动下一轮生效。
+   */
+  externalTools?: Record<string, boolean>
 }
 
 /**
@@ -261,8 +289,12 @@ export type Topic = {
   isNameManuallyEdited?: boolean
   /** 分支血缘：有值 = 由内核 fork 创建的分支子话题（值为父话题 id）；侧栏/话题列表只显示根（无此字段）。 */
   parentTopicId?: string
+  /** 家族浏览记忆（记在根话题行上）：该分支家族最后浏览的成员 topic id；缺省 = 看主分支；指向的分支被删时自然落回根。 */
+  lastViewedBranchId?: string
   /** 分支意图：regenerate = 对模型回复重新生成（应共享原用户节点、长新回复节点）；resend = 对用户消息重发/编辑重发（新开用户节点）；parallel = 切换模型回答的隐藏旁答子会话（旁答经家族投影并进主视图卡片组，不进侧栏/分叉图/页码）。 */
   branchKind?: 'resend' | 'regenerate' | 'parallel'
+  /** 工作模式开关的渲染层镜像（权威在内核话题注册表；缺省 = 关）。 */
+  workMode?: boolean
 }
 
 export type User = {
@@ -352,20 +384,8 @@ export enum ThemeMode {
   system = 'system'
 }
 
-/** 有限的UI语言 */
-export type LanguageVarious =
-  | 'zh-CN'
-  | 'zh-TW'
-  | 'de-DE'
-  | 'el-GR'
-  | 'en-US'
-  | 'es-ES'
-  | 'fr-FR'
-  | 'ja-JP'
-  | 'pt-PT'
-  | 'ro-RO'
-  | 'ru-RU'
-  | 'vi-VN'
+/** 有限的UI语言（v0.2.4-1 i18n 收敛为 zh-CN / en-US，其余语言包已删） */
+export type LanguageVarious = 'zh-CN' | 'en-US'
 
 export type CodeStyleVarious = 'auto' | string
 

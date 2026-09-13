@@ -33,4 +33,3 @@ export const PluginMetadataSchema = z.object({
   packageName: z.string().optional(), // Parent package name (e.g., "my-plugin")
   packageVersion: z.string().optional() // Package version from plugin.json
 })
-

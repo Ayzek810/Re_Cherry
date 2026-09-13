@@ -1,4 +1,4 @@
-import store, { useAppSelector } from '@renderer/store'
+import { useAppSelector } from '@renderer/store'
 import { setLMStudioKeepAliveTime } from '@renderer/store/llm'
 import { useDispatch } from 'react-redux'
 
@@ -8,4 +8,3 @@ export function useLMStudioSettings() {
 
   return { ...settings, setKeepAliveTime: (time: number) => dispatch(setLMStudioKeepAliveTime(time)) }
 }
-
