@@ -15,6 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import { loggerService } from '@logger'
+import i18n from '@renderer/i18n'
 import FileManager from '@renderer/services/FileManager'
 import { BlockManager } from '@renderer/services/messageStreaming/BlockManager'
 import { createCallbacks } from '@renderer/services/messageStreaming/callbacks'
@@ -232,9 +233,13 @@ const fetchAndProcessAssistantResponseImpl = async (
   // 的 model 覆盖在调用方变体上，不能被 store 值覆盖回去）。
   const storedAssistant = getState().assistants.assistants.find((a) => a.id === origAssistant.id)
   const topic = (storedAssistant ?? origAssistant).topics.find((t) => t.id === topicId)
+  // 助手系统提示词留空 = 加载随界面语言走的默认句（i18n 实时取值，切语言下一轮生效）；
+  // 用户填了就只用用户的。话题提示词仍按既有规则叠加在基底之后。
+  const basePrompt =
+    origAssistant.prompt.trim().length > 0 ? origAssistant.prompt : i18n.t('chat.assistant.defaultSystemPrompt')
   const assistant = topic?.prompt
-    ? { ...origAssistant, prompt: `${origAssistant.prompt}\n${topic.prompt}` }
-    : origAssistant
+    ? { ...origAssistant, prompt: `${basePrompt}\n${topic.prompt}` }
+    : { ...origAssistant, prompt: basePrompt }
   const assistantMsgId = assistantMessage.id
   let callbacks: StreamProcessorCallbacks = {}
   try {

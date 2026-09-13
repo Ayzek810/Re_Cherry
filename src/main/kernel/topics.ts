@@ -75,6 +75,8 @@ const liveHandles = new Map<string, AgentHandle>()
 interface MountedToolsState {
   builtins: string[]
   externals: string[]
+  /** setup 时的 topic.systemPrompt 快照（闭包持行对象，行被 createTopic 换新后旧值不变）。 */
+  systemPrompt: string
 }
 const mountedTools = new Map<string, MountedToolsState>()
 
@@ -823,8 +825,17 @@ export async function sendMessage(
   const externals = [...new Set(options?.externalTools ?? [])].sort()
   // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
   //（会话已持久化）并按新状态重挂——开关随时可切，生效点永远在下一轮开始之前。
+  // systemPrompt 同判：assistant section 是 setup 时的静态文本，行被 createTopic 覆盖后
+  // 活体若不重建，模型永远收到旧提示词（用户改提示词/默认句随语言切换都靠这里生效）。
+  const mountedState = mountedTools.get(id)
+  const desiredPrompt = topics.get(id)?.systemPrompt ?? ''
   const handle = liveHandles.get(id)
-  if (handle !== undefined && !mountedStateEquals(mountedTools.get(id), builtins, externals)) {
+  if (
+    handle !== undefined &&
+    (mountedState === undefined ||
+      !mountedStateEquals(mountedState, builtins, externals) ||
+      mountedState.systemPrompt !== desiredPrompt)
+  ) {
     await handle.dispose()
     liveHandles.delete(id)
     mountedTools.delete(id)
@@ -833,7 +844,19 @@ export async function sendMessage(
   const topic = topics.get(id)
   if (topic !== undefined) {
     if (options?.reasoningEffort !== undefined) topic.reasoningEffort = options.reasoningEffort
-    if (externals.length > 0) applyWorkModeTier(agent, options?.tier ?? 'read-only')
+    if (externals.length > 0) {
+      applyWorkModeTier(agent, options?.tier ?? 'read-only')
+    } else {
+      // 关闭态清档位残留：外置清单为空 = 没有任何文件/命令执行体，沙箱档位无消费路径
+      //（实际完全隔离）；落词汇表最严档 + 免审批，防止上一轮档位事件残留并被运行时
+      // 快照报给模型（模型嘴上带"我有写权限"的锚定源）。折叠一致时不重复追加事件。
+      if (effectiveSandboxMode(agent.session.events) !== 'read-only') {
+        setSandboxMode(agent.session, 'read-only')
+      }
+      if (effectiveApprovalPolicy(agent.session.events) !== 'never') {
+        setApprovalPolicy(agent.session, 'never')
+      }
+    }
     topic.updatedAt = Date.now()
   }
   const message = createUserMessage({
@@ -1103,7 +1126,11 @@ async function ensureAgent(
     }
   }
   liveHandles.set(topic.id, handle)
-  mountedTools.set(topic.id, { builtins: builtinsMounted, externals: externalsMounted })
+  mountedTools.set(topic.id, {
+    builtins: builtinsMounted,
+    externals: externalsMounted,
+    systemPrompt: topic.systemPrompt ?? ''
+  })
   return handle.agent
 }
 

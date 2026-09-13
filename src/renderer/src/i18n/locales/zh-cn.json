@@ -197,6 +197,7 @@
       }
     },
     "assistant": {
+      "defaultSystemPrompt": "你是一个使用中文的有帮助的助手",
       "search": {
         "placeholder": "搜索"
       }
