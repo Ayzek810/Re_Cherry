@@ -242,6 +242,7 @@
       "send": "发送",
       "slash_commands": {
         "description": "代理会话斜杠命令",
+        "empty": "没有可用的斜杠命令",
         "title": "斜杠命令"
       },
       "thinking": {
@@ -569,6 +570,7 @@
     "reset": "重置",
     "retry": "重试",
     "save": "保存",
+    "save_failed": "保存失败",
     "saved": "已保存",
     "search": "搜索",
     "select": "选择",
@@ -842,6 +844,11 @@
       "label": "确定要导入外部数据吗？"
     },
     "content": "选择要导入的外部应用对话文件，暂时仅支持ChatGPT的JSON格式文件",
+    "error": {
+      "invalid_format": "导入文件格式无效",
+      "unknown": "导入失败，请检查文件格式",
+      "unsupported_format": "不支持的文件格式"
+    },
     "title": "导入外部对话"
   },
   "knowledge": {
@@ -1028,6 +1035,7 @@
         "export": "导出 Notion 错误，请检查连接状态并对照文档检查配置",
         "no_api_key": "未配置 Notion API Key 或 Notion Database ID"
       },
+      "save_provider_logo": "保存提供商图标失败",
       "siyuan": {
         "export": "导出思源笔记失败，请检查连接状态并对照文档检查配置",
         "no_config": "未配置思源笔记 API 地址或令牌"
@@ -1036,6 +1044,7 @@
         "invalid": "无法获取有效的表格数据"
       },
       "unknown": "未知错误",
+      "update_provider_logo": "更新提供商图标失败",
       "yuque": {
         "export": "导出语雀错误，请检查连接状态并对照文档检查配置",
         "no_config": "未配置语雀 Token 或 知识库 URL"
@@ -1173,6 +1182,12 @@
       "reject": "拒绝",
       "streaming": "流式传输中",
       "truncated": "输出已截断（原始大小：{{size}}）"
+    },
+    "video": {
+      "error": {
+        "local_file_missing": "找不到本地视频文件",
+        "unsupported_type": "不支持的视频类型"
+      }
     },
     "warn": {
       "export": {

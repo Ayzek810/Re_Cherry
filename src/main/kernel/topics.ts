@@ -22,6 +22,9 @@ import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/con
 import { app } from 'electron'
 
 import * as askUserTool from './askUserTool'
+import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
+import { isInjectedUserEvent } from './sessionEventView'
+import { isUnreadableSessionError } from './sessionReadFailure'
 
 const logger = loggerService.withContext('KernelTopics')
 
@@ -322,6 +325,9 @@ async function persistRegistry(): Promise<void> {
 /** 启动话题子系统：加载注册表并挂上 session 事件监听（标题回写）。 */
 export async function initTopics(ctx: Context): Promise<void> {
   await loadRegistry()
+  // 先补历史事件的 ignorable 标记，再清扫：含遗留事件的旧会话此前对内核是"整段不可读"，
+  // 而"不可读"与"孤儿"是两回事，不该被同一个兜底路径吞掉（详见 legacySessionMigration.ts）。
+  await migrateLegacyIgnorableEvents()
   await sweepOrphanSessions(ctx)
 
   ctx.on('session/event', (session, event) => {
@@ -1012,6 +1018,9 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
 
     for (const event of events) {
       if (event.type !== 'user/message' && event.type !== 'assistant/message') continue
+      // 注入的插件源消息是模型侧状态标注，不是对话内容：不得进检索结果（UI 视界同一判据，
+      // 见 sessionEventView.ts）。此前漏封此处，注入快照会以 role:'user' 的形式出现在历史搜索里。
+      if (isInjectedUserEvent(event)) continue
       // user/message 的文本在 event.data.content，assistant/message 在 event.data.message.content
       const content = event.type === 'user/message' ? event.data.content : event.data.message.content
       const text = content
@@ -1115,10 +1124,20 @@ async function ensureAgent(
       setup
     })
   } else {
-    // 先尝试从持久化恢复（重启后的话题）；失败则新建空会话
+    // 先尝试从持久化恢复（重启后的话题）；"会话确实不存在"时新建空会话（既有健壮性设计）。
     try {
       handle = await ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
     } catch (error) {
+      // 数据安全（v0.3.0-1 后续）：日志**存在但读不出来**时绝不能用同一 id 新建——那会掩盖问题，
+      // 最坏情况覆盖用户历史（遗留 cherry/work-mode 会话正是这一类：日志在库里、resume 必然失败）。
+      // 判别只认 dsh 公开导出的具名错误类，不做消息匹配（见 sessionReadFailure.ts）。
+      if (isUnreadableSessionError(error)) {
+        logger.error(
+          `kernel: session "${topic.id}" exists but is unreadable; refusing to create a fresh session over it`,
+          error instanceof Error ? error : new Error(String(error))
+        )
+        throw error
+      }
       logger.warn(
         `kernel: resume session "${topic.id}" failed, creating fresh`,
         error instanceof Error ? error : new Error(String(error))

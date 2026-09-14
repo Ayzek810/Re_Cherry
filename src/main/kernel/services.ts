@@ -11,6 +11,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { loggerService } from '@logger'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
+import { uiSessionEvents } from './sessionEventView'
 import type { DestroyTurnsResult, KernelTopic } from './topics'
 import {
   createTopic,
@@ -66,7 +67,11 @@ export interface TopicTreeService {
   ) => Promise<void>
   stop: (id: string) => void
   isRunning: (id: string) => boolean
-  events: (id: string) => readonly SessionEvent[]
+  /**
+   * 该话题会话事件的 **UI 视界**：注入的插件源消息（RuntimeContextProjection 的工具面
+   * 快照、档位标注等）已剔除。渲染层据此不再需要任何可见性判据（v0.3.0-1 结构化的核心）。
+   */
+  uiEvents: (id: string) => readonly SessionEvent[]
 }
 
 /** ctx.sessionGC 服务面（物理清盘；插件可接管）。 */
@@ -118,7 +123,7 @@ export function registerAppServiceSeams(ctx: Context): void {
     ) => sendMessage(ctx, id, text, options),
     stop: (id: string) => stopTopic(ctx, id),
     isRunning: (id: string) => isTopicRunning(ctx, id),
-    events: (id: string) => sessionEvents(ctx, id)
+    uiEvents: (id: string) => uiSessionEvents(sessionEvents(ctx, id))
   }
   app.topicTree = topicTreeService
 

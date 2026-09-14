@@ -28,6 +28,7 @@ The agent sandbox for this project normally has **no `node_modules`** and **cann
   ```powershell
   node E:\Workspace\Re_Cherry\tools\static-checks\run-all.js
   ```
+  > ⚠️ **Currently missing (verified 2026, after the E:\Workspace reorganisation).** That exact path does not exist, and neither does `E:\Workspace\project_REC\tools`; an exhaustive search of `E:\Workspace` finds no `run-all.js`, no `check-imports.js` and no `tools/static-checks` directory anywhere. The workspace root is now `E:\Workspace\project_REC` (the old `E:\Workspace\Re_Cherry` no longer exists), so most likely the suite was lost or left behind in that reorganisation. **Do not claim it was run, and do not treat a deletion/rename batch as verified until it is restored or replaced.** The requirement below still stands — only the tool is gone.
   It provides eight checks, and **all eight must be green** (exit code 0) after any batch of deletions/renames:
   - `check-imports.js` — every import/export/require/dynamic-import specifier resolves on disk (relative, aliases, `?url` query suffixes, NodeNext `.js`→`.ts`, bare packages vs `package.json`).
   - `check-symbols.js` — every `import { a } from '<local path>'` is really exported there (handles this repo's three export shapes: `export const X`, `export const { a, b } = slice.actions` with comments in between, `export { default as X, type Y } from './z'`).
@@ -48,7 +49,7 @@ The agent sandbox for this project normally has **no `node_modules`** and **cann
 - **The kernel session log is the single source of truth.** The renderer is a projection of kernel events. Any conversational state must be recoverable by folding the session log — no parallel sources of truth.
 - **`src/main/kernel/topics.ts`** owns topics (= dsh session + agent) including the `destroyTurns` deletion engine. Structural operations go through the `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` service seams (`src/main/kernel/services.ts`).
 - **`src/renderer/src/services/kernelChat.ts`** is the event-projection bridge (its name is similar to the legacy `services/messageStreaming/**` layer — do not confuse them).
-- Version roadmap and per-version goals live in `<workspace>/docs/当前任务总体规划.txt`; the work-mode (agent toggle) design is in `docs/work-mode-evolution.md` of this repo.
+- Version roadmap and per-version goals live in `<workspace>/docs/当前任务总体规划.txt`.
 
 ## Development Commands (run on the user's real machine)
 
@@ -123,7 +124,9 @@ The dsh kernel is embedded in-process as a Cordis plugin tree (never via the YAM
 | `topics.ts` | Topic registry & chat operations; topic = dsh session + agent; `destroyTurns` deletion engine; reasoning-level convergence |
 | `providers.ts` | Renderer provider config → pi-ai routes (`KernelProviderInput`); clears stale routes on resync |
 | `credentials.ts` | In-memory credential provider (`CherryCredentialProvider`), multi-key rotation per request |
-| `services.ts` | App service seams: `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` (plugins may take over) |
+| `services.ts` | App service seams: `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` (plugins may take over); `ctx.topicTree.uiEvents` returns the UI view of a session log |
+| `sessionEventView.ts` | The single injected-event predicate plus the UI view of session events (v0.3.0-1). All three UI exits apply it: live broadcast, `uiEvents` IPC, `searchSessions` — the renderer holds no visibility predicate of its own |
+| `dsmlRepair.ts` | Response-side DSML tool-call repair, registered as an `llm/stream` waterfall middleware — replaced the `@deepseek-ai/dsh-llm-pi-ai` pnpm patch in v0.3.0-1 |
 
 Renderer side: `src/renderer/src/services/kernelChat.ts` subscribes to kernel `session/event` and projects messages/blocks into Redux. The **quick assistant** (mini window) is the one deliberately separate path: it calls `window.api.dshStreamComplete` without a kernel session.
 
@@ -225,7 +228,12 @@ Winston with daily rotation; log files in `userData/logs/`. Never use `console.l
 
 pnpm settings live in **`pnpm-workspace.yaml`**, not in a `pnpm` field of `package.json`: pnpm 10.6+ ignores that field (it only prints a warning) and pnpm 11 stops reading it entirely. The keys `overrides`, `patchedDependencies` and `onlyBuiltDependencies` are declared there. Moving any of them back into `package.json` silently disables them as soon as the lockfile is regenerated — the `overrides` include several security pins and the patches are load-bearing (libsql's affects win32-arm64 native resolution, file-stream-rotator's affects log rotation, antd's replaces an icon import).
 
-`patches/` must stay in 1:1 correspondence with `patchedDependencies`. Current patches (4): `antd@5.27.0`, `atomically@1.7.0`, `file-stream-rotator@0.6.1`, `libsql@0.4.7`. (`check-configs.js` enforces the 1:1 rule; the former `@tiptap/extension-drag-handle` patch went away with the RichEditor removal.)
+`patches/` must stay in 1:1 correspondence with `patchedDependencies`. Current patches (5): `antd@5.27.0`, `atomically@1.7.0`, `file-stream-rotator@0.6.1`, `libsql@0.4.7`, `node-pty@1.2.0-beta.15`. (`check-configs.js` enforced the 1:1 rule — that suite is currently missing, see above. Two former patches went away: `@tiptap/extension-drag-handle` with the RichEditor removal, and `@deepseek-ai/dsh-llm-pi-ai` in v0.3.0-1 — see below.)
+
+The non-trivial patches carry an explicit rationale:
+
+- **`node-pty@1.2.0-beta.15`** (v0.3.0) — its `binding.gyp` hard-codes `SpectreMitigation: 'Spectre'` on the `OS=="win"` branch, which needs Spectre-mitigated CRT libs that a plain VS BuildTools install lacks (MSB8040). The patch removes only that attribute block; the `msvs_settings` hardening flags (`/guard:cf`, `/sdl`, `/DYNAMICBASE`) are kept. `node-pty` reaches us as a transitive dep of `@deepseek-ai/dsh-subprocess-local` (pwsh PTY), so it is patched rather than the kernel package.
+- **DSML response-side repair is no longer a patch (v0.3.0-1)** — it used to be a `pnpm patch` on the **kernel package family** (`@deepseek-ai/dsh-llm-pi-ai@0.1.1-rc.2`), i.e. the one place where we touched kernel behaviour, and it was pinned to that version. The rationale is unchanged: provider-side parsing of `<｜DSML｜invoke>` markers into structured tool calls is non-deterministic (the same marker parsed on one turn and leaked into the text stream on another), which corrupts *the session log itself* — a leaking turn records no tool call at all. The repair now lives in **our own** kernel-side module `src/main/kernel/dsmlRepair.ts`, registered via `registerDsmlRepair` on the dsh-documented **`llm/stream` waterfall** that both agent-loop call paths pass through (`ctx.llm.stream()` and `prepareCall().stream()`). Semantics are the same as the old patch (well-formed marker + valid JSON → real tool-call block; malformed or non-JSON → passthrough, fail-safe), pinned by `src/main/kernel/__tests__/dsmlRepair.test.ts`. **No kernel package is patched any more**; re-verify with the unit test plus one real-machine session on any kernel upgrade. Full record: `<workspace>/docs/v0.3.0-1_doc.md`.
 
 ## Testing Guidelines
 

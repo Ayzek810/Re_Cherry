@@ -187,7 +187,13 @@ describe('InputEmbeddingDimension', () => {
       await user.click(refreshButton)
 
       await waitFor(() => {
-        expect(mocks.aiCore.getEmbeddingDimensions).toHaveBeenCalledWith(mockModel)
+        // 组件经 `@renderer/services/embedding` 取维度，其签名是 (provider, model)
+        // （见 services/embedding.ts:10）；provider 为 useProvider 的返回并注入轮转后的
+        // apiKey 的副本。旧断言只传了 model，是组件改走该服务之前的写法（v0.3.0-1 后续修正）。
+        expect(mocks.aiCore.getEmbeddingDimensions).toHaveBeenCalledWith(
+          { id: 'test-provider', name: 'Test Provider', apiKey: 'test-key' },
+          mockModel
+        )
         expect(handleChange).toHaveBeenCalledWith(1536)
       })
     })

@@ -49,19 +49,11 @@ export type CMOriginId = string // 形如 sessionId:index
  *   - 祖先的 end-seed 一定小于本会话边界（两者之间没有 user 事件）。
  * 因此取 max{ end-seed seq < maxUserSeq } 即本会话自己的边界；无此类时回退取最大 end-seed。
  * 取第一个会少算共享前缀，导致第一次重发之后的轮被误当成新轮重复建节点。
+ *
+ * 注入消息：内核注入的插件源 user 消息（RuntimeContextProjection 的工具面快照、档位标注等）
+ * 已由内核在 UI 出口统一剔除（`src/main/kernel/sessionEventView.ts`），本模块只收 UI 视界的
+ * 事件，故不再需要可见性判据——v0.3.0 曾在此单独拦截，v0.3.0-1 起改由结构保证。
  */
-/**
- * 内核注入的插件源 user 消息（RuntimeContextProjection 的工具面快照、审批档位变更等）：
- * 面向模型的状态标注，不是用户轮——分支树/页码/删除/重发解析必须无视。此路径直读内核
- * 事件（dshTopicEvents），绕过消息投影层的过滤，必须在此单独拦截（user/message 事件的
- * data 就是消息本体，source 直接挂 data 上）。
- */
-function isInjectedUserEvent(e: { type: string; data?: unknown }): boolean {
-  if (e.type !== 'user/message') return false
-  const source = (e.data as { source?: { kind?: string } } | undefined)?.source
-  return source?.kind === 'plugin'
-}
-
 export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: string; data?: unknown }>): {
   turns: CMUserTurn[]
   userBeforeEndSeed: number
@@ -71,8 +63,7 @@ export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: st
   let userMaxSeq = -1
   const seedSeqs: number[] = []
   for (const event of events) {
-    // 注入事件不计入 maxUserSeq：拖尾快照会把 end-seed 边界判定推偏
-    if (event.type === 'user/message' && !isInjectedUserEvent(event) && event.seq > userMaxSeq) userMaxSeq = event.seq
+    if (event.type === 'user/message' && event.seq > userMaxSeq) userMaxSeq = event.seq
     if (event.type === 'session/end-seed') seedSeqs.push(event.seq)
   }
   let endSeedSeq: number | undefined
@@ -90,8 +81,6 @@ export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: st
   let pendingReplySeq: number | undefined
   for (const e of events) {
     if (e.type === 'user/message') {
-      // 注入事件不是用户轮：不建节点、不计 userBefore、不占 userSeqs/replySeqs 槽位
-      if (isInjectedUserEvent(e)) continue
       if (endSeedSeq !== undefined && e.seq < endSeedSeq) userBefore += 1
       const content = (e.data as { content?: Array<{ type: string; text?: string }> } | undefined)?.content
       turns.push({ text: textOf(content), replies: [] })

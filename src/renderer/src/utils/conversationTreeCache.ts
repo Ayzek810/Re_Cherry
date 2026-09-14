@@ -1,3 +1,4 @@
+import { fetchTopicEvents } from '@renderer/services/kernelEventStream'
 import { type CMFamily, loadFamily } from '@renderer/utils/conversationModel'
 
 interface Entry {
@@ -20,10 +21,8 @@ export function loadConversationTree(rootTopicId: string, signature: string): Pr
     },
     sessionEvents: async (id) => {
       try {
-        const { events } = (await window.api.dshTopicEvents(id)) as {
-          events: Array<{ seq: number; type: string; data?: unknown }>
-        }
-        return events
+        // UI 视界取数（唯一入口）：注入的插件源消息已在内核侧剔除
+        return await fetchTopicEvents(id)
       } catch {
         return []
       }

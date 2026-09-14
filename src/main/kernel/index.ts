@@ -31,10 +31,12 @@ import { IpcChannel } from '@shared/IpcChannel'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
 import { CherryCredentialProvider } from './credentials'
+import { registerDsmlRepair } from './dsmlRepair'
 import type { KernelInteractionHub } from './interaction'
 import { registerInteractionHost } from './interaction'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
+import { uiSessionEvent } from './sessionEventView'
 import { clearLiveHandles, getTopic, initTopics, listTopicBranches, listTopics, searchSessions } from './topics'
 
 const logger = loggerService.withContext('Kernel')
@@ -118,6 +120,10 @@ export async function bootKernel(): Promise<Context> {
     // LLM 层
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(piAiPlugin, { providers: {} })
+    // 响应端工具调用修复（v0.3.0-1）：挂在 dsh 文档化的 `llm/stream` waterfall 上，
+    // agent-loop 的 ctx.llm.stream / prepareCall().stream 两条路径都经此，恒开不受开关约束。
+    // 此前用 pnpm patch 改内核包 dsh-llm-pi-ai 的编译产物，本版起不再动内核包。
+    registerDsmlRepair(ctx)
 
     // 提示词与工具层（tools 空注册：MCP 已砍，占位满足 agent-loop 的 inject）。
     // includeRuntimeContext 必须开：RuntimeContextProjection 靠它把动态上下文（工具面
@@ -209,16 +215,20 @@ export async function bootKernel(): Promise<Context> {
   }
 }
 
-/** 内核事件 → 所有窗口（UI 是内核的显示器）。 */
+/** 内核事件 → 所有窗口（UI 是内核的显示器）。注入的插件源消息不是用户发言：就地不发。 */
 function registerEventForwarding(ctx: Context): void {
   ctx.on('session/event', (session, event) => {
-    broadcast('dsh:session-event', { topicId: session.id, event })
+    // UI 视界判据的唯一落点之一（另两处：ctx.topicTree.uiEvents 与 searchSessions）：
+    // 注入快照只服务模型上下文，渲染层不该看见，也无需自己再判（v0.3.0-1 结构化）。
+    const view = uiSessionEvent(event)
+    if (view === undefined) return
+    broadcast(IpcChannel.Dsh_SessionEvent, { topicId: session.id, event: view })
   })
   ctx.on('session/created', (session) => {
-    broadcast('dsh:session-event', { topicId: session.id, event: { type: 'session/created', data: {} } })
+    broadcast(IpcChannel.Dsh_SessionEvent, { topicId: session.id, event: { type: 'session/created', data: {} } })
   })
   ctx.on('session/disposed', (session) => {
-    broadcast('dsh:session-event', { topicId: session.id, event: { type: 'session/disposed', data: {} } })
+    broadcast(IpcChannel.Dsh_SessionEvent, { topicId: session.id, event: { type: 'session/disposed', data: {} } })
   })
 }
 
@@ -535,7 +545,8 @@ function registerKernelIpc(): void {
     // 必须 await：重启后 agent 需从持久化异步 resume，
     // 不同步等待则下方 events 取不到 agent 而抛 "session is not loaded"
     await tree.open(id)
-    return { events: tree.events(id) }
+    // UI 视界：注入的插件源消息已由 seam 剔除（渲染层因此不需要可见性判据）
+    return { events: tree.uiEvents(id) }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicGet, (_event, id: string) => {
