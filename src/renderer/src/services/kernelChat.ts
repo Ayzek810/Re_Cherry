@@ -4,6 +4,7 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import { loggerService } from '@logger'
 import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
+import { fetchTopicEvents, subscribeKernelSessionEvents } from '@renderer/services/kernelEventStream'
 import store from '@renderer/store'
 import { updateTopic, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
@@ -151,9 +152,9 @@ let bridgeInitialized = false
 export function initKernelBridge(): void {
   if (bridgeInitialized) return
   bridgeInitialized = true
-  window.api.dshOnSessionEvent((payload) => {
+  subscribeKernelSessionEvents((payload) => {
     try {
-      handleSessionEvent(payload as { topicId: string; event: SessionEvent })
+      handleSessionEvent(payload)
     } catch (error) {
       logger.error(
         'kernelChat: failed to handle session event',
@@ -293,8 +294,9 @@ export async function loadKernelTopicMessages(
   topicId: string
 ): Promise<{ messages: Message[]; blocks: MessageBlock[] } | null> {
   try {
-    const { events } = await window.api.dshTopicEvents(topicId)
-    return projectEventsToMessages(topicId, events as SessionEvent[])
+    // UI 视界取数：注入的插件源消息已在内核侧剔除（渲染层不再需要可见性判据）
+    const events = await fetchTopicEvents(topicId)
+    return projectEventsToMessages(topicId, events)
   } catch (error) {
     logger.warn(
       `kernelChat: failed to load topic "${topicId}" from kernel`,
@@ -312,13 +314,10 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
   const { topicId, event } = payload
   switch (event.type) {
     case 'user/message': {
-      // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
-      // 不是用户发言：不参与回执配对（否则会消耗 FIFO 队列里真实发送的配对名额，把
-      // 本地用户消息的回执 seq 记到注入事件上，fork 锚点随之错乱——分支控制混乱的根因
-      // 之一），也不投影。user/message 事件的 data 就是消息本体（source 直接挂 data 上）。
-      if (event.data.source?.kind === 'plugin') {
-        break
-      }
+      // 注入的插件源消息（RuntimeContextProjection 的工具面快照、档位标注等）已由内核在
+      // 广播口剔除（kernel/sessionEventView.ts），这里收到的一定是真实发送——回执 FIFO
+      // 不再有被注入事件抢占名额、把本地消息的回执 seq 记到注入事件上的风险（v0.3.0-1
+      // 结构化：可见性由单一判据保证，本层无需再判）。
       // 回执登记：本地 uuid user 消息 → 内核 seq（供以后对该消息 fork 用）
       const localUserId = recordUserMessageSeq(topicId, event.seq)
       // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）
@@ -690,12 +689,8 @@ function projectEventsToMessages(
   for (const event of events) {
     switch (event.type) {
       case 'user/message': {
-        // 内核注入的插件源消息（RuntimeContextProjection 的工具面快照、审批档位变更等）
-        // 不是用户发言——不投影为聊天气泡（user/message 事件的 data 就是消息本体，source
-        // 直接挂 data 上，没有 .message 包裹——assistant/message 才有）。刻意不 closeReply：
-        // 注入只出现在 step 边界（审批档位变更在轮内、快照在 user 后 assistant 前且彼时
-        // reply 已被真实 user 消息 close），同轮的 step 间切断会把一轮回答误拆成两条。
-        if (event.data.source?.kind === 'plugin') break
+        // 注入消息已在内核侧从 UI 视界剔除（kernel/sessionEventView.ts）：此处不再有
+        // "插件源消息"分支——到达这里的 user/message 一定是真实用户轮，直接开新气泡。
         closeReply()
         const messageId = kernelMessageId(topicId, event.seq)
         lastUserMessageId = messageId

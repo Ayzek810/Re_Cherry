@@ -76,7 +76,10 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
       if (onError) {
         onError(error)
       } else {
-        window.toast.error(t('common.save_failed') || 'Failed to save')
+        // 曾写作 `t('common.save_failed') || 'Failed to save'`——那是**无效兜底**：i18next 缺键时
+        // 返回键名本身（真值），`||` 永不生效，用户会看到裸键。v0.3.0-1 已补齐该键（两语），
+        // 故直接取文案即可。
+        window.toast.error(t('common.save_failed'))
       }
     } finally {
       setIsSaving(false)

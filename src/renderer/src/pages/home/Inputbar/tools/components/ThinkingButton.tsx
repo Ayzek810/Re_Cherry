@@ -131,10 +131,16 @@ const ThinkingButton: FC<Props> = ({
   const isThinkingEnabled =
     currentReasoningEffort !== undefined && currentReasoningEffort !== 'none' && currentReasoningEffort !== 'default'
 
-  // Check if model supports multiple thinking levels (more than one of: low, medium, high, xhigh, minimal)
-  const hasMultipleLevels = useMemo(() => {
-    return supportedOptions.filter((opt) => ['low', 'medium', 'high', 'xhigh', 'minimal'].includes(opt)).length > 1
-  }, [supportedOptions])
+  /**
+   * 当前能否"一键关闭思考"：思考已开启，且档位表里有"关"（none）这一项。
+   *
+   * 历史：v0.3.0 之前该条件还要求"非多档模型"（`!hasMultipleLevels`），但档位表改成
+   * **模型无关常驻六项**（`reasoningOptionsForModel`）之后，"含 none"必然意味着同时含
+   * low/medium/high → `hasMultipleLevels` 恒为 true → 该分支永不成立，"一键关闭"实际消失
+   * （`disableThinking` 沦为死代码）。v0.3.0-1 按用户裁决恢复该交互：只要有"关"这一项，
+   * 点一下就直接关掉，不再看档位数。
+   */
+  const canTurnOffThinking = isThinkingEnabled && supportedOptions.includes('none')
 
   const disableThinking = useCallback(() => {
     onThinkingChange('none')
@@ -156,21 +162,13 @@ const ThinkingButton: FC<Props> = ({
       return
     }
 
-    // If model has only single level (doesn't support multiple levels), directly disable thinking
-    if (isThinkingEnabled && supportedOptions.includes('none') && !hasMultipleLevels) {
+    // 已开启思考且面板里有"关" → 点一下直接关闭（一键关闭，见 canTurnOffThinking 的说明）
+    if (canTurnOffThinking) {
       disableThinking()
       return
     }
     openQuickPanel()
-  }, [
-    openQuickPanel,
-    quickPanelHook,
-    isThinkingEnabled,
-    supportedOptions,
-    hasMultipleLevels,
-    disableThinking,
-    isFixedReasoning
-  ])
+  }, [openQuickPanel, quickPanelHook, canTurnOffThinking, disableThinking, isFixedReasoning])
 
   useEffect(() => {
     if (isFixedReasoning) return
@@ -193,15 +191,16 @@ const ThinkingButton: FC<Props> = ({
     }
   }, [currentReasoningEffort, openQuickPanel, quickPanel, t, isFixedReasoning])
 
-  // Determine tooltip label, consistent with handleOpenQuickPanel behavior:
-  // - Fixed reasoning models: always show "Thinking"
-  // - Multi-level models: always show "Reasoning Effort" (opens panel)
-  // - Single-level models: show "Close" when thinking enabled, otherwise "Reasoning Effort"
+  // 提示语与点击行为必须一致（v0.3.0-1 修正：此前"多档且已开启"给的是"Reasoning Effort"，
+  // 但那时点击其实会打开面板——档位重构后点击变成"关闭"，标签不改就会再次出现标签与行为不符）：
+  // - 固定推理模型：永远"Thinking"（点击无响应）
+  // - 可一键关闭（已开启且有"关"）："Close"（点击即关闭）
+  // - 其余（未开启，或档位表里没有"关"）："Reasoning Effort"（点击打开面板）
   const ariaLabel = isFixedReasoning
     ? t('chat.input.thinking.label')
-    : hasMultipleLevels || !isThinkingEnabled
-      ? t('assistants.settings.reasoning_effort.label')
-      : t('common.close')
+    : canTurnOffThinking
+      ? t('common.close')
+      : t('assistants.settings.reasoning_effort.label')
 
   return (
     <Tooltip placement="top" title={ariaLabel} mouseLeaveDelay={0} arrow>
@@ -235,7 +234,12 @@ const ThinkingIcon = (props: { option?: ThinkingOption; isFixedReasoning?: boole
       case 'high':
         IconComponent = MdiLightbulbOn90
         break
+      // `max`（UI 常驻档位的最高档）与 xhigh 同图标：v0.3.0 引入 REASONING_UI_OPTIONS 时
+      // 漏了这个 case，导致"满"档落到 default 分支显示问号（"未知"）图标——label/description
+      // 侧当时已为 max 复用 xhigh 文案，故这里是遗漏而非设计（v0.3.0-1 后续修复）。
+      // 注：注释必须放在 case 'xhigh' **之前**——夹在两个 case 之间会被 no-fallthrough 判警告。
       case 'xhigh':
+      case 'max':
         IconComponent = MdiLightbulbOn
         break
       case 'auto':

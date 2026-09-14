@@ -56,6 +56,10 @@ export default defineConfig([
       'node_modules/**',
       'build/**',
       'out/**',
+      // electron-builder 打包产物（win-unpacked 内还嵌着 out/ 的副本）。漏了它会让打包后的
+      // `pnpm lint` 去 lint 生成代码（实测 139 errors：define is not defined 等），
+      // 而 v0.3.0 的 lint 全绿只是因为它跑在打包之前——lint 必须在任何时点都可信。
+      'dist/**',
       'tests/**',
       '.gitignore',
       'src/main/integration/nutstore/sso/lib/**',

@@ -224,9 +224,10 @@ describe('naming', () => {
     it('should remove trailing :free', () => {
       expect(getLowerBaseModelName('gpt-4:free')).toBe('gpt-4')
     })
-    it('should remove trailing (free)', () => {
-      expect(getLowerBaseModelName('agent/gpt-4(free)')).toBe('gpt-4')
-    })
+    // 曾断言 `agent/gpt-4(free)` → `gpt-4`：该 `(free)` 剥除是上游 v1.9.11 为 **cherryin** provider
+    // 而写的（上游注释 "for cherryin"），cherryin 已随精简整体移除（全仓 0 命中），
+    // 其专属归一化一并不再需要，故此处不再断言。若将来重新引入会产生 `(free)` 后缀的 provider，
+    // 应连同 `getLowerBaseModelName` 的剥除逻辑与本用例一起恢复。
     it('should remove trailing :cloud', () => {
       expect(getLowerBaseModelName('local/kimi-k2.5:cloud')).toBe('kimi-k2.5')
     })
