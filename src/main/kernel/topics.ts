@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -274,43 +274,171 @@ function attachReasoningEffortListener(agentCtx: Context, topicId: string): void
   )
 }
 
-function registryPath(): string {
-  return join(app.getPath('userData'), 'kernel', 'topics.json')
+function registryDir(): string {
+  return join(registryDirOverride ?? app.getPath('userData'), 'kernel')
 }
 
-async function loadRegistry(): Promise<void> {
+function registryPath(): string {
+  return join(registryDir(), 'topics.json')
+}
+
+/**
+ * 注册表加载结果。**`absent` 与 `failed` 必须分开**（v0.3.0-4 问题 D）：
+ *
+ * | 状态 | 含义 | 是否允许破坏性清扫 |
+ * |---|---|---|
+ * | `loaded` | 解析成功（行数可多可少，含**合法的空注册表**） | 允许 |
+ * | `absent` | 文件不存在（首次启动 / 用户清过数据） | 允许 |
+ * | `failed` | 文件**存在但读不出来**（截断 / 半写 / 非法 JSON）→ **注册表不可知** | **禁止** |
+ *
+ * 折叠这两种状态的后果是数据毁灭：`absent`/空注册表会让 `sweepOrphanSessions` 把库里每个会话都判成
+ * 孤儿并**物理 DELETE**（`purgePersistedSession`）——一次解析失败 = 一次启动 = 全部会话日志消失。
+ */
+export type RegistryLoadOutcome = 'loaded' | 'absent' | 'failed'
+
+/** 本进程的注册表加载结果，供清扫判定消费（启动时由 {@link loadRegistry} 写入）。 */
+let registryLoadOutcome: RegistryLoadOutcome = 'absent'
+
+/**
+ * 测试接缝：`loadRegistry(dir)` 显式传 **userData 目录** 时，注册表与损坏备份都按该目录解析
+ * （即 `<dir>/kernel/topics.json`），并重置"本批损坏已备份"的记账。
+ * 生产路径**不传**，一律用 `app.getPath('userData')`，行为不变。
+ */
+let registryDirOverride: string | null = null
+
+/** 已为当前这批损坏内容留下过备份（避免每次启动都堆一份）。 */
+let corruptBackupTaken = false
+
+/**
+ * 加载话题注册表。
+ *
+ * v0.3.0-4 问题 D：区分三态（见 {@link RegistryLoadOutcome}），并在**读不出来**时把原始文件复制一份
+ * 到 `topics.json.corrupt-<时间戳>`——复制必须发生在**任何可能覆盖它的写盘之前**，而加载时刻是唯一
+ * 能保证这一点的位置（写盘侧（`persistRegistry`）无法保证自己没有先被别人跑过）。
+ * @param dir - 仅测试使用：显式指定 userData 目录（生产调用不传）。
+ * @returns 本次加载结果。
+ */
+export async function loadRegistry(dir?: string): Promise<RegistryLoadOutcome> {
+  if (dir !== undefined) {
+    registryDirOverride = dir
+    corruptBackupTaken = false
+  }
   try {
     const raw = await readFile(registryPath(), 'utf8')
     const parsed = JSON.parse(raw) as TopicRegistryFile
-    if (Array.isArray(parsed.topics)) {
-      // 旧 C 版遗留（rootId/parentId/parentAnchorUserSeq/titleFrozen）与现行血缘模型不兼容，
-      // 加载时剔除，避免它们被当作根话题污染侧栏/分支枚举（会话数据仍在，仅注册表元数据不再引用）
-      const legacy = parsed.topics.filter(
-        (topic) =>
-          (topic as { parentId?: string }).parentId !== undefined || (topic as { rootId?: string }).rootId !== undefined
-      )
-      if (legacy.length > 0) {
-        logger.warn(`kernel: dropped ${legacy.length} legacy topic row(s) from registry (incompatible schema)`)
-      }
-      topics = new Map(
-        parsed.topics
-          .filter(
-            (topic) =>
-              (topic as { parentId?: string }).parentId === undefined &&
-              (topic as { rootId?: string }).rootId === undefined
-          )
-          .map((topic) => [topic.id, topic] as const)
-      )
+    if (!Array.isArray(parsed.topics)) {
+      // 能解析但没有 `topics` 数组（手改成 `{}` 之类）：结构非法 ⇒ 视为**读不出来**，
+      // 否则"0 行"会被当成"合法空注册表"，清扫照样删库。
+      registryLoadOutcome = 'failed'
+      logger.error('kernel: topic registry parsed but has no "topics" array — treating it as unreadable')
+      await backupCorruptRegistry()
+      return registryLoadOutcome
     }
+    // 旧 C 版遗留（rootId/parentId/parentAnchorUserSeq/titleFrozen）与现行血缘模型不兼容，
+    // 加载时剔除，避免它们被当作根话题污染侧栏/分支枚举（会话数据仍在，仅注册表元数据不再引用）
+    const legacy = parsed.topics.filter(
+      (topic) =>
+        (topic as { parentId?: string }).parentId !== undefined || (topic as { rootId?: string }).rootId !== undefined
+    )
+    if (legacy.length > 0) {
+      logger.warn(`kernel: dropped ${legacy.length} legacy topic row(s) from registry (incompatible schema)`)
+    }
+    topics = new Map(
+      parsed.topics
+        .filter(
+          (topic) =>
+            (topic as { parentId?: string }).parentId === undefined &&
+            (topic as { rootId?: string }).rootId === undefined
+        )
+        .map((topic) => [topic.id, topic] as const)
+    )
+    registryLoadOutcome = 'loaded'
   } catch (error) {
-    // 文件缺失或损坏：空注册表启动；损坏内容记日志，不覆盖原文件直到下次写入
-    if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') {
-      logger.warn(
-        'kernel: topic registry failed to load, starting empty',
-        error instanceof Error ? error : new Error(String(error))
-      )
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
+      // 文件不存在 = 合法的空注册表（首次启动 / 用户清过数据）
+      registryLoadOutcome = 'absent'
+      return registryLoadOutcome
+    }
+    // 文件存在但读不出来 = 注册表**不可知**（紧急态）：保留原始内容并禁止破坏性动作
+    registryLoadOutcome = 'failed'
+    logger.error(
+      'kernel: topic registry exists but could not be read — its contents are unknown, so no persisted session ' +
+        'can be proven an orphan; destructive cleanup is disabled (and the raw file is backed up before any write)',
+      error instanceof Error ? error : new Error(String(error))
+    )
+    await backupCorruptRegistry()
+  }
+  return registryLoadOutcome
+}
+
+/**
+ * 把读不出来的注册表复制一份（**复制，不搬走**：原文件留在原位，手工抢救的线索不丢）。
+ * 已有内容相同的备份时不重复创建；复制失败时记 error 并上抛——宁可不写，也不覆盖唯一线索。
+ */
+async function backupCorruptRegistry(): Promise<void> {
+  if (corruptBackupTaken) return
+  const file = registryPath()
+  const dir = registryDir()
+  try {
+    const raw = await readFile(file)
+    const base = 'topics.json.corrupt-'
+    const existing = (await readdir(dir)).filter((name) => name.startsWith(base))
+    for (const name of existing) {
+      const previous = await readFile(join(dir, name))
+      if (previous.equals(raw)) {
+        corruptBackupTaken = true
+        return
+      }
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backup = join(dir, `${base}${stamp}`)
+    await copyFile(file, backup)
+    corruptBackupTaken = true
+    logger.warn(`kernel: unreadable topic registry backed up to ${backup}`)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
+      // 备份时文件已不在（例如被外部删除）：没有可丢的内容，不阻塞后续写盘
+      logger.warn('kernel: no topic registry file to back up (already gone)')
+      return
+    }
+    logger.error(
+      'kernel: failed to back up the unreadable topic registry before overwriting it',
+      error instanceof Error ? error : new Error(String(error))
+    )
+    throw error
+  }
+}
+
+/**
+ * 允不允许清扫孤儿会话（**纯函数**，便于穷举三态；`reason` 用于日志）。
+ *
+ * 唯一的否决项是 `failed`：注册表不可知时，"库里每个会话都不在注册表里"这一观测**不构成孤儿证据**。
+ * @param outcome - 注册表加载结果。
+ * @param registrySize - 当前注册表行数。
+ * @returns `sweep` 与给日志用的理由。
+ */
+export function shouldSweepOrphans(
+  outcome: RegistryLoadOutcome,
+  registrySize: number
+): { sweep: boolean; reason: string } {
+  if (outcome === 'failed') {
+    return {
+      sweep: false,
+      reason:
+        'topic registry could not be read: its contents are unknown, so no persisted session can be proven an orphan'
     }
   }
+  if (outcome === 'absent' && registrySize > 0) {
+    // 理论上的矛盾态（文件缺失却已有行）：行是唯一可依据的信息，按权威处理
+    return {
+      sweep: true,
+      reason: 'registry file is absent but rows are present in memory; treating them as authoritative'
+    }
+  }
+  if (registrySize === 0) {
+    return { sweep: true, reason: 'registry is empty and known: every persisted session without a row is an orphan' }
+  }
+  return { sweep: true, reason: 'registry loaded with rows: persisted sessions without a row are orphans' }
 }
 
 async function persistRegistry(): Promise<void> {
@@ -923,6 +1051,21 @@ export async function purgePersistedSession(id: string): Promise<void> {
 async function sweepOrphanSessions(ctx: Context): Promise<void> {
   try {
     const headers = await ctx.sessionPersistence.list()
+    // 注册表不可知时**整体跳过**：`failed` 态下"每个会话都不在注册表里"不是孤儿证据
+    //（v0.3.0-4 问题 D：这条闸门之前不存在，一次解析失败就会把全部会话日志物理删掉）。
+    const decision = shouldSweepOrphans(registryLoadOutcome, topics.size)
+    if (!decision.sweep) {
+      logger.error(
+        `kernel: orphan sweep skipped — ${decision.reason} (${headers.length} persisted session(s) left untouched)`
+      )
+      return
+    }
+    if (topics.size === 0 && headers.length > 0) {
+      // 合法空注册表（用户删光了话题）与"读不出来"在库里长得一模一样，故显式记账这条强信号
+      logger.warn(
+        `kernel: registry is empty while ${headers.length} persisted session(s) exist — treating them as orphans (load outcome: ${registryLoadOutcome})`
+      )
+    }
     const known = new Set(topics.keys())
     let removed = 0
     let registryDirty = false

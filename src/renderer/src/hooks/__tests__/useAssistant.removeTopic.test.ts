@@ -17,6 +17,10 @@ const kernelDelete = vi.fn()
 const toastError = vi.fn()
 let topics: Topic[] = []
 
+// 本文件要拉起 `useAssistant` 的真实模块图（含模型/助手配置），满负载下首个用例可达 16~30s：
+// 默认 20s 会在全量并行跑时误红。放宽超时是**避免用时间做信号**，不是把慢当绿。
+vi.setConfig({ testTimeout: 60000 })
+
 vi.mock('@renderer/store', () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
     selector({
@@ -56,6 +60,13 @@ vi.mock('@renderer/config/models', async (importOriginal) => ({
   isSupportedReasoningEffortModel: () => false,
   isSupportedThinkingTokenModel: () => false
 }))
+// `reasoningOptionsForModel` 会拉起整张 provider/model 配置图（实测满负载下首例 20~30s）：
+// 本用例只关心删除路径，故整体桩掉。
+vi.mock('@renderer/utils/reasoningKernel', () => ({
+  reasoningOptionsForModel: () => [],
+  kernelReasoningLevelFor: () => undefined,
+  kernelReasoningEffortsForModel: () => []
+}))
 
 function topic(id: string): Topic {
   return {
@@ -75,6 +86,13 @@ async function loadHook(): Promise<typeof UseAssistantModule> {
 
 const dispatchedTypes = (): string[] => dispatch.mock.calls.map(([action]) => (action as { type: string }).type)
 
+/**
+ * 只看**删除路径**的 dispatch。`useAssistant` 自身的 effect 也可能 dispatch（例如思考档位
+ * `updateAssistantSettings`），断言里把它们算进来会在满负载下变成 flaky（本轮实测踩到）。
+ */
+const deletePathTypes = (): string[] =>
+  dispatchedTypes().filter((type) => type === 'assistants/removeTopic' || type === 'assistants/addTopic')
+
 beforeEach(() => {
   dispatch.mockClear()
   kernelDelete.mockReset()
@@ -91,9 +109,9 @@ describe('useAssistant().removeTopic（乐观删除 + 失败回滚）', () => {
 
     result.current.removeTopic(topic('topic-a'))
 
-    expect(dispatchedTypes()).toEqual(['assistants/removeTopic'])
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    expect(dispatchedTypes()).toEqual(['assistants/removeTopic'])
+    expect(deletePathTypes()).toEqual(['assistants/removeTopic'])
+    await vi.waitFor(() => expect(kernelDelete).toHaveBeenCalledWith('topic-a'))
+    expect(deletePathTypes()).toEqual(['assistants/removeTopic']) // 内核确认后不得再有回滚
     expect(toastError).not.toHaveBeenCalled()
   })
 
@@ -104,9 +122,13 @@ describe('useAssistant().removeTopic（乐观删除 + 失败回滚）', () => {
 
     result.current.removeTopic(topic('topic-a'))
 
-    await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('chat.topics.manage.delete.error'))
-    expect(dispatchedTypes()).toEqual(['assistants/removeTopic', 'assistants/addTopic'])
-    const rollback = dispatch.mock.calls[1][0] as { payload: { topic: Topic } }
-    expect(rollback.payload.topic.id).toBe('topic-a')
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('chat.topics.manage.delete.error'), {
+      timeout: 10000
+    })
+    expect(deletePathTypes()).toEqual(['assistants/removeTopic', 'assistants/addTopic'])
+    const rollback = dispatch.mock.calls.find(
+      ([action]) => (action as { type: string }).type === 'assistants/addTopic'
+    ) as [{ payload: { topic: Topic } }]
+    expect(rollback[0].payload.topic.id).toBe('topic-a')
   })
 })
