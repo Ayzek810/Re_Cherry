@@ -393,6 +393,7 @@
         "word": "Export as Word",
         "yuque": "Export to Yuque"
       },
+      "gone": "This topic no longer exists — switched to another topic",
       "manage": {
         "clear_selection": "Clear Selection",
         "delete": {

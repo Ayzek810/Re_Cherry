@@ -85,23 +85,14 @@ export async function materializeKernelTopicRow(params: {
   if (existing) return { row: existing, created: false }
   try {
     const { topic: kernelTopic } = (await window.api.dshTopicGet(sessionId)) as {
-      topic?: { id: string; name?: string; parentTopicId?: string }
+      topic?: KernelTopicRow
     }
     if (!kernelTopic) return null
-    const parentTopicId = kernelTopic.parentTopicId ?? params.fallbackParentId
-    return {
-      row: {
-        id: kernelTopic.id,
-        type: TopicType.Chat,
-        assistantId,
-        name: kernelTopic.name || params.fallbackName || '新分支',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        messages: [],
-        ...(parentTopicId && parentTopicId.length > 0 ? { parentTopicId } : {})
-      },
-      created: true
-    }
+    const row = topicFromKernelRow(kernelTopic, assistantId, {
+      fallbackParentId: params.fallbackParentId,
+      fallbackName: params.fallbackName
+    })
+    return { row, created: true }
   } catch (error) {
     logger.warn(
       '[topicBranch] failed to materialize kernel topic row ' + sessionId,
@@ -111,35 +102,129 @@ export async function materializeKernelTopicRow(params: {
   }
 }
 
-let kernelRootIdsCache: Promise<Set<string> | null> | null = null
+// ---------------------------------------------------------------------------
+// 话题成员资格：**内核是唯一权威**（v0.3.0-2 目标 B）
+//
+// 本版退役的做法是"渲染层用自己那份 persist 推断内核那份的可见性"（BOOT_TIME 时间戳启发式）——
+// 那是 v0.3.0-1 在事件层刚消灭过的同一个反模式，只是换了轴。替代方案是：成员资格一律问内核
+// （`dshTopicList`），渲染层只做字段合并与补齐。
+// ---------------------------------------------------------------------------
 
-/** 取内核当前确认存在的根话题 id 集合（空/失败返回 null 表示"未知"）。带缓存。 */
-export function loadKernelTopicRootIds(): Promise<Set<string> | null> {
-  if (kernelRootIdsCache) return kernelRootIdsCache
-  kernelRootIdsCache = (async () => {
-    try {
-      const { topics } = (await window.api.dshTopicList()) as {
-        topics?: Array<{ id: string }>
-      }
-      if (!topics) return null
-      return new Set(topics.map((topic) => topic.id))
-    } catch (error) {
-      logger.warn(
-        '[topicBranch] failed to list kernel topics',
-        error instanceof Error ? error : new Error(String(error))
-      )
-      return null
-    }
-  })()
-  return kernelRootIdsCache
+/** 内核话题行（`dshTopicList` / `dshTopicGet` 的返回形状）。 */
+export interface KernelTopicRow {
+  id: string
+  name: string
+  /** 创建时间，**epoch ms**（内核口径；渲染层 `Topic` 用 ISO 串，换算只在 {@link topicFromKernelRow} 一处）。 */
+  createdAt: number
+  /** 最近更新时间，**epoch ms**（同上）。 */
+  updatedAt: number
+  parentTopicId?: string
 }
 
-/** 渲染进程启动时刻：早于此、且内核不认识的根话题视为历史遗留孤儿（隐藏）；其后新建的视为有效（显示）。 */
-const BOOT_TIME = Date.now()
+/**
+ * 用内核行构造渲染层 `Topic` 行——**唯一**的 ms → ISO 换算点。
+ * @param row - 内核返回的话题行。
+ * @param assistantId - 归属助手。
+ * @param fallback - 内核行缺字段时的兜底（`parentTopicId` / `name`）。
+ */
+export function topicFromKernelRow(
+  row: KernelTopicRow,
+  assistantId: string,
+  fallback?: { fallbackParentId?: string; fallbackName?: string }
+): Topic {
+  const parentTopicId = row.parentTopicId ?? fallback?.fallbackParentId
+  return {
+    id: row.id,
+    type: TopicType.Chat,
+    assistantId,
+    name: row.name || fallback?.fallbackName || '新分支',
+    createdAt: new Date(row.createdAt).toISOString(),
+    updatedAt: new Date(row.updatedAt).toISOString(),
+    messages: [],
+    ...(parentTopicId !== undefined && parentTopicId.length > 0 ? { parentTopicId } : {})
+  }
+}
 
-/** 侧栏可见性：内核确认存在 → 显示；内核未知但启动后新建（尚未首发的空话题）→ 显示；启动前遗留且内核未知 → 隐藏。 */
-export function shouldShowTopicRow(topic: Topic, kernelRoots: Set<string> | null): boolean {
-  if (kernelRoots === null) return true
-  if (kernelRoots.has(topic.id)) return true
-  return new Date(topic.updatedAt).getTime() >= BOOT_TIME
+/**
+ * 上次会话留下的行（rehydrate 时登记一次，见 `store/index.ts`）。
+ *
+ * **为什么需要它**：新话题在**首次发送**前内核并不知道它（建册发生在 `ensureKernelTopic`），
+ * 所以"内核不认识"这一个事实不足以判一行失效。判据必须是"这一行是上次会话留下来的"——
+ * 一个**显式事件**（持久化恢复），而不是时间戳（`updatedAt >= BOOT_TIME` 正是本版退役的启发式，
+ * 它既受时钟影响，又要跨 ms/ISO 两种口径比较）。
+ */
+let restoredTopicIds: ReadonlySet<string> = new Set()
+
+/** 登记"从上次会话持久化恢复的行"。 */
+export function noteRestoredTopicIds(ids: Iterable<string>): void {
+  restoredTopicIds = new Set(ids)
+  logger.info(`[topicBranch] recorded ${restoredTopicIds.size} restored topic row(s) from the previous session`)
+}
+
+/** 该行是否来自上次会话的持久化——只有这类行才可能"内核已遗忘"。 */
+export function isRestoredTopicRow(id: string): boolean {
+  return restoredTopicIds.has(id)
+}
+
+/** 上次取到的内核根话题（id → 行）；null = 尚未取到或上次取失败。 */
+let kernelRoots: Map<string, KernelTopicRow> | null = null
+let kernelRootsInFlight: Promise<Map<string, KernelTopicRow> | null> | null = null
+
+async function fetchKernelRoots(): Promise<Map<string, KernelTopicRow> | null> {
+  try {
+    const { topics } = (await window.api.dshTopicList()) as { topics?: KernelTopicRow[] }
+    if (!Array.isArray(topics)) return null
+    return new Map(topics.map((row) => [row.id, row]))
+  } catch (error) {
+    logger.warn('[topicBranch] failed to list kernel topics', error instanceof Error ? error : new Error(String(error)))
+    return null
+  }
+}
+
+/**
+ * 内核根话题集合（权威成员集合）。命中缓存即返回；对账入口用 {@link refreshKernelRootTopics} 强制取新。
+ * @returns id → 内核行；`null` = **未知**——调用方此时必须退回渲染层现有行，绝不据此隐藏任何行。
+ */
+export async function kernelRootTopics(): Promise<Map<string, KernelTopicRow> | null> {
+  if (kernelRoots !== null) return kernelRoots
+  return await refreshKernelRootTopics()
+}
+
+/** 重新问内核并更新缓存（同一时刻只发一次 IPC）。 */
+export async function refreshKernelRootTopics(): Promise<Map<string, KernelTopicRow> | null> {
+  if (kernelRootsInFlight !== null) return kernelRootsInFlight
+  kernelRootsInFlight = (async () => {
+    const rows = await fetchKernelRoots()
+    if (rows !== null) kernelRoots = rows
+    return rows
+  })()
+  try {
+    return await kernelRootsInFlight
+  } finally {
+    kernelRootsInFlight = null
+  }
+}
+
+/** 建册/删除之后让缓存作废（下一次查询重新问内核）。 */
+export function invalidateKernelRootTopics(): void {
+  kernelRoots = null
+}
+
+/**
+ * 内核注册表里是否有这一行。根话题用 `dshTopicList`（见 {@link kernelRootTopics}），
+ * **fork 子行只能用这里**——`dshTopicList` 只返回根。
+ * @param id - 话题 id。
+ * @returns `true` / `false`；`null` = 查询失败（按"不知道"处理，**不得**据此拒绝或隐藏）。
+ */
+export async function kernelKnowsTopic(id: string): Promise<boolean | null> {
+  try {
+    const { topic } = (await window.api.dshTopicGet(id)) as { topic?: KernelTopicRow }
+    return topic !== undefined
+  } catch (error) {
+    logger.warn(
+      `[topicBranch] failed to get kernel topic ${id}`,
+      error instanceof Error ? error : new Error(String(error))
+    )
+    return null
+  }
 }

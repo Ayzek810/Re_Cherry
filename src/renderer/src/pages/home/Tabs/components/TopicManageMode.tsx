@@ -64,12 +64,7 @@ export function useTopicManageMode(): TopicManageModeState {
   }
 }
 
-import {
-  listRootTopics,
-  loadKernelTopicRootIds,
-  recallLastViewedBranch,
-  shouldShowTopicRow
-} from '@renderer/utils/topicBranch'
+import { listRootTopics, recallLastViewedBranch } from '@renderer/utils/topicBranch'
 
 interface TopicManagePanelProps {
   assistant: Assistant
@@ -98,26 +93,12 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   const { t } = useTranslation()
   const { isManageMode, selectedIds, searchText, exitManageMode, setSelectedIds, setSearchText } = manageState
   const [isSearchMode, setIsSearchMode] = useState(false)
-  const [kernelRoots, setKernelRoots] = useState<Set<string> | null>(null)
-  const topicsKey = useMemo(() => (assistant?.topics ?? []).map((topic) => topic.id).join(','), [assistant?.topics])
-  useEffect(() => {
-    let active = true
-    void loadKernelTopicRootIds().then((ids) => {
-      if (active) setKernelRoots(ids)
-    })
-    return () => {
-      active = false
-    }
-  }, [topicsKey])
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Topics that can be selected (non-pinned, and filtered when in search mode)
-  const selectableTopics = useMemo(() => {
-    const baseTopics = isSearchMode ? filteredTopics : listRootTopics(assistant.topics ?? [])
-    const known =
-      kernelRoots === null ? baseTopics : baseTopics.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
-    return known.filter((topic) => !topic.pinned)
-  }, [assistant.topics, filteredTopics, isSearchMode, kernelRoots])
+  // Topics that can be selected (non-pinned; search-filtered when in search mode)
+  // v0.3.0-2 目标 B：行集合由 Topics 统一以内核为准对账后传入（filteredTopics 就是它），
+  // 本组件不再自己问内核、更不做"自持久化推断内核可见性"。
+  const selectableTopics = useMemo(() => filteredTopics.filter((topic) => !topic.pinned), [filteredTopics])
 
   // Check if all selectable topics are selected
   const isAllSelected = useMemo(() => {
@@ -164,8 +145,15 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
 
     const idsArray = Array.from(selectedIds)
 
-    // Delete DB records and files
-    const results = await Promise.allSettled(idsArray.map((id) => TopicManager.removeTopic(id).then(() => id)))
+    // Delete DB records and files；`removeTopic` 返回**真实的内核删除结果**（v0.3.0-2 §6.9），
+    // 因此这里的"成功/失败"计数不再是假信号
+    const results = await Promise.allSettled(
+      idsArray.map(async (id) => {
+        const deleted = await TopicManager.removeTopic(id)
+        if (!deleted) throw new Error(`kernel refused to delete topic "${id}"`)
+        return id
+      })
+    )
 
     // Filter successful ids
     const successfulIds = new Set(

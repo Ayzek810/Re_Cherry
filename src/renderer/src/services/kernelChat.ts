@@ -23,6 +23,7 @@ import {
 import { renameAbortController } from '@renderer/utils/abortController'
 import { createMainTextBlock, createThinkingBlock, createToolBlock } from '@renderer/utils/messageUtils/create'
 import { kernelReasoningEffortsForModel, kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
+import { invalidateKernelRootTopics, isRestoredTopicRow, kernelKnowsTopic } from '@renderer/utils/topicBranch'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
 const logger = loggerService.withContext('KernelChat')
@@ -242,11 +243,25 @@ export function assistantReasoningLevel(assistant: Assistant): string | undefine
   return kernelReasoningLevelFor(assistant.model, assistant.settings?.reasoning_effort)
 }
 
-/** 确保内核侧存在该话题的 agent/session（幂等）。工作模式不进建册输入——它是渲染层话题开关，随发送参数生效。 */
+/**
+ * 确保内核侧存在该话题的 agent/session（幂等）。工作模式不进建册输入——它是渲染层话题开关，随发送参数生效。
+ *
+ * v0.3.0-2 目标 B（`report.md` §3.3.2-5）：`dshTopicCreate` 是 **upsert**，对"内核已遗忘的 id"调用
+ * 会让该 id **复活**（违反内核兼容契约第 4 节的墓碑纪律）。因此只服务**真正新建**的话题：
+ * 来自上次会话的行（`isRestoredTopicRow`）必须先由内核确认存在，否则拒绝建册。
+ * 本进程内新建的话题不需要这次确认——内核不认识它是因为它还没首发过（这正是本函数要做的建册）。
+ */
 export async function ensureKernelTopic(topicId: string, assistant: Assistant): Promise<void> {
   const model = assistant.model
   if (model === undefined || model.provider === undefined) {
     throw new Error(`kernelChat: assistant "${assistant.id}" has no model/provider`)
+  }
+  if (isRestoredTopicRow(topicId)) {
+    const known = await kernelKnowsTopic(topicId)
+    // known === null（查询失败）不拒绝：建册本身就要走同一个内核，此时拒绝只会把主操作也挡掉
+    if (known === false) {
+      throw new Error(`kernelChat: topic "${topicId}" is unknown to the kernel registry; refusing to recreate it`)
+    }
   }
   await window.api.dshTopicCreate({
     id: topicId,
@@ -259,6 +274,8 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
       ? { workingDir: assistant.workMode.workingDir }
       : {})
   })
+  // 建册成功 → 成员集合变了（新建的行现在在内核里）
+  invalidateKernelRootTopics()
 }
 
 /** 发送一条消息到内核；流式回复经由事件流投影回 Redux。工具面（内置/外置）与权限档位随发送参数生效（拨动下一轮生效）。 */

@@ -70,6 +70,7 @@ export function useAssistants() {
 export function useAssistant(id: string) {
   const assistant = useAppSelector((state) => state.assistants.assistants.find((a) => a.id === id) as Assistant)
   const dispatch = useAppDispatch()
+  const { t } = useTranslation()
   const { defaultModel } = useDefaultModel()
 
   const model = useMemo(() => assistant?.model ?? assistant?.defaultModel ?? defaultModel, [assistant, defaultModel])
@@ -146,9 +147,18 @@ export function useAssistant(id: string) {
     assistant: assistantWithModel,
     model,
     addTopic: (topic: Topic) => dispatch(addTopic({ assistantId: assistant.id, topic })),
+    /**
+     * 删除一个话题。**乐观删除 + 失败回滚**（v0.3.0-2 §6.9）：行立刻消失（体验不变），
+     * 内核若没删掉就把行放回去并提示——不留下"渲染层已删、内核还在"的分歧
+     * （那正是真机上"删过的话题又回来"的来源）。
+     */
     removeTopic: (topic: Topic) => {
-      void TopicManager.removeTopic(topic.id)
       dispatch(removeTopic({ assistantId: assistant.id, topic }))
+      void TopicManager.removeTopic(topic.id).then((deleted) => {
+        if (deleted) return
+        dispatch(addTopic({ assistantId: assistant.id, topic }))
+        window.toast.error(t('chat.topics.manage.delete.error'))
+      })
     },
     moveTopic: (topic: Topic, toAssistant: Assistant) => {
       dispatch(addTopic({ assistantId: toAssistant.id, topic: { ...topic, assistantId: toAssistant.id } }))
