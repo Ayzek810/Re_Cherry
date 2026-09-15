@@ -97,6 +97,17 @@ describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
     expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-new' }))
   })
 
+  it('验C-1 集成半边：启动窗口内第一次问不到、随后问到 → **不拒绝**、照常建册', async () => {
+    // 旧实现在这里会因 `null` 放行而"碰巧"建册成功，但那是把"暂时不知道"当成"知道"：
+    // 若该行其实已被内核遗忘，upsert 就会复活墓碑 id。重试后拿到确定性答案，语义才成立。
+    const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
+    getTopic.mockRejectedValueOnce(new Error('No handler registered'))
+
+    await expect(ensure('topic-live', assistant)).resolves.toBeUndefined()
+    expect(getTopic).toHaveBeenCalledTimes(2)
+    expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-live' }))
+  })
+
   it('查询失败（内核不可达）→ **不拒绝**：建册走的是同一个内核，此时拒绝只会把主操作也挡掉', async () => {
     const { ensureKernelTopic: ensure } = await loadEnsure(['topic-unknown'], null)
     getTopic.mockRejectedValue(new Error('ipc down'))
