@@ -211,20 +211,79 @@ export function invalidateKernelRootTopics(): void {
 }
 
 /**
+ * 内核查询的启动窗口重试参数。
+ *
+ * 为什么需要：主进程**并行**建窗口与启动内核（`src/main/index.ts`：`createMainWindow()` 之后才
+ * `bootKernel()`），而 `dsh:*` 的 handler 要等 `initTopics()` 之后才注册——这期间渲染层查询会以
+ * "No handler registered" 失败。那是**预期内的瞬时失败**，不是"内核未知"。
+ * 两处内核查询（本模块的 {@link kernelKnowsTopic} 与 `services/kernelTopics.ts` 的对账入口）
+ * **共用**这两个常量：同一竞态在两处给出不同处置曾是真实的维护隐患。
+ */
+export const KERNEL_QUERY_ATTEMPTS = 6
+export const KERNEL_QUERY_DELAY_MS = 700
+
+/**
+ * 重试一个"可能因内核尚未就绪而失败"的查询。
+ *
+ * 语义要点：**延时只在失败之后发生**——成功路径不引入任何定时器（热路径零新增开销）；
+ * 而"确定性答案"（哪怕是否定的）不再重试，重试一个已经明确的答案只会白白拖慢调用方。
+ * @param query - 查询函数。返回 `undefined` = 本次没问到（可重试）；返回任何其它值（含 `false`、
+ *   空集合）= **确定性答案**，立即返回。
+ * @param options - 尝试次数与间隔（默认 {@link KERNEL_QUERY_ATTEMPTS} × {@link KERNEL_QUERY_DELAY_MS}）；仅供测试收窄。
+ * @returns 查询答案；全部尝试都没问到 → `null`（"不知道"）。
+ */
+export async function retryKernelQuery<T>(
+  query: () => Promise<T | undefined>,
+  options?: { attempts?: number; delayMs?: number }
+): Promise<T | null> {
+  const attempts = options?.attempts ?? KERNEL_QUERY_ATTEMPTS
+  const delayMs = options?.delayMs ?? KERNEL_QUERY_DELAY_MS
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const answer = await query()
+    if (answer !== undefined) return answer
+    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  return null
+}
+
+/**
  * 内核注册表里是否有这一行。根话题用 `dshTopicList`（见 {@link kernelRootTopics}），
  * **fork 子行只能用这里**——`dshTopicList` 只返回根。
+ *
+ * 带启动窗口重试（与对账入口同口径，见 {@link retryKernelQuery}）：本查询服务于"拒绝复活"的判定
+ * （`ensureKernelTopic` 用它决定是否允许 upsert），而在 handler 注册前它只会拿到
+ * "No handler registered"——只试一次会把"暂时不知道"当成"知道"，于是 `dshTopicCreate` 会把一个
+ * 内核已遗忘的 id **复活**（违反内核兼容契约第 4 节）。重试把该窗口收窄到与列表路径等价。
+ *
+ * **确定性否定不重试**：内核明确回答"无此行"（`topic === undefined`）时立即返回 `false`。
+ * 本函数仍是 fail-open：「全部尝试都没问到」返回 `null`，调用方按"不知道"处理，
+ * **不得**据此拒绝或隐藏任何东西。
  * @param id - 话题 id。
- * @returns `true` / `false`；`null` = 查询失败（按"不知道"处理，**不得**据此拒绝或隐藏）。
+ * @param options - 仅用于测试：收窄重试次数与间隔。
+ * @returns `true` / `false`；`null` = 全部尝试都没问到。
  */
-export async function kernelKnowsTopic(id: string): Promise<boolean | null> {
-  try {
-    const { topic } = (await window.api.dshTopicGet(id)) as { topic?: KernelTopicRow }
-    return topic !== undefined
-  } catch (error) {
+export async function kernelKnowsTopic(
+  id: string,
+  options?: { attempts?: number; delayMs?: number }
+): Promise<boolean | null> {
+  const answer = await retryKernelQuery<boolean>(async () => {
+    try {
+      const { topic } = (await window.api.dshTopicGet(id)) as { topic?: KernelTopicRow }
+      return topic !== undefined
+    } catch (error) {
+      logger.warn(
+        `[topicBranch] failed to get kernel topic ${id}`,
+        error instanceof Error ? error : new Error(String(error))
+      )
+      return undefined
+    }
+  }, options)
+  if (answer === null) {
     logger.warn(
-      `[topicBranch] failed to get kernel topic ${id}`,
-      error instanceof Error ? error : new Error(String(error))
+      `[topicBranch] kernel did not answer whether topic ${id} exists after ${
+        options?.attempts ?? KERNEL_QUERY_ATTEMPTS
+      } attempt(s)`
     )
-    return null
   }
+  return answer
 }

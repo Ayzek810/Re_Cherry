@@ -31,20 +31,19 @@ import { addTopic, pruneTopics } from '@renderer/store/assistants'
 import type { Topic } from '@renderer/types'
 import {
   isRestoredTopicRow,
+  KERNEL_QUERY_ATTEMPTS,
+  KERNEL_QUERY_DELAY_MS,
   type KernelTopicRow,
   listRootTopics,
   refreshKernelRootTopics,
+  retryKernelQuery,
   topicFromKernelRow
 } from '@renderer/utils/topicBranch'
 
 const logger = loggerService.withContext('KernelTopics')
 
-/** 启动窗口重试的默认参数（见 {@link fetchKernelRootsWithRetry}）。 */
-const KERNEL_FETCH_ATTEMPTS = 6
-const KERNEL_FETCH_DELAY_MS = 700
-
 /**
- * 取内核成员集合，**带启动窗口重试**。
+ * 取内核成员集合，**带启动窗口重试**（与 `kernelKnowsTopic` 共用 `retryKernelQuery` 与同一组参数）。
  *
  * 为什么必须重试：主进程建窗口与启动内核是**并行**的（`src/main/index.ts`：`createMainWindow()` 之后
  * 才 `bootKernel()`），而 `dsh:*` 的 handler 要等 `initTopics()` 之后才注册——这期间渲染层查询会以
@@ -58,13 +57,15 @@ async function fetchKernelRootsWithRetry(
   attempts: number,
   delayMs: number
 ): Promise<Map<string, KernelTopicRow> | null> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const roots = await refreshKernelRootTopics()
-    if (roots !== null) return roots
-    if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs))
+  const roots = await retryKernelQuery(
+    // null（本次没问到）→ undefined（触发重试）；拿到集合（含空集合）= 确定性答案
+    async () => (await refreshKernelRootTopics()) ?? undefined,
+    { attempts, delayMs }
+  )
+  if (roots === null) {
+    logger.warn(`kernelTopics: kernel topic list unavailable after ${attempts} attempt(s); leaving rows untouched`)
   }
-  logger.warn(`kernelTopics: kernel topic list unavailable after ${attempts} attempt(s); leaving rows untouched`)
-  return null
+  return roots
 }
 
 /**
@@ -91,8 +92,8 @@ export async function reconcileAssistantTopicRows(
   if (assistant === undefined) return null
 
   const kernelRoots = await fetchKernelRootsWithRetry(
-    options?.attempts ?? KERNEL_FETCH_ATTEMPTS,
-    options?.delayMs ?? KERNEL_FETCH_DELAY_MS
+    options?.attempts ?? KERNEL_QUERY_ATTEMPTS,
+    options?.delayMs ?? KERNEL_QUERY_DELAY_MS
   )
   if (kernelRoots === null) return null
 
