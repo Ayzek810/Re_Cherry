@@ -16,6 +16,7 @@
  */
 import { loggerService } from '@logger'
 import { combineReducers, configureStore } from '@reduxjs/toolkit'
+import { noteRestoredTopicIds } from '@renderer/utils/topicBranch'
 import { useDispatch, useSelector, useStore } from 'react-redux'
 import {
   createTransform,
@@ -143,9 +144,29 @@ export type AppDispatch = typeof store.dispatch
 export const persistor = persistStore(store, undefined, () => {
   // v0.2.4-1：原 ReduxStoreReady invoke 已删除（main 侧 handler 随 ReduxService 一并移除）
   // v0.2.4 K4：rehydrate 完成后从 main 加密存储回填 provider key（本地持久层已不再落明文）
+  void recordRestoredTopicIds()
   void backfillProviderKeysFromVault()
   logger.info('Redux store ready')
 })
+
+/** v0.3.0-2 目标 B：登记"上次会话留下的行"。
+ *
+ * 这是"内核不认识这一行"能否作为**失效**判据的唯一依据（见 `utils/topicBranch.ts` 的
+ * `noteRestoredTopicIds`）：本进程内新建的话题在首发前内核本来就不认识它，不能据此判失效。
+ * 记录时机是 rehydrate 这个**显式事件**，不是时间戳。
+ *
+ * 全新安装（从未写过持久化数据）不登记任何行：此时所有行都是本进程新建的，不存在"内核已遗忘"的判据。 */
+async function recordRestoredTopicIds(): Promise<void> {
+  try {
+    const persisted = await storage.getItem('persist:cherry-studio')
+    if (persisted === null) return
+    noteRestoredTopicIds(
+      store.getState().assistants.assistants.flatMap((assistant) => assistant.topics.map((topic) => topic.id))
+    )
+  } catch (error) {
+    logger.warn('recordRestoredTopicIds failed', error instanceof Error ? error : new Error(String(error)))
+  }
+}
 
 /** v0.2.4 K4：启动回填 —— main 加密存储（ProviderKeyStore）是 key 的持久真源。
  * rehydrate 后按 providerId 把 key 注入 redux（运行态语义与旧版一致），

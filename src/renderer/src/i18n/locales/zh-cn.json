@@ -393,6 +393,7 @@
         "word": "导出为 Word",
         "yuque": "导出到语雀"
       },
+      "gone": "该话题已不存在，已切换到其他话题",
       "manage": {
         "clear_selection": "取消选择",
         "delete": {

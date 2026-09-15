@@ -43,6 +43,25 @@ const initialState: AssistantsState = {
 
 const normalizeTopics = (topics: unknown): Topic[] => (Array.isArray(topics) ? topics : [])
 
+/**
+ * 收集这些话题及其全部 fork 后代的 id（血缘在删除根时一并消失）。
+ * 删除类操作共用：removeTopic（用户删除）与 pruneTopics（内核对账剪除）。
+ */
+const collectSubtreeIds = (topics: Topic[], roots: string[]): Set<string> => {
+  const ids = new Set<string>(roots)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const topic of topics) {
+      if (topic.parentTopicId !== undefined && ids.has(topic.parentTopicId) && !ids.has(topic.id)) {
+        ids.add(topic.id)
+        changed = true
+      }
+    }
+  }
+  return ids
+}
+
 const assistantsSlice = createSlice({
   name: 'assistants',
   initialState,
@@ -134,17 +153,31 @@ const assistantsSlice = createSlice({
       const assistantTopics = normalizeTopics(
         state.assistants.find((assistant) => assistant.id === action.payload.assistantId)?.topics ?? []
       )
-      const idsToRemove = new Set<string>([action.payload.topic.id])
-      let changed = true
-      while (changed) {
-        changed = false
-        for (const topic of assistantTopics) {
-          if (topic.parentTopicId !== undefined && idsToRemove.has(topic.parentTopicId) && !idsToRemove.has(topic.id)) {
-            idsToRemove.add(topic.id)
-            changed = true
-          }
-        }
-      }
+      const idsToRemove = collectSubtreeIds(assistantTopics, [action.payload.topic.id])
+      state.assistants = state.assistants.map((assistant) =>
+        assistant.id === action.payload.assistantId
+          ? {
+              ...assistant,
+              topics: assistantTopics.filter((topic) => !idsToRemove.has(topic.id))
+            }
+          : assistant
+      )
+    },
+    /**
+     * 以内核结果**剪除**渲染层陈旧行（v0.3.0-2 目标 B）：按 id 删除这些根行及其全部 fork 后代。
+     *
+     * 与相邻 action 的语义边界（勿混用）：
+     * - `updateTopics`：以根列表**替换**并保留血缘仍成立的后代行（侧栏只操作根）；
+     * - `removeTopic`：用户主动删除一个话题（含后代）；
+     * - `pruneTopics`：**只**由 `services/kernelTopics.ts` 的内核对账使用——针对"上次会话留下、
+     *   内核已不认识"的行。不得用于普通删除。
+     */
+    pruneTopics: (state, action: PayloadAction<{ assistantId: string; topicIds: string[] }>) => {
+      if (action.payload.topicIds.length === 0) return
+      const assistantTopics = normalizeTopics(
+        state.assistants.find((assistant) => assistant.id === action.payload.assistantId)?.topics ?? []
+      )
+      const idsToRemove = collectSubtreeIds(assistantTopics, action.payload.topicIds)
       state.assistants = state.assistants.map((assistant) =>
         assistant.id === action.payload.assistantId
           ? {
@@ -275,6 +308,7 @@ export const {
   updateAssistant,
   addTopic,
   removeTopic,
+  pruneTopics,
   updateTopic,
   updateTopics,
   removeAllTopics,

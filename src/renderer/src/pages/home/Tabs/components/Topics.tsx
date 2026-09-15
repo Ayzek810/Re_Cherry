@@ -13,6 +13,7 @@ import { finishTopicRenaming, startTopicRenaming, TopicManager } from '@renderer
 import { fetchMessagesSummary } from '@renderer/services/ApiService'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { reconcileAssistantTopicRows } from '@renderer/services/kernelTopics'
 import type { RootState } from '@renderer/store'
 import store from '@renderer/store'
 import { newMessagesActions } from '@renderer/store/newMessage'
@@ -28,12 +29,7 @@ import {
   exportTopicToNotion,
   topicToMarkdown
 } from '@renderer/utils/export'
-import {
-  listRootTopics,
-  loadKernelTopicRootIds,
-  recallLastViewedBranch,
-  shouldShowTopicRow
-} from '@renderer/utils/topicBranch'
+import { listRootTopics, recallLastViewedBranch } from '@renderer/utils/topicBranch'
 import type { MenuProps } from 'antd'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType, MenuItemType } from 'antd/es/menu/interface'
@@ -74,22 +70,24 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const { assistants } = useAssistants()
   const { assistant, addTopic, removeTopic, moveTopic, updateTopic, updateTopics } = useAssistant(_assistant.id)
   // 侧栏只展示"根话题"；fork 分支仅通过分支图切换
-  const [kernelRoots, setKernelRoots] = useState<Set<string> | null>(null)
+  // v0.3.0-2 目标 B：行集合以内核为权威（services/kernelTopics 对账：补齐/剪除），
+  // 本组件不再用自持久化的时间戳启发式推断可见性。
+  const [reconciledRoots, setReconciledRoots] = useState<Topic[] | null>(null)
   const topicsKey = useMemo(() => (assistant?.topics ?? []).map((topic) => topic.id).join(','), [assistant?.topics])
   useEffect(() => {
     let active = true
-    void loadKernelTopicRootIds().then((ids) => {
-      if (active) setKernelRoots(ids)
+    void reconcileAssistantTopicRows(_assistant.id).then((rows) => {
+      if (active) setReconciledRoots(rows)
     })
     return () => {
       active = false
     }
-  }, [topicsKey])
-  const rootTopics = useMemo(() => {
-    const base = listRootTopics(assistant?.topics ?? [])
-    // 内核确认存在（或当前正激活/暂无内核结果时）才展示，避免历史遗留孤儿行污染列表
-    return base.filter((topic) => shouldShowTopicRow(topic, kernelRoots))
-  }, [assistant?.topics, kernelRoots])
+  }, [_assistant.id, topicsKey])
+  const rootTopics = useMemo(
+    // 对账结果为准；内核未知（null）时退回渲染层现有行——宁可多显示，也不在没有依据时隐藏
+    () => reconciledRoots ?? listRootTopics(assistant?.topics ?? []),
+    [reconciledRoots, assistant?.topics]
+  )
   const { showTopicTime, pinTopicsToTop, setTopicPosition, topicPosition } = useSettings()
 
   const renamingTopics = useSelector((state: RootState) => state.runtime.chat.renamingTopics)

@@ -24,7 +24,7 @@ import { app } from 'electron'
 import * as askUserTool from './askUserTool'
 import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
 import { isInjectedUserEvent } from './sessionEventView'
-import { isUnreadableSessionError } from './sessionReadFailure'
+import { resumeOrCreateSession } from './sessionResumeFallback'
 
 const logger = loggerService.withContext('KernelTopics')
 
@@ -1125,25 +1125,15 @@ async function ensureAgent(
     })
   } else {
     // 先尝试从持久化恢复（重启后的话题）；"会话确实不存在"时新建空会话（既有健壮性设计）。
-    try {
-      handle = await ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup })
-    } catch (error) {
-      // 数据安全（v0.3.0-1 后续）：日志**存在但读不出来**时绝不能用同一 id 新建——那会掩盖问题，
-      // 最坏情况覆盖用户历史（遗留 cherry/work-mode 会话正是这一类：日志在库里、resume 必然失败）。
-      // 判别只认 dsh 公开导出的具名错误类，不做消息匹配（见 sessionReadFailure.ts）。
-      if (isUnreadableSessionError(error)) {
-        logger.error(
-          `kernel: session "${topic.id}" exists but is unreadable; refusing to create a fresh session over it`,
-          error instanceof Error ? error : new Error(String(error))
-        )
-        throw error
-      }
-      logger.warn(
-        `kernel: resume session "${topic.id}" failed, creating fresh`,
-        error instanceof Error ? error : new Error(String(error))
-      )
-      handle = await ctx.agents.create({ sessionId, meta, agentOptions, setup })
-    }
+    // 拒绝还是兜底由 sessionResumeFallback 决定，判据是"持久化里有没有这个会话"（本地事实），
+    // 不是 resume 抛了哪种错误（那依赖上游抛错行为，而 dsh 对格式无兼容承诺）——见该模块文档。
+    handle = await resumeOrCreateSession({
+      sessionId,
+      topicId: topic.id,
+      listPersisted: () => ctx.sessionPersistence.list(),
+      resume: () => ctx.agents.resume({ resumeSessionId: sessionId, agentOptions, setup }),
+      createFresh: () => ctx.agents.create({ sessionId, meta, agentOptions, setup })
+    })
   }
   liveHandles.set(topic.id, handle)
   mountedTools.set(topic.id, {

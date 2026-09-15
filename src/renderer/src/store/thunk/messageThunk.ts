@@ -29,6 +29,7 @@ import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMes
 import { addAbortController } from '@renderer/utils/abortController'
 import { createAssistantMessage, resetAssistantMessage } from '@renderer/utils/messageUtils/create'
 import { getTopicQueue, waitForTopicQueue } from '@renderer/utils/queue'
+import { isRestoredTopicRow } from '@renderer/utils/topicBranch'
 import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
 import { t } from 'i18next'
 import { isEmpty, throttle } from 'lodash'
@@ -839,8 +840,12 @@ export const loadTopicMessagesThunk =
           messageCount: kernelData.messages.length,
           blockCount: kernelData.blocks.length
         })
-      } else {
+      } else if (isRestoredTopicRow(topicId)) {
         logger.warn(`Failed to load topic "${topicId}" from kernel, showing empty history`)
+      } else {
+        // 本进程内新建、尚未首发建册：内核本来就没有它的会话，"没有历史"是正常状态而不是失败
+        // （旧写法在这里一律 warn，真机日志里把"新建话题点一下"污染成了一条 not found 报错）。
+        logger.debug(`topic "${topicId}" has no kernel session yet (created this session, never sent)`)
       }
     } catch (error) {
       logger.error(`Failed to load messages for topic ${topicId}:`, error as Error)

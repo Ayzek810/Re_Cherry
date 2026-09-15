@@ -17,27 +17,34 @@ This file provides guidance to AI coding assistants when working with code in th
 
 ## Sandbox Constraints (IMPORTANT)
 
-The agent sandbox for this project normally has **no `node_modules`** and **cannot run `pnpm`**. Consequence:
+The agent sandbox for this project may have **no `node_modules`** and **no permission to run `pnpm`** — it depends on the permissions the session was granted. When the session does grant them (as in v0.3.0-1 and v0.3.0-2), **run the gates for real instead of reasoning about them**, with two environment facts:
 
-- `pnpm lint` / `pnpm test` / `pnpm typecheck` / `pnpm build` are **not available**; do not claim you ran them.
-- Verification is by **code review + static analysis**. Required steps for any non-trivial change:
+```powershell
+$env:PATH = "F:\nodejs;" + $env:PATH   # Node ≥24.11.1; DSH's bundled Node 24.9.0 is too old
+$env:CI = "true"                        # avoids ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
+```
+
+Consequence when they are **not** available: `pnpm lint` / `pnpm test` / `pnpm typecheck` / `pnpm build` cannot be run — say so explicitly rather than claiming a run, and fall back to **code review + static analysis**:
   1. Grep every removed/renamed symbol and file path across `src/`, `packages/`, `scripts/`, `tests/`, and all root configs.
   2. Check **all three** reference forms: alias (`@renderer/...`, `@main/...`, `@shared/...`), relative (`./x`, `../x`), and barrel re-export (`export * from`, `export { x } from`).
   3. Re-grep after the change to prove zero dangling references.
-- **Run the static-check suite** (built during the v0.2.4-1 cleanup, lives **outside** this repo so it is never committed):
+
+**Shell gotcha (cost a failed history rewrite once):** the shell is **Windows PowerShell 5.1**, not PowerShell 7. `Get-Content` decodes as ANSI (a UTF-8 source file loses lines and turns Chinese into mojibake — `topics.ts` reports 1098 lines instead of 1172), and `>` / `Out-File` default to **UTF-16LE** (git then rejects the file with `a NUL byte in commit log message not allowed`). Read files with the file tools or `[System.IO.File]::ReadAllText` (UTF-8), write them with an explicit UTF-8 no-BOM encoder, and capture a command's exit code via `$LASTEXITCODE` — not through a pipeline, whose reported code can differ.
+
+- **Run the static-check suite** (rebuilt during v0.3.0-1 as nine checks, lives **outside** this repo so it is never committed):
   ```powershell
-  node E:\Workspace\Re_Cherry\tools\static-checks\run-all.js
+  node E:\Workspace\project_REC\tools\static-checks\run-all.js
   ```
-  > ⚠️ **Currently missing (verified 2026, after the E:\Workspace reorganisation).** That exact path does not exist, and neither does `E:\Workspace\project_REC\tools`; an exhaustive search of `E:\Workspace` finds no `run-all.js`, no `check-imports.js` and no `tools/static-checks` directory anywhere. The workspace root is now `E:\Workspace\project_REC` (the old `E:\Workspace\Re_Cherry` no longer exists), so most likely the suite was lost or left behind in that reorganisation. **Do not claim it was run, and do not treat a deletion/rename batch as verified until it is restored or replaced.** The requirement below still stands — only the tool is gone.
-  It provides eight checks, and **all eight must be green** (exit code 0) after any batch of deletions/renames:
+  It provides nine checks, and **all nine must be green** (exit code 0) after any batch of deletions/renames. `check-upstream` needs the upstream reference tree `E:\Workspace\project_REC\参考资产\cherry-studio v1.9.11` in place; it self-skips without it.
   - `check-imports.js` — every import/export/require/dynamic-import specifier resolves on disk (relative, aliases, `?url` query suffixes, NodeNext `.js`→`.ts`, bare packages vs `package.json`).
   - `check-symbols.js` — every `import { a } from '<local path>'` is really exported there (handles this repo's three export shapes: `export const X`, `export const { a, b } = slice.actions` with comments in between, `export { default as X, type Y } from './z'`).
   - `check-syntax.js` — parses all `.ts` via Node's `stripTypeScriptTypes` (a syntax-level substitute for `tsgo`; `.tsx` cannot be checked because JSX is unsupported).
-  - `check-configs.js` — `package.json` / `tsconfig*.json` / `.oxlintrc.json` (JSONC-tolerant) / `pnpm-workspace.yaml` / `electron-builder.yml` parse, carry no BOM, and keep `patches/` in 1:1 correspondence with `patchedDependencies`.
+  - `check-configs.js` — `package.json` / `tsconfig*.json` / `.oxlintrc.json` (JSONC-tolerant) / `pnpm-workspace.yaml` / `electron-builder.yml` parse, carry no BOM, and keep `patches/` in 1:1 correspondence with `patchedDependencies` (and the lockfile's `patchedDependencies`).
   - `check-i18n-parity.js` — `en-us.json` and `zh-cn.json` must have identical leaf-key sets.
   - `check-main-i18n.js` — **the main process must be able to read its own strings.** The main process accesses locales by *object value* (`const { tray: trayLocale } = locale.translation`), so `'tray.show_window'` never appears as a literal anywhere in the source and a text-driven prune deletes the whole namespace. This check verifies the namespaces exist, their member keys resolve to strings, and every `t('a.b.c')` literal resolves.
   - `check-i18n-keys.js` — every quoted dotted string that starts with a locale namespace resolves in both bundles, with i18next plural/context awareness (`_one`/`_other`/`_male` have no bare key). Compared against `i18n-baseline.json`: **only new misses fail**; pass `--head <dir>` to diff against a HEAD snapshot and separate regressions from pre-existing upstream gaps.
   - `check-i18n-dynamic.js` — template-literal keys (`` `error.${x}` ``) have no dotted literal either. New unregistered shapes fail; registered ones must declare resolvable `expandsTo` keys; the conversation-importer registry must have matching `import.<name>.assistant_name` keys.
+  - `check-upstream.js` — reconciles ProviderType-keyed constant tables against the upstream reference tree, with `equal` / `subset-of-upstream` rules and a stated reason per constant (v0.3.0-1 added it after a batch of upstream tables had been pruned by mistake).
   Known false positives and usage discipline are documented in `tools/static-checks/README.md` — read it before acting on a report. **Never prune text-driven content (i18n keys, barrels, side-effect imports) without first enumerating every way that text can be consumed** — literal, object value, template literal, variable key table, barrel forward, side-effect import. See the incident record in that README.
 - These checks catch broken references, syntax and config breakage, **not** type errors (e.g. a deleted state field still written in a file typed with `RootState`). When you delete a field/type, grep every consumer including `store/migrate.ts`, and prefer deleting the now-dead statements over adding `@ts-expect-error`.
 - **Startup order is a safety property** (`src/main/index.ts`): `registerShortcuts()` and `await registerIpc()` must stay ahead of every cosmetic/optional initializer (tray, macOS app menu, telemetry), and those must stay wrapped in `try/catch` that only logs. A cosmetic failure must never take the app's basic usability with it.
@@ -47,6 +54,8 @@ The agent sandbox for this project normally has **no `node_modules`** and **cann
 
 - **Kernel-plugin compatibility contract** is a hard acceptance gate: see `<workspace>/docs/内核插件兼容契约.md`. Never bypass the cordis `ctx.plugin` lifecycle or the public seams (`ctx.agents`, `ctx.sessionPersistence`, `ctx.llm.resolveModelInfo`, `ToolRuntime`, `session/event`). IPC handlers are thin forwarders only; do not scatter direct SQLite access outside the kernel.
 - **The kernel session log is the single source of truth.** The renderer is a projection of kernel events. Any conversational state must be recoverable by folding the session log — no parallel sources of truth.
+- **Topic membership is the kernel's to decide, never the renderer's** (v0.3.0-2). The renderer holds three persisted views of a topic (session log, kernel registry, Redux `assistants[].topics`), so it must not filter its own rows by its own timestamps: `utils/topicBranch.ts` fetches the authoritative set (`dshTopicList`, plus `dshTopicGet` for fork children) and `services/kernelTopics.ts` reconciles — materialize what the kernel has and the renderer lacks, prune what the kernel no longer knows, complete fields only from the kernel. **Only rows restored from the previous session may ever be judged stale** (`noteRestoredTopicIds` at rehydrate); a topic created in this process is simply not in the kernel yet until its first send (`ensureKernelTopic` registers it). The old `shouldShowTopicRow` / `BOOT_TIME` heuristic is retired and pinned by `services/__tests__/topicAuthorityGate.test.ts`.
+- **`ensureAgent` may never silently create a session over an existing log** (v0.3.0-2). `sessionResumeFallback.ts` is the single decision point: a persistence existence query decides refuse-vs-create (fail-closed when the query itself fails), and the error's type is only a diagnostic label. See `sessionReadFailure.ts` for the classifier's deliberately narrowed role.
 - **`src/main/kernel/topics.ts`** owns topics (= dsh session + agent) including the `destroyTurns` deletion engine. Structural operations go through the `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` service seams (`src/main/kernel/services.ts`).
 - **`src/renderer/src/services/kernelChat.ts`** is the event-projection bridge (its name is similar to the legacy `services/messageStreaming/**` layer — do not confuse them).
 - Version roadmap and per-version goals live in `<workspace>/docs/当前任务总体规划.txt`.
@@ -127,6 +136,8 @@ The dsh kernel is embedded in-process as a Cordis plugin tree (never via the YAM
 | `services.ts` | App service seams: `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` (plugins may take over); `ctx.topicTree.uiEvents` returns the UI view of a session log |
 | `sessionEventView.ts` | The single injected-event predicate plus the UI view of session events (v0.3.0-1). All three UI exits apply it: live broadcast, `uiEvents` IPC, `searchSessions` — the renderer holds no visibility predicate of its own |
 | `dsmlRepair.ts` | Response-side DSML tool-call repair, registered as an `llm/stream` waterfall middleware — replaced the `@deepseek-ai/dsh-llm-pi-ai` pnpm patch in v0.3.0-1 |
+| `sessionResumeFallback.ts` | The **single** decision point for "resume failed — refuse or create fresh" (v0.3.0-2). The criterion is a **persistence existence query** (`ctx.sessionPersistence.list()`), never the error's type; fail-closed when the query itself fails, and `createFresh()` is only reachable after the session is confirmed absent |
+| `sessionReadFailure.ts` | Diagnostic classification of a read failure (`format-unsupported` / `corrupted` / `unclassified`) for logging only (v0.3.0-2). **Its return value must never gate session creation** — the security criterion lives in `sessionResumeFallback.ts` |
 
 Renderer side: `src/renderer/src/services/kernelChat.ts` subscribes to kernel `session/event` and projects messages/blocks into Redux. The **quick assistant** (mini window) is the one deliberately separate path: it calls `window.api.dshStreamComplete` without a kernel session.
 
@@ -228,7 +239,7 @@ Winston with daily rotation; log files in `userData/logs/`. Never use `console.l
 
 pnpm settings live in **`pnpm-workspace.yaml`**, not in a `pnpm` field of `package.json`: pnpm 10.6+ ignores that field (it only prints a warning) and pnpm 11 stops reading it entirely. The keys `overrides`, `patchedDependencies` and `onlyBuiltDependencies` are declared there. Moving any of them back into `package.json` silently disables them as soon as the lockfile is regenerated — the `overrides` include several security pins and the patches are load-bearing (libsql's affects win32-arm64 native resolution, file-stream-rotator's affects log rotation, antd's replaces an icon import).
 
-`patches/` must stay in 1:1 correspondence with `patchedDependencies`. Current patches (5): `antd@5.27.0`, `atomically@1.7.0`, `file-stream-rotator@0.6.1`, `libsql@0.4.7`, `node-pty@1.2.0-beta.15`. (`check-configs.js` enforced the 1:1 rule — that suite is currently missing, see above. Two former patches went away: `@tiptap/extension-drag-handle` with the RichEditor removal, and `@deepseek-ai/dsh-llm-pi-ai` in v0.3.0-1 — see below.)
+`patches/` must stay in 1:1 correspondence with `patchedDependencies`. Current patches (5): `antd@5.27.0`, `atomically@1.7.0`, `file-stream-rotator@0.6.1`, `libsql@0.4.7`, `node-pty@1.2.0-beta.15`. (`check-configs.js` enforces that 1:1 rule, against both `pnpm-workspace.yaml` and the lockfile. Two former patches went away: `@tiptap/extension-drag-handle` with the RichEditor removal, and `@deepseek-ai/dsh-llm-pi-ai` in v0.3.0-1 — see below.)
 
 The non-trivial patches carry an explicit rationale:
 
