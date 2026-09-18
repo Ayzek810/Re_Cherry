@@ -162,4 +162,36 @@ describe('classifyError', () => {
     const result = classifyError(makeError({ status: '401' }))
     expect(result.category).toBe('auth')
   })
+
+  // v0.3.1-1：内核回合错误码
+  it('classifies EMPTY_RESPONSE code as empty_response (kernelChat 空轮守门)', () => {
+    const result = classifyError(
+      makeError({ message: 'The model finished this turn but returned no content.', code: 'EMPTY_RESPONSE' })
+    )
+    expect(result.category).toBe('empty_response')
+    expect(result.i18nKey).toBe('error.diagnosis.empty_response')
+    expect(result.navTarget).toBeNull()
+  })
+
+  it('classifies UNKNOWN_MODEL code as model (message 已被投影层本地化，须按 code 命中)', () => {
+    const result = classifyError(
+      makeError({ message: '话题使用的模型 X 已不在当前服务商的可用模型列表。', code: 'UNKNOWN_MODEL' })
+    )
+    expect(result.category).toBe('model')
+    expect(result.navTarget).toBe('/settings/provider')
+    expect(result.navTarget).not.toContain('?id=')
+  })
+
+  it('classifies "no configured model" text as model (引擎原文路径)', () => {
+    const result = classifyError(
+      makeError({ message: 'pi-ai provider "silicon" has no configured model "deepseek-ai/DeepSeek-V4-Flash"' })
+    )
+    expect(result.category).toBe('model')
+  })
+
+  it('never applies EMPTY_RESPONSE/UNKNOWN_MODEL without the code/text (误报防护)', () => {
+    const result = classifyError(makeError({ message: 'plain runtime failure without code' }))
+    expect(result.category).not.toBe('empty_response')
+    expect(result.category).not.toBe('model')
+  })
 })

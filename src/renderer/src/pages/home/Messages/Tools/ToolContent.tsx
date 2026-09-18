@@ -60,7 +60,12 @@ const OutputText = styled.div<{ $isError: boolean }>`
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 240px;
+  /* v0.3.1-1：同 ScrollableToolList 的缺陷形状——只写 overflow-y 会让另一轴计算成 auto，
+     在本框下方多出一根原生横滚动条，并在溢出边界反复闪烁；输出文本已 pre-wrap+break-word，
+     不需要横向滚动。scrollbar-gutter 让竖向条的进出不再挤压文字宽度。 */
+  overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   background: var(--color-background-soft, transparent);
   border: 0.5px solid var(--color-border);
   border-radius: 6px;

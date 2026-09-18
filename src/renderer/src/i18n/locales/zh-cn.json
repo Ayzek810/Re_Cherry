@@ -675,6 +675,7 @@
       "content": "消息内容被安全系统拦截，请修改后重试",
       "context_length": "对话上下文过长，请清理历史消息或开启新对话",
       "deprecated": "该模型已下线或弃用，请更换其他模型",
+      "empty_response": "模型未返回任何内容，请重试或更换模型",
       "go_to_settings": "前往设置",
       "knowledge": "知识库向量化失败",
       "mcp": "MCP 服务器连接失败，请检查服务是否已启动",
@@ -864,7 +865,9 @@
     "title": "导入外部对话"
   },
   "kernelChat": {
-    "imageLoadFailed": "[图片附件加载失败，重新打开话题可重试]"
+    "emptyResponse": "模型已结束本轮，但没有返回任何内容。可重试或更换模型。",
+    "imageLoadFailed": "[图片附件加载失败，重新打开话题可重试]",
+    "unknownModelError": "话题使用的模型 {{model}} 已不在当前服务商的可用模型列表（可能已在服务商侧下架，或服务商配置已变更）。请在话题设置里重新选择模型后重试。"
   },
   "knowledge": {
     "dimensions_auto_set": "自动设置嵌入维度",

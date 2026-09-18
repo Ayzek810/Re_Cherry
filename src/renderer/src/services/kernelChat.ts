@@ -18,8 +18,10 @@ import { newMessagesActions } from '@renderer/store/newMessage'
 import { toolPermissionsActions } from '@renderer/store/toolPermissions'
 import { type UserQuestionEntry, userQuestionsActions } from '@renderer/store/userQuestions'
 import type { Assistant, FileMetadata, Model } from '@renderer/types'
+import type { SerializedError } from '@renderer/types/error'
 import {
   AssistantMessageStatus,
+  type ErrorMessageBlock,
   type Message,
   type MessageBlock,
   MessageBlockStatus,
@@ -28,6 +30,7 @@ import {
 } from '@renderer/types/newMessage'
 import { renameAbortController } from '@renderer/utils/abortController'
 import {
+  createErrorBlock,
   createImageBlock,
   createMainTextBlock,
   createThinkingBlock,
@@ -671,6 +674,53 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
   store.dispatch(toolPermissionsActions.removeByToolCallId({ toolCallId: resultBlock.toolCallId }))
 }
 
+/** v0.3.1-1：turn/end kind=error → ErrorMessageBlock 载荷。
+ * UNKNOWN_MODEL（话题绑定的模型不在内核路由集——渲染层模型选择与路由集脱同步）换双语
+ * 友好文案；其余错误保留引擎原文，由 ErrorBlock 的分类体系渲染。 */
+function serializedTurnError(reason: { error?: { message: string; code: string } }): SerializedError {
+  const raw = reason.error
+  const code = raw?.code ?? 'TURN_FAILED'
+  let message: string = raw?.message ?? 'turn ended with error'
+  if (code === 'UNKNOWN_MODEL') {
+    const model = /has no configured model "([^"]+)"/.exec(message)?.[1]
+    if (model !== undefined) {
+      message = i18n.t('kernelChat.unknownModelError', { model })
+    }
+  }
+  return { name: 'KernelTurnError', message, stack: null, code }
+}
+
+/** v0.3.1-1：空响应块载荷（回合正常收尾但零可见输出）。 */
+function serializedEmptyTurn(): SerializedError {
+  return {
+    name: 'KernelTurnError',
+    message: i18n.t('kernelChat.emptyResponse'),
+    stack: null,
+    code: 'EMPTY_RESPONSE'
+  }
+}
+
+/** v0.3.1-1：本轮是否产出过可见内容（非空正文/思考；工具卡本身即可见——
+ * 纯工具轮是合法形态，不得按空响应误报）。 */
+function turnHasVisibleOutput(
+  state: TurnState,
+  entities: Record<string, MessageBlock | undefined>
+): boolean {
+  return state.blockIds.some((blockId) => {
+    const block = entities[blockId]
+    if (block === undefined) return false
+    switch (block.type) {
+      case MessageBlockType.MAIN_TEXT:
+      case MessageBlockType.THINKING:
+        return typeof block.content === 'string' && block.content.trim().length > 0
+      case MessageBlockType.TOOL:
+        return true
+      default:
+        return false
+    }
+  })
+}
+
 function finishTurn(topicId: string, reason: { kind: string; error?: { message: string; code: string } }): void {
   const state = streams.get(topicId)
   if (state === undefined) return
@@ -678,6 +728,19 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   const aborted = reason.kind === 'aborted'
   if (failed) {
     logger.error(`kernelChat: turn failed for topic "${topicId}": ${reason.error?.message ?? 'unknown'}`)
+  }
+  // v0.3.1-1：失败/空响应以 ERROR 块投影进消息本体（直播路径）。此前只落日志并把
+  // 消息状态置 error，气泡里没有任何可见内容（"空回复"案的呈现层缺陷）。历史还原路径
+  // （projectEventsToMessages 的 turn/end case）与此同构。
+  const turnErrorBlock: ErrorMessageBlock | undefined = failed
+    ? createErrorBlock(state.assistantMessageId, serializedTurnError(reason))
+    : !aborted && !turnHasVisibleOutput(state, store.getState().messageBlocks.entities)
+      ? createErrorBlock(state.assistantMessageId, serializedEmptyTurn())
+      : undefined
+  if (turnErrorBlock !== undefined) {
+    state.blockIds.push(turnErrorBlock.id)
+    store.dispatch(upsertManyBlocks([turnErrorBlock]))
+    syncMessageBlocks(topicId, state)
   }
   // 只收尾仍处于流式/进行中的块（已终态的块保持其成功/失败原样）
   const settleStatus = failed
@@ -754,6 +817,8 @@ async function projectEventsToMessages(
     blockIds: string[]
     usage: { inputTokens: number; outputTokens: number }
     toolBlocks: Map<string, ToolMessageBlock>
+    /** v0.3.1-1：本轮是否产出过可见内容（正文/思考/工具卡）——turn/end 空轮守门。 */
+    sawVisibleOutput: boolean
   } | null = null
 
   const closeReply = (): void => {
@@ -831,7 +896,8 @@ async function projectEventsToMessages(
             message,
             blockIds: [],
             usage: { inputTokens: 0, outputTokens: 0 },
-            toolBlocks: new Map()
+            toolBlocks: new Map(),
+            sawVisibleOutput: false
           }
         }
         // 说话块顺序追加；tool-call 块由 tool/call + tool/result 事件负责（避免双卡）
@@ -840,10 +906,12 @@ async function projectEventsToMessages(
             const main = createMainTextBlock(reply.messageId, block.text, { status: MessageBlockStatus.SUCCESS })
             blocks.push(main)
             reply.blockIds.push(main.id)
+            reply.sawVisibleOutput = true
           } else if (block.type === 'reasoning' && block.text !== undefined && block.text.length > 0) {
             const thinking = createThinkingBlock(reply.messageId, block.text, { status: MessageBlockStatus.SUCCESS })
             blocks.push(thinking)
             reply.blockIds.push(thinking.id)
+            reply.sawVisibleOutput = true
           }
         }
         if (event.data.usage !== undefined) {
@@ -857,6 +925,8 @@ async function projectEventsToMessages(
           logger.warn(`kernelChat: tool/call before any assistant message in topic "${topicId}" (seq ${event.seq})`)
           break
         }
+        // 工具卡本身即可见输出（纯工具轮合法，空轮守门不误报）
+        reply.sawVisibleOutput = true
         let parsedArguments: Record<string, unknown> | undefined
         try {
           const parsed = JSON.parse(event.data.arguments) as unknown
@@ -891,6 +961,46 @@ async function projectEventsToMessages(
         const failed = resultBlock.isError === true || event.data.error !== undefined
         toolBlock.content = text
         toolBlock.status = failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+        break
+      }
+      case 'turn/end': {
+        // v0.3.1-1：错误/空轮的历史投影与直播路径（finishTurn）同构。此前投影循环
+        // 没有 turn/end case，失败轮重新打开话题后只剩空气泡。轮内没有任何
+        // assistant/message 时（如 UNKNOWN_MODEL 在引擎之前失败），先补一条承载
+        // 消息（id 用本事件 seq），否则错误块无处可挂。
+        const reason = event.data.reason as { kind: string; error?: { message: string; code: string } }
+        const wantsErrorBlock = reason.kind === 'error'
+        // 空轮守门：正常收尾但零可见输出；aborted 不投（PAUSED 语义）。
+        const wantsEmptyBlock =
+          reason.kind !== 'error' && reason.kind !== 'aborted' && !(reply?.sawVisibleOutput ?? false)
+        if (!wantsErrorBlock && !wantsEmptyBlock) break
+        if (reply === null) {
+          if (lastUserMessageId === undefined) break
+          const messageId = kernelMessageId(topicId, event.seq)
+          const message = createKernelMessage(messageId, topicId, assistantId, 'assistant', [], {
+            askId: lastUserMessageId,
+            status: 'error' as AssistantMessageStatus
+          })
+          messages.push(message)
+          reply = {
+            messageId,
+            message,
+            blockIds: [],
+            usage: { inputTokens: 0, outputTokens: 0 },
+            toolBlocks: new Map(),
+            sawVisibleOutput: false
+          }
+        }
+        const turnBlock = wantsErrorBlock
+          ? createErrorBlock(reply.messageId, serializedTurnError(reason))
+          : createErrorBlock(reply.messageId, serializedEmptyTurn())
+        // 消息级 status 与直播路径（finishTurn）对齐：error 轮置 error；
+        // 空轮保持 success（直播路径成功收尾语义，错误承载在块内）
+        if (wantsErrorBlock) {
+          reply.message.status = 'error' as AssistantMessageStatus
+        }
+        blocks.push(turnBlock)
+        reply.blockIds.push(turnBlock.id)
         break
       }
       default:
