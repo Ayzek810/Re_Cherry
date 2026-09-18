@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildPageFamily, type CMFamily, type CMSession } from '../conversationModel'
+import { buildPageFamily, type CMFamily, type CMSession, originOf } from '../conversationModel'
 
 /** 手工构造会话（纯函数测试；replies 数组与页码分组成员一一对应）。 */
 function session(
@@ -140,5 +140,78 @@ describe('buildPageFamily（页码 = 分叉图合并树投影）', () => {
     // 提问页切换目标：原问在 P、重发拷贝在 C
     expect(page.userOwnerOf.get('R:u:0')).toBe('R')
     expect(page.userOwnerOf.has('C1:u:0')).toBe(false)
+  })
+
+  it('共享边界权威：祖先删轮后子日志的 shared 停在历史形状 → 钳到父链现长并暴露给门控（9141be6f 族真机实证）', () => {
+    // 真实缺陷形态：R 原 3 轮时 S fork（seed 至第 2 轮末，shared=2），之后 R 删掉第 2 轮只剩 1 轮。
+    // S 的日志保留全部 3 个 seed 轮，其 shared=2 大于父链现长 1。
+    const F = family(
+      session('R', undefined, 0, [{ text: 'Q1', replies: 1 }]), // R 现在只剩 1 轮
+      session('S', 'R', 2, [
+        { text: 'Q1(共享)', replies: 1 },
+        { text: 'Q2(祖先已删轮的拷贝)', replies: 1 },
+        { text: 'Q3', replies: 1 }
+      ])
+    )
+    const page = buildPageFamily(F, { S: 'regenerate' })
+    // 钳制：门控权威 = 父链现长 1，而非子日志声称的 2（根恒 0）
+    expect(page.sharedBoundaryOf.get('S')).toBe(1)
+    expect(page.sharedBoundaryOf.get('R')).toBe(0)
+    // 后果一（修复前）：页码条直接吃 session.shared=2 → S 的第 1、2 轮全被当"共享区"，
+    // 整组页码被吞；现在边界=1 → 第 1/2 轮都是自有区。
+    // 后果二：第 1 轮在祖先链里没有对应单元（R 链长 1），合并不成立，S 只能自立提问节点
+    expect(page.userOwnerOf.get('S:u:1')).toBe('S')
+    expect(page.answersOf.get('S:u:1')).toEqual(['S:a:1:0'])
+    expect(page.answersOf.get('S:u:2')).toEqual(['S:a:2:0'])
+    // 链完整（3 轮），第 0 轮引用祖先单元
+    expect(page.chains.get('S')?.length).toBe(3)
+    expect(page.chains.get('S')?.[0]?.userId).toBe('R:u:0')
+    expect(page.chains.get('S')?.[1]?.userId).toBe('S:u:1')
+  })
+
+  it('共享边界权威：无删轮的正常血缘下钳制值 = 原值（不改变既有分组）', () => {
+    const F = family(
+      session('P', undefined, 0, [
+        { text: 'Q1', replies: 1 },
+        { text: 'Q2', replies: 1 }
+      ]),
+      session('C', 'P', 1, [
+        { text: 'Q1(共享)', replies: 1 },
+        { text: 'Q3', replies: 1 }
+      ])
+    )
+    const page = buildPageFamily(F, { C: 'resend' })
+    expect(page.sharedBoundaryOf.get('C')).toBe(1)
+    expect(page.sharedBoundaryOf.get('P')).toBe(0)
+    // 既有分组不受影响
+    expect(page.questionsOf.get('P:a:0:0')).toEqual(['P:u:1', 'C:u:1'])
+  })
+
+  it('originOf 同一权威：祖先删轮后 shared 停在历史形状 → 钳到父链现长，不再打进父已删的轮（unresolved warn 根除）', () => {
+    // 与 sharedBoundaryOf 用例同形态：R 只剩 1 轮，S 日志 shared=2
+    const F = family(
+      session('R', undefined, 0, [{ text: 'Q1', replies: 1 }]),
+      session('S', 'R', 2, [
+        { text: 'Q1(共享)', replies: 1 },
+        { text: 'Q2(祖先已删轮的拷贝)', replies: 1 },
+        { text: 'Q3', replies: 1 }
+      ])
+    )
+    // 旧逻辑：index1 < rawShared2 → 递归进 R:1（不存在）→ null（warn 降级）
+    // 新逻辑：钳制边界1 → index1 自有
+    expect(originOf(F, 'S', 1)).toBe('S:1')
+    expect(originOf(F, 'S', 2)).toBe('S:2')
+    // 共享段照常归祖先
+    expect(originOf(F, 'S', 0)).toBe('R:0')
+    // 正常血缘不受影响（边界 = 原值）
+    const N = family(
+      session('P', undefined, 0, [{ text: 'Q1', replies: 1 }]),
+      session('C', 'P', 1, [
+        { text: 'Q1(共享)', replies: 1 },
+        { text: 'Q2', replies: 1 }
+      ])
+    )
+    expect(originOf(N, 'C', 0)).toBe('P:0')
+    expect(originOf(N, 'C', 1)).toBe('C:1')
   })
 })

@@ -108,7 +108,15 @@ const ApiOptionsSettings = ({ providerId }: Props) => {
       }
     ]
 
-    if (provider.type === 'openai' || provider.type === 'openai-response' || provider.type === 'azure-openai') {
+    // new-api/gateway 同为 OpenAI 兼容协议：developer-role/enable_thinking 等声明开关
+    // 对它们必须可达（泛用思考协议修正的用户出口，见 config/reasoningCompat.ts A 层）
+    if (
+      provider.type === 'openai' ||
+      provider.type === 'openai-response' ||
+      provider.type === 'azure-openai' ||
+      provider.type === 'new-api' ||
+      provider.type === 'gateway'
+    ) {
       items.push(...openAIOptions)
     }
 

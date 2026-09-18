@@ -5,7 +5,7 @@ import { isLocalAi } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import db from '@renderer/databases'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
-import { initKernelBridge, syncProvidersToKernel } from '@renderer/services/kernelChat'
+import { initKernelBridge, syncImageDescriberToKernel, syncProvidersToKernel } from '@renderer/services/kernelChat'
 import MemoryService from '@renderer/services/MemoryService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
@@ -155,11 +155,20 @@ export function useAppInit() {
   }, [])
 
   const kernelProviders = useAppSelector((state) => state.llm.providers)
+  const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
+  const imageDescriberPrompt = useAppSelector((state) => state.llm.imageDescriberPrompt)
 
   useEffect(() => {
     // 把 provider 配置同步进内核（provider 变更时自动重同步）
     void syncProvidersToKernel(kernelProviders)
   }, [kernelProviders])
+
+  useEffect(() => {
+    // 转述模型配置同步（v0.3.1 识图通道补全）：变更即推。undefined → null =
+    // 通道关闭（describe_images 不挂载，渲染层图片门禁回收现状）；
+    // prompt 为 '' = 内置默认提示词。
+    void syncImageDescriberToKernel(imageDescriberModel ?? undefined, imageDescriberPrompt ?? '')
+  }, [imageDescriberModel, imageDescriberPrompt])
 
   useEffect(() => {
     void checkDataLimit()

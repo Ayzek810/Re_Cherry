@@ -22,9 +22,6 @@ export interface ToolHeaderProps {
   status?: ToolStatus
   hasError?: boolean
   showStatus?: boolean // default true
-
-  // Style variant
-  variant?: 'standalone' | 'collapse-label'
 }
 
 const getToolDescription = (block?: ToolMessageBlock): string | undefined => {
@@ -37,21 +34,8 @@ const getToolDescription = (block?: ToolMessageBlock): string | undefined => {
 
 // ============ Styled Components ============
 
-const HeaderContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 100%;
-  font-size: 13px;
-  padding: 8px 12px;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  min-width: 0;
-`
-
-// Label variant: no border/padding, for use inside Collapse header
+// 组内行形态（唯一形态，v0.3.1：standalone 单卡随 ToolBlock 退役）：
+// 无边框/内边距，供 Collapse 头与组内行使用
 const LabelContainer = styled.div`
   display: flex;
   align-items: center;
@@ -132,8 +116,7 @@ const ToolHeader: FC<ToolHeaderProps> = ({
   stats,
   status: propStatus,
   hasError: propHasError,
-  showStatus = true,
-  variant = 'standalone'
+  showStatus = true
 }) => {
   const { t } = useTranslation()
 
@@ -146,10 +129,8 @@ const ToolHeader: FC<ToolHeaderProps> = ({
 
   const description = params ?? getToolDescription(block)
 
-  const Container = variant === 'standalone' ? HeaderContainer : LabelContainer
-
   return (
-    <Container>
+    <LabelContainer>
       <ToolName className="tool-name" align="center" gap={6}>
         <Tooltip title={resolvedName !== toolName ? resolvedName : undefined} mouseLeaveDelay={0}>
           <span className="tool-icon">{propIcon || display.icon || <Wrench size={14} />}</span>
@@ -163,7 +144,7 @@ const ToolHeader: FC<ToolHeaderProps> = ({
           <ToolStatusIndicator status={status} hasError={hasError} />
         </StatusWrapper>
       )}
-    </Container>
+    </LabelContainer>
   )
 }
 

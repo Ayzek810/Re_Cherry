@@ -103,10 +103,10 @@ export const messagesSlice = createSlice({
   reducers: {
     setCurrentTopicId(state, action: PayloadAction<string | null>) {
       state.currentTopicId = action.payload
-      if (action.payload && !(action.payload in state.messageIdsByTopic)) {
-        state.messageIdsByTopic[action.payload] = []
-        state.loadingByTopic[action.payload] = false
-      }
+      // 刻意不播种 messageIdsByTopic（v0.3.0-5）：播种空数组 = "没加载"与"加载完的空历史"
+      // 在 loadTopicMessagesThunk 的短路判定里不可区分——一次瞬时加载失败后该话题会被
+      // 空数组卡住，重进也不再重拉（真机"点进话题偶发空白直到重启"的一半根源）。
+      // 所有消费方对 undefined 都已容错（?? [] / 显式判 undefined）。
     },
     setTopicLoading(state, action: PayloadAction<SetTopicLoadingPayload>) {
       const { topicId, loading } = action.payload
@@ -300,6 +300,7 @@ export default messagesSlice.reducer
 
 // --- Selectors ---
 import { createSelector } from '@reduxjs/toolkit'
+import { rootTopicIdOf } from '@renderer/utils/topicBranch'
 
 import type { RootState } from './index' // Adjust path if necessary
 
@@ -327,5 +328,50 @@ export const selectMessagesForTopic = createSelector(
     }
     // Map the ordered IDs to the actual message objects from the dictionary
     return topicMessageIds.map((id) => messageEntities[id]).filter((m): m is Message => !!m) // Filter out undefined/null in case of inconsistencies
+  }
+)
+
+// ---------------------------------------------------------------------------
+// 话题进行中/完成的**回合口径**信号（v0.3.1 第三轮）。
+//
+// 历史锚错：loadingByTopic 由发送任务队列驱动——queue 排空（内核流还远没结束）即被清
+// （useMessageOperations.useTopicGenerating 的注释自证）；fulfilled 的 true 也挂在同一错
+// 时刻，从未在 turn/end 落地。侧栏黄点半路熄灭、绿点提前点亮后被看没了，两个特效一起失
+// 灵。修复分工：
+// ① 黄点 = selectGeneratingTopicIds（下方）——PENDING/PROCESSING 的 assistant 消息
+//    存在即"生成中"，写端不动、**读端折叠**到根 id；
+// ② 绿点的真来源在 kernelChat.finishTurn（写入端直接写**根 id 投影**，非当前家族
+//    时才置 true），清除端（HomePage/Topics effect）同域清根投影。
+// ---------------------------------------------------------------------------
+
+/**
+ * 进行中回合的话题集合（发送到 turn/end 全程覆盖；PENDING = 尚未收到首字节）。
+ * memoized：Set 内容不变则同引用——流式 delta 高频 dispatch 不会让侧栏白重渲染。
+ *
+ * **家族折叠（v0.3.1 第三轮）**：重发/旁答的回合在 fork 出的子会话 id 上记账，
+ * 侧栏只渲染根行——输出统一折叠为**根 id**（`rootTopicIdOf`，Redux 行链同步上溯），
+ * 侧栏按根行 id 查询即中。这修复了"重发流黄点全灭"（子会话在打字，根行不知道）。
+ */
+export const selectGeneratingTopicIds = createSelector(
+  [
+    (state: RootState) => state.messages.messageIdsByTopic,
+    (state: RootState) => state.messages.entities as Record<string, Message | undefined>,
+    (state: RootState) => state.assistants.assistants.flatMap((assistant) => assistant.topics ?? [])
+  ],
+  (idsByTopic, entities, topicRows) => {
+    const result = new Set<string>()
+    for (const [topicId, ids] of Object.entries(idsByTopic)) {
+      if (ids === undefined) continue
+      for (const id of ids) {
+        const message = entities[id]
+        if (message === undefined) continue
+        if (message.role !== 'assistant') continue
+        if (message.status === AssistantMessageStatus.PENDING || message.status === AssistantMessageStatus.PROCESSING) {
+          result.add(rootTopicIdOf(topicId, topicRows))
+          break
+        }
+      }
+    }
+    return result
   }
 )

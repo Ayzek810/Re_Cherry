@@ -15,6 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import { loggerService } from '@logger'
+import { isVisionModel } from '@renderer/config/models'
 import i18n from '@renderer/i18n'
 import FileManager from '@renderer/services/FileManager'
 import { BlockManager } from '@renderer/services/messageStreaming/BlockManager'
@@ -22,7 +23,7 @@ import { createCallbacks } from '@renderer/services/messageStreaming/callbacks'
 import { endSpan } from '@renderer/services/SpanManagerService'
 import type { StreamProcessorCallbacks } from '@renderer/services/StreamProcessingService'
 import store from '@renderer/store'
-import { updateTopicUpdatedAt } from '@renderer/store/assistants'
+import { moveTopicToHead, updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { type Assistant, type FileMetadata, type Model, type Topic } from '@renderer/types'
 import type { FileMessageBlock, ImageMessageBlock, Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
@@ -43,8 +44,10 @@ const logger = loggerService.withContext('MessageThunk')
 
 const finishTopicLoading = async (topicId: string) => {
   await waitForTopicQueue(topicId)
+  // v0.3.1 第三轮：fulfilled 的 true 不在这里设——queue 排空≠回合结束（内核流还在打），
+  // 旧位置会让侧栏绿点提前亮然后被"看没了"。真源在 kernelChat.finishTurn（回合成功 + 用户
+  // 未在观看时才置 true）。loading:false 本身保留：它服务"加载等待"语义（加载中禁点）。
   store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
-  store.dispatch(newMessagesActions.setTopicFulfilled({ topicId, fulfilled: true }))
 }
 
 type AgentSessionContext = {
@@ -291,19 +294,32 @@ const fetchAndProcessAssistantResponseImpl = async (
     if (triggeringUserMessage) {
       await kernelChat.ensureKernelTopic(topicId, assistant)
       const text = kernelChat.extractTextFromUserMessage(triggeringUserMessage)
-      if (text.length === 0) {
-        logger.warn('kernelChat: user message has no text content, nothing to send')
+      // v0.3.1 识图通道：图片块规范化为附件载荷（canvas 解码/EXIF/压预算），随发送参数上行。
+      // 准入（数量/字节/容器校验）在内核附件仓库，失败整轮拒绝并上抛。
+      const images = await kernelChat.extractImagesFromUserMessage(triggeringUserMessage)
+      if (text.length === 0 && images.length === 0) {
+        logger.warn('kernelChat: user message has no text or image content, nothing to send')
       }
       // 能力状态随发送参数现算（类 buildToolsForSession，拨动下一轮生效）：
       // 内置工具 = 助手开关；外置工具 = 话题工作模式开关（宏）× 助手外置开关；档位 = 助手权限配置
+      // v0.3.1 识图通道补全：主模型（本 assistant.model，@提及轮经 assistantForThisMention
+      // 已是实际发送模型）无视觉且已配置转述模型 → 追加 describe_images。不进工具设置页
+      //（用户裁决：开关由"是否是视觉模型"自动决定）；视觉路由永不挂载，模型直读，
+      // 执行侧防线保留拒Call。
+      const describerModel = getState().llm.imageDescriberModel
+      const wantsDescriber =
+        assistant.model !== undefined && !isVisionModel(assistant.model) && describerModel !== undefined
       await kernelChat.sendToKernel(topicId, text, assistantMsgId, triggeringUserMessage.id, {
         reasoningEffort: kernelChat.assistantReasoningLevel(assistant),
-        builtinTools: BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false),
+        builtinTools: wantsDescriber
+          ? [...BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false), 'describe_images']
+          : BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false),
         externalTools:
           topic?.workMode === true
             ? EXTERNAL_TOOL_IDS.filter((toolId) => assistant.externalTools?.[toolId] !== false)
             : [],
-        tier: assistant.workMode?.approval
+        tier: assistant.workMode?.approval,
+        images
       })
     } else {
       logger.error('kernelChat: triggering user message not found, skipping send')
@@ -369,6 +385,8 @@ export const sendMessage =
         dispatch(upsertManyBlocks(userMessageBlocks))
       }
       dispatch(updateTopicUpdatedAt({ topicId }))
+      // 活动浮顶（v0.3.1 验收轮）：发送即写数组序，侧栏立刻反映；只动位置，updatedAt 已由上行负责
+      dispatch(moveTopicToHead({ topicId }))
 
       const queue = getTopicQueue(topicId)
 

@@ -1,17 +1,23 @@
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-// 类型副作用导入：加载 dsh-session-title 对 SessionEventMap 的声明合并（session/title 事件）
-import type {} from '@deepseek-ai/dsh-session-title'
 import { loggerService } from '@logger'
-import { providerReasoningCompat } from '@renderer/config/reasoningCompat'
-import { fetchTopicEvents, subscribeKernelSessionEvents } from '@renderer/services/kernelEventStream'
+import { isVisionModel } from '@renderer/config/models'
+import { providerReasoningCompat, type ReasoningCompatProviderInput } from '@renderer/config/reasoningCompat'
+import i18n from '@renderer/i18n'
+import { fetchTopicEventsWithRetry, subscribeKernelSessionEvents } from '@renderer/services/kernelEventStream'
+import {
+  encodeImageFileForKernel,
+  type KernelImageInput,
+  syncKernelImageAttachment
+} from '@renderer/services/kernelImages'
+import { autoNameKernelTopic } from '@renderer/services/topicNaming'
 import store from '@renderer/store'
-import { updateTopic, updateTopicUpdatedAt } from '@renderer/store/assistants'
+import { updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { toolPermissionsActions } from '@renderer/store/toolPermissions'
 import { type UserQuestionEntry, userQuestionsActions } from '@renderer/store/userQuestions'
-import type { Assistant, Model } from '@renderer/types'
+import type { Assistant, FileMetadata, Model } from '@renderer/types'
 import {
   AssistantMessageStatus,
   type Message,
@@ -21,9 +27,19 @@ import {
   type ToolMessageBlock
 } from '@renderer/types/newMessage'
 import { renameAbortController } from '@renderer/utils/abortController'
-import { createMainTextBlock, createThinkingBlock, createToolBlock } from '@renderer/utils/messageUtils/create'
+import {
+  createImageBlock,
+  createMainTextBlock,
+  createThinkingBlock,
+  createToolBlock
+} from '@renderer/utils/messageUtils/create'
 import { kernelReasoningEffortsForModel, kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
-import { invalidateKernelRootTopics, isRestoredTopicRow, kernelKnowsTopic } from '@renderer/utils/topicBranch'
+import {
+  invalidateKernelRootTopics,
+  isRestoredTopicRow,
+  kernelKnowsTopic,
+  rootTopicIdOf
+} from '@renderer/utils/topicBranch'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
 const logger = loggerService.withContext('KernelChat')
@@ -218,13 +234,17 @@ export async function syncProvidersToKernel(providers: unknown[]): Promise<void>
         ...provider,
         models: models.map((model) => {
           const reasoningEfforts = kernelReasoningEffortsForModel(model as Model)
-          // 通用登记表：按 apiHost/provider id 命中第三方网关的思考协议（硅基流动等）
-          const compat = providerReasoningCompat(provider, model as Model)
-          if (reasoningEfforts === undefined && compat === undefined) return model
+          // 三层思考协议修正：登记网关事实 + 泛用家族推断 + 用户 apiOptions 声明（见 config/reasoningCompat.ts）
+          const compat = providerReasoningCompat(provider as ReasoningCompatProviderInput, model as Model)
+          // v0.3.1 识图通道：视觉模型声明输入模态（pi-ai models[].input）——目录外自定义
+          // 视觉模型缺了这条，图片会被内核按纯文本路由降级成 handle 文本，永远不上 wire。
+          const input = isVisionModel(model as Model) ? (['text', 'image'] as const) : undefined
+          if (reasoningEfforts === undefined && compat === undefined && input === undefined) return model
           return {
             ...model,
             ...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
-            ...(compat === undefined ? {} : { compat })
+            ...(compat === undefined ? {} : { compat }),
+            ...(input === undefined ? {} : { input: [...input] })
           }
         })
       }
@@ -233,6 +253,28 @@ export async function syncProvidersToKernel(providers: unknown[]): Promise<void>
   } catch (error) {
     logger.error(
       'kernelChat: failed to sync providers to kernel',
+      error instanceof Error ? error : new Error(String(error))
+    )
+  }
+}
+
+/**
+ * 转述模型配置同步（v0.3.1 识图通道补全）。变更即推；启动窗内内核未就绪时
+ * 只记日志（下一处 provider 变更或重启会重推；describe_images 挂载由发送链
+ * 的 builtinTools 决定，路由缺失仅使工具调用明错，不会静默劣化）。
+ * prompt 为 '' = 内置默认提示词。
+ */
+export async function syncImageDescriberToKernel(
+  model: { provider: string; id: string } | undefined,
+  prompt: string
+): Promise<void> {
+  try {
+    await window.api.dshSyncImageDescriber(
+      model === undefined ? null : { provider: model.provider, model: model.id, prompt }
+    )
+  } catch (error) {
+    logger.error(
+      'kernelChat: failed to sync image describer config to kernel',
       error instanceof Error ? error : new Error(String(error))
     )
   }
@@ -289,6 +331,8 @@ export async function sendToKernel(
     builtinTools?: string[]
     externalTools?: string[]
     tier?: WorkModeApprovalTier
+    /** 随消息附带的图片（已规范化进预算，v0.3.1 识图通道）。 */
+    images?: KernelImageInput[]
   }
 ): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)
@@ -302,25 +346,43 @@ export async function sendToKernel(
 }
 
 /**
+ * 提取用户消息携带的图片并规范化为内核附件载荷新形态（v0.3.1 识图通道）。
+ * 图片块 → FileMetadata → canvas 解码/EXIF 摆正/压预算 → base64 wire 载荷。
+ * 单个图片失败即抛错（发送链可见失败），由附件仓库做最后防线校验。
+ */
+export async function extractImagesFromUserMessage(message: Message): Promise<KernelImageInput[]> {
+  const entities = store.getState().messageBlocks.entities
+  const files: FileMetadata[] = []
+  for (const blockId of message.blocks ?? []) {
+    const block = entities[blockId]
+    if (block !== undefined && block.type === MessageBlockType.IMAGE && block.file !== undefined) {
+      files.push(block.file)
+    }
+  }
+  if (files.length === 0) return []
+  return Promise.all(files.map((file) => encodeImageFileForKernel(file)))
+}
+
+/**
  * 从内核会话日志还原一个话题的 Message/MessageBlock（打开话题的初始渲染用）。
  * 按"轮"归并（B8：一轮 = 一条回答）：turn 内所有 assistant/message（多 step）的说话块
- * 顺序追加进同一条回答消息；tool/call + tool/result 按 callId 配对产出统一工具块。
- * 返回 null 表示内核不可用（未启动/无此话题），调用方应回退旧路径。
+ * 顺序追加进同一条回答消息；tool/call + tool/result 按 callId 配对产出统一工具块；
+ * 用户消息的 image 内容块经 Dsh_AttachmentSync 幂等同步回本地文件仓后产出 IMAGE 块（v0.3.1）。
+ * @returns 投影结果（空历史 = 空数组，是真实状态）；`null` = 内核在重试窗口内始终不可达
+ *   （真失败——调用方不得把它当"没有消息"渲染，须允许后续重进重拉）。
+ *   启动窗口的瞬时失败（handler 未注册 / agent 异步 resume）由 fetchTopicEventsWithRetry
+ *   覆盖（v0.3.0-5：此前一次瞬时失败即返回 null → 话题空白且被"已加载"短路卡住）。
  */
 export async function loadKernelTopicMessages(
   topicId: string
 ): Promise<{ messages: Message[]; blocks: MessageBlock[] } | null> {
-  try {
-    // UI 视界取数：注入的插件源消息已在内核侧剔除（渲染层不再需要可见性判据）
-    const events = await fetchTopicEvents(topicId)
-    return projectEventsToMessages(topicId, events)
-  } catch (error) {
-    logger.warn(
-      `kernelChat: failed to load topic "${topicId}" from kernel`,
-      error instanceof Error ? error : new Error(String(error))
-    )
+  // UI 视界取数：注入的插件源消息已在内核侧剔除（渲染层不再需要可见性判据）
+  const events = await fetchTopicEventsWithRetry(topicId)
+  if (events === null) {
+    logger.warn(`kernelChat: kernel unreachable for topic "${topicId}" after retry window`)
     return null
   }
+  return await projectEventsToMessages(topicId, events)
 }
 
 // ---------------------------------------------------------------------------
@@ -367,10 +429,11 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
     }
     case 'turn/end': {
       finishTurn(topicId, event.data.reason)
-      break
-    }
-    case 'session/title': {
-      applyKernelTitle(topicId, event.data.title)
+      // 回合成功 → 话题自动命名（V1 原理：轻量调用 + 设置面可控，见 services/topicNaming.ts）。
+      // 错误/中断回合不命名：失败回合的名字没有语义，留给下一次成功的轮次。
+      if (event.data.reason.kind !== 'error' && event.data.reason.kind !== 'aborted') {
+        void autoNameKernelTopic(topicId)
+      }
       break
     }
     default:
@@ -649,6 +712,21 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   store.dispatch(newMessagesActions.updateMessage({ topicId, messageId: state.assistantMessageId, updates }))
   store.dispatch(updateTopicUpdatedAt({ topicId }))
   store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
+  // v0.3.1 第三轮：fulfilled 的**真来源**。旧位置在发送任务队列排空时设 true——queue 排
+  // 空≠回合结束（内核流还在打），绿点提前亮然后被"看没了"，也从不按回合亮。规则：回合
+  // **成功**结束且用户没盯着它（盯着 = 看完了，不算未读）；错误/中断回合不置。
+  if (!failed && !aborted) {
+    // 写入端直接写**根 id 投影**（v0.3.1 第三轮补丁）：重发/旁答的回合发生在 fork 出的
+    // 子会话上，侧栏只渲染根行——不折叠的话子会话的"完成"永远照不到根行（重发流绿点
+    // 全灭）。判定"用户正盯着"也按家族：currentTopicId 与本回合同根 = 同一串对话在眼前。
+    const rows = store.getState().assistants.assistants.flatMap((assistant) => assistant.topics ?? [])
+    const rootId = rootTopicIdOf(topicId, rows)
+    const current = store.getState().messages.currentTopicId
+    const watchingFamily = current !== null && rootTopicIdOf(current, rows) === rootId
+    if (!watchingFamily) {
+      store.dispatch(newMessagesActions.setTopicFulfilled({ topicId: rootId, fulfilled: true }))
+    }
+  }
   // 兜底清理：回合结束（含错误/中断）时该话题不应再有未决审批/问答
   store.dispatch(toolPermissionsActions.clearByTopic({ topicId }))
   store.dispatch(userQuestionsActions.clearByTopic({ topicId }))
@@ -656,26 +734,14 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   pendingStubs.delete(topicId)
 }
 
-function applyKernelTitle(topicId: string, title: string): void {
-  if (typeof title !== 'string' || title.length === 0) return
-  const state = store.getState()
-  for (const assistant of state.assistants.assistants) {
-    const topic = assistant.topics.find((t) => t.id === topicId)
-    if (topic !== undefined) {
-      store.dispatch(updateTopic({ assistantId: assistant.id, topic: { ...topic, name: title } }))
-      return
-    }
-  }
-}
-
 // ---------------------------------------------------------------------------
 // 历史还原：session 事件 → Cherry Message/MessageBlock
 // ---------------------------------------------------------------------------
 
-function projectEventsToMessages(
+async function projectEventsToMessages(
   topicId: string,
   events: SessionEvent[]
-): { messages: Message[]; blocks: MessageBlock[] } {
+): Promise<{ messages: Message[]; blocks: MessageBlock[] }> {
   const messages: Message[] = []
   const blocks: MessageBlock[] = []
   const assistantId = findAssistantIdForTopic(topicId)
@@ -717,6 +783,21 @@ function projectEventsToMessages(
             const block = createMainTextBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
             blocks.push(block)
             blockIds.push(block.id)
+          } else if (content.type === 'image') {
+            // v0.3.1：内核只存图片 ref——按 ref 同步字节回本地文件仓（幂等）再产出 IMAGE 块。
+            // 同步失败不吞：投影占位文本，重启后重进话题可再同步。
+            const file = await syncKernelImageAttachment(content.attachment)
+            if (file !== null) {
+              const block = createImageBlock(messageId, { file, status: MessageBlockStatus.SUCCESS })
+              blocks.push(block)
+              blockIds.push(block.id)
+            } else {
+              const failed = createMainTextBlock(messageId, i18n.t('kernelChat.imageLoadFailed'), {
+                status: MessageBlockStatus.SUCCESS
+              })
+              blocks.push(failed)
+              blockIds.push(failed.id)
+            }
           }
         }
         messages.push(

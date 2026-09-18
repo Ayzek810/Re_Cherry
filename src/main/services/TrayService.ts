@@ -47,10 +47,6 @@ export class TrayService {
 
     this.updateContextMenu()
 
-    if (isLinux) {
-      this.tray.setContextMenu(this.contextMenu)
-    }
-
     this.tray.setToolTip('Re_Cherry')
 
     this.tray.on('right-click', () => {
@@ -91,6 +87,13 @@ export class TrayService {
     ].filter(Boolean) as MenuItemConstructorOptions[]
 
     this.contextMenu = Menu.buildFromTemplate(template)
+    // 所有平台都把菜单原生挂到托盘上：Explorer/Dock 收到右键即出菜单，
+    // 无需依赖 'right-click' 事件 + popUpContextMenu 的手动弹窗路径——
+    // Electron 41 + Win11 上 popUpContextMenu 在 'right-click' 句柄里弹出
+    // 不可靠（表现为右键无任何反应，2026-09-17 用户端事故）。
+    // 此前只有 Linux 挂载，且挂载后语言/开关变化从不重挂，Win/mac 一直
+    // 靠易碎的 popUp 路径；现在统一挂载并在每次模板重建后重挂。
+    this.tray?.setContextMenu(this.contextMenu)
   }
 
   private updateTray() {

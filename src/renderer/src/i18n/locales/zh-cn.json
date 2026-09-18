@@ -53,9 +53,6 @@
     "edit": {
       "title": "编辑助手"
     },
-    "icon": {
-      "type": "助手图标"
-    },
     "list": {
       "showByList": "列表展示",
       "showByTags": "标签展示"
@@ -91,6 +88,16 @@
     "search": "搜索助手",
     "settings": {
       "default_model": "默认模型",
+      "display": {
+        "assistant": "助手信息",
+        "label": "对话页显示",
+        "model": "模型信息"
+      },
+      "identity": {
+        "image": "上传自定义图片",
+        "image_failed": "图片处理失败",
+        "image_invalid": "仅支持图片文件"
+      },
       "max_tool_calls": {
         "label": "最大工具调用次数",
         "tip": "单次对话中允许的最大工具调用次数。较高的值支持更复杂的多步操作，但可能增加 Token 消耗和响应时间。"
@@ -201,6 +208,10 @@
       "search": {
         "placeholder": "搜索"
       }
+    },
+    "branches": {
+      "jumpFailed": "分支会话不存在或已失效，请重新打开分支图",
+      "loadFailed": "分支结构加载失败，请重新打开分支图重试"
     },
     "deeply_thought": "已深度思考（用时 {{seconds}} 秒）",
     "default": {
@@ -415,7 +426,7 @@
         "title": "管理话题"
       },
       "move_to": "移动到",
-      "pin": "固定话题",
+      "pin": "置顶话题",
       "prompt": {
         "edit": {
           "title": "编辑话题提示词"
@@ -427,7 +438,7 @@
         "placeholder": "搜索话题...",
         "title": "搜索"
       },
-      "unpin": "取消固定"
+      "unpin": "取消置顶"
     },
     "web_search": {
       "warning": {
@@ -852,6 +863,9 @@
     },
     "title": "导入外部对话"
   },
+  "kernelChat": {
+    "imageLoadFailed": "[图片附件加载失败，重新打开话题可重试]"
+  },
   "knowledge": {
     "dimensions_auto_set": "自动设置嵌入维度",
     "dimensions_error_invalid": "无效的嵌入维度",
@@ -1157,6 +1171,7 @@
       "labels": {
         "askUser": "向用户提问",
         "bash": "执行命令",
+        "describeImage": "识图",
         "edit": "编辑",
         "exitPlanMode": "退出计划模式",
         "glob": "文件匹配",
@@ -1588,14 +1603,6 @@
       }
     },
     "assistant": {
-      "icon": {
-        "type": {
-          "emoji": "Emoji 表情",
-          "label": "模型图标类型",
-          "model": "模型图标",
-          "none": "不显示"
-        }
-      },
       "label": "默认助手",
       "model_params": "模型参数",
       "title": "默认助手"
@@ -2015,9 +2022,6 @@
       "title": "开发者模式"
     },
     "display": {
-      "assistant": {
-        "title": "助手设置"
-      },
       "custom": {
         "css": {
           "cherrycss": "从 cherrycss.com 获取",
@@ -2269,6 +2273,12 @@
       "default_assistant_model": "默认助手模型",
       "default_assistant_model_description": "创建新助手时使用的模型，如果助手未设置模型，则使用此模型",
       "empty": "没有模型",
+      "image_describer": {
+        "description": "当主模型不支持识图时，由这个视觉模型代看图片：图片会被转述成文字（识别文字、描述版面与位置）交回主模型使用。主模型自己能读图时不会经过它；不配置则纯文字模型无法看图",
+        "label": "转述模型",
+        "prompt": "转述提示词",
+        "setting_title": "转述模型设置"
+      },
       "manage": {
         "add_listed": {
           "confirm": "确定要添加所有模型到列表吗？",
@@ -2750,7 +2760,6 @@
       }
     },
     "topic": {
-      "pin_to_top": "固定话题置顶",
       "position": {
         "label": "话题位置",
         "left": "左侧",

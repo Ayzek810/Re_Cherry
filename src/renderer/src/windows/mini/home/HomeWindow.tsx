@@ -4,6 +4,7 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
+import { lightStream } from '@renderer/services/lightLlm'
 import { getAssistantMessage, getUserMessage } from '@renderer/services/MessagesService'
 import store, { useAppSelector } from '@renderer/store'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
@@ -354,19 +355,19 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
         const reasoningEffort = kernelReasoningLevelFor(model, quickAssistantReasoningEffort)
 
-        await window.api.dshStreamComplete(
+        await lightStream(
+          assistantMessage.id,
           {
-            requestId: assistantMessage.id,
             provider: model.provider,
             model: model.id,
             system: system || undefined,
             messages: context,
-            reasoningEffort
+            reasoningEffort,
+            source: 'cherry-quick-assistant'
           },
-          (data) => {
+          (event) => {
             if (cancelledRef.current) return
-            const event = data as { type: string; text?: string; message?: string }
-            if (event.type === 'delta' && event.text !== undefined) {
+            if (event.type === 'delta') {
               streamedText += event.text
               if (rafId === 0) {
                 rafId = requestAnimationFrame(() => {
@@ -374,7 +375,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
                   flushText()
                 })
               }
-            } else if (event.type === 'reasoning-delta' && event.text !== undefined) {
+            } else if (event.type === 'reasoning-delta') {
               ensureThinkingBlock()
               thinkingText += event.text
               if (thinkingRafId === 0) {

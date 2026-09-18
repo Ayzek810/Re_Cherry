@@ -96,8 +96,8 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Topics that can be selected (non-pinned; search-filtered when in search mode)
-  // v0.3.0-2 目标 B：行集合由 Topics 统一以内核为准对账后传入（filteredTopics 就是它），
-  // 本组件不再自己问内核、更不做"自持久化推断内核可见性"。
+  // v0.3.1：行集合由 Topics 从 Redux 数组单源派生后传入（filteredTopics 就是它）；
+  // 组件不自问内核、不持快照——对账写 store 的结果自然反映到这里。
   const selectableTopics = useMemo(() => filteredTopics.filter((topic) => !topic.pinned), [filteredTopics])
 
   // Check if all selectable topics are selected

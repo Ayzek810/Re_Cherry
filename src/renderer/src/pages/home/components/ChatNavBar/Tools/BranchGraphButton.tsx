@@ -3,10 +3,18 @@ import { loggerService } from '@logger'
 import NavbarIcon from '@renderer/components/NavbarIcon'
 import BranchGraph from '@renderer/pages/home/Messages/BranchGraph'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { addTopic } from '@renderer/store/assistants'
+import { addTopic, selectAllTopics } from '@renderer/store/assistants'
 import type { Assistant, Topic } from '@renderer/types'
-import { listRootTopics, materializeKernelTopicRow, requestTopicSwitch, rootTopicOf } from '@renderer/utils/topicBranch'
-import { Drawer, Tooltip } from 'antd'
+import {
+  branchKindsOf,
+  familyRowSignature,
+  listRootTopics,
+  materializeKernelTopicRow,
+  requestTopicSwitch,
+  retryKernelQuery,
+  rootTopicOf
+} from '@renderer/utils/topicBranch'
+import { Drawer, message as antdMessage, Tooltip } from 'antd'
 import { t } from 'i18next'
 import { useMemo, useState } from 'react'
 import styled from 'styled-components'
@@ -19,25 +27,32 @@ interface Props {
   onSwitchTopic?: (topic: Topic) => void
 }
 
-/** 沿内核血缘（parentTopicId）找到真正的家族根 —— 不依赖渲染层 Topic 行，行缺链/陈旧不影响。 */
+/**
+ * 沿内核血缘（parentTopicId）找到真正的家族根 —— 不依赖渲染层 Topic 行，行缺链/陈旧不影响。
+ * 每一跳带启动窗口重试（retryKernelQuery）：重启后用户往往立刻点分支图，单次 dshTopicGet
+ * 会在 handler 注册前失败一次；确定性答案（含"内核明确回答无此行"）不重试。
+ */
 async function kernelRootOf(topicId: string): Promise<{ id: string; name?: string } | null> {
   const seen = new Set<string>()
   let id = topicId
   while (!seen.has(id)) {
     seen.add(id)
-    try {
-      const { topic: kernelTopic } = (await window.api.dshTopicGet(id)) as {
-        topic?: { id: string; name?: string; parentTopicId?: string }
+    const answer = await retryKernelQuery<{ id: string; name?: string; parentTopicId?: string } | null>(async () => {
+      try {
+        const { topic: kernelTopic } = (await window.api.dshTopicGet(id)) as {
+          topic?: { id: string; name?: string; parentTopicId?: string }
+        }
+        return kernelTopic ?? null
+      } catch (error) {
+        logger.warn('kernel root walk failed at ' + id, error as Error)
+        return undefined
       }
-      if (!kernelTopic) return null
-      if (!kernelTopic.parentTopicId || kernelTopic.parentTopicId.length === 0) {
-        return { id: kernelTopic.id, name: kernelTopic.name }
-      }
-      id = kernelTopic.parentTopicId
-    } catch (error) {
-      logger.warn('kernel root walk failed at ' + id, error as Error)
-      return null
+    })
+    if (answer === null) return null
+    if (!answer.parentTopicId || answer.parentTopicId.length === 0) {
+      return { id: answer.id, name: answer.name }
     }
+    id = answer.parentTopicId
   }
   return null
 }
@@ -53,36 +68,36 @@ async function kernelRootOf(topicId: string): Promise<{ id: string; name?: strin
 const BranchGraphButton: React.FC<Props> = ({ assistant, topic, onSwitchTopic }) => {
   const [open, setOpen] = useState(false)
   const [openedRoot, setOpenedRoot] = useState<{ id: string; name?: string } | null>(null)
+  // 每次打开抽屉自增：折进 refreshKey 强制家族缓存失效——分支图绝不渲染上一次打开时的陈旧家族
+  const [openSeq, setOpenSeq] = useState(0)
   const dispatch = useAppDispatch()
-  const assistants = useAppSelector((state) => state.assistants.assistants)
   const activeAssistantId = assistant?.id ?? topic?.assistantId ?? ''
-  const assistantTopics = useMemo(
-    () => assistants.find((candidate) => candidate.id === activeAssistantId)?.topics ?? [],
-    [assistants, activeAssistantId]
-  )
+  // kind/签名/物化查找全部用**跨助手联合**（selectAllTopics）：分支图的结构域是内核家族
+  // 本身，行分属哪个助手与结构无关。此前按"激活助手"那份清单取 branchKind——同一家族
+  // 的行分属不同助手时读到 kind=undefined，regenerate 合并失效、分支被当新问题建节点，
+  // 与页码条（归属口径）结构对不上（真机实证的"有时和分支图不对应"）。
+  const allRows = useAppSelector(selectAllTopics)
   const storeTopicId = useAppSelector((state) => state.messages.currentTopicId)
   const currentTopic = useMemo(() => {
     if (topic) return topic
     if (storeTopicId) {
-      const found = assistantTopics.find((candidate) => candidate.id === storeTopicId)
+      const found = allRows.find((candidate) => candidate.id === storeTopicId)
       if (found) return found
     }
-    return listRootTopics(assistantTopics)[0] ?? assistantTopics[0]
-  }, [topic, storeTopicId, assistantTopics])
+    return listRootTopics(allRows)[0] ?? allRows[0]
+  }, [topic, storeTopicId, allRows])
   // 仅作兜底：内核解析失败时退回本地行推断的根（打开时快照一次，不做结构权威）
   const localRoot = useMemo(
-    () => (currentTopic ? rootTopicOf(currentTopic, assistantTopics) : undefined),
-    [currentTopic, assistantTopics]
+    () => (currentTopic ? rootTopicOf(currentTopic, allRows) : undefined),
+    [currentTopic, allRows]
   )
+  // 家族域签名（与页码条/旁答条同口径）：只盖本家族的行、含 branchKind；
+  // 另一边持有者（归属助手）改行也要失效图的家族缓存
   const familyRefreshKey = useMemo(
-    () => assistantTopics.map((t) => t.id + ':' + t.updatedAt).join('|'),
-    [assistantTopics]
+    () => (currentTopic ? familyRowSignature(allRows, currentTopic.id) : ''),
+    [allRows, currentTopic]
   )
-  const branchKinds = useMemo(() => {
-    const map: Record<string, string | undefined> = {}
-    for (const row of assistantTopics) map[row.id] = row.branchKind
-    return map
-  }, [assistantTopics])
+  const branchKinds = useMemo(() => branchKindsOf(allRows), [allRows])
 
   const graphRoot = useMemo(
     () => openedRoot ?? (localRoot ? { id: localRoot.id, name: localRoot.name } : undefined),
@@ -91,6 +106,7 @@ const BranchGraphButton: React.FC<Props> = ({ assistant, topic, onSwitchTopic })
 
   const handleOpen = async (): Promise<void> => {
     const startId = currentTopic?.id
+    setOpenSeq((seq) => seq + 1)
     if (startId) {
       const kernelRoot = await kernelRootOf(startId)
       if (kernelRoot) {
@@ -105,22 +121,32 @@ const BranchGraphButton: React.FC<Props> = ({ assistant, topic, onSwitchTopic })
 
   const handleOpenBranch = useMemo(
     () => async (sessionId: string, name?: string) => {
-      if (!graphRoot) return
+      if (!graphRoot) {
+        logger.error('[BranchGraph] node clicked but graphRoot unresolved', { sessionId })
+        return
+      }
       const materialized = await materializeKernelTopicRow({
         sessionId,
+        // 新行落点：激活助手；已有行（含其他助手持有的）由 allRows 联合查找命中——
+        // 绝不再往激活助手里造 kindless 重复行（跨助手点击的旧病根）
         assistantId: activeAssistantId,
-        allTopics: assistantTopics,
+        allTopics: allRows,
         fallbackParentId: graphRoot.id,
         fallbackName: name ?? graphRoot.name
       })
-      if (!materialized) return
+      if (!materialized) {
+        // 绝不静默：图上看得见的节点点击后物化失败，多半是陈旧家族缓存（内核里会话已不存在）
+        logger.error('[BranchGraph] materialize failed for visible node', { sessionId, graphRoot: graphRoot.id })
+        antdMessage.error(t('chat.branches.jumpFailed'))
+        return
+      }
       if (materialized.created) {
         dispatch(addTopic({ assistantId: activeAssistantId, topic: materialized.row }))
       }
       requestTopicSwitch(materialized.row)
       onSwitchTopic?.(materialized.row)
     },
-    [graphRoot, assistantTopics, activeAssistantId, dispatch, onSwitchTopic]
+    [graphRoot, allRows, activeAssistantId, dispatch, onSwitchTopic]
   )
 
   return (
@@ -144,7 +170,7 @@ const BranchGraphButton: React.FC<Props> = ({ assistant, topic, onSwitchTopic })
               rootTopicId={graphRoot.id}
               activeTopicId={currentTopic?.id}
               branchKinds={branchKinds}
-              refreshKey={familyRefreshKey}
+              refreshKey={familyRefreshKey + '|' + openSeq}
               onOpenBranch={(sessionId, branchName) => void handleOpenBranch(sessionId, branchName)}
             />
           ) : null}

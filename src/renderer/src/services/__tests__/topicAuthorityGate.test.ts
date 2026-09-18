@@ -11,7 +11,9 @@ import { describe, expect, it } from 'vitest'
  * 背景：`shouldShowTopicRow` 用 `updatedAt >= BOOT_TIME` 这一时间戳启发式，在渲染层用**自己那份**
  * persist 推断**内核那份**的可见性。它已整体退役，替换为
  * `utils/topicBranch.ts`（取内核集合）+ `services/kernelTopics.ts`（对账：补齐 / 剪除）。
- * 本门禁守三条：① 退役符号零残留；② 裸通道只有权威层能碰；③ 侧栏与管理模式不再各自问内核。
+ * 本门禁守三条：① 退役符号零残留；② 裸通道只有权威层能碰；③ 显示层只消费 store——
+ * 侧栏/管理模式不持对账快照、不问内核（v0.3.1：旧快照是注册表序，杀拖拽/滞显/乱跳三宗罪），
+ * 对账伞盖钉在 useTopic（切助手/开聊天必然执行），把对账写进 store 的结果自然反映到派生列表。
  */
 const RAW_CHANNEL = 'window.api.dshTopicList'
 /** 允许直接问内核集合的模块（权威层 + 它的两个异步消费者）。 */
@@ -96,10 +98,14 @@ describe('话题权威结构门禁', () => {
     expect(readerOffenders).toEqual([])
   })
 
-  it('侧栏以内核对账结果为准，管理模式不再自己问内核（B-3/B-4 的落点）', () => {
+  it('侧栏只消费 store（不持对账快照、不自问内核），对账伞盖在 useTopic（B-3/B-4 落点，v0.3.1）', () => {
     const sidebar = readFileSync(repoRoot + sep + 'src/renderer/src/pages/home/Tabs/components/Topics.tsx', 'utf8')
-    expect(sidebar).toContain('reconcileAssistantTopicRows(')
-    // 对账结果就是行集合：不得再出现"用内核集合过滤自持久化数组"的写法
+    // 列表单源派生自 Redux 数组：名字/顺序的写入从此立刻反映到侧栏
+    expect(sidebar).toContain('listRootTopics(')
+    // 显示层绝不自问内核、也不持"注册表序"快照（快照曾让拖拽被吞、名字滞显、顺序乱跳）
+    expect(sidebar).not.toContain('reconcileAssistantTopicRows')
+    expect(sidebar).not.toContain('kernelRootTopics(')
+    // 不得再出现"用内核集合过滤自持久化数组"的写法
     expect(sidebar).not.toContain('.filter((topic) => kernelRoots')
 
     const manage = readFileSync(
@@ -108,5 +114,9 @@ describe('话题权威结构门禁', () => {
     )
     expect(manage).not.toContain('reconcileAssistantTopicRows')
     expect(manage).not.toContain('kernelRootTopics')
+
+    // 对账伞盖（sidebar 释放调用后全靠这里；不得被顺手删掉）
+    const umbrella = readFileSync(repoRoot + sep + 'src/renderer/src/hooks/useTopic.ts', 'utf8')
+    expect(umbrella).toContain('reconcileAssistantTopicRows(')
   })
 })

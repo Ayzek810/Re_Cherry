@@ -3,7 +3,10 @@ import { app } from 'electron'
 
 import { getDataPath } from './utils'
 
-if (isDev) {
+if (process.env.RC_USER_DATA_OVERRIDE) {
+  // 排障专用：显式指定 userData 目录（Playwright 隔离实例），优先级高于 isDev 后缀
+  app.setPath('userData', process.env.RC_USER_DATA_OVERRIDE)
+} else if (isDev) {
   app.setPath('userData', app.getPath('userData') + 'Dev')
 }
 

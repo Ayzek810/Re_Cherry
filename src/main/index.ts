@@ -84,6 +84,10 @@ app.commandLine.appendSwitch(
   'enable-features',
   'DocumentPolicyIncludeJSCallStacksInCrashReports,EarlyEstablishGpuChannel,EstablishGpuChannelAsync'
 )
+// 排障专用：env 门控的 CDP 调试端口（Playwright attach 真实 dev 实例），定案后删除
+if (process.env.RC_REMOTE_DEBUG_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.RC_REMOTE_DEBUG_PORT)
+}
 app.on('web-contents-created', (_, webContents) => {
   webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({

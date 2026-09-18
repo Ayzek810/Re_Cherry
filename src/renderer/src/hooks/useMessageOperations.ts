@@ -14,7 +14,7 @@ import { appendMessageTrace, pauseTrace, restartTrace } from '@renderer/services
 import { estimateUserPromptUsage } from '@renderer/services/TokenService'
 import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer/store'
 import { addTopic, removeTopic, selectTopicsMap, updateTopicUpdatedAt } from '@renderer/store/assistants'
-import { upsertManyBlocks } from '@renderer/store/messageBlock'
+import { removeManyBlocks, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
 import {
   appendAssistantResponseThunk,
@@ -26,7 +26,7 @@ import {
   sendMessage as sendMessageThunk,
   updateMessageAndBlocksThunk
 } from '@renderer/store/thunk/messageThunk'
-import { type Assistant, type Model, type Topic, TopicType } from '@renderer/types'
+import { type Assistant, type FileMetadata, type Model, type Topic, TopicType } from '@renderer/types'
 import { objectKeys } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
@@ -72,6 +72,23 @@ function anchorOfMessage(state: RootState, message: Message, fallbackTopicId: st
   return undefined
 }
 
+/**
+ * 消息携带的附件（图片/文档）的 file 记录，供分支重发继承。
+ * fork 的 seed 截到锚点轮之前——重发消息若不带这些 file，图片/附件会在分支里
+ * 静默消失（分支看不到图，模型也无图可读：v0.3.1 识图通道真机验收发现的回归）。
+ */
+function collectMessageFiles(state: RootState, message: Message): FileMetadata[] {
+  const files: FileMetadata[] = []
+  for (const blockId of message.blocks ?? []) {
+    const block = state.messageBlocks.entities[blockId]
+    if (block === undefined) continue
+    if ((block.type === MessageBlockType.IMAGE || block.type === MessageBlockType.FILE) && block.file !== undefined) {
+      files.push(block.file)
+    }
+  }
+  return files
+}
+
 export function useMessageOperations(topic: Topic) {
   const dispatch = useAppDispatch()
 
@@ -88,7 +105,10 @@ export function useMessageOperations(topic: Topic) {
       kind: 'resend' | 'regenerate' = 'resend'
     ): Promise<boolean> => {
       const trimmed = (text ?? '').trim()
-      if (trimmed.length === 0) {
+      // 分支重发继承锚点消息的附件（图片/文档）：fork 的 seed 截到锚点轮之前，
+      // 重发消息不带 file 的话图片会在子分支里静默消失（用户卡片无图、模型也无图可读）。
+      const files = collectMessageFiles(store.getState(), anchorMessage)
+      if (trimmed.length === 0 && files.length === 0) {
         logger.warn('[branchResend] nothing to send')
         return false
       }
@@ -113,6 +133,7 @@ export function useMessageOperations(topic: Topic) {
 
       const { message: userMessage, blocks } = getUserMessage({
         content: trimmed,
+        files,
         assistant,
         topic: childTopic
       })
@@ -148,6 +169,18 @@ export function useMessageOperations(topic: Topic) {
             error instanceof Error ? error : new Error(String(error))
           )
         }
+        // Redux 投影一并清掉（文件 + 投影是两回事；TopicManager.clearTopicMessages 只清文件——
+        // 与 newMessagesActions.clearTopicMessages 同名不同物，历史上靠同名遮蔽漏掉了投影清理，
+        // 后果：purged 话题的 entities/messageIdsByTopic 残留到重启，useParallelAnswers 的
+        // "Redux 有就不重拉"会把陈旧投影当新鲜数据跳过重取）。
+        const statePre = store.getState()
+        const blockIds = (statePre.messages.messageIdsByTopic[purgedId] ?? []).flatMap(
+          (messageId) => statePre.messages.entities[messageId]?.blocks ?? []
+        )
+        if (blockIds.length > 0) {
+          dispatch(removeManyBlocks(blockIds))
+        }
+        dispatch(newMessagesActions.clearTopicMessages(purgedId))
         const stateNow = store.getState()
         const row = selectTopicsMap(stateNow).get(purgedId)
         if (row === undefined) continue
@@ -466,8 +499,10 @@ export function useMessageOperations(topic: Topic) {
         return false
       }
       const text = getMainTextContent(anchor)
-      if (text.trim().length === 0) {
-        logger.warn('[startParallelAnswer] anchor question has no text content, skip')
+      // 旁答分支同修：重发消息继承锚点问题的图片/文档附件（v0.3.1 识图通道真机回归）。
+      const files = collectMessageFiles(store.getState(), anchor)
+      if (text.trim().length === 0 && files.length === 0) {
+        logger.warn('[startParallelAnswer] anchor question has no text or image content, skip')
         return false
       }
       // 工作模式激活（话题级开关，B6）时禁用旁答：旁答子会话共享前缀但拿不到本话题的工作模式状态，
@@ -492,7 +527,7 @@ export function useMessageOperations(topic: Topic) {
       }
       dispatch(addTopic({ assistantId: assistant.id, topic: childTopic }))
 
-      const { message: userMessage, blocks } = getUserMessage({ content: text, assistant, topic: childTopic })
+      const { message: userMessage, blocks } = getUserMessage({ content: text, files, assistant, topic: childTopic })
 
       // 直接发进子会话（不经 loadTopicMessagesThunk：避免把 currentTopicId 指到隐藏会话；
       // 种子历史无需入 store——卡片组只消费子会话自有轮的回答）。

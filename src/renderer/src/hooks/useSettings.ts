@@ -15,15 +15,13 @@
  * --------------------------------------------------------------------------
  */
 import store, { useAppDispatch, useAppSelector } from '@renderer/store'
-import type { AssistantIconType, SendMessageShortcut, SettingsState } from '@renderer/store/settings'
+import type { SendMessageShortcut, SettingsState } from '@renderer/store/settings'
 import {
-  setAssistantIconType,
   setDisableHardwareAcceleration,
   setEnableDeveloperMode,
   setLaunchOnBoot,
   setLaunchToTray,
   setNavbarPosition,
-  setPinTopicsToTop,
   setSendMessageShortcut as _setSendMessageShortcut,
   setSidebarIcons,
   setTheme,
@@ -77,9 +75,6 @@ export function useSettings() {
     setTopicPosition(topicPosition: 'left' | 'right') {
       dispatch(setTopicPosition(topicPosition))
     },
-    setPinTopicsToTop(pinTopicsToTop: boolean) {
-      dispatch(setPinTopicsToTop(pinTopicsToTop))
-    },
     updateSidebarIcons(icons: { visible: SidebarIcon[]; disabled: SidebarIcon[] }) {
       dispatch(setSidebarIcons(icons))
     },
@@ -88,9 +83,6 @@ export function useSettings() {
     },
     updateSidebarDisabledIcons(icons: SidebarIcon[]) {
       dispatch(setSidebarIcons({ disabled: icons }))
-    },
-    setAssistantIconType(assistantIconType: AssistantIconType) {
-      dispatch(setAssistantIconType(assistantIconType))
     },
     setDisableHardwareAcceleration(disableHardwareAcceleration: boolean) {
       dispatch(setDisableHardwareAcceleration(disableHardwareAcceleration))

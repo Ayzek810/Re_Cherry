@@ -220,7 +220,7 @@ const WaitingToolHeader = React.memo(({ block }: WaitingToolHeaderProps) => {
 
   return (
     <HeaderWithActions>
-      <ToolHeader block={block} variant="collapse-label" status={effectiveStatus} />
+      <ToolHeader block={block} status={effectiveStatus} />
       {!isQuestion && (approval.isWaiting || approval.isExecuting) && (
         <ToolApprovalActionsComponent {...approval} compact />
       )}
@@ -305,7 +305,7 @@ const GroupHeaderContent = React.memo(({ blocks, allCompleted }: GroupHeaderCont
           initial="enter"
           animate="center"
           exit="exit">
-          <ToolHeader block={lastRunningBlock} variant="collapse-label" />
+          <ToolHeader block={lastRunningBlock} />
         </AnimatedHeaderWrapper>
       </AnimatePresence>
     )
@@ -361,7 +361,7 @@ const ToolListContent = React.memo(({ blocks, allCompleted, role, scrollRef }: T
       return (
         <ToolItem key={block.id} data-block-id={block.id} $isCompleted={isCompletedToolBlock(block)}>
           <ErrorBoundary fallbackComponent={BlockErrorFallback}>
-            <MessageTools block={block} variant="inline" />
+            <MessageTools block={block} />
           </ErrorBoundary>
         </ToolItem>
       )

@@ -13,7 +13,34 @@ export function listRootTopics(topics: Topic[]): Topic[] {
   return topics.filter((topic) => isRootTopic(topic))
 }
 
-/** 沿 parentTopicId 向上找到该话题所属的根话题（找不到就返回自身）。 */
+/**
+ * 沿 Redux 行链（parentTopicId）上溯到**家族根 id**（同步、无 IPC、无内核往返）。
+ * 起查行必须在表内——不在则返回自身 id（只有 id、行又尚未物化时的无害降级）。
+ *
+ * 侧栏信号折叠（v0.3.1 第三轮）的唯一根解析器：重发/旁答的回合记账都发生在
+ * fork 出的**子会话** id 上，而侧栏只渲染根行——两个域之间必须有一层统一的
+ * 折叠，否则"子会话在生成/完成"永远照不亮根行（重发流灯全灭的真根因）。
+ */
+export function rootTopicIdOf(topicId: string, allTopics: Topic[]): string {
+  const byId = new Map(allTopics.map((row) => [row.id, row]))
+  let current = byId.get(topicId)
+  if (current === undefined) return topicId
+  const visited = new Set<string>()
+  while (current.parentTopicId !== undefined && current.parentTopicId.length > 0 && !visited.has(current.id)) {
+    visited.add(current.id)
+    const parent = byId.get(current.parentTopicId)
+    if (parent === undefined) break
+    current = parent
+  }
+  return current.id
+}
+
+/**
+ * 沿 parentTopicId 向上找到该话题所属的根话题（找不到就返回自身）。
+ * 与 rootTopicIdOf 的分工：这里**行对象在手**——即使该行尚未进入清单
+ * （新 fork 分支刚 addTopic、调用方闭包还是旧帧清单），也能从对象自身的
+ * parentTopicId 起步上溯到根。
+ */
 export function rootTopicOf(topic: Topic, allTopics: Topic[]): Topic {
   let current = topic
   const visited = new Set<string>()
@@ -35,22 +62,86 @@ export function recallLastViewedBranch(root: Topic, allTopics: Topic[]): Topic {
   return allTopics.find((topic) => topic.id === root.lastViewedBranchId) ?? root
 }
 
-/** 沿内核血缘（dshTopicGet.parentTopicId）求某会话的家族根 id；失败返回 null。 */
+/**
+ * 家族行签名（页码条/旁答条的家族缓存失效口径）：只含**本话题所在家族**的行
+ * （本地血缘迭代下溯，跨多层成立），稳定排序；含 updatedAt（结构/记忆变更）
+ * 与 branchKind（合并判定变更）。
+ *
+ * 与"盖全助手清单"旧口径的区别：无关话题的任何变动（发送/删除/改名发生在别的
+ * 话题上）都不再推翻本家族的缓存——否则每条无关 updatedAt 都触发一次全家族重取，
+ * 页码条在"清空→重建"间闪烁（真机实证的"乱跳"形态之一）。
+ */
+export function familyRowSignature(allTopics: Topic[], topicId: string): string {
+  const self = allTopics.find((row) => row.id === topicId)
+  if (!self) return ''
+  const root = rootTopicOf(self, allTopics)
+  const ids = new Set<string>([root.id])
+  // 迭代收敛：行的父在本集合 → 行属于家族（血缘链可能隔多层）
+  let grew = true
+  while (grew) {
+    grew = false
+    for (const row of allTopics) {
+      if (ids.has(row.id) || !row.parentTopicId) continue
+      if (ids.has(row.parentTopicId) && !ids.has(row.id)) {
+        ids.add(row.id)
+        grew = true
+      }
+    }
+  }
+  return allTopics
+    .filter((row) => ids.has(row.id))
+    .map((row) => row.id + ':' + row.updatedAt + ':' + (row.branchKind ?? ''))
+    .sort()
+    .join('|')
+}
+
+/**
+ * branchKind 判定的**跨助手联合口径**：输入 = 全部助手的行（`selectAllTopics`），
+ * 同 id 多份持有（历史污染副本）时**首个有值的 kind 获胜**——kindless 副本（例如
+ * 旧跨助手物化误建的重复行）绝不遮蔽带 kind 的正主；两份都有值时以清单顺序首个为准
+ * （kind 是建分支那一刻记下的事实，只写一次，现实中不会冲突）。
+ *
+ * 为什么分支图/页码条/旁答条必须同用这一份：三者的结构（regenerate 合并、parallel 隐藏）
+ * 全由 kind 决定。此前分支图取"激活助手"那份、页码条取"first-holder"那份——同一家族
+ * 的行分属不同助手时两边读到不同 kind → 图当新分支建节点、条按祖先合并 → 结构对不上。
+ */
+export function branchKindsOf(rows: Topic[]): Record<string, string | undefined> {
+  const map: Record<string, string | undefined> = {}
+  for (const row of rows) {
+    if (map[row.id] === undefined) map[row.id] = row.branchKind
+  }
+  return map
+}
+
+/**
+ * 沿内核血缘（dshTopicGet.parentTopicId）求某会话的家族根 id；失败返回 null。
+ *
+ * 每一跳都带启动窗口重试（{@link retryKernelQuery}）：主进程并行建窗口与启内核，重启后
+ * 用户往往**立刻**点分支图/重发，单次 `dshTopicGet` 会在 handler 注册前失败一次——那与
+ * "内核不认识"是两回事。确定性答案（含"内核明确回答无此行"）不重试。
+ */
 export async function kernelRootTopicId(topicId: string): Promise<string | null> {
   const seen = new Set<string>()
   let id = topicId
   while (!seen.has(id)) {
     seen.add(id)
-    try {
-      const { topic } = (await window.api.dshTopicGet(id)) as {
-        topic?: { id: string; parentTopicId?: string }
+    const answer = await retryKernelQuery<{ id: string; parentTopicId?: string } | null>(async () => {
+      try {
+        const { topic } = (await window.api.dshTopicGet(id)) as {
+          topic?: { id: string; parentTopicId?: string }
+        }
+        return topic ?? null
+      } catch (error) {
+        logger.warn(
+          `[topicBranch] failed to get kernel topic ${id}`,
+          error instanceof Error ? error : new Error(String(error))
+        )
+        return undefined
       }
-      if (!topic) return null
-      if (!topic.parentTopicId || topic.parentTopicId.length === 0) return topic.id
-      id = topic.parentTopicId
-    } catch {
-      return null
-    }
+    })
+    if (answer === null) return null
+    if (!answer.parentTopicId || answer.parentTopicId.length === 0) return answer.id
+    id = answer.parentTopicId
   }
   return null
 }

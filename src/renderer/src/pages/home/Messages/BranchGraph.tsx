@@ -222,7 +222,7 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
 }) => {
   const { t } = useTranslation()
   const { settedTheme } = useTheme()
-  const { family, loading } = useConversationTree(rootTopicId, refreshKey ?? '')
+  const { family, loading, failed } = useConversationTree(rootTopicId, refreshKey ?? '')
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 
@@ -401,16 +401,37 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
       parentOf.set(edge.target, edge.source)
     }
 
-    // 点击语义：从所选节点起，始终沿“左子树”（childrenOf 顺序 = 布局自左向右 = 最早创建路径）
-    // 的第一子节点逐级下探到底 —— 打开的是那条一直延续到最新叶子所属的会话，
-    // 而不是“选到那就到哪”（自己所属会话的终点，通常缺了下方经后代分支延续的对话）。
+    // 点击语义：从所选节点起，沿"最深延续线"下探到底 —— 打开那条把对话延续到最深的
+    // 分支会话，而不是"选到那就到哪"（自己所属会话的终点，通常缺了下方经后代分支
+    // 延续的对话），也不是无条件走最左子树：最左那条常是被重生成分支截断的死端
+    //（真机实证：点主干开出"没有下文"的旧线，而图里明明挂着更深的延续卡片）。
+    // 等深时保持最左（创建序），与旧规则兼容。
     const sessionOfNode = new Map(flowNodes.map((node) => [node.id, (node.data as unknown as TreeNodeData).sessionId]))
+    const heightCache = new Map<string, number>()
+    const heightOf = (id: string): number => {
+      const cached = heightCache.get(id)
+      if (cached !== undefined) return cached
+      const kids = childrenOf.get(id) ?? []
+      const value = kids.length === 0 ? 0 : 1 + Math.max(...kids.map((kid) => heightOf(kid)))
+      heightCache.set(id, value)
+      return value
+    }
     const bottomCache = new Map<string, string>()
     const bottomOf = (id: string): string => {
       const cached = bottomCache.get(id)
       if (cached !== undefined) return cached
       const kids = childrenOf.get(id) ?? []
-      const bottom = kids.length > 0 ? bottomOf(kids[0]) : id
+      let bottom = id
+      if (kids.length > 0) {
+        let bestHeight = -1
+        for (const kid of kids) {
+          const height = heightOf(kid)
+          if (height > bestHeight) {
+            bestHeight = height
+            bottom = bottomOf(kid)
+          }
+        }
+      }
       bottomCache.set(id, bottom)
       return bottom
     }
@@ -509,6 +530,14 @@ const BranchGraph: React.FC<BranchGraphProps> = ({
     return (
       <Center>
         <Spin size="large" />
+      </Center>
+    )
+  }
+  if (failed && !family) {
+    // 取数失败（重试窗口用尽）：显式失败态，不伪装成"没有消息"——重开抽屉即重试
+    return (
+      <Center>
+        <Empty description={t('chat.branches.loadFailed')} />
       </Center>
     )
   }

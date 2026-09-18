@@ -25,7 +25,6 @@ import ImageBlock from './ImageBlock'
 import MainTextBlock from './MainTextBlock'
 import PlaceholderBlock from './PlaceholderBlock'
 import ThinkingBlock from './ThinkingBlock'
-import ToolBlock from './ToolBlock'
 import ToolBlockGroup from './ToolBlockGroup'
 import VideoBlock from './VideoBlock'
 
@@ -213,9 +212,11 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
 
           if (block.some(isExecutionDetailBlock)) {
             if (block.length === 1 && isToolBlock(block[0])) {
+              // 单个工具调用也走组形态（可收拢）——与多工具组一致，
+              // 否则孤儿调用（如识图 describe_images）永远摊开无法折叠。
               return (
                 <AnimatedBlockWrapper key={groupKey} enableAnimation={message.status.includes('ing')}>
-                  <ToolBlock key={block[0].id} block={block[0]} />
+                  <ToolBlockGroup blocks={block} role={message.role} />
                 </AnimatedBlockWrapper>
               )
             }
@@ -262,14 +263,14 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
           } else if (block[0].type === MessageBlockType.TOOL) {
             // 对于连续的TOOL，使用分组显示
             if (block.length === 1) {
-              // 单个工具调用，直接渲染
+              // 单个工具调用也走组形态（可收拢），与多工具组一致
               if (!isToolBlock(block[0])) {
                 logger.warn('Expected tool block but got different type', block[0])
                 return null
               }
               return (
                 <AnimatedBlockWrapper key={groupKey} enableAnimation={message.status.includes('ing')}>
-                  <ToolBlock key={block[0].id} block={block[0]} />
+                  <ToolBlockGroup blocks={block} role={message.role} />
                 </AnimatedBlockWrapper>
               )
             }
@@ -319,7 +320,8 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
             blockComponent = <FileBlock key={block.id} block={block} />
             break
           case MessageBlockType.TOOL:
-            blockComponent = <ToolBlock key={block.id} block={block} />
+            // 组形态（可收拢），与分组路径一致
+            blockComponent = <ToolBlockGroup key={block.id} blocks={[block]} role={message.role} />
             break
           case MessageBlockType.CITATION:
             blockComponent = <CitationBlock key={block.id} block={block} />

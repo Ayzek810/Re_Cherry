@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import AddButton from '@renderer/components/AddButton'
 import AssistantAvatar from '@renderer/components/Avatar/AssistantAvatar'
 import type { DraggableVirtualListRef } from '@renderer/components/DraggableList'
@@ -13,10 +14,10 @@ import { finishTopicRenaming, startTopicRenaming, TopicManager } from '@renderer
 import { fetchMessagesSummary } from '@renderer/services/ApiService'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
-import { reconcileAssistantTopicRows } from '@renderer/services/kernelTopics'
+import { syncTopicNameToKernel } from '@renderer/services/topicNaming'
 import type { RootState } from '@renderer/store'
 import store from '@renderer/store'
-import { newMessagesActions } from '@renderer/store/newMessage'
+import { newMessagesActions, selectGeneratingTopicIds } from '@renderer/store/newMessage'
 import { setGenerating } from '@renderer/store/runtime'
 import type { Assistant, Topic } from '@renderer/types'
 import { classNames, removeSpecialCharactersForFileName } from '@renderer/utils'
@@ -29,7 +30,7 @@ import {
   exportTopicToNotion,
   topicToMarkdown
 } from '@renderer/utils/export'
-import { listRootTopics, recallLastViewedBranch } from '@renderer/utils/topicBranch'
+import { listRootTopics, recallLastViewedBranch, rootTopicOf } from '@renderer/utils/topicBranch'
 import type { MenuProps } from 'antd'
 import { Dropdown, Tooltip } from 'antd'
 import type { ItemType, MenuItemType } from 'antd/es/menu/interface'
@@ -65,33 +66,28 @@ interface Props {
   position: 'left' | 'right'
 }
 
+const logger = loggerService.withContext('Topics')
+
 export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, setActiveTopic, position }) => {
   const { t } = useTranslation()
   const { assistants } = useAssistants()
   const { assistant, addTopic, removeTopic, moveTopic, updateTopic, updateTopics } = useAssistant(_assistant.id)
-  // 侧栏只展示"根话题"；fork 分支仅通过分支图切换
-  // v0.3.0-2 目标 B：行集合以内核为权威（services/kernelTopics 对账：补齐/剪除），
-  // 本组件不再用自持久化的时间戳启发式推断可见性。
-  const [reconciledRoots, setReconciledRoots] = useState<Topic[] | null>(null)
-  const topicsKey = useMemo(() => (assistant?.topics ?? []).map((topic) => topic.id).join(','), [assistant?.topics])
-  useEffect(() => {
-    let active = true
-    void reconcileAssistantTopicRows(_assistant.id).then((rows) => {
-      if (active) setReconciledRoots(rows)
-    })
-    return () => {
-      active = false
-    }
-  }, [_assistant.id, topicsKey])
-  const rootTopics = useMemo(
-    // 对账结果为准；内核未知（null）时退回渲染层现有行——宁可多显示，也不在没有依据时隐藏
-    () => reconciledRoots ?? listRootTopics(assistant?.topics ?? []),
-    [reconciledRoots, assistant?.topics]
-  )
-  const { showTopicTime, pinTopicsToTop, setTopicPosition, topicPosition } = useSettings()
+  // 侧栏只展示"根话题"；fork 分支仅通过分支图切换。
+  //
+  // v0.3.1 显示序单源化：列表直接派生自 Redux 数组（listRootTopics），不再持有"对账快照"。
+  // 旧快照（reconciledRoots）取的是注册表序（updatedAt desc = 最近活动序），三宗罪同根：
+  // ①吞掉拖拽/置顶写入的数组序（用户排了也白排）；②改名/自动命名写入 store 却不刷新
+  //   （名字一直显示旧值，直到数组成员变化才偶然恢复）；③每次对账重触发整列表按最近
+  //   活动重排（顺序乱跳）。内核权威不受影响：对账（补齐/剪除，写入 store）照旧由
+  // useTopic 兜底执行；本组件只做纯派生——store 变了立刻生效。
+  const rootTopics = useMemo(() => listRootTopics(assistant?.topics ?? []), [assistant?.topics])
+  const { showTopicTime, setTopicPosition, topicPosition } = useSettings()
 
   const renamingTopics = useSelector((state: RootState) => state.runtime.chat.renamingTopics)
-  const topicLoadingQuery = useSelector((state: RootState) => state.messages.loadingByTopic)
+  // v0.3.1 第三轮：pending 信号改为**回合口径**（PENDING/PROCESSING 的助手消息存在）——
+  // 旧的 loadingByTopic 挂在发送任务队列上，queue 排空即熄（内核流还在打），黄点半路死；
+  // fulfilled 的 true 已改在 kernelChat.finishTurn（回合真正结束时）落地。
+  const generatingTopicIds = useSelector(selectGeneratingTopicIds)
   const topicFulfilledQuery = useSelector((state: RootState) => state.messages.fulfilledByTopic)
   const newlyRenamedTopics = useSelector((state: RootState) => state.runtime.chat.newlyRenamedTopics)
 
@@ -112,6 +108,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       if (topic && name !== topic.name) {
         const updatedTopic = { ...topic, name, isNameManuallyEdited: true }
         updateTopic(updatedTopic)
+        syncTopicNameToKernel(topic.id, name)
         window.toast.success(t('common.saved'))
       }
       setEditingTopicId(null)
@@ -121,12 +118,15 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     }
   })
 
-  const isPending = useCallback((topicId: string) => topicLoadingQuery[topicId], [topicLoadingQuery])
+  const isPending = useCallback((topicId: string) => generatingTopicIds.has(topicId), [generatingTopicIds])
   const isFulfilled = useCallback((topicId: string) => topicFulfilledQuery[topicId], [topicFulfilledQuery])
   const dispatch = useDispatch()
 
   useEffect(() => {
-    dispatch(newMessagesActions.setTopicFulfilled({ topicId: activeTopic.id, fulfilled: false }))
+    // v0.3.1 第三轮：清除端与写入端同域（**根 id 投影**，kernelChat.finishTurn 记账在根行）。
+    // rootTopicOf 拿 activeTopic 行对象上溯，行不在本帧清单也能经由 parentTopicId 到根。
+    const rootId = rootTopicOf(activeTopic, assistant?.topics ?? []).id
+    dispatch(newMessagesActions.setTopicFulfilled({ topicId: rootId, fulfilled: false }))
   }, [activeTopic.id, dispatch, topicFulfilledQuery])
 
   const isRenaming = useCallback(
@@ -181,42 +181,16 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     [activeTopic.id, addTopic, assistant.id, assistant.topics, removeTopic, rootTopics, setActiveTopic]
   )
 
+  // v0.3.1 第三轮（验收反馈"置顶还乱动"）：置顶改为**纯显示层分组**。
+  // 旧实现是"物理重排版"（点击时写数组序），受 pinTopicsToTop 开关门控，且与浮顶/拖拽
+  // 全都挤同一个数组序——谁后写谁赢，正是"点了置顶还是乱动"的病根。
+  // 新语义：置顶行永远在顶区（与数组序解耦），点击只翻转 pinned 位；浮顶/拖拽只影响
+  // 非置顶区的相对顺序，永远挤不动置顶区。
   const onPinTopic = useCallback(
     (topic: Topic) => {
-      // 只有当 pinTopicsToTop 开启时才重新排序话题
-      if (pinTopicsToTop) {
-        let newIndex = 0
-
-        if (topic.pinned) {
-          // 取消固定：将话题移到未固定话题的顶部
-          const pinnedTopics = rootTopics.filter((t) => t.pinned)
-          const unpinnedTopics = rootTopics.filter((t) => !t.pinned)
-
-          const reorderedTopics = [...pinnedTopics.filter((t) => t.id !== topic.id), topic, ...unpinnedTopics]
-
-          newIndex = pinnedTopics.length - 1
-          updateTopics(reorderedTopics)
-        } else {
-          // 固定话题：移到固定区域顶部
-          const pinnedTopics = rootTopics.filter((t) => t.pinned)
-          const unpinnedTopics = rootTopics.filter((t) => !t.pinned)
-
-          const reorderedTopics = [topic, ...pinnedTopics, ...unpinnedTopics.filter((t) => t.id !== topic.id)]
-
-          newIndex = 0
-          updateTopics(reorderedTopics)
-        }
-
-        // 延迟滚动到话题位置（等待渲染完成）
-        setTimeout(() => {
-          listRef.current?.scrollToIndex(newIndex, { align: 'auto' })
-        }, 50)
-      }
-
-      const updatedTopic = { ...topic, pinned: !topic.pinned }
-      updateTopic(updatedTopic)
+      updateTopic({ ...topic, pinned: !topic.pinned })
     },
-    [assistant.topics, updateTopic, updateTopics, pinTopicsToTop, rootTopics]
+    [updateTopic]
   )
 
   const onDeleteTopic = useCallback(
@@ -245,7 +219,13 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     async (topic: Topic) => {
       // await modelGenerating()
       // 家族浏览记忆：进话题时恢复上次浏览的分支（无记忆/分支已删 → 落回点击的根话题）
-      setActiveTopic(recallLastViewedBranch(topic, assistant?.topics ?? []))
+      const recalled = recallLastViewedBranch(topic, assistant?.topics ?? [])
+      // ③诊断日志（v0.3.1 第三轮"切回落错分支"取证）：点击的根 vs 实际召回的分支，
+      // 与 HomePage.recordTopicView 的写入日志配套对读（真机日志过滤 topicView）。
+      logger.info(
+        `[topicView] sidebar: click=${topic.id} recalled=${recalled.id} memory=${topic.lastViewedBranchId ?? '(none)'}`
+      )
+      setActiveTopic(recalled)
     },
     [setActiveTopic, assistant]
   )
@@ -273,6 +253,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
               if (summaryText) {
                 const updatedTopic = { ...topic, name: summaryText, isNameManuallyEdited: false }
                 updateTopic(updatedTopic)
+                syncTopicNameToKernel(topic.id, summaryText)
               } else if (error) {
                 window.toast?.error(`${t('message.error.fetchTopicName')}: ${error}`)
               }
@@ -299,6 +280,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
           if (name && topic?.name !== name) {
             const updatedTopic = { ...topic, name, isNameManuallyEdited: true }
             updateTopic(updatedTopic)
+            syncTopicNameToKernel(topic.id, name)
           }
         }
       },
@@ -514,17 +496,13 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     rootTopics.length
   ])
 
-  // Sort topics based on pinned status if pinTopicsToTop is enabled
+  // 置顶区无条件分组（v0.3.1 第三轮）：置顶行在前，组内保持数组序；
+  // 不再有开关——"固定"名不副实的双重根源（开关+物理重排）一并消除
   const sortedTopics = useMemo(() => {
-    if (pinTopicsToTop) {
-      return [...rootTopics].sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
-        return 0
-      })
-    }
-    return rootTopics
-  }, [rootTopics, pinTopicsToTop])
+    const pinned = rootTopics.filter((topic) => topic.pinned)
+    const rest = rootTopics.filter((topic) => !topic.pinned)
+    return [...pinned, ...rest]
+  }, [rootTopics])
 
   // Filter topics based on search text (only in manage mode)
   // Supports: case-insensitive, space-separated keywords (all must match)
