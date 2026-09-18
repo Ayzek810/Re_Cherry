@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path'
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
+import type { EncodedImageAttachment, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
@@ -22,6 +24,7 @@ import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/con
 import { app } from 'electron'
 
 import * as askUserTool from './askUserTool'
+import * as describeImagesTool from './describeImageTool'
 import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
 import { isInjectedUserEvent } from './sessionEventView'
 import { resumeOrCreateSession } from './sessionResumeFallback'
@@ -84,12 +87,24 @@ interface MountedToolsState {
 const mountedTools = new Map<string, MountedToolsState>()
 
 /**
+ * 活体 agent 建载（create/resume）时实际使用的路由（provider/model）。
+ * dsh 只在 create/resume 时消费 agentOptions——live agent 不会随后续 createTopic upsert
+ * 自动换路由（真机实锤：fork 后连切 Qwen/V4，六轮请求仍全发给首建时的 Kimi）。
+ * 本表让 ensureAgent 能识别"注册表路由已变、活体还持旧路由"的漂移并重挂。
+ */
+const liveAgentRoute = new Map<string, { provider: string; model: string }>()
+
+/**
  * 工具面挂载注册表（数据驱动，新增工具零逻辑改动）：id（@shared/config/agentTools 的
  * BUILTIN_TOOL_IDS / EXTERNAL_TOOL_IDS）→ 挂载单元。一个挂载单元可以在插件里展开成
  * 任意数量的工具（如 fs 展开 read/write/edit/read_image），挂载逻辑只认 id 不认工具名。
  */
 const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
-  { id: 'ask_user_question', mount: (agentCtx) => agentCtx.plugin(askUserTool) }
+  { id: 'ask_user_question', mount: (agentCtx) => agentCtx.plugin(askUserTool) },
+  // v0.3.1 识图通道补全：主模型无视觉 + 已配置转述模型时由渲染层注入 builtinTools；
+  // 工具体 = describe_images（本仓模块）。图片 ref 的真相源是会话日志，
+  // 工具执行时在日志内反查（不建并行登记表）。
+  { id: 'describe_images', mount: (agentCtx) => agentCtx.plugin(describeImagesTool) }
 ]
 
 const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
@@ -117,7 +132,22 @@ const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
  * 开关随时可变以本段为准、禁止正文写调用标记（DSML 泄漏只变文本）、调用前一句短说明。
  * 具体工具的使用时机在各工具自身 description 里（不在此处逐工具写死）。
  */
-function buildToolFaceSection(builtins: string[], externals: string[]): string {
+export function buildToolFaceSection(builtins: string[], externals: string[]): string {
+  // 纯聊天轮（externals 为空；ask_user 等内置问答工具不算"工具面"）压缩版（v0.3.1 上下文
+  // 净化 B）：保留杀幻觉内核（本请求即环境全部事实）与 DSML/快照两条防线，砍掉逐条能力
+  // 面与"调用前先说明"等只在有文件/命令工具时才有意义的行——真机实录无工具轮模型会把
+  // 整段英文注入当用户话语复述。
+  if (externals.length === 0) {
+    return [
+      '## Tool Face (this turn)',
+      '- No file or command tools are available this turn; answer in plain text. The tool schemas in THIS request ' +
+        'are the complete truth of this environment: do not simulate, claim, or mention any hidden file, command, ' +
+        'or UI capability. The user can toggle tools between turns.',
+      ...(builtins.length > 0 ? [`- Interactive built-in tools this turn: ${builtins.join(', ')}.`] : []),
+      '- Never include tool-call syntax or markup in your reply text: it is never executed and only pollutes the answer. To call a tool, issue a real tool call.',
+      '- Messages in this conversation that begin with "Current runtime context" are system-injected state notes, not user speech: comply with them silently and NEVER quote, repeat, or mention them in your reply.'
+    ].join('\n')
+  }
   const lines = [
     '## Tool Face (this turn)',
     'The tool schemas in THIS request are the complete truth of this environment. ' +
@@ -450,26 +480,14 @@ async function persistRegistry(): Promise<void> {
   await rename(temp, file)
 }
 
-/** 启动话题子系统：加载注册表并挂上 session 事件监听（标题回写）。 */
+/** 启动话题子系统：加载注册表。（v0.3.1 起标题不再经 session 事件回写：命名由渲染层
+ *  services/topicNaming.ts 调度，经 Dsh_TopicRename → renameTopic 落注册表。） */
 export async function initTopics(ctx: Context): Promise<void> {
   await loadRegistry()
   // 先补历史事件的 ignorable 标记，再清扫：含遗留事件的旧会话此前对内核是"整段不可读"，
   // 而"不可读"与"孤儿"是两回事，不该被同一个兜底路径吞掉（详见 legacySessionMigration.ts）。
   await migrateLegacyIgnorableEvents()
   await sweepOrphanSessions(ctx)
-
-  ctx.on('session/event', (session, event) => {
-    if (event.type === 'session/title') {
-      const topic = topics.get(session.id)
-      if (topic !== undefined && typeof event.data.title === 'string') {
-        topic.name = event.data.title
-        topic.updatedAt = Date.now()
-        void persistRegistry().catch((error) => {
-          logger.warn('kernel: failed to persist topic title', error)
-        })
-      }
-    }
-  })
 
   logger.info(`kernel: topic registry ready (${topics.size} topics)`)
 }
@@ -540,7 +558,8 @@ export async function createTopic(ctx: Context, input: KernelTopicInput): Promis
   return topic
 }
 
-/** 改名（用户显式重命名；自动标题回写走 session/event 监听）。 */
+/** 改名（手动改名与自动命名的统一注册表落点：渲染层 syncTopicNameToKernel 经
+ *  Dsh_TopicRename 调到这里；显示名的权威在 Redux 行，注册表名服务重启恢复）。 */
 export async function renameTopic(id: string, name: string): Promise<KernelTopic> {
   const topic = topics.get(id)
   if (topic === undefined) throw new Error(`kernel: topic "${id}" not found`)
@@ -641,6 +660,7 @@ async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<strin
   if (handle !== undefined) {
     await handle.dispose()
     liveHandles.delete(id)
+    liveAgentRoute.delete(id)
     mountedTools.delete(id)
   }
   topics.delete(id)
@@ -954,6 +974,12 @@ export async function sendMessage(
     externalTools?: string[]
     /** 外置工具的权限档位（沙箱/审批预设）；仅外置清单非空时落位。 */
     tier?: WorkModeApprovalTier
+    /**
+     * 随消息附带的图片（base64 wire 形态，v0.3.1 识图通道）。
+     * 经 ctx.attachments 准入（容器/尺寸/字节预算校验 + 内容寻址落盘）后，
+     * 以 image 内容块并入用户消息；纯文本路由由内核降级为稳定 handle 文本。
+     */
+    images?: EncodedImageAttachment[]
   }
 ): Promise<void> {
   const builtins = [...new Set(options?.builtinTools ?? [])].sort()
@@ -973,6 +999,7 @@ export async function sendMessage(
   ) {
     await handle.dispose()
     liveHandles.delete(id)
+    liveAgentRoute.delete(id)
     mountedTools.delete(id)
   }
   const agent = await openTopic(ctx, id, { builtins, externals })
@@ -994,8 +1021,23 @@ export async function sendMessage(
     }
     topic.updatedAt = Date.now()
   }
+  // 内容块拼接：文本块（非空时）+ 准入后的图片块。准入失败（超限/坏容器）整轮拒绝，
+  // 错误经 IPC 原样上抛——调用方可修正后重发，会话日志不留半轮。
+  let images: ImageAttachmentRef[] = []
+  if (options?.images !== undefined && options.images.length > 0) {
+    images = [...(await admitEncodedImages(ctx.attachments, options.images))]
+  }
+  const imageBlocks = images.map((ref) => ({ type: 'image' as const, attachment: ref }))
+  const content: Array<{ type: 'text'; text: string } | { type: 'image'; attachment: ImageAttachmentRef }> = [
+    ...(text.length > 0 ? [{ type: 'text' as const, text }] : []),
+    ...imageBlocks
+  ]
+  if (content.length === 0) {
+    // 调用方（渲染层发送链）已挡空消息；这里兜底保持旧行为，避免空 content 的畸形事件。
+    content.push({ type: 'text', text })
+  }
   const message = createUserMessage({
-    content: [{ type: 'text', text }],
+    content,
     source: { kind: 'user' }
   })
   agent.send(message, 'next-turn', true)
@@ -1101,6 +1143,7 @@ async function sweepOrphanSessions(ctx: Context): Promise<void> {
 
 export function clearLiveHandles(): void {
   liveHandles.clear()
+  liveAgentRoute.clear()
   mountedTools.clear()
 }
 
@@ -1195,7 +1238,19 @@ async function ensureAgent(
   options?: { seed?: readonly SessionEvent[]; parentSessionId?: string; builtins?: string[]; externals?: string[] }
 ): Promise<Agent> {
   const existing = liveHandles.get(topic.id)
-  if (existing !== undefined) return existing.agent
+  if (existing !== undefined) {
+    const loaded = liveAgentRoute.get(topic.id)
+    if (loaded !== undefined && loaded.provider === topic.provider && loaded.model === topic.model) {
+      return existing.agent
+    }
+    // 路由漂移：注册表 provider/model 已被 createTopic upsert 更新，活体还持旧路由。
+    // 流式回合进行中不拆活体（会打断进行中的请求）；本次沿用旧路由，下轮 ensure 自然重挂。
+    if (isTopicRunning(ctx, topic.id)) return existing.agent
+    await existing.dispose()
+    liveHandles.delete(topic.id)
+    liveAgentRoute.delete(topic.id)
+    // 刻意保留 mountedTools：期望工具面/提示词经下方 previous 语义复用，重挂不丢开关状态。
+  }
 
   const sessionId = SessionId(topic.id)
   const live = ctx.agents.get(sessionId)
@@ -1232,11 +1287,19 @@ async function ensureAgent(
     // 用户消息之后，最近因位置），状态变化即被模型以最高新鲜度看到，压掉它对自己历史回答
     // 的锚定（真机实锤：挂载/schema 全对，模型仍连续复读旧状态）。面没变不注入（dsh 去重）。
     // 文本刻意压到最短（无感注入：一词一句都是 token）。
-    agentCtx.systemPrompt.context({
-      name: 'cherry:tool-face-state',
-      order: 0,
-      text: `Tools: ${[...builtinsMounted, ...externalsMounted].join(', ') || 'none'}.`
-    })
+    if (externalsMounted.length > 0) {
+      agentCtx.systemPrompt.context({
+        name: 'cherry:tool-face-state',
+        order: 0,
+        text: `Tools: ${[...builtinsMounted, ...externalsMounted].join(', ')}.`
+      })
+    } else {
+      // 纯聊天/仅内置问答轮抑制整个运行时快照（v0.3.1 上下文净化 C）：快照的另两行
+      // （文件策略/审批档位）只对带文件/命令工具的轮有意义，零工具时无可越权、无可幻读，
+      // 注入只剩 token 与复述噪音（真机实录模型把快照与图片句柄当用户话语复述）。
+      // 作用域级抑制器随 agent dispose 自动撤销；工具话题与后续 remount（externals>0）不受影响。
+      agentCtx.systemPrompt.suppressRuntimeContext()
+    }
     attachReasoningEffortListener(agentCtx, topic.id)
     for (const entry of BUILTIN_MOUNTS) {
       if (builtinsMounted.includes(entry.id)) await entry.mount(agentCtx)
@@ -1279,6 +1342,7 @@ async function ensureAgent(
     })
   }
   liveHandles.set(topic.id, handle)
+  liveAgentRoute.set(topic.id, { provider: topic.provider, model: topic.model })
   mountedTools.set(topic.id, {
     builtins: builtinsMounted,
     externals: externalsMounted,

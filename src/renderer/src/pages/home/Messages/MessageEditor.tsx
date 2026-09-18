@@ -48,6 +48,8 @@ const MessageBlockEditor: FC<Props> = ({ message, topicId, onSave, onResend, onC
   const [isFileDragging, setIsFileDragging] = useState(false)
   const { assistant } = useAssistant(message.assistantId)
   const model = assistant.model || assistant.defaultModel
+  // v0.3.1 识图通道补全：转述模型（无视觉路由用它把图转成文字）。未配置=同另两栏，需用时明错。
+  const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
   const { pasteLongTextAsFile, pasteLongTextThreshold, fontSize, sendMessageShortcut, enableSpellCheck } = useSettings()
   const { t } = useTranslation()
   const textareaRef = useRef<TextAreaRef>(null)
@@ -65,6 +67,10 @@ const MessageBlockEditor: FC<Props> = ({ message, topicId, onSave, onResend, onC
 
   const couldAddImageFile = useMemo(() => {
     const relatedAssistantMessages = topicMessages.filter((m) => m.askId === message.id && m.role === 'assistant')
+    // v0.3.1 识图通道补全：转述模型已配置 → 无视觉路由的图片也放行（describe_images 通道）。
+    // 未配置时退回原判定；describerOpen 放第一分支之前，语义 = 任何路由皆可上图。
+    const describerOpen = imageDescriberModel !== undefined
+    if (describerOpen) return true
     if (relatedAssistantMessages.length === 0) {
       // 无关联消息时fallback到助手模型
       return isVisionModel(model)
@@ -77,7 +83,7 @@ const MessageBlockEditor: FC<Props> = ({ message, topicId, onSave, onResend, onC
         return true
       }
     })
-  }, [message.id, model, topicMessages])
+  }, [message.id, model, topicMessages, imageDescriberModel])
 
   const couldAddTextFile = useMemo(() => {
     const relatedAssistantMessages = topicMessages.filter((m) => m.askId === message.id && m.role === 'assistant')

@@ -31,8 +31,13 @@ export const useChatContext = (activeTopic: Topic) => {
   }, [dispatch])
 
   useEffect(() => {
-    dispatch(setActiveTopic(activeTopic))
-  }, [dispatch, activeTopic])
+    // 只在**话题 id 变化**时写入 runtime.chat.activeTopic。此前以对象为 dep 无条件派发：
+    // 话题行的任何字段更新（updateTopic 重建对象）都会再 dispatch 一个新对象进 runtime——
+    // 该字段没有任何读取者，却让全部 store 订阅者白通知一轮，是流式期无谓重算的噪音源。
+    if (store.getState().runtime.chat.activeTopic?.id !== activeTopic.id) {
+      dispatch(setActiveTopic(activeTopic))
+    }
+  }, [dispatch, activeTopic, store])
 
   const handleToggleMultiSelectMode = useCallback(
     (value: boolean) => {

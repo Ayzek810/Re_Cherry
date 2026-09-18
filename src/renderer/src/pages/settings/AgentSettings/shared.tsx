@@ -1,3 +1,4 @@
+import AssistantAvatar from '@renderer/components/Avatar/AssistantAvatar'
 import EmojiIcon from '@renderer/components/EmojiIcon'
 import type { Assistant } from '@renderer/types'
 import { cn } from '@renderer/utils'
@@ -37,13 +38,16 @@ export type AgentLabelProps = {
   hideIcon?: boolean
 }
 
-/** 弹窗标题：助手 emoji + 名称。 */
+/** 弹窗标题：助手标识（单路径，AssistantAvatar）+ 名称；无助手时兜底 ⭐️。 */
 export const AgentLabel = ({ assistant, classNames, hideIcon }: AgentLabelProps) => {
-  const emoji = assistant?.emoji || '⭐️'
-
   return (
     <div className={cn('flex w-full items-center gap-2 truncate', classNames?.container)}>
-      {!hideIcon && <EmojiIcon emoji={emoji} className={classNames?.avatar} size={24} />}
+      {!hideIcon &&
+        (assistant ? (
+          <AssistantAvatar assistant={assistant} className={classNames?.avatar} size={24} />
+        ) : (
+          <EmojiIcon emoji="⭐️" className={classNames?.avatar} size={24} />
+        ))}
       <span className={cn('truncate', 'text-(--color-text)', classNames?.name)}>{assistant?.name ?? ''}</span>
     </div>
   )

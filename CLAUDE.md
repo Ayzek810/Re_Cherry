@@ -8,26 +8,25 @@ This file provides guidance to AI coding assistants when working with code in th
 
 - **Keep it clear**: Write code that is easy to read, maintain, and explain.
 - **Match the house style**: Reuse existing patterns, naming, and conventions.
-- **Search smart**: Use the `grep`/`glob`/`read` tools; prefer semantic queries over guesswork.
-- **Log centrally**: Route all logging through `loggerService` with the right context—no `console.log`.
-- **Always propose before executing**: Before making any changes, clearly explain your planned approach and wait for explicit user approval.
+- **Search smart**: use the `grep`/`glob`/`read` tools and prefer semantic queries over guesswork — but scope every call (see *Retrieval must be scoped* under Loop Discipline).
+- **Confirm before acting — but only where confirmation means something.** A direct instruction from the user **is** the authorisation: do the thing, then report. Do not re-derive "may I?" from the instruction you were just given, and do not ask twice for the same decision. Reserve the ask for what nobody asked for and cannot be undone: rewriting history, force-pushing, deleting data or files, or a structural change to how this project works. Re-reading the same material or re-asking the same resolved question is pure cost with no information in it — if you notice yourself doing it, act or ask once.
 - **Never commit**: Finish your work and hand it to the user for acceptance. Do **not** run `git commit` / `git add` / `git push`.
-- **Write the version report**: Every version/phase ends with a report at `<workspace>/docs/[version]_doc.md` (workspace `docs/`, *not* this repo's `docs/`). Reports are never overwritten by later versions.
-- **No blind deletion**: Before removing code, prove it is unreferenced (see *Static verification* below). This fork's single biggest regression risk is deleting something that is still wired up.
+- **Write the version report**: Every version/phase ends with a report at `<workspace>/docs/[version]_doc.md` (workspace `docs/`, *not* this repo's `docs/`). **Reports are never overwritten or moved by later versions** — each version keeps its own file in `docs/`, formatted to the shared template (结论速览 / 用户裁决 / 正文 / 事故与加固 / 验证 / 遗留). **Keep them tight, and keep them small:** this folder has reached 458 KB, the largest report is 182 KB / 970 lines, and one read of it is expensive — a report records decisions and evidence, not the process that produced them. Past ~40 KB or ~500 lines a report is being used as a log; split it by release instead of letting it grow. **Version containment:** a sub-release (`-1`, `.1`) does **not** get its own file — it nests inside its parent as a `## vX.Y.Z —— <subject>` section with the sub-release's own numbered sections demoted one level (`## N.` → `### N.`), and its version number stays visible so the record is still traceable. Anything still binding is distilled into `<workspace>/docs/经验教训.md` so each rule has one home and the reports keep only their own evidence.
+- **Never leave a pointer-style instruction file**: a sibling file whose content is just the name of another instruction file (`AGENTS.md` containing the 9 bytes `CLAUDE.md`) is *loaded in addition to*, not instead of, its target. `dsh-agent-instructions` collapses siblings only when their trimmed content is byte-identical (`dedupInstructionFilesByDirectory`, SHA-1), so a pointer doubles the fixed per-request cost for zero information. Read `<workspace>/docs/README.md` before adding or moving anything under `docs/`.
+- **No blind deletion**: Before removing code, prove it is unreferenced — run the static-check suite first, and only fall back to scoped grep (both are under *Sandbox Constraints* below). This fork's single biggest regression risk is deleting something that is still wired up.
 
 ## Sandbox Constraints (IMPORTANT)
 
-The agent sandbox for this project may have **no `node_modules`** and **no permission to run `pnpm`** — it depends on the permissions the session was granted. When the session does grant them (as in v0.3.0-1 and v0.3.0-2), **run the gates for real instead of reasoning about them**, with two environment facts:
+Sandbox permissions depend on what the session was granted. When the gates are available, **run them for real instead of reasoning about them**. Two environment facts:
 
 ```powershell
 $env:PATH = "F:\nodejs;" + $env:PATH   # Node ≥24.11.1; DSH's bundled Node 24.9.0 is too old
 $env:CI = "true"                        # avoids ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
 ```
 
-Consequence when they are **not** available: `pnpm lint` / `pnpm test` / `pnpm typecheck` / `pnpm build` cannot be run — say so explicitly rather than claiming a run, and fall back to **code review + static analysis**:
-  1. Grep every removed/renamed symbol and file path across `src/`, `packages/`, `scripts/`, `tests/`, and all root configs.
-  2. Check **all three** reference forms: alias (`@renderer/...`, `@main/...`, `@shared/...`), relative (`./x`, `../x`), and barrel re-export (`export * from`, `export { x } from`).
-  3. Re-grep after the change to prove zero dangling references.
+**`pnpm` does not run under the sandbox.** DSH's pnpm wrapper spawns a child process, so every `pnpm <script>` dies with `Error: spawn EPERM` (`pnpm-runner.mjs`) — deterministically, not intermittently. Do not keep retrying it or working around it by hand. **When a step genuinely needs pnpm, ask the user to grant full permissions for that command**, and say which command and why. Everything reachable without pnpm should be reached that way: `node tools/static-checks/run-all.js` for the suite, and `node_modules/.bin/` for the individual gates — `tsgo`, `vitest`, `oxlint`, `eslint`, `biome`, `playwright` and `electron-vite` are all present there, so read the `pnpm` script you wanted in `package.json` and invoke the same binary under `.bin/` directly (e.g. `typecheck` is two `tsgo --noEmit -p tsconfig.{node,web}.json` runs).
+
+When they are **not** available, say so explicitly rather than claiming a run — the static-check suite documented below is the fallback (it needs no `node_modules`, no `pnpm`). Only then fall back to code review, and **scope it**: grep the specific symbol and path you touched across `src/` / `packages/` / `scripts/` / `tests/`, checking alias (`@renderer/...`), relative (`./x`) and barrel (`export * from './x'`) forms, then re-grep to prove zero dangling references. **Do not sweep the whole repository by hand when a gate can answer the same question in one command.**
 
 **Shell gotcha (cost a failed history rewrite once):** the shell is **Windows PowerShell 5.1**, not PowerShell 7. `Get-Content` decodes as ANSI (a UTF-8 source file loses lines and turns Chinese into mojibake — `topics.ts` reports 1098 lines instead of 1172), and `>` / `Out-File` default to **UTF-16LE** (git then rejects the file with `a NUL byte in commit log message not allowed`). Read files with the file tools or `[System.IO.File]::ReadAllText` (UTF-8), write them with an explicit UTF-8 no-BOM encoder, and capture a command's exit code via `$LASTEXITCODE` — not through a pipeline, whose reported code can differ.
 
@@ -35,20 +34,10 @@ Consequence when they are **not** available: `pnpm lint` / `pnpm test` / `pnpm t
   ```powershell
   node E:\Workspace\project_REC\tools\static-checks\run-all.js
   ```
-  It provides nine checks, and **all nine must be green** (exit code 0) after any batch of deletions/renames. `check-upstream` needs the upstream reference tree `E:\Workspace\project_REC\参考资产\cherry-studio v1.9.11` in place; it self-skips without it.
-  - `check-imports.js` — every import/export/require/dynamic-import specifier resolves on disk (relative, aliases, `?url` query suffixes, NodeNext `.js`→`.ts`, bare packages vs `package.json`).
-  - `check-symbols.js` — every `import { a } from '<local path>'` is really exported there (handles this repo's three export shapes: `export const X`, `export const { a, b } = slice.actions` with comments in between, `export { default as X, type Y } from './z'`).
-  - `check-syntax.js` — parses all `.ts` via Node's `stripTypeScriptTypes` (a syntax-level substitute for `tsgo`; `.tsx` cannot be checked because JSX is unsupported).
-  - `check-configs.js` — `package.json` / `tsconfig*.json` / `.oxlintrc.json` (JSONC-tolerant) / `pnpm-workspace.yaml` / `electron-builder.yml` parse, carry no BOM, and keep `patches/` in 1:1 correspondence with `patchedDependencies` (and the lockfile's `patchedDependencies`).
-  - `check-i18n-parity.js` — `en-us.json` and `zh-cn.json` must have identical leaf-key sets.
-  - `check-main-i18n.js` — **the main process must be able to read its own strings.** The main process accesses locales by *object value* (`const { tray: trayLocale } = locale.translation`), so `'tray.show_window'` never appears as a literal anywhere in the source and a text-driven prune deletes the whole namespace. This check verifies the namespaces exist, their member keys resolve to strings, and every `t('a.b.c')` literal resolves.
-  - `check-i18n-keys.js` — every quoted dotted string that starts with a locale namespace resolves in both bundles, with i18next plural/context awareness (`_one`/`_other`/`_male` have no bare key). Compared against `i18n-baseline.json`: **only new misses fail**; pass `--head <dir>` to diff against a HEAD snapshot and separate regressions from pre-existing upstream gaps.
-  - `check-i18n-dynamic.js` — template-literal keys (`` `error.${x}` ``) have no dotted literal either. New unregistered shapes fail; registered ones must declare resolvable `expandsTo` keys; the conversation-importer registry must have matching `import.<name>.assistant_name` keys.
-  - `check-upstream.js` — reconciles ProviderType-keyed constant tables against the upstream reference tree, with `equal` / `subset-of-upstream` rules and a stated reason per constant (v0.3.0-1 added it after a batch of upstream tables had been pruned by mistake).
-  Known false positives and usage discipline are documented in `tools/static-checks/README.md` — read it before acting on a report. **Never prune text-driven content (i18n keys, barrels, side-effect imports) without first enumerating every way that text can be consumed** — literal, object value, template literal, variable key table, barrel forward, side-effect import. See the incident record in that README.
+  It provides nine checks, and **all nine must be green** (exit code 0) after any batch of deletions/renames. `check-upstream` needs the upstream reference tree `E:\Workspace\project_REC\参考资产\cherry-studio v1.9.11` in place; it self-skips without it. In one line each: `check-imports` (every specifier resolves on disk) · `check-symbols` (every named import is really exported there) · `check-syntax` (`.ts` parses; **`.tsx` is out of scope**) · `check-configs` (configs parse, no BOM, `patches/` 1:1 with `patchedDependencies`) · `check-i18n-parity` · `check-main-i18n` (**the main process must be able to read its own strings** — it accesses locales by *object value*, so `'tray.show_window'` appears as no literal anywhere and a text-driven prune deletes the whole namespace) · `check-i18n-keys` (baseline-based: only *new* misses fail) · `check-i18n-dynamic` (template-literal keys must be registered) · `check-upstream` (reconciles constant tables against the upstream tree).
+  **What each check does *not* cover, its known false positives, and the usage discipline are in `tools/static-checks/README.md` — read that before acting on a report.** **Never prune text-driven content (i18n keys, barrels, side-effect imports) without first enumerating every way that text can be consumed** — literal, object value, template literal, variable key table, barrel forward, side-effect import. See the incident record in that README.
 - These checks catch broken references, syntax and config breakage, **not** type errors (e.g. a deleted state field still written in a file typed with `RootState`). When you delete a field/type, grep every consumer including `store/migrate.ts`, and prefer deleting the now-dead statements over adding `@ts-expect-error`.
 - **Startup order is a safety property** (`src/main/index.ts`): `registerShortcuts()` and `await registerIpc()` must stay ahead of every cosmetic/optional initializer (tray, macOS app menu, telemetry), and those must stay wrapped in `try/catch` that only logs. A cosmetic failure must never take the app's basic usability with it.
-- If a change genuinely needs a typecheck or a test run, say so and hand the exact command to the user instead of guessing.
 
 ## Project Rules Specific to This Fork
 
@@ -61,6 +50,16 @@ Consequence when they are **not** available: `pnpm lint` / `pnpm test` / `pnpm t
 - **`src/main/kernel/topics.ts`** owns topics (= dsh session + agent) including the `destroyTurns` deletion engine. Structural operations go through the `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` service seams (`src/main/kernel/services.ts`).
 - **`src/renderer/src/services/kernelChat.ts`** is the event-projection bridge (its name is similar to the legacy `services/messageStreaming/**` layer — do not confuse them).
 - Version roadmap and per-version goals live in `<workspace>/docs/当前任务总体规划.txt`.
+
+## Loop Discipline (cost control)
+
+- **A logic hunt needs a stop condition.** Words like "彻查" / "深入排查" have no endpoint, and an unbounded one is the single most expensive thing this project does — one past session ran 2,613 steps / 526 minutes / 1.8 亿 input tokens against 19 steps for a normal task. If the last several steps produced no new hypothesis or no new evidence, **stop and report**: what you ruled out, what remains, and what you would try next. Do not keep going on momentum.
+- **Explore in a subagent, decide in the main session.** Bulk reading, multi-file surveys and parallel extraction belong in a subagent; the main session should receive conclusions. State plainly that a subagent redistributes cost, it does not reduce it.
+- **Batch, don't repeat.** If you are about to do the same kind of operation a third time, switch to a script, a single batched command, or one scoped query instead.
+- **Edit an injected instruction file in one pass.** Every `write`/`edit` to `CLAUDE.md` (or any `AGENTS.md`) re-injects the whole file into the next request — so think the change through and land it in one edit rather than iterating.
+- **Prefer the gate over the hand audit.** One real type gate (`tsgo`, run directly — not through a `pnpm` script in the sandbox) is cheaper and stronger than grepping the tree by hand. Reach for grep only for what no gate answers.
+- **Retrieval must be scoped.** `glob`/`grep` deliberately pass `--no-ignore` and exclude only VCS metadata (`.git`, `.svn`, `.hg`, `.bzr`, `.jj`, `.sl` — a hard-coded list), so `node_modules`, `dist`, `out` and any vendored tree **are** searched and `.gitignore` is not honoured. Measured: a bare `**/*.ts` from this repo's root returns **33,094** paths and shows the wrong 100 (all `node_modules`); the same pattern scoped to `src/` returns **458** and shows them all. So always pass `path`, pick the narrowest root that can hold the answer (`src/`, `docs/`, a single package), and never start a broad search from the repo or workspace root.
+- **Never search `参考资产/` on your own initiative.** It holds ~170k files / 2.5 GB (upstream source trees plus their `node_modules`) and 71% of every `.md` in the workspace — an unscoped search there floods the result with irrelevant hits and returns the wrong 100. Two exceptions only: (a) the user explicitly asks you to compare against upstream or check what Cherry Studio did; (b) `tools/static-checks/check-upstream.js` reads `cherry-studio v1.9.11` by itself as a machine gate — that is not you searching. When you genuinely need it under (a), **delegate to a subagent**: name the one subdirectory in the prompt, require scoped searches, and require **conclusions only — never bring back the list of matched paths or file contents**, or the delegation has bought nothing.
 
 ## Development Commands (run on the user's real machine)
 
@@ -75,7 +74,7 @@ Consequence when they are **not** available: `pnpm lint` / `pnpm test` / `pnpm t
 - **Format**: `pnpm format` — Biome write mode
 - **i18n**: `pnpm i18n:check` (validate) / `pnpm i18n:sync` (sync + sort keys)
 - **Bundle Analysis**: `pnpm analyze:renderer` / `pnpm analyze:main`
-- **Release packaging**: `pnpm build:win:x64`, `build:mac*`, `build:linux*`, `release` (see `electron-builder.yml`)
+- **Release packaging**: `pnpm build:win:x64 --publish never`, `build:mac* --publish never`, `build:linux* --publish never`, `release` (see `electron-builder.yml`). **`--publish never` is not optional here:** `$env:CI='true'` (which every command in this project sets, to dodge pnpm's TTY abort) makes electron-builder treat the run as CI and **implicitly attempt a GitHub Release publish** — which then fails with a missing `GH_TOKEN`, turning a *successful* packaging run into `exit 1`. That has already been misread as "the build failed" once. electron-builder warns this implicit behaviour is removed in v27. **Read the tail of a build log before concluding anything about the build: if the artifacts exist and are signed, packaging succeeded and only the publish step failed.**
 
 ## Project Architecture
 
@@ -131,13 +130,14 @@ The dsh kernel is embedded in-process as a Cordis plugin tree (never via the YAM
 
 | File | Responsibility |
 |---|---|
-| `index.ts` | Programmatic plugin assembly (settings-file + credentials + llm + pi-ai adapter + system prompt + tools + session store/SQLite persistence + title service + agent registry/loop) and all `dsh:*` IPC |
+| `index.ts` | Programmatic plugin assembly (settings-file + credentials + llm + pi-ai adapter + system prompt + tools + session store/SQLite persistence + agent registry/loop) and all `dsh:*` IPC. The dsh session-title plugin was removed in v0.3.1 — topic auto-naming runs in the renderer (`services/topicNaming.ts`, V1 semantics via the quick model) and reaches the kernel registry through `Dsh_TopicRename` only |
 | `topics.ts` | Topic registry & chat operations; topic = dsh session + agent; `destroyTurns` deletion engine; reasoning-level convergence |
 | `providers.ts` | Renderer provider config → pi-ai routes (`KernelProviderInput`); clears stale routes on resync |
 | `credentials.ts` | In-memory credential provider (`CherryCredentialProvider`), multi-key rotation per request |
 | `services.ts` | App service seams: `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning` (plugins may take over); `ctx.topicTree.uiEvents` returns the UI view of a session log |
 | `sessionEventView.ts` | The single injected-event predicate plus the UI view of session events (v0.3.0-1). All three UI exits apply it: live broadcast, `uiEvents` IPC, `searchSessions` — the renderer holds no visibility predicate of its own |
 | `dsmlRepair.ts` | Response-side DSML tool-call repair, registered as an `llm/stream` waterfall middleware — replaced the `@deepseek-ai/dsh-llm-pi-ai` pnpm patch in v0.3.0-1 |
+| `thinkingReplay.ts` | Request-side prior-turn thinking replay trim (v0.3.1), installed as a `globalThis` neutral gate consumed by the one-line `dsh-llm-pi-ai` patch; intra-turn thinking kept, prior turns stripped on the wire, DB untouched |
 | `sessionResumeFallback.ts` | The **single** decision point for "resume failed — refuse or create fresh" (v0.3.0-2). The criterion is a **persistence existence query** (`ctx.sessionPersistence.list()`), never the error's type; fail-closed when the query itself fails, and `createFresh()` is only reachable after the session is confirmed absent |
 | `sessionReadFailure.ts` | Diagnostic classification of a read failure (`format-unsupported` / `corrupted` / `unclassified`) for logging only (v0.3.0-2). **Its return value must never gate session creation** — the security criterion lives in `sessionResumeFallback.ts` |
 
@@ -145,25 +145,13 @@ Renderer side: `src/renderer/src/services/kernelChat.ts` subscribes to kernel `s
 
 ### Renderer Process (`src/renderer/src/`)
 
-React 19 + Redux Toolkit SPA. Routes (`Router.tsx`): `/` (home), `/files`, `/settings/*`.
-
-```
-components/      # Shared UI (Ant Design 5 + styled-components + TailwindCSS v4)
-databases/       # Dexie (IndexedDB): files, settings, knowledge_notes, quick_phrases
-hooks/           # React hooks (useAppInit, useAssistant, useChatContext, useSettings, ...)
-pages/           # files, history, home (chat + Inputbar + Messages), onboarding, settings
-services/        # ApiService, kernelChat, BackupService, MemoryService, ...
-store/           # Redux Toolkit slices (+ thunk/ for message operations)
-types/           # TypeScript type definitions
-workers/         # Web Workers (pyodide, shiki-stream)
-windows/         # Mini window entry point
-```
+React 19 + Redux Toolkit SPA. Routes (`Router.tsx`): `/` (home), `/files`, `/settings/*`. The directory layout under this path is the filesystem's to state — `src/renderer/src/` holds `components/`, `databases/` (Dexie: files / settings / knowledge_notes / quick_phrases), `hooks/`, `pages/`, `services/`, `store/`, `types/`, `workers/` (pyodide, shiki-stream) and `windows/` (the mini window entry).
 
 ### Redux Store (`src/renderer/src/store/`)
 
-Slices: `assistants`, `backup`, `copilot`, `inputTools`, `llm`, `memory`, `messageBlock`, `minapps`, `newMessage`, `nutstore`, `runtime`, `settings`, `shortcuts`, `tabs`, `toolPermissions` (persist config + migrations in `index.ts` / `migrate.ts`).
+The authoritative list of slices is the `combineReducers` call in `src/renderer/src/store/index.ts` — read it there rather than trusting any list, including this one. Two things it will not tell you by shape: two state keys are **not** named after their file (`messages` ← `newMessagesReducer` in `newMessage.ts`, `messageBlocks` ← `messageBlocksReducer` in `messageBlock.ts`), and `userQuestions.ts` is a real registered slice that no earlier inventory in this file mentioned. Persist config lives in `index.ts`; migrations in `migrate.ts`.
 
-- `migrate.ts` uses `{'2': fn, ..., '213': fn}`-style migrations. **Every branch is reachable** (redux-persist runs all keys with `currentVersion >= key > inboundVersion`), and a throw inside a branch discards the entire persisted state. Do not delete migration branches; when adding a branch, bump `version` in `index.ts` and the highest key in `migrate.ts` together.
+- `migrate.ts` holds the `{'2': fn, ..., '<N>': fn}` migration table. **Every branch is reachable** (redux-persist runs all keys with `currentVersion >= key > inboundVersion`), and a throw inside a branch discards the entire persisted state. Do not delete migration branches; when adding a branch, bump `version` in `index.ts` and the highest key in `migrate.ts` together — **the current `version` is in `index.ts`, not in this file, because numbers written here go stale** (an earlier revision of this file said 213 while the code was already at 214).
 - `blacklist` in the persist config means "not written to localStorage", **not** "unused".
 
 ### Database Layer
@@ -241,18 +229,27 @@ Winston with daily rotation; log files in `userData/logs/`. Never use `console.l
 
 pnpm settings live in **`pnpm-workspace.yaml`**, not in a `pnpm` field of `package.json`: pnpm 10.6+ ignores that field (it only prints a warning) and pnpm 11 stops reading it entirely. The keys `overrides`, `patchedDependencies` and `onlyBuiltDependencies` are declared there. Moving any of them back into `package.json` silently disables them as soon as the lockfile is regenerated — the `overrides` include several security pins and the patches are load-bearing (libsql's affects win32-arm64 native resolution, file-stream-rotator's affects log rotation, antd's replaces an icon import).
 
-`patches/` must stay in 1:1 correspondence with `patchedDependencies`. Current patches (5): `antd@5.27.0`, `atomically@1.7.0`, `file-stream-rotator@0.6.1`, `libsql@0.4.7`, `node-pty@1.2.0-beta.15`. (`check-configs.js` enforces that 1:1 rule, against both `pnpm-workspace.yaml` and the lockfile. Two former patches went away: `@tiptap/extension-drag-handle` with the RichEditor removal, and `@deepseek-ai/dsh-llm-pi-ai` in v0.3.0-1 — see below.)
+`patches/` must stay in 1:1 correspondence with `patchedDependencies`. Current patches (6): `antd@5.27.0`, `atomically@1.7.0`, `file-stream-rotator@0.6.1`, `libsql@0.4.7`, `node-pty@1.2.0-beta.15`, `@deepseek-ai/dsh-llm-pi-ai@0.1.1-rc.2` (**neutral gate only** — see the request-side thinking trim below).
 
-The non-trivial patches carry an explicit rationale:
+Why the three non-trivial patches exist — the rule is the first sentence; the full incident records are in the version reports:
 
-- **`node-pty@1.2.0-beta.15`** (v0.3.0) — its `binding.gyp` hard-codes `SpectreMitigation: 'Spectre'` on the `OS=="win"` branch, which needs Spectre-mitigated CRT libs that a plain VS BuildTools install lacks (MSB8040). The patch removes only that attribute block; the `msvs_settings` hardening flags (`/guard:cf`, `/sdl`, `/DYNAMICBASE`) are kept. `node-pty` reaches us as a transitive dep of `@deepseek-ai/dsh-subprocess-local` (pwsh PTY), so it is patched rather than the kernel package.
-- **DSML response-side repair is no longer a patch (v0.3.0-1)** — it used to be a `pnpm patch` on the **kernel package family** (`@deepseek-ai/dsh-llm-pi-ai@0.1.1-rc.2`), i.e. the one place where we touched kernel behaviour, and it was pinned to that version. The rationale is unchanged: provider-side parsing of `<｜DSML｜invoke>` markers into structured tool calls is non-deterministic (the same marker parsed on one turn and leaked into the text stream on another), which corrupts *the session log itself* — a leaking turn records no tool call at all. The repair now lives in **our own** kernel-side module `src/main/kernel/dsmlRepair.ts`, registered via `registerDsmlRepair` on the dsh-documented **`llm/stream` waterfall** that both agent-loop call paths pass through (`ctx.llm.stream()` and `prepareCall().stream()`). Semantics are the same as the old patch (well-formed marker + valid JSON → real tool-call block; malformed or non-JSON → passthrough, fail-safe), pinned by `src/main/kernel/__tests__/dsmlRepair.test.ts`. **No kernel package is patched any more**; re-verify with the unit test plus one real-machine session on any kernel upgrade. Full record: `<workspace>/docs/v0.3.0-1_doc.md`.
+- **`node-pty@1.2.0-beta.15`** — its `binding.gyp` hard-codes `SpectreMitigation: 'Spectre'` on the `OS=="win"` branch, which needs Spectre-mitigated CRT libs a plain VS BuildTools install lacks (MSB8040). The patch removes that block only; the `/guard:cf` `/sdl` `/DYNAMICBASE` hardening stays. Transitive dep of `@deepseek-ai/dsh-subprocess-local`, so it is patched rather than the kernel package. Record: `<workspace>/docs/v0.3.0_doc.md` §8.9.
+- **DSML response-side repair is no longer a patch (v0.3.0-1)** — it lives in **our own** module `src/main/kernel/dsmlRepair.ts`, registered via `registerDsmlRepair` on the dsh-documented **`llm/stream` waterfall** that both agent-loop call paths pass through. Semantics unchanged (well-formed marker + valid JSON → real tool-call; malformed → passthrough, fail-safe), pinned by `__tests__/dsmlRepair.test.ts`. Record: `<workspace>/docs/v0.3.0-1_doc.md`.
+- **`@deepseek-ai/dsh-llm-pi-ai@0.1.1-rc.2` neutral gate (v0.3.1)** — one line at the top of `streamWithSnapshot`: `options = globalThis.__recTrimPriorTurnThinking?.(options) ?? options`. Request-side thinking replay trim cannot be reached from any public seam, so the patch is a bare hook with **zero fork semantics** — with the hook absent the package equals upstream. All logic is in `src/main/kernel/thinkingReplay.ts`. Record: `<workspace>/docs/v0.3.1_doc.md`.
+
+**On any kernel-package upgrade, re-run both of these and nothing else:** `__tests__/dsmlRepair.test.ts` + one real-machine session (DSML), and `__tests__/thinkingReplay.test.ts` + `tools/branch-jump-artifacts/probe-e2e-thinking-trim.js` (thinking trim).
 
 ## Testing Guidelines
 
 - Vitest 3 with project-based configs; main tests run in Node (`tests/main.setup.ts`), renderer tests in jsdom (`tests/renderer.setup.ts`, `@testing-library/react`).
 - Coverage via v8 (`pnpm test:coverage`); e2e via Playwright (`tests/e2e/`).
-- A module whose only reference is its own `__tests__` file is dead code — prefer deleting module + test together over keeping tests for unreachable code.
+- A module whose only reference is its own `__tests__` file is dead code — prefer deleting module + test together over keeping tests for unreachable code. A *single export* inside an active module that is only referenced by its own test is **not** dead code — keep it.
+- **A new gate or guard is not proven until a reverse-control probe turned it red.** Plant a deliberate break, watch the specific check fail by name, then remove the probe and confirm the suite is green again with a clean `git diff`. A guard whose failure mode is silent (retry logic that always burns its full window, a sweep guard that would delete the library) can only be trusted after this.
+- **"Green" always needs its scope stated.** `pnpm lint` does not run tests; the nine static checks cover references/syntax/config/i18n but **not** types; a single sample cannot prove an intermittent failure is gone. Name the four greens and their boundaries in every acceptance record instead of writing "all green". The four are: typecheck, lint's full chain, the static-check suite, and the build — **and the first two need pnpm, i.e. the user's real machine or an explicit permission grant.**
+
+## Project Lessons
+
+`<workspace>/docs/经验教训.md` collects the binding lessons, judgement rules, rejected approaches and open debts that were distilled from the version reports. Read it when deciding whether something may be deleted, whether a failure counts as "empty", or whether a green signal is strong enough to conclude from. The per-version reports in `<workspace>/docs/` remain the detailed record — go to the specific version when you need its evidence.
 
 ## Important Notes
 

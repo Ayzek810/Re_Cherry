@@ -1,3 +1,4 @@
+import AssistantAvatar from '@renderer/components/Avatar/AssistantAvatar'
 import EmojiAvatar from '@renderer/components/Avatar/EmojiAvatar'
 import { HStack } from '@renderer/components/Layout'
 import UserPopup from '@renderer/components/Popups/UserPopup'
@@ -46,24 +47,34 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
 
   const isSelected = selectedMessageIds?.includes(message.id)
 
-  const avatarSource = useMemo(() => getAvatarSource(isLocalAi, getMessageModelId(message)), [message])
-
-  const getUserName = useCallback(() => {
-    if (isLocalAi && message.role !== 'user') {
-      return APP_NAME
-    }
-
-    if (message.role === 'assistant') {
-      return getModelName(model) || getMessageModelId(message) || ''
-    }
-
-    return userName || t('common.you')
-  }, [message, model, t, userName])
-
   const isAssistantMessage = message.role === 'assistant'
   const isUserMessage = message.role === 'user'
   const isUserBubbleMessage = isBubbleStyle && isUserMessage && !isMultiSelectMode
   const showMinappIcon = sidebarIcons.visible.includes('minapp')
+
+  /**
+   * 功能二（v0.3.1）：助手级显示挡位 —— 'assistant' 时 AI 行展示助手标识与助手名，
+   * 模型名退到时间戳小字右侧；缺省 'model' 保持原版模型头像 + 模型名。
+   */
+  const isAssistantIdentityMode =
+    isAssistantMessage && (assistant?.settings?.messageIdentity ?? 'model') === 'assistant'
+
+  const avatarSource = useMemo(() => getAvatarSource(isLocalAi, getMessageModelId(message)), [message])
+
+  const getUserName = useCallback(() => {
+    if (isAssistantMessage) {
+      // 助手信息挡：标题改为助手名（剥掉名称首 emoji，头像已是标识）
+      if (isAssistantIdentityMode) {
+        return removeLeadingEmoji(assistant?.name ?? '') || t('chat.default.name')
+      }
+      if (isLocalAi) {
+        return APP_NAME
+      }
+      return getModelName(model) || getMessageModelId(message) || ''
+    }
+
+    return userName || t('common.you')
+  }, [isAssistantMessage, isAssistantIdentityMode, assistant, model, message, t, userName])
 
   const avatarName = useMemo(() => firstLetter(assistant?.name).toUpperCase(), [assistant?.name])
   const username = useMemo(() => removeLeadingEmoji(getUserName()), [getUserName])
@@ -83,18 +94,22 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
   return (
     <Container className={isUserBubbleMessage ? 'message-header user-bubble-header' : 'message-header'}>
       {isAssistantMessage ? (
-        <Avatar
-          src={avatarSource}
-          size={35}
-          style={{
-            borderRadius: '25%',
-            cursor: showMinappIcon ? 'pointer' : 'default',
-            border: isLocalAi ? '1px solid var(--color-border-soft)' : 'none',
-            filter: theme === 'dark' ? 'invert(0.05)' : undefined
-          }}
-          onClick={showMiniApp}>
-          {avatarName}
-        </Avatar>
+        isAssistantIdentityMode ? (
+          <AssistantAvatar assistant={assistant} size={35} />
+        ) : (
+          <Avatar
+            src={avatarSource}
+            size={35}
+            style={{
+              borderRadius: '25%',
+              cursor: showMinappIcon ? 'pointer' : 'default',
+              border: isLocalAi ? '1px solid var(--color-border-soft)' : 'none',
+              filter: theme === 'dark' ? 'invert(0.05)' : undefined
+            }}
+            onClick={showMiniApp}>
+            {avatarName}
+          </Avatar>
+        )
       ) : (
         <>
           {isEmoji(avatar) ? (
@@ -125,6 +140,9 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
           </HStack>
           <InfoWrap className="message-header-info-wrap text-(--color-text-3) text-[10px]">
             <MessageTime>{dayjs(message?.updatedAt ?? message.createdAt).format('MM/DD HH:mm')}</MessageTime>
+            {isAssistantIdentityMode && (
+              <MessageModelName>{getModelName(model) || getMessageModelId(message) || ''}</MessageModelName>
+            )}
           </InfoWrap>
         </UserWrap>
       )}
@@ -173,6 +191,16 @@ const UserName = styled.span<{ isBubbleStyle?: boolean; theme?: string }>`
 const MessageTime = styled.div`
   font-size: 10px;
   color: var(--color-text-3);
+`
+
+/** 助手信息挡：模型名显示在时间戳右侧的小字 */
+const MessageModelName = styled.div`
+  font-size: 10px;
+  color: var(--color-text-3);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 export default MessageHeader

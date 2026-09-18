@@ -6,12 +6,14 @@ import { DeleteIcon } from '@renderer/components/Icons'
 import { HSpaceBetweenStack, HStack } from '@renderer/components/Layout'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
 import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
+import useAssistantIdentityImage from '@renderer/hooks/useAssistantIdentityImage'
 import { usePromptProcessor } from '@renderer/hooks/usePromptProcessor'
+import { createIdentityImage, releaseIdentityImage } from '@renderer/services/assistantIdentity'
 import { estimateTextTokens } from '@renderer/services/TokenService'
 import type { Assistant, AssistantSettings, Model } from '@renderer/types'
 import { getLeadingEmoji } from '@renderer/utils'
-import { Button, Input, Popover } from 'antd'
-import { Edit, HelpCircle, PlusIcon, Save } from 'lucide-react'
+import { Button, Input, Popover, Segmented, Upload } from 'antd'
+import { Edit, HelpCircle, ImagePlus, PlusIcon, Save } from 'lucide-react'
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -35,6 +37,8 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
   const { t } = useTranslation()
   const [emoji, setEmoji] = useState(assistant.emoji || getLeadingEmoji(assistant.name) || '')
   const [name, setName] = useState(assistant.name.replace(getLeadingEmoji(assistant.name) || '', '').trim())
+  const [uploading, setUploading] = useState(false)
+  const identityImageUrl = useAssistantIdentityImage(emoji)
 
   const [prompt, setPrompt] = useState(assistant.prompt)
   const [showPreview, setShowPreview] = useState(false)
@@ -55,6 +59,19 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
     updateAssistant({ name: nextName, emoji: nextEmoji })
   }
 
+  /**
+   * 标识单路径写入（v0.3.1 功能一）：库选 emoji 与 `img:` 图片引用都落在 assistant.emoji 上；
+   * 被替换的图片标识在再无引用时回收。
+   */
+  const applyIdentity = (next: string) => {
+    const previous = assistant.emoji
+    setEmoji(next)
+    persistIdentity(name.trim(), next)
+    if (next !== previous) {
+      void releaseIdentityImage(previous)
+    }
+  }
+
   const handleNameBlur = () => {
     const nextName = name.trim()
     if (nextName === assistant.name.replace(getLeadingEmoji(assistant.name) || '', '').trim()) return
@@ -62,13 +79,26 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
   }
 
   const handleEmojiSelect = (selectedEmoji: string) => {
-    setEmoji(selectedEmoji)
-    persistIdentity(name.trim(), selectedEmoji)
+    applyIdentity(selectedEmoji)
   }
 
   const handleEmojiDelete = () => {
-    setEmoji('')
-    persistIdentity(name.trim(), '')
+    applyIdentity('')
+  }
+
+  const handleImageSelect = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      window.toast.error(t('assistants.settings.identity.image_invalid'))
+      return
+    }
+    setUploading(true)
+    try {
+      applyIdentity(await createIdentityImage(file))
+    } catch {
+      window.toast.error(t('assistants.settings.identity.image_failed'))
+    } finally {
+      setUploading(false)
+    }
   }
 
   const modelFilter = (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model)
@@ -87,9 +117,37 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
       <SettingsItem inline>
         <SettingsTitle>{t('common.name')}</SettingsTitle>
         <HStack alignItems="center" gap={8} style={{ minWidth: 0, flex: 1, justifyContent: 'flex-end' }}>
-          <Popover content={<EmojiPicker onEmojiClick={handleEmojiSelect} />} arrow trigger="click">
+          <Popover
+            content={
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Upload
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  showUploadList={false}
+                  beforeUpload={(file) => {
+                    void handleImageSelect(file)
+                    return false
+                  }}>
+                  <Button icon={<ImagePlus size={14} />} loading={uploading} style={{ width: '100%' }}>
+                    {t('assistants.settings.identity.image')}
+                  </Button>
+                </Upload>
+                <EmojiPicker onEmojiClick={handleEmojiSelect} />
+              </div>
+            }
+            arrow
+            trigger="click">
             <EmojiButtonWrapper>
-              <Button style={{ fontSize: 18, padding: '4px', minWidth: '28px', height: '28px' }}>{emoji}</Button>
+              <Button style={{ fontSize: 18, padding: '4px', minWidth: '28px', height: '28px' }}>
+                {identityImageUrl ? (
+                  <img
+                    src={identityImageUrl}
+                    alt=""
+                    style={{ width: 20, height: 20, borderRadius: 10, objectFit: 'cover', verticalAlign: 'middle' }}
+                  />
+                ) : (
+                  emoji
+                )}
+              </Button>
               {emoji && (
                 <CloseCircleFilled
                   className="delete-icon"
@@ -118,6 +176,22 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
             style={{ maxWidth: 320 }}
           />
         </HStack>
+      </SettingsItem>
+
+      {/* 功能二：本助手对话页显示"模型信息"（默认）还是"助手信息"，两挡选择，不进全局设置 */}
+      <SettingsItem inline>
+        <SettingsTitle>{t('assistants.settings.display.label')}</SettingsTitle>
+        <Segmented
+          shape="round"
+          value={assistant.settings?.messageIdentity ?? 'model'}
+          onChange={(value) =>
+            updateAssistantSettings({ messageIdentity: value as AssistantSettings['messageIdentity'] })
+          }
+          options={[
+            { value: 'model', label: t('assistants.settings.display.model') },
+            { value: 'assistant', label: t('assistants.settings.display.assistant') }
+          ]}
+        />
       </SettingsItem>
 
       <SettingsItem inline>

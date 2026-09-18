@@ -8,6 +8,7 @@ import { isEmbeddingModel } from '@renderer/config/models'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import { getEmbeddingDimensions } from '@renderer/services/embedding'
+import { lightComplete } from '@renderer/services/lightLlm'
 import type { Model, Provider } from '@renderer/types'
 import { isSystemProvider } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
@@ -172,13 +173,14 @@ export async function fetchMessagesSummary({
   )
 
   try {
-    // dsh 内核替换：话题命名走内核一次性 completion（无 session 残留）
-    const { text } = await window.api.dshComplete({
+    // 轻量内核：话题命名 = 一次性 completion（无 session 残留；思考缺省 off）
+    const { text } = await lightComplete({
       provider: provider.id,
       model: model.id,
       system: prompt,
       messages: [{ role: 'user', text: conversation }],
-      maxTokens: 128
+      maxTokens: 128,
+      source: 'cherry-topic-naming'
     })
 
     const result = removeSpecialCharactersForTopicName(text)
@@ -207,12 +209,13 @@ export async function fetchGenerate({
   }
 
   try {
-    // dsh 内核替换：搜索编排/记忆/错误诊断等一次性生成走内核 completion
-    const { text } = await window.api.dshComplete({
+    // 轻量内核：搜索编排/记忆/错误诊断等一次性生成（思考缺省 off）
+    const { text } = await lightComplete({
       provider: provider.id,
       model: model.id,
       system: prompt,
-      messages: [{ role: 'user', text: content }]
+      messages: [{ role: 'user', text: content }],
+      source: 'cherry-generate'
     })
     return text || ''
   } catch (error: any) {
@@ -480,14 +483,15 @@ export async function checkApi(provider: Provider, model: Model, timeout = 15000
     return
   }
 
-  // dsh 内核替换：健康检查 = 内核一次性 completion 的 'hi' ping
+  // 轻量内核：健康检查 = 一次性 completion 的 'hi' ping（思考缺省 off）
   const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
   await Promise.race([
-    window.api.dshComplete({
+    lightComplete({
       provider: provider.id,
       model: model.id,
       messages: [{ role: 'user', text: 'hi' }],
-      maxTokens: 16
+      maxTokens: 16,
+      source: 'cherry-api-check'
     }),
     timeoutPromise
   ])

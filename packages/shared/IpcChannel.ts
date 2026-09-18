@@ -213,6 +213,7 @@ export enum IpcChannel {
 
   // dsh kernel
   Dsh_SyncProviders = 'dsh:sync-providers',
+  Dsh_SyncImageDescriber = 'dsh:sync-image-describer',
   Dsh_StreamSmoke = 'dsh:stream-smoke',
   Dsh_Complete = 'dsh:complete',
   Dsh_StreamComplete = 'dsh:stream-complete',
@@ -235,5 +236,7 @@ export enum IpcChannel {
   Dsh_QuestionRequest = 'dsh:question-request',
   Dsh_QuestionAnswer = 'dsh:question-answer',
   Dsh_SearchMessages = 'dsh:search-messages',
-  Dsh_SessionEvent = 'dsh:session-event'
+  Dsh_SessionEvent = 'dsh:session-event',
+  /** 内核图片附件 → 渲染层文件仓的回放同步（v0.3.1 识图通道；读 ref、写字节、返回 FileMetadata）。 */
+  Dsh_AttachmentSync = 'dsh:attachment-sync'
 }

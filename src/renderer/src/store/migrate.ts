@@ -1306,8 +1306,8 @@ const migrateConfig = {
   },
   '96': (state: RootState) => {
     try {
-      // @ts-ignore eslint-disable-next-line
-      state.settings.assistantIconType = state.settings?.showAssistantIcon ? 'model' : 'emoji'
+      // 全局 assistantIconType（模型图标/emoji/不显示三挡）已移除，改由助手级设置与标识单路径；
+      // 这里只清理更早的 showAssistantIcon 旧字段。
       // @ts-ignore eslint-disable-next-line
       delete state.settings.showAssistantIcon
       return state
@@ -3186,6 +3186,18 @@ const migrateConfig = {
       state.llm.providers = state.llm.providers.filter(
         (provider) => !REMOVED_SYSTEM_PROVIDER_IDS.has(provider.id) && !REMOVED_PROVIDER_TYPES.has(provider.type)
       )
+      return state
+    } catch (error) {
+      return state
+    }
+  },
+  '214': (state: RootState) => {
+    try {
+      // v0.3.1 识图通道补全：llm 切片新增 imageDescriberModel（转述模型）字段。
+      // 旧持久化态没有此字段；显式落 undefined = 通道关闭。rehydrate 后 reducer 照常可写。
+      if (state.llm !== undefined) {
+        state.llm.imageDescriberModel = undefined
+      }
       return state
     } catch (error) {
       return state

@@ -18,8 +18,9 @@ const toastError = vi.fn()
 let topics: Topic[] = []
 
 // 本文件要拉起 `useAssistant` 的真实模块图（含模型/助手配置），满负载下首个用例可达 16~30s：
-// 默认 20s 会在全量并行跑时误红。放宽超时是**避免用时间做信号**，不是把慢当绿。
-vi.setConfig({ testTimeout: 60000 })
+// 默认 20s 会在全量并行跑时误红；真机高负载（后台并行全量时实测 60s 也曾被打爆）再放宽到 120s。
+// 放宽超时是**避免用时间做信号**，不是把慢当绿。
+vi.setConfig({ testTimeout: 120000 })
 
 vi.mock('@renderer/store', () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>

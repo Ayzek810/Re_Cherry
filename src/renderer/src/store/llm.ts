@@ -49,6 +49,10 @@ export interface LlmState {
   topicNamingModel: Model
   quickModel: Model
   quickAssistantModel: Model | undefined
+  /** 转述模型（v0.3.1 识图通道补全）：主模型无视觉时描述图片的视觉模型；undefined = 通道关闭。 */
+  imageDescriberModel: Model | undefined
+  /** 转述提示词：'' = 内置默认（@shared/config/imageDescriber）。 */
+  imageDescriberPrompt: string
   settings: LlmSettings
 }
 
@@ -57,6 +61,8 @@ export const initialState: LlmState = {
   topicNamingModel: SYSTEM_MODELS.defaultModel[1],
   quickModel: SYSTEM_MODELS.defaultModel[1],
   quickAssistantModel: undefined,
+  imageDescriberModel: undefined,
+  imageDescriberPrompt: '',
   providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)),
   settings: {
     ollama: {
@@ -176,6 +182,16 @@ const llmSlice = createSlice({
     setQuickAssistantModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
       state.quickAssistantModel = action.payload.model
     },
+
+    // 转述模型（v0.3.1 识图通道补全）：undefined = 关闭（纯文本主模型收到图片时
+    // 只剩 wire 占位文本，与 v0.3.1 现状完全一致——门禁回收到未启用态）。
+    setImageDescriberModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
+      state.imageDescriberModel = action.payload.model
+    },
+    // 转述提示词（转述模型设置弹窗）：'' = 内置默认（@shared/config/imageDescriber）。
+    setImageDescriberPrompt: (state, action: PayloadAction<string>) => {
+      state.imageDescriberPrompt = action.payload
+    },
     setOllamaKeepAliveTime: (state, action: PayloadAction<number>) => {
       state.settings.ollama.keepAliveTime = action.payload
     },
@@ -213,6 +229,8 @@ export const {
   setDefaultModel,
   setQuickModel,
   setQuickAssistantModel,
+  setImageDescriberModel,
+  setImageDescriberPrompt,
   setOllamaKeepAliveTime,
   setLMStudioKeepAliveTime,
   setGPUStackKeepAliveTime,

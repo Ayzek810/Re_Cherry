@@ -53,9 +53,6 @@
     "edit": {
       "title": "Edit Assistant"
     },
-    "icon": {
-      "type": "Assistant Icon"
-    },
     "list": {
       "showByList": "List View",
       "showByTags": "Tag View"
@@ -91,6 +88,16 @@
     "search": "Search assistants...",
     "settings": {
       "default_model": "Default Model",
+      "display": {
+        "assistant": "Assistant info",
+        "label": "Chat page display",
+        "model": "Model info"
+      },
+      "identity": {
+        "image": "Upload a custom image",
+        "image_failed": "Failed to process the image",
+        "image_invalid": "Only image files are supported"
+      },
       "max_tool_calls": {
         "label": "Max Tool Calls",
         "tip": "Maximum number of tool calls allowed in a single conversation. Higher values allow more complex multi-step operations but may increase token usage and response time."
@@ -201,6 +208,10 @@
       "search": {
         "placeholder": "Search"
       }
+    },
+    "branches": {
+      "jumpFailed": "Branch session not found or no longer valid — reopen the branch graph",
+      "loadFailed": "Failed to load the branch structure — reopen the branch graph to retry"
     },
     "deeply_thought": "Deeply thought ({{seconds}} seconds)",
     "default": {
@@ -852,6 +863,9 @@
     },
     "title": "Import External Conversations"
   },
+  "kernelChat": {
+    "imageLoadFailed": "[Image attachment failed to load; reopen the topic to retry]"
+  },
   "knowledge": {
     "dimensions_auto_set": "Auto-set embedding dimensions",
     "dimensions_error_invalid": "Invalid embedding dimension",
@@ -1157,6 +1171,7 @@
       "labels": {
         "askUser": "Ask User",
         "bash": "Bash",
+        "describeImage": "Read Image",
         "edit": "Edit",
         "exitPlanMode": "ExitPlanMode",
         "glob": "Glob",
@@ -1588,14 +1603,6 @@
       }
     },
     "assistant": {
-      "icon": {
-        "type": {
-          "emoji": "Emoji Icon",
-          "label": "Model Icon Type",
-          "model": "Model Icon",
-          "none": "Hide"
-        }
-      },
       "label": "Default Assistant",
       "model_params": "Model Parameters",
       "title": "Default Assistant"
@@ -2015,9 +2022,6 @@
       "title": "Developer Mode"
     },
     "display": {
-      "assistant": {
-        "title": "Assistant Settings"
-      },
       "custom": {
         "css": {
           "cherrycss": "Get from cherrycss.com",
@@ -2269,6 +2273,12 @@
       "default_assistant_model": "Default Assistant Model",
       "default_assistant_model_description": "Model used when creating a new assistant, if the assistant is not set, this model will be used",
       "empty": "No models found",
+      "image_describer": {
+        "description": "When the main model cannot read images, this vision model reads them on its behalf: each image is transcribed into text (visible text, layout and positions) and handed back to the main model. It is bypassed whenever the main model has vision itself; leaving it empty means text-only models cannot see images",
+        "label": "Image Describer Model",
+        "prompt": "Describe Prompt",
+        "setting_title": "Image Describer Settings"
+      },
       "manage": {
         "add_listed": {
           "confirm": "Are you sure you want to add all models to the list?",
@@ -2750,7 +2760,6 @@
       }
     },
     "topic": {
-      "pin_to_top": "Pin Topics to Top",
       "position": {
         "label": "Topic position",
         "left": "Left",

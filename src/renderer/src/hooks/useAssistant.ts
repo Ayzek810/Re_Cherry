@@ -17,7 +17,7 @@ import {
   updateTopic,
   updateTopics
 } from '@renderer/store/assistants'
-import { setDefaultModel, setQuickModel } from '@renderer/store/llm'
+import { setDefaultModel, setImageDescriberModel, setImageDescriberPrompt, setQuickModel } from '@renderer/store/llm'
 import type { Assistant, AssistantSettings, Model, ThinkingOption, Topic } from '@renderer/types'
 import { uuid } from '@renderer/utils'
 import { reasoningOptionsForModel } from '@renderer/utils/reasoningKernel'
@@ -194,13 +194,19 @@ export function useDefaultAssistant() {
 }
 
 export function useDefaultModel() {
-  const { defaultModel, quickModel } = useAppSelector((state) => state.llm)
+  const { defaultModel, quickModel, imageDescriberModel, imageDescriberPrompt } = useAppSelector((state) => state.llm)
   const dispatch = useAppDispatch()
 
   return {
     defaultModel,
     quickModel,
+    // 转述模型（v0.3.1 识图通道补全）：undefined = 关闭；Settings 默认模型第三栏读写。
+    imageDescriberModel,
+    // 转述提示词（设置弹窗）：'' = 内置默认。
+    imageDescriberPrompt,
     setDefaultModel: (model: Model) => dispatch(setDefaultModel({ model })),
-    setQuickModel: (model: Model) => dispatch(setQuickModel({ model }))
+    setQuickModel: (model: Model) => dispatch(setQuickModel({ model })),
+    setImageDescriberModel: (model: Model | undefined) => dispatch(setImageDescriberModel({ model })),
+    setImageDescriberPrompt: (prompt: string) => dispatch(setImageDescriberPrompt(prompt))
   }
 }

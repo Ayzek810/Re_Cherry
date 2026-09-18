@@ -1,4 +1,4 @@
-import { CloseCircleFilled, QuestionCircleOutlined } from '@ant-design/icons'
+import { CloseCircleFilled, PictureOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import EmojiPicker from '@renderer/components/EmojiPicker'
 import { ResetIcon } from '@renderer/components/Icons'
 import { HStack } from '@renderer/components/Layout'
@@ -7,10 +7,26 @@ import { TopView } from '@renderer/components/TopView'
 import { DEFAULT_CONTEXTCOUNT, DEFAULT_TEMPERATURE } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultAssistant } from '@renderer/hooks/useAssistant'
+import useAssistantIdentityImage from '@renderer/hooks/useAssistantIdentityImage'
+import { createIdentityImage, releaseIdentityImage } from '@renderer/services/assistantIdentity'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
 import type { AssistantSettings as AssistantSettingsType } from '@renderer/types'
 import { getLeadingEmoji, modalConfirm } from '@renderer/utils'
-import { Button, Col, Divider, Flex, Input, InputNumber, Modal, Popover, Row, Slider, Switch, Tooltip } from 'antd'
+import {
+  Button,
+  Col,
+  Divider,
+  Flex,
+  Input,
+  InputNumber,
+  Modal,
+  Popover,
+  Row,
+  Slider,
+  Switch,
+  Tooltip,
+  Upload
+} from 'antd'
 import TextArea from 'antd/es/input/TextArea'
 import type { Dispatch, FC, SetStateAction } from 'react'
 import { useState } from 'react'
@@ -35,6 +51,8 @@ const AssistantSettings: FC = () => {
   const [name, setName] = useState(
     defaultAssistant.name.replace(getLeadingEmoji(defaultAssistant.name) || '', '').trim()
   )
+  const [uploading, setUploading] = useState(false)
+  const identityImageUrl = useAssistantIdentityImage(emoji)
   const { theme } = useTheme()
 
   const { t } = useTranslation()
@@ -86,14 +104,37 @@ const AssistantSettings: FC = () => {
     })
   }
 
+  /** 标识单路径写入：库选 emoji 与 `img:` 图片引用都落在 defaultAssistant.emoji 上；被替换的图片标识在无人引用时回收。 */
+  const applyIdentity = (next: string) => {
+    const previous = defaultAssistant.emoji
+    setEmoji(next)
+    updateDefaultAssistant({ ...defaultAssistant, emoji: next, name })
+    if (next !== previous) {
+      void releaseIdentityImage(previous)
+    }
+  }
+
   const handleEmojiSelect = (selectedEmoji: string) => {
-    setEmoji(selectedEmoji)
-    updateDefaultAssistant({ ...defaultAssistant, emoji: selectedEmoji, name })
+    applyIdentity(selectedEmoji)
   }
 
   const handleEmojiDelete = () => {
-    setEmoji('')
-    updateDefaultAssistant({ ...defaultAssistant, emoji: '', name })
+    applyIdentity('')
+  }
+
+  const handleImageSelect = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      window.toast.error(t('assistants.settings.identity.image_invalid'))
+      return
+    }
+    setUploading(true)
+    try {
+      applyIdentity(await createIdentityImage(file))
+    } catch {
+      window.toast.error(t('assistants.settings.identity.image_failed'))
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,9 +148,40 @@ const AssistantSettings: FC = () => {
       style={{ height: 'auto', background: 'transparent', padding: `0 0 12px 0`, gap: 10 }}
       theme={theme}>
       <HStack gap={8} alignItems="center" mt={10}>
-        <Popover content={<EmojiPicker onEmojiClick={handleEmojiSelect} />} arrow trigger="click">
+        <Popover
+          content={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Upload
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  void handleImageSelect(file)
+                  return false
+                }}>
+                <Button
+                  icon={<PictureOutlined style={{ fontSize: 14 }} />}
+                  loading={uploading}
+                  style={{ width: '100%' }}>
+                  {t('assistants.settings.identity.image')}
+                </Button>
+              </Upload>
+              <EmojiPicker onEmojiClick={handleEmojiSelect} />
+            </div>
+          }
+          arrow
+          trigger="click">
           <EmojiButtonWrapper>
-            <Button style={{ fontSize: 20, padding: '4px', minWidth: '30px', height: '30px' }}>{emoji}</Button>
+            <Button style={{ fontSize: 20, padding: '4px', minWidth: '30px', height: '30px' }}>
+              {identityImageUrl ? (
+                <img
+                  src={identityImageUrl}
+                  alt=""
+                  style={{ width: 22, height: 22, borderRadius: 11, objectFit: 'cover', verticalAlign: 'middle' }}
+                />
+              ) : (
+                emoji
+              )}
+            </Button>
             {emoji && (
               <CloseCircleFilled
                 className="delete-icon"

@@ -168,14 +168,23 @@ export async function loadFamily(
   return { rootId, sessions, byId: new Map(sessions.map((s) => [s.id, s])) }
 }
 
-/** origin 递归推导；悬空/越界返回 null。 */
+/**
+ * origin 递归推导；悬空/越界返回 null。
+ *
+ * 共享边界与 `buildPageFamily`/`BranchGraph` 同一权威：**钳制后的有效边界**
+ * `min(shared, 父链现长)`，不是子日志声称的原始 shared——祖先删轮后原值停在历史形状
+ * （真机实证 9141be6f 族：父 1 轮子 shared=2），按原值递归会跳进父已不存在的轮 →
+ * 每次建图打 "unresolved origin" warn 并降级为自立节点。
+ */
 export function originOf(family: CMFamily, sessionId: string, index: number): CMOriginId | null {
   const session = family.byId.get(sessionId)
   if (!session || index < 0 || index >= session.turns.length) return null
-  if (index < session.shared) {
-    const parentId = session.parentTopicId
-    if (!parentId || !family.byId.has(parentId)) return null
-    return originOf(family, parentId, index)
+  const parentId = session.parentTopicId
+  const parent = parentId !== undefined ? family.byId.get(parentId) : undefined
+  // 钳制：边界以父会话**现存的轮数**为上限（无在册父 = 无共享段）
+  const shared = parent ? Math.min(session.shared, parent.turns.length) : 0
+  if (index < shared && parent) {
+    return originOf(family, parent.id, index)
   }
   return sessionId + ':' + index
 }
@@ -218,6 +227,16 @@ export interface CMPageFamily {
   userOwnerOf: Map<string, string>
   /** 提问节点 id -> 其父回复节点 id（有则属于某提问页）。 */
   userPageParentOf: Map<string, string>
+  /**
+   * 会话 id -> 建链时**实际生效**的共享边界（= min(shared, 父链现长)，根 = 0）。
+   *
+   * 这是页码条"自有区"门控的唯一权威（真机实证的缺陷修复）：祖先被删轮后，
+   * 子会话日志里的 shared 记的是**历史形状**（可大于父链现长——RealCase：
+   * 9141be6f 族，父 1 轮子 shared=2）。门控若直接吃 session.shared 原值，会把
+   * 本会话自有轮整组页码吞掉（该组在子分支上有 <k/n>、回到本分支却消失）——
+   * 页码在不同分支间"乱跳"、与分支图逐渐对不上的真凶。
+   */
+  sharedBoundaryOf: Map<string, number>
 }
 
 export function buildPageFamily(family: CMFamily, branchKinds: Record<string, string | undefined>): CMPageFamily {
@@ -227,6 +246,7 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
   const replyOwnerOf = new Map<string, { sessionId: string; turnIndex: number; replyIndex: number }>()
   const userOwnerOf = new Map<string, string>()
   const userPageParentOf = new Map<string, string>()
+  const sharedBoundaryOf = new Map<string, number>()
 
   const pushUnique = (map: Map<string, string[]>, key: string, value: string): void => {
     const list = map.get(key)
@@ -242,8 +262,10 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
       session.parentTopicId !== undefined && session.parentTopicId.length > 0
         ? chains.get(session.parentTopicId)
         : undefined
-    // 防御：共享段截到父链可引用的前缀（正常血缘下 shared <= 父轮数恒成立）
+    // 防御：共享段截到父链可引用的前缀（正常血缘下 shared <= 父轮数恒成立；
+    // 祖先删轮后子日志的 shared 停在历史形状——钳制值是页码门控的唯一权威，见接口注释）
     const shared = parentChain ? Math.min(session.shared, parentChain.length) : 0
+    sharedBoundaryOf.set(session.id, shared)
     const chain: CMPageUnit[] = []
     const isRegenerate = branchKinds[session.id] === 'regenerate'
     // parallel（切换模型回答的隐藏旁答子会话）：不进页码体系——
@@ -294,7 +316,7 @@ export function buildPageFamily(family: CMFamily, branchKinds: Record<string, st
     chains.set(session.id, chain)
   }
 
-  return { chains, answersOf, questionsOf, replyOwnerOf, userOwnerOf, userPageParentOf }
+  return { chains, answersOf, questionsOf, replyOwnerOf, userOwnerOf, userPageParentOf, sharedBoundaryOf }
 }
 
 export interface CMPagePosition {

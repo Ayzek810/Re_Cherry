@@ -5,6 +5,7 @@ import { useAssistant, useAssistants } from '@renderer/hooks/useAssistant'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useTags } from '@renderer/hooks/useTags'
 import AssistantSettingsPopup from '@renderer/pages/settings/AssistantSettings'
+import { isImageIdentity } from '@renderer/services/assistantIdentity'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Assistant, AssistantsSortType } from '@renderer/types'
 import { cn, uuid } from '@renderer/utils'
@@ -22,7 +23,6 @@ import {
   Plus,
   Save,
   Settings2,
-  Smile,
   Tag,
   Tags
 } from 'lucide-react'
@@ -63,7 +63,7 @@ const AssistantItem: FC<AssistantItemProps> = ({
   const { t } = useTranslation()
   const { allTags } = useTags()
   const { removeAllTopics } = useAssistant(assistant.id)
-  const { clickAssistantToShowTopic, topicPosition, setAssistantIconType } = useSettings()
+  const { clickAssistantToShowTopic, topicPosition } = useSettings()
   const { assistants, updateAssistants } = useAssistants()
 
   const [isPending, setIsPending] = useState(false)
@@ -105,7 +105,6 @@ const AssistantItem: FC<AssistantItemProps> = ({
         onSwitch,
         onDelete,
         removeAllTopics,
-        setAssistantIconType,
         sortBy,
         handleSortByChange,
         sortByPinyinAsc,
@@ -122,7 +121,6 @@ const AssistantItem: FC<AssistantItemProps> = ({
       onSwitch,
       onDelete,
       removeAllTopics,
-      setAssistantIconType,
       sortBy,
       handleSortByChange,
       sortByPinyinAsc,
@@ -140,8 +138,10 @@ const AssistantItem: FC<AssistantItemProps> = ({
   }, [clickAssistantToShowTopic, onSwitch, assistant, topicPosition])
 
   const assistantName = useMemo(() => assistant.name || t('chat.default.name'), [assistant.name, t])
+  // 悬浮提示里的名称前缀只对 emoji 标识有意义；`img:` 图片引用不进文本
   const fullAssistantName = useMemo(
-    () => (assistant.emoji ? `${assistant.emoji} ${assistantName}` : assistantName),
+    () =>
+      assistant.emoji && !isImageIdentity(assistant.emoji) ? `${assistant.emoji} ${assistantName}` : assistantName,
     [assistant.emoji, assistantName]
   )
 
@@ -267,7 +267,6 @@ function getMenuItems({
   onSwitch,
   onDelete,
   removeAllTopics,
-  setAssistantIconType,
   sortBy,
   handleSortByChange,
   sortByPinyinAsc,
@@ -316,28 +315,6 @@ function getMenuItems({
         addPreset(preset)
         window.toast.success(t('assistants.save.success'))
       }
-    },
-    {
-      label: t('assistants.icon.type'),
-      key: 'icon-type',
-      icon: <Smile size={14} />,
-      children: [
-        {
-          label: t('settings.assistant.icon.type.model'),
-          key: 'model',
-          onClick: () => setAssistantIconType('model')
-        },
-        {
-          label: t('settings.assistant.icon.type.emoji'),
-          key: 'emoji',
-          onClick: () => setAssistantIconType('emoji')
-        },
-        {
-          label: t('settings.assistant.icon.type.none'),
-          key: 'none',
-          onClick: () => setAssistantIconType('none')
-        }
-      ]
     },
     {
       type: 'divider'

@@ -14,6 +14,7 @@ import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useShowTopics } from '@renderer/hooks/useStore'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
+import { syncTopicNameToKernel } from '@renderer/services/topicNaming'
 import type { Assistant, Model, Topic } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { Flex } from 'antd'
@@ -82,6 +83,7 @@ const Chat: FC<Props> = (props) => {
     if (name && topic.name !== name) {
       const updatedTopic = { ...topic, name, isNameManuallyEdited: true }
       updateTopic(updatedTopic as Topic)
+      syncTopicNameToKernel(topic.id, name)
     }
   })
 

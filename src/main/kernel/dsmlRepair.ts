@@ -11,7 +11,7 @@
  * 两条取流路径——`ctx.llm.stream()`（agent.ts:346 回退分支）与 `prepareCall().stream()`
  * （同样经 streamWithRegistration）——都要过这个 waterfall，因此在 fork 自己的插件里包装
  * 流即可，语义不变、不动内核包、不再有版本钉死。生产内核包已有同款 listener 范式
- * （dsh-session-title、dsh-session-checkpoint-policy）。
+ * （如 dsh-session-checkpoint-policy）。
  *
  * 语义与补丁逐字一致（fail-safe）：格式完好且参数为合法 JSON 的标记机械转换为真 tool-call
  * 块（正文剥离标记）；畸形标记或非 JSON 参数**原样透传**。已关闭的工具因不在 schema 中，

@@ -27,7 +27,7 @@
 import { loggerService } from '@logger'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import store from '@renderer/store'
-import { addTopic, pruneTopics } from '@renderer/store/assistants'
+import { addTopic, pruneTopics, updateTopic as updateTopicAction } from '@renderer/store/assistants'
 import type { Topic } from '@renderer/types'
 import {
   isRestoredTopicRow,
@@ -97,7 +97,49 @@ export async function reconcileAssistantTopicRows(
   )
   if (kernelRoots === null) return null
 
-  const localRoots = listRootTopics(assistant.topics ?? [])
+  // ⓪ 助手分离（修复"不同助手的话题分离从未实现"）：
+  // 内核话题注册表是**扁平**的（KernelTopic 不记助手归属，agent 按话题建而非按助手建），
+  // 助手归属只存在于渲染层各助手的行里。旧对账第②步把全部内核根物化进"当时正在对账的
+  // 助手"，于是每切换一次助手，别的助手的话题就被复制一份到当前助手名下——分离从未成立。
+  // 这里先把"别的助手也持有"的行还给原主人（历史污染清理，跨助手复制的行按定义是脏数据），
+  // 第②步物化孤儿行前也会跳过已被其他助手持有的行。
+  const ownedByOthers = new Set(
+    store
+      .getState()
+      .assistants.assistants.filter((row) => row.id !== assistantId)
+      .flatMap((row) => (row.topics ?? []).map((topic) => topic.id))
+  )
+  const duplicated = (assistant.topics ?? []).filter((row) => ownedByOthers.has(row.id))
+  if (duplicated.length > 0) {
+    // 浏览记忆随行归还（v0.3.0-5）：被归还的**根行**若带着 lastViewedBranchId 而主人那份没有，
+    // 先把记忆写到主人副本上再剪——否则用户在重复副本上留下的"最后浏览分支"会随剪除丢失。
+    const allAssistants = store.getState().assistants.assistants
+    for (const dup of duplicated) {
+      if (dup.parentTopicId !== undefined || dup.lastViewedBranchId === undefined) continue
+      const owner = allAssistants.find(
+        (candidate) => candidate.id !== assistantId && (candidate.topics ?? []).some((topic) => topic.id === dup.id)
+      )
+      if (owner === undefined) continue
+      const ownerCopy = (owner.topics ?? []).find((topic) => topic.id === dup.id)
+      if (ownerCopy === undefined || ownerCopy.lastViewedBranchId !== undefined) continue
+      store.dispatch(
+        updateTopicAction({
+          assistantId: owner.id,
+          topic: { ...ownerCopy, assistantId: owner.id, lastViewedBranchId: dup.lastViewedBranchId }
+        })
+      )
+      logger.info(
+        `kernelTopics: transferred lastViewedBranchId of duplicated root "${dup.id}" to its owning assistant "${owner.id}"`
+      )
+    }
+    store.dispatch(pruneTopics({ assistantId: assistant.id, topicIds: duplicated.map((row) => row.id) }))
+    logger.info(
+      `kernelTopics: returned ${duplicated.length} duplicated topic row(s) of assistant "${assistant.id}" to their owning assistant(s)`
+    )
+  }
+
+  const freshAssistant = store.getState().assistants.assistants.find((row) => row.id === assistantId)
+  const localRoots = listRootTopics(freshAssistant?.topics ?? assistant.topics ?? [])
   const localById = new Map(localRoots.map((row) => [row.id, row]))
 
   // ① 剪除：上次会话留下、内核已不认识的根行（本进程内新建的行一律不动）
@@ -109,7 +151,9 @@ export async function reconcileAssistantTopicRows(
     )
   }
 
-  // ② 补齐：内核有、渲染层无 —— 行内容只能来自内核（含 ms → ISO 换算）
+  // ② 补齐：内核有、渲染层无 —— 行内容只能来自内核（含 ms → ISO 换算）。
+  //    助手分离：已被其他助手持有的行绝不物化到当前助手名下（归属以渲染层行为准）；
+  //    只有"任何助手都没有"的内核孤儿行才由当前对账收留（兜底救援语义保持不变）。
   const shown: Topic[] = []
   for (const kernelRow of kernelRoots.values()) {
     const local = localById.get(kernelRow.id)
@@ -117,6 +161,7 @@ export async function reconcileAssistantTopicRows(
       shown.push(local)
       continue
     }
+    if (ownedByOthers.has(kernelRow.id)) continue
     const materialized = topicFromKernelRow(kernelRow, assistant.id)
     store.dispatch(addTopic({ assistantId: assistant.id, topic: materialized }))
     logger.info(`kernelTopics: materialized missing topic row "${kernelRow.id}" of assistant "${assistant.id}"`)
@@ -127,6 +172,20 @@ export async function reconcileAssistantTopicRows(
   for (const row of localRoots) {
     if (kernelRoots.has(row.id) || isRestoredTopicRow(row.id)) continue
     shown.push(row)
+  }
+
+  // ③' 浏览记忆的有效性收口（v0.3.0-5）：根行上的 lastViewedBranchId 必须指向**同一助手**名下的
+  // 分支行。隔离对账会移动行，历史遗留的越界指针让"恢复上次浏览分支"时好时坏——统一清掉，
+  // recallLastViewedBranch 的兜底（落回根）从此变成数据保证而不是碰运气。
+  const freshRows = store.getState().assistants.assistants.find((row) => row.id === assistantId)?.topics ?? []
+  const rowIds = new Set(freshRows.map((row) => row.id))
+  for (const root of listRootTopics(freshRows)) {
+    if (root.lastViewedBranchId === undefined) continue
+    if (rowIds.has(root.lastViewedBranchId)) continue
+    store.dispatch(updateTopicAction({ assistantId: assistant.id, topic: { ...root, lastViewedBranchId: undefined } }))
+    logger.info(
+      `kernelTopics: cleared stale lastViewedBranchId "${root.lastViewedBranchId}" on root "${root.id}" of assistant "${assistant.id}" (branch row not owned by this assistant)`
+    )
   }
 
   // ④ 兜底：对账不能留下"零话题"状态（侧栏与输入栏都按"至少一行"设计）

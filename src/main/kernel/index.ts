@@ -1,22 +1,20 @@
-import { mkdir } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import type { EncodedImageAttachment, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import * as fsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
-import LlmRuntime, { BlockAssembler, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as piAiPlugin from '@deepseek-ai/dsh-llm-pi-ai'
 import SandboxPwshExecutor from '@deepseek-ai/dsh-pwsh-sandbox'
 import LocalSandboxProvider from '@deepseek-ai/dsh-sandbox-local'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SqliteSessionPersistence from '@deepseek-ai/dsh-session-persistence-sqlite'
-import SessionTitleService from '@deepseek-ai/dsh-session-title'
-import { registerSessionTitleLlmProvider } from '@deepseek-ai/dsh-session-title-llm'
 import FileSettingsProvider from '@deepseek-ai/dsh-settings-file'
 import * as shellEnv from '@deepseek-ai/dsh-shell-env'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
@@ -25,18 +23,33 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { loggerService } from '@logger'
+import { getFilesDir } from '@main/utils/file'
 import { isWorkModeApprovalTier, type WorkModeApprovalTier } from '@shared/config/workMode'
 import type { KernelApprovalDecisionPayload, KernelQuestionAnswerPayload } from '@shared/interaction/types'
 import { IpcChannel } from '@shared/IpcChannel'
+import type { LightLlmCall } from '@shared/lightLlm/types'
+import type { FileMetadata } from '@types'
+import { FILE_TYPE } from '@types'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
+import {
+  attachmentFileExtension,
+  CherryAttachmentStore,
+  IMAGE_MEDIA_TYPES,
+  parseImageAttachmentRef
+} from './attachments'
 import { CherryCredentialProvider } from './credentials'
 import { registerDsmlRepair } from './dsmlRepair'
+import { ImageDescriberService } from './imageDescriber'
+import { installRequestImageHandleAnchor } from './imageHandleText'
 import type { KernelInteractionHub } from './interaction'
 import { registerInteractionHost } from './interaction'
+import { lightOneShot, lightStream } from './lightLlm'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
+import { installThinkingReplayTrim } from './thinkingReplay'
+import { isTopicNotFoundError } from './topicNotFoundError'
 import { clearLiveHandles, getTopic, initTopics, listTopicBranches, listTopics, searchSessions } from './topics'
 
 const logger = loggerService.withContext('Kernel')
@@ -45,19 +58,6 @@ const logger = loggerService.withContext('Kernel')
 function topicTree(ctx: Context): TopicTreeService {
   const service = (ctx as unknown as { topicTree: TopicTreeService }).topicTree
   if (service === undefined) throw new Error('kernel: ctx.topicTree not registered')
-  return service
-}
-
-/** ctx.reasoning 服务访问器（思考档位收敛；独立配置插件可接管）。 */
-function reasoning(ctx: Context): {
-  resolveRequest: (p: string, m: string, r?: string) => Promise<string | undefined>
-} {
-  const service = (
-    ctx as unknown as {
-      reasoning: { resolveRequest: (p: string, m: string, r?: string) => Promise<string | undefined> }
-    }
-  ).reasoning
-  if (service === undefined) throw new Error('kernel: ctx.reasoning not registered')
   return service
 }
 
@@ -117,12 +117,33 @@ export async function bootKernel(): Promise<Context> {
     })
     await ctx.plugin(CherryCredentialProvider)
 
+    // 附件仓库（v0.3.1 识图通道）：ctx.attachments 服务缝的宿主实现。内容寻址 blob 落
+    // kernelDir/attachments；会话日志只存 ref，读回与请求版本按 ref 即时核验。
+    // 位置在 LLM 层之前——dsh-tool-fs 的 read_image 工具按"attachments 已挂载"注册。
+    await ctx.plugin(CherryAttachmentStore, { root: join(kernelDir, 'attachments') })
+    // 转述模型服务（v0.3.1 识图通道补全）：ctx.imageDescriber 服务缝（cordis Service
+    // 子类，super(ctx, 'imageDescriber')——直接给 ctx 赋属性会被声明制拒绝）。
+    // 只持转述路由一份状态（Dsh_SyncImageDescriber 推送）；会话状态一概走日志真相源。
+    await ctx.plugin(ImageDescriberService)
+
     // LLM 层
     await ctx.plugin(LlmRuntime)
     await ctx.plugin(piAiPlugin, { providers: {} })
+    // 请求端思考回放剥离（见 thinkingReplay.ts）：动作点在包内"dsh 消息 → pi 消息"
+    // 转换，无公开缝可投（`llm/stream` 瀑布只能观察、不能替换请求），因此在内核包上
+    // 补一层中性门（globalThis 钩子，门缺失 = 零行为差异），判定与剥离逻辑全在本仓
+    // thinkingReplay.ts。必须在 piAiPlugin 装载后、首个请求前安装。
+    installThinkingReplayTrim()
+    // 图片句柄短锚（v0.3.1 上下文净化 A'，见 imageHandleText.ts）：pi-ai 在 wire 上给每个
+    // image part 伴一条上游长句柄（hash+尺寸），经由同一补丁文件的第二个中性门
+    // （globalThis.__recRequestImageHandleText）改写为中文短锚 `图片N (WxHpx)`；
+    // 钩子缺失/形状不认识 = 上游原样（零行为差异）。
+    installRequestImageHandleAnchor()
     // 响应端工具调用修复（v0.3.0-1）：挂在 dsh 文档化的 `llm/stream` waterfall 上，
     // agent-loop 的 ctx.llm.stream / prepareCall().stream 两条路径都经此，恒开不受开关约束。
-    // 此前用 pnpm patch 改内核包 dsh-llm-pi-ai 的编译产物，本版起不再动内核包。
+    // DSML 修复自身不走补丁（v0.3.0-1 移除了当时的 dsh-llm-pi-ai 行为补丁）；内核包上现存的
+    // 唯一补丁文件持有两个请求端中性门（思考剥离 + 图片句柄短锚，见 thinkingReplay.ts 头注
+    // 与 imageHandleText.ts 头注），与 DSML 修复（响应端 waterfall）机制不同、互不替代。
     registerDsmlRepair(ctx)
 
     // 提示词与工具层（tools 空注册：MCP 已砍，占位满足 agent-loop 的 inject）。
@@ -163,30 +184,14 @@ export async function bootKernel(): Promise<Context> {
     await ctx.plugin(SandboxPwshExecutor, {})
     await ctx.plugin(LocalJobRegistry, {})
 
-    // 会话层：内存 store + SQLite 持久化 + 自动标题
+    // 会话层：内存 store + SQLite 持久化。
+    // 话题标题服务（dsh-session-title）已移除（v0.3.1）：自动命名回归 V1 原理——
+    // 快速模型 + 用户设置项，经 renderer services/topicNaming.ts 调度（turn/end 触发），
+    // 名称经 Dsh_TopicRename 落注册表；注册表 .name 只服务重启恢复（物化缺行）。
     await ctx.plugin(SessionStore)
     await ctx.plugin(SqliteSessionPersistence, {
       path: join(kernelDir, 'sessions.db')
     })
-    await ctx.plugin(SessionTitleService, {
-      fallbackMaxWords: 12,
-      fallbackMaxBytes: 512,
-      maxTitleBytes: 1024
-    })
-    // 话题自动命名：首次提问后用会话同一路由调一次 llm.stream
-    registerSessionTitleLlmProvider(
-      ctx,
-      {
-        targetWords: 6,
-        targetCjkCharacters: 12,
-        maxInputBytes: 8000,
-        maxOutputTokens: 128,
-        timeoutMs: 30_000
-      },
-      'cherry',
-      'first-prompt',
-      (messages) => messages
-    )
 
     // Agent 层：注册表 + 回合循环（工厂由 loop 注入注册表）
     await ctx.plugin(AgentRegistry)
@@ -253,6 +258,40 @@ function registerKernelIpc(): void {
     return { ok: true }
   })
 
+  // 转述模型配置同步（v0.3.1 识图通道补全）：payload = { provider, model, prompt } 或 null（未配置）。
+  // prompt 为空字符串 = 内置默认提示词（@shared/config/imageDescriber）。
+  // 内核不做路由存在性校验——provider 同步（Dsh_SyncProviders）才是路由的真相源，
+  // 这里只落 ctx.imageDescriber；describe_images 执行时路由缺失自然明错。
+  ipcMain.handle(
+    IpcChannel.Dsh_SyncImageDescriber,
+    async (_event, config: { provider: unknown; model: unknown; prompt: unknown } | null) => {
+      const ctx = requireKernel()
+      const describer = (
+        ctx as unknown as {
+          imageDescriber?: {
+            setConfig: (r: { provider: string; model: string } | undefined, prompt: string) => void
+          }
+        }
+      ).imageDescriber
+      if (describer === undefined) throw new Error('kernel: image describer service not mounted')
+      if (config === null) {
+        describer.setConfig(undefined, '')
+        return { ok: true }
+      }
+      if (
+        typeof config?.provider !== 'string' ||
+        config.provider.length === 0 ||
+        typeof config?.model !== 'string' ||
+        config.model.length === 0 ||
+        typeof config?.prompt !== 'string'
+      ) {
+        throw new Error('kernel: invalid image describer config payload')
+      }
+      describer.setConfig({ provider: config.provider, model: config.model }, config.prompt)
+      return { ok: true }
+    }
+  )
+
   ipcMain.handle(
     IpcChannel.Dsh_StreamSmoke,
     async (
@@ -264,169 +303,41 @@ function registerKernelIpc(): void {
 
       await syncCherryProviders(ctx, providers)
 
-      const assembler = new BlockAssembler()
-      const options = {
+      const { text, finishKind } = await lightOneShot(ctx, {
         provider: providerId,
         model: modelId,
-        messages: [
-          createUserMessage({
-            content: [{ type: 'text', text: prompt }],
-            source: { kind: 'plugin', plugin: 'cherry-smoke' }
-          })
-        ]
-      }
-      for await (const chunk of ctx.llm.stream(options)) {
-        assembler.push(chunk)
-      }
-      const finish = assembler.finish
-      if (finish.kind === 'error' || finish.kind === 'aborted') {
-        throw new Error(finish.failure.message)
-      }
-      const text = assembler
-        .blocks()
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('')
-      return { text, finish: finish.kind }
+        messages: [{ role: 'user', text: prompt }],
+        source: 'cherry-smoke'
+      })
+      return { text, finish: finishKind }
     }
   )
 
-  // ---- 一次性 completion（话题命名/搜索编排/记忆/错误诊断/健康检查） ----
+  // ---- 轻量 LLM 服务（一次性/流式补全；实现见 lightLlm.ts，handler 只做薄转发） ----
 
-  ipcMain.handle(
-    IpcChannel.Dsh_Complete,
-    async (
-      _event,
-      payload: {
-        provider: string
-        model: string
-        system?: string
-        messages: { role: 'user' | 'assistant'; text: string }[]
-        maxTokens?: number
-        reasoningEffort?: string
-      }
-    ) => {
-      const ctx = requireKernel()
-      const { provider, model } = payload
-      const reasoningEffort = await reasoning(ctx).resolveRequest(provider, model, payload.reasoningEffort)
-      const assembler = new BlockAssembler()
-      const options = {
-        provider,
-        model,
-        messages: payload.messages.map((message) =>
-          message.role === 'user'
-            ? createUserMessage({
-                content: [{ type: 'text', text: message.text }],
-                source: { kind: 'plugin', plugin: 'cherry-complete' }
-              })
-            : createAssistantMessage({
-                content: [{ type: 'text', text: message.text }],
-                source: { provider, model }
-              })
-        ),
-        ...(payload.system === undefined || payload.system.length === 0 ? {} : { system: payload.system }),
-        ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens }),
-        ...(reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) })
-      }
-      for await (const chunk of ctx.llm.stream(options)) {
-        assembler.push(chunk)
-      }
-      const finish = assembler.finish
-      if (finish.kind === 'error' || finish.kind === 'aborted') {
-        throw new Error(finish.failure.message)
-      }
-      const text = assembler
-        .blocks()
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('')
-      return {
-        text,
-        usage: assembler.usage
-          ? {
-              inputTokens: assembler.usage.inputTokens,
-              outputTokens: assembler.usage.outputTokens
-            }
-          : undefined
+  ipcMain.handle(IpcChannel.Dsh_Complete, async (_event, payload: LightLlmCall) => {
+    return await lightOneShot(requireKernel(), payload)
+  })
+
+  ipcMain.handle(IpcChannel.Dsh_StreamComplete, async (event, payload: { requestId: string } & LightLlmCall) => {
+    const ctx = requireKernel()
+    const { requestId } = payload
+    const send = (data: object): void => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IpcChannel.Dsh_CompletionEvent, { requestId, ...data })
       }
     }
-  )
-
-  // ---- 流式 completion（快捷助手流式回复） ----
-
-  ipcMain.handle(
-    IpcChannel.Dsh_StreamComplete,
-    async (
-      event,
-      payload: {
-        requestId: string
-        provider: string
-        model: string
-        system?: string
-        messages: { role: 'user' | 'assistant'; text: string }[]
-        maxTokens?: number
-        reasoningEffort?: string
+    let lastEventWasTerminal = false
+    await lightStream(ctx, payload, (streamEvent) => {
+      if (streamEvent.type === 'error' || streamEvent.type === 'done') {
+        // 终态只发一次：lightStream 的异常路径已在事件面收口，这里不重复补发
+        if (lastEventWasTerminal) return
+        lastEventWasTerminal = true
       }
-    ) => {
-      const ctx = requireKernel()
-      const { requestId, provider, model } = payload
-      const reasoningEffort = await reasoning(ctx).resolveRequest(provider, model, payload.reasoningEffort)
-      const send = (data: object): void => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(IpcChannel.Dsh_CompletionEvent, { requestId, ...data })
-        }
-      }
-      const options = {
-        provider,
-        model,
-        messages: payload.messages.map((message) =>
-          message.role === 'user'
-            ? createUserMessage({
-                content: [{ type: 'text', text: message.text }],
-                source: { kind: 'plugin', plugin: 'cherry-stream-complete' }
-              })
-            : createAssistantMessage({
-                content: [{ type: 'text', text: message.text }],
-                source: { provider, model }
-              })
-        ),
-        ...(payload.system === undefined || payload.system.length === 0 ? {} : { system: payload.system }),
-        ...(payload.maxTokens === undefined ? {} : { maxTokens: payload.maxTokens }),
-        ...(reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) })
-      }
-      try {
-        let finished = false
-        for await (const chunk of ctx.llm.stream(options)) {
-          if (chunk.type === 'text-delta') {
-            send({ type: 'delta', text: chunk.text })
-          } else if (chunk.type === 'reasoning-delta') {
-            send({ type: 'reasoning-delta', text: chunk.text })
-          } else if (chunk.type === 'finish') {
-            // 流已产出终态 chunk（文本输出完毕）。立即收尾并跳出循环，
-            // 不依赖适配器在 finish 之后是否还会正常返回迭代结束——
-            // 否则连接挂起时 for-await 永不结束，done 永远到不了 UI。
-            finished = true
-            if (chunk.reason?.kind === 'error') {
-              const failure = chunk.reason.failure as { message?: string } | undefined
-              send({ type: 'error', message: failure?.message || 'stream error' })
-            } else if (chunk.reason?.kind === 'aborted') {
-              send({ type: 'error', message: 'stream aborted' })
-            } else {
-              send({ type: 'done' })
-            }
-            break
-          }
-        }
-        if (!finished) {
-          send({ type: 'done' })
-        }
-        return { ok: true }
-      } catch (error) {
-        send({ type: 'error', message: error instanceof Error ? error.message : String(error) })
-        return { ok: false }
-      }
-    }
-  )
+      send(streamEvent)
+    })
+    return { ok: true }
+  })
 
   // ---- 话题 ----
 
@@ -490,6 +401,7 @@ function registerKernelIpc(): void {
         builtinTools?: string[]
         externalTools?: string[]
         tier?: WorkModeApprovalTier
+        images?: Array<{ mediaType?: unknown; data?: unknown; name?: unknown }>
       }
     ) => {
       const cleanOptions: {
@@ -497,6 +409,7 @@ function registerKernelIpc(): void {
         builtinTools?: string[]
         externalTools?: string[]
         tier?: WorkModeApprovalTier
+        images?: EncodedImageAttachment[]
       } = {}
       if (options?.reasoningEffort !== undefined) {
         if (typeof options.reasoningEffort !== 'string') {
@@ -525,10 +438,62 @@ function registerKernelIpc(): void {
         }
         cleanOptions.externalTools = options.externalTools
       }
+      if (options?.images !== undefined) {
+        if (!Array.isArray(options.images)) {
+          throw new Error('kernel: invalid images in topic send options')
+        }
+        cleanOptions.images = options.images.map((image) => {
+          if (
+            typeof image !== 'object' ||
+            image === null ||
+            typeof image.mediaType !== 'string' ||
+            !IMAGE_MEDIA_TYPES.includes(image.mediaType as ImageMediaType) ||
+            typeof image.data !== 'string' ||
+            image.data.length === 0 ||
+            (image.name !== undefined && typeof image.name !== 'string')
+          ) {
+            throw new Error('kernel: invalid image entry in topic send options')
+          }
+          return {
+            mediaType: image.mediaType as ImageMediaType,
+            data: image.data,
+            ...(typeof image.name === 'string' && image.name.length > 0 ? { name: image.name } : {})
+          }
+        })
+      }
       await topicTree(requireKernel()).send(id, text, cleanOptions)
       return { ok: true }
     }
   )
+
+  // 内核图片附件回放同步（v0.3.1 识图通道）：按 ref 从附件仓读回并核验字节，
+  // 确定性落进渲染层文件仓（<attachmentId>.<ext>，同 id 同字节幂等），返回 FileMetadata。
+  // 渲染层把它 upsert 进 Dexie 后即可按普通图片块渲染（file:// 直读）。
+  ipcMain.handle(IpcChannel.Dsh_AttachmentSync, async (_event, ref: unknown) => {
+    const parsed = parseImageAttachmentRef(ref)
+    const ctx = requireKernel()
+    const stored = await ctx.attachments.readImage(parsed)
+    const ext = attachmentFileExtension(parsed.mediaType)
+    const filesDir = getFilesDir()
+    await mkdir(filesDir, { recursive: true })
+    const fileName = `${parsed.attachmentId}${ext}`
+    const filePath = join(filesDir, fileName)
+    await writeFile(filePath, stored.data)
+    const file: FileMetadata = {
+      id: parsed.attachmentId,
+      name: fileName,
+      origin_name: parsed.name ?? fileName,
+      path: filePath,
+      size: stored.data.byteLength,
+      // FileMetadata.ext 带点（与上传路径一致）：getFilePath / base64File(id+ext)
+      // / delete(id+ext) 全按 "<id>.<ext>" 拼文件名，剥点会让回放图片 404 变占位符。
+      ext,
+      type: FILE_TYPE.IMAGE,
+      created_at: new Date().toISOString(),
+      count: 1
+    }
+    return { file }
+  })
 
   ipcMain.handle(IpcChannel.Dsh_TopicStop, (_event, id: string) => {
     topicTree(requireKernel()).stop(id)
@@ -544,7 +509,16 @@ function registerKernelIpc(): void {
     const tree = topicTree(ctx)
     // 必须 await：重启后 agent 需从持久化异步 resume，
     // 不同步等待则下方 events 取不到 agent 而抛 "session is not loaded"
-    await tree.open(id)
+    try {
+      await tree.open(id)
+    } catch (error) {
+      // 确定性"注册表无此行"（从未建册/已删）= 真实状态：按空会话回答——渲染层本就把
+      // 这一答案降级为空（kernelEventStream.isDefinitiveTopicUnknown），在源头回答可免
+      // ipcMain.handle 的 reject 被 Electron 无条件打印成 "Error occurred in handler"。
+      // 瞬时失败（"session is not loaded" 等）照原样抛——渲染层对它们有重试窗口。
+      if (isTopicNotFoundError(error)) return { events: [] }
+      throw error
+    }
     // UI 视界：注入的插件源消息已由 seam 剔除（渲染层因此不需要可见性判据）
     return { events: tree.uiEvents(id) }
   })

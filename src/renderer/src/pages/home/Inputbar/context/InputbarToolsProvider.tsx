@@ -1,4 +1,5 @@
 import type { QuickPanelListItem, QuickPanelReservedSymbol } from '@renderer/components/QuickPanel'
+import { useAppSelector } from '@renderer/store'
 import type { FileMetadata, KnowledgeBase, Model } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import React, { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -171,7 +172,12 @@ export const InputbarToolsProvider: React.FC<InputbarToolsProviderProps> = ({ ch
   const [couldAddImageFile, setCouldAddImageFile] = useState(initialState?.couldAddImageFile || false)
   const [extensions, setExtensions] = useState<string[]>(initialState?.extensions || [])
 
-  const couldMentionNotVisionModel = !files.some((file) => file.type === FILE_TYPE.IMAGE)
+  // v0.3.1 识图通道补全：转述模型已配置 → 被@模型无视觉也收图（describe_images 通道
+  // 由发送链注入，随实际路由判定），不再把提及候选限到视觉模型。
+  // 未配置时保持原约束：有图在输入区时 @ 只列视觉模型。
+  const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
+  const couldMentionNotVisionModel =
+    imageDescriberModel !== undefined || !files.some((file) => file.type === FILE_TYPE.IMAGE)
 
   // Quick Panel Registry (stored in refs to avoid re-renders)
   const rootMenuRegistryRef = useRef(new Map<string, QuickPanelListItem[]>())

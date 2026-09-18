@@ -1,0 +1,21 @@
+diff --git a/lib/index.js b/lib/index.js
+index b819f847403e2bd76a7c04518da4652562a7a791..6cf79345499a585d94545683dda61fc1b446f50e 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -1082,7 +1082,7 @@ async function userContent(blocks, requestImages) {
+ 			const version = requestImages.get(block.attachment.attachmentId);
+ 			content.push({
+ 				type: "text",
+-				text: requestImageHandleText(version)
++				text: (globalThis.__recRequestImageHandleText?.(version)) ?? requestImageHandleText(version)
+ 			});
+ 			content.push({
+ 				type: "image",
+@@ -1701,6 +1701,7 @@ var PiAiAdapter = class extends LlmAdapter {
+ 		return this.streamWithSnapshot(options, this.current());
+ 	}
+ 	async *streamWithSnapshot(options, snapshot) {
++		options = globalThis.__recTrimPriorTurnThinking?.(options) ?? options;
+ 		const env_1 = {
+ 			stack: [],
+ 			error: void 0,

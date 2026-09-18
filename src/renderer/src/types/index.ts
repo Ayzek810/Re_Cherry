@@ -206,6 +206,11 @@ export type AssistantSettings = {
   toolUseMode: 'function' | 'prompt'
   maxToolCalls?: number
   enableMaxToolCalls?: boolean
+  /**
+   * 对话页头部显示挡位（助手级，默认 'model'）：
+   * 'model' = 原版模型头像 + 模型名；'assistant' = 助手标识 + 助手名，模型名进时间戳右侧。
+   */
+  messageIdentity?: 'model' | 'assistant'
 }
 
 export type AssistantPreset = Omit<Assistant, 'model'> & {

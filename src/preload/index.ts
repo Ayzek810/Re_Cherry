@@ -44,6 +44,8 @@ export function tracedInvoke(channel: string, spanContext: SpanContext | undefin
 // Custom APIs for renderer
 const api = {
   dshSyncProviders: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncProviders, providers),
+  dshSyncImageDescriber: (config: { provider: string; model: string; prompt: string } | null) =>
+    ipcRenderer.invoke(IpcChannel.Dsh_SyncImageDescriber, config),
   dshStreamSmoke: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_StreamSmoke, payload),
   dshComplete: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_Complete, payload),
   dshStreamComplete: (payload: unknown, onEvent: (data: unknown) => void) => {
@@ -75,8 +77,19 @@ const api = {
       builtinTools?: string[]
       externalTools?: string[]
       tier?: WorkModeApprovalTier
+      /** 随消息附带的图片（base64，v0.3.1 识图通道；内核准入后并入用户消息内容块）。 */
+      images?: Array<{ mediaType: string; data: string; name?: string }>
     }
   ) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, options),
+  /** 内核图片附件回放同步：按 ref 读回核验字节并落入文件仓（确定性 id，幂等）。 */
+  dshAttachmentSync: (ref: {
+    attachmentId: string
+    mediaType: string
+    bytes: number
+    width: number
+    height: number
+    name?: string
+  }) => ipcRenderer.invoke(IpcChannel.Dsh_AttachmentSync, ref),
   dshTopicStop: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicStop, id),
   dshTopicRunning: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicRunning, id),
   dshTopicEvents: (id: string) => ipcRenderer.invoke(IpcChannel.Dsh_TopicEvents, id),

@@ -9,15 +9,7 @@ import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useTimer } from '@renderer/hooks/useTimer'
 import useUserTheme from '@renderer/hooks/useUserTheme'
 import { useAppDispatch } from '@renderer/store'
-import type { AssistantIconType } from '@renderer/store/settings'
-import {
-  setAssistantIconType,
-  setClickAssistantToShowTopic,
-  setCustomCss,
-  setPinTopicsToTop,
-  setShowTopicTime,
-  setSidebarIcons
-} from '@renderer/store/settings'
+import { setClickAssistantToShowTopic, setCustomCss, setShowTopicTime, setSidebarIcons } from '@renderer/store/settings'
 import { ThemeMode } from '@renderer/types'
 import { Button, ColorPicker, Segmented, Select, Switch, Tooltip } from 'antd'
 import { Minus, Monitor, Moon, Plus, Sun } from 'lucide-react'
@@ -64,11 +56,9 @@ const DisplaySettings: FC = () => {
     setTopicPosition,
     clickAssistantToShowTopic,
     showTopicTime,
-    pinTopicsToTop,
     customCss,
     sidebarIcons,
     setTheme,
-    assistantIconType,
     userTheme,
     useSystemTitleBar,
     setUseSystemTitleBar
@@ -209,15 +199,6 @@ const DisplaySettings: FC = () => {
       })
     },
     [setUserTheme, userTheme]
-  )
-
-  const assistantIconTypeOptions = useMemo(
-    () => [
-      { value: 'model', label: t('settings.assistant.icon.type.model') },
-      { value: 'emoji', label: t('settings.assistant.icon.type.emoji') },
-      { value: 'none', label: t('settings.assistant.icon.type.none') }
-    ],
-    [t]
   )
 
   const renderFontOption = useCallback(
@@ -431,24 +412,6 @@ const DisplaySettings: FC = () => {
         <SettingRow>
           <SettingRowTitle>{t('settings.topic.show.time')}</SettingRowTitle>
           <Switch checked={showTopicTime} onChange={(checked) => dispatch(setShowTopicTime(checked))} />
-        </SettingRow>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.topic.pin_to_top')}</SettingRowTitle>
-          <Switch checked={pinTopicsToTop} onChange={(checked) => dispatch(setPinTopicsToTop(checked))} />
-        </SettingRow>
-      </SettingGroup>
-      <SettingGroup theme={theme}>
-        <SettingTitle>{t('settings.display.assistant.title')}</SettingTitle>
-        <SettingDivider />
-        <SettingRow>
-          <SettingRowTitle>{t('settings.assistant.icon.type.label')}</SettingRowTitle>
-          <Segmented
-            value={assistantIconType}
-            shape="round"
-            onChange={(value) => dispatch(setAssistantIconType(value as AssistantIconType))}
-            options={assistantIconTypeOptions}
-          />
         </SettingRow>
       </SettingGroup>
       {navbarPosition === 'left' && (

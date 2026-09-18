@@ -7,6 +7,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { loggerService } from '@logger'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
@@ -119,6 +120,7 @@ export function registerAppServiceSeams(ctx: Context): void {
         builtinTools?: string[]
         externalTools?: string[]
         tier?: WorkModeApprovalTier
+        images?: EncodedImageAttachment[]
       }
     ) => sendMessage(ctx, id, text, options),
     stop: (id: string) => stopTopic(ctx, id),

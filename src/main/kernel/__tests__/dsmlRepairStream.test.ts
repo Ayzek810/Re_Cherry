@@ -118,7 +118,7 @@ describe('DSML 修复中间件（llm/stream waterfall，运行期）', () => {
     // 实测语义：cordis waterfall 里**先注册者在链外侧**，故后注册的观察者拿到的是修复前的
     // 原始块（block-start + block-end(text) + finish = 3），而最终输出是修复后的 6 块。
     // 若内核升级改变这一顺序语义，本条会红——那时要复核的是我们中间件相对其他监听器的位置
-    // （上游 dsh-session-title 用 prepend:true 抢最外层，但它只观察不改造，故互不影响）。
+    // （曾有上游监听器（标题服务）用 prepend:true 抢最外层，但纯观察不改道，故互不影响）。
     expect(observed).toBe(3)
     expect(chunks).toHaveLength(6)
     expect(chunks.flatMap((chunk) => (chunk.type === 'finish' ? [chunk] : []))).toHaveLength(1)

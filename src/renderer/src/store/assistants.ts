@@ -240,13 +240,77 @@ const assistantsSlice = createSlice({
       })
     },
     updateTopicUpdatedAt: (state, action: PayloadAction<{ topicId: string }>) => {
-      outer: for (const assistant of state.assistants) {
+      // 全持有者提升（v0.3.0-5）：隔离对账前的历史污染可能让多个助手持有同 id 行，
+      // first-match 只提升污染副本会让归属助手的 familyRefreshKey（图/页码条的失效签名）
+      // 停留不更新 → 陈旧家族缓存。每一份持有者都提升，幂等无副作用。
+      const now = new Date().toISOString()
+      for (const assistant of state.assistants) {
         for (const topic of normalizeTopics(assistant.topics)) {
           if (topic.id === action.payload.topicId) {
-            topic.updatedAt = new Date().toISOString()
-            break outer
+            topic.updatedAt = now
           }
         }
+      }
+    },
+    updateTopicName: (state, action: PayloadAction<{ topicId: string; name: string }>) => {
+      // 全持有者写入（与 updateTopicUpdatedAt 同理由，v0.3.0-5）：隔离对账前的历史污染
+      // 可能让多个助手持有同 id 行，只写 first-match 会让污染副本维持旧名。
+      //
+      // 与通用 updateTopic 的关键差异：**不 bump updatedAt**。updatedAt 在
+      // familyRowSignature（页码条/分支图的家族缓存失效签名）里，而名字落定时
+      // 结构/活动都没变——用 updateTopic 落名会把每次命名都变成一次全家族重取，
+      // 表现为对话树数字连跳（真机 2026-09-17：dsh session/title 事件首次持续
+      // 流动后暴露；v0.3.1 起调用方为 services/topicNaming.ts 的自动命名，规则
+      // 不变）。名字是标签不是活动；真活动（发送/回合结束）由
+      // updateTopicUpdatedAt 专门负责。
+      for (const assistant of state.assistants) {
+        for (const topic of normalizeTopics(assistant.topics)) {
+          if (topic.id === action.payload.topicId && topic.name !== action.payload.name) {
+            topic.name = action.payload.name
+          }
+        }
+      }
+    },
+    /**
+     * 发送时刻的"活动浮顶"写入（v0.3.1 验收轮，用户反馈：底层话题发消息后应浮到侧栏顶部）。
+     *
+     * - 这是**数组序的写入**，不是显示时排序：显示时排序会把拖拽/置顶的序再吞一次
+     *   （v0.3.1 刚修的病根），写数组序才是唯一不被吞的落点；
+     * - 只动位置，不碰任何字段（updatedAt 由成对的 updateTopicUpdatedAt 负责）——同
+     *   updateTopicName 的教义：位置也不是"活动"，familyRowSignature（页码条/分支图缓存
+     *   失效签名）不因本 action 变化；
+     * - 全持有者写入（同 updateTopicUpdatedAt 的理由）：多持有历史污染行只搬一份，
+     *   另一份所在清单的顺序就悬空了；
+     * - 输入若是分支子行（用户正浏览分支时发送），搬的是**家族根行**——侧栏只显示根，
+     *   分支仅通过根进入；上溯用现有行的 parentTopicId 链，链断（父行缺失）以自身为根；
+     * - 已在头部（或该持有者不持有）→ no-op，不制造无意义的替换/persist 写盘。
+     */
+    moveTopicToHead: (state, action: PayloadAction<{ topicId: string }>) => {
+      // ① 任一持有者里找到这行，沿血缘上溯到家族根
+      let rootId: string | undefined
+      for (const assistant of state.assistants) {
+        const existing = normalizeTopics(assistant.topics)
+        const self = existing.find((topic) => topic.id === action.payload.topicId)
+        if (self === undefined) continue
+        let row = self
+        const visited = new Set<string>()
+        while (row.parentTopicId !== undefined && row.parentTopicId.length > 0 && !visited.has(row.id)) {
+          visited.add(row.id)
+          const parent = existing.find((topic) => topic.id === row.parentTopicId)
+          if (parent === undefined) break
+          row = parent
+        }
+        rootId = row.id
+        break
+      }
+      if (rootId === undefined) return
+      // ② 全持有者：把根行搬到各自清单头部（splice+unshift 在 Immer 草稿上原位生效）
+      for (const assistant of state.assistants) {
+        const existing = normalizeTopics(assistant.topics)
+        const index = existing.findIndex((topic) => topic.id === rootId)
+        if (index <= 0) continue // -1 = 未持有；0 = 已在头部
+        const [moved] = existing.splice(index, 1)
+        existing.unshift(moved)
       }
     },
     setModel: (state, action: PayloadAction<{ assistantId: string; model: Model }>) => {
@@ -313,6 +377,8 @@ export const {
   updateTopics,
   removeAllTopics,
   updateTopicUpdatedAt,
+  updateTopicName,
+  moveTopicToHead,
   setModel,
   setTagsOrder,
   updateAssistantSettings,
@@ -334,5 +400,20 @@ export const selectTopicsMap = createSelector([selectAllTopics], (topics) => {
     return map
   }, new Map())
 })
+
+/**
+ * 话题行归属的**唯一权威判定**（v0.3.0-5）：返回实际持有该话题行的助手。
+ *
+ * 为什么不能信行上的 `assistantId` 字段：隔离对账前的历史污染行、以及任何没经过
+ * `recordTopicView` 归一的行，该字段都可能指向别的助手。按字段找助手会拿到**错误的话题
+ * 清单**——页码条/旁答条用那份清单算家族刷新签名（永远不变）与 branchKind 判定（永远
+ * undefined），切页还会把重复行物化进错误助手。成员归属（"哪份清单里有这行"）才是事实。
+ * @param assistants - 全部助手（store 里的 `assistants.assistants`）。
+ * @param topicId - 话题行 id。
+ * @returns 持有该行的助手；任何助手都没有（行已删/尚未物化）→ undefined。
+ */
+export function owningAssistantOfTopic(assistants: Assistant[], topicId: string): Assistant | undefined {
+  return assistants.find((assistant) => normalizeTopics(assistant.topics).some((row) => row.id === topicId))
+}
 
 export default assistantsSlice.reducer

@@ -42,8 +42,6 @@ export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Comm
 // Re-export for backward compatibility
 export { DEFAULT_SIDEBAR_ICONS }
 
-export type AssistantIconType = 'model' | 'emoji' | 'none'
-
 export type UserTheme = {
   colorPrimary: string
   userFontFamily: string
@@ -74,8 +72,6 @@ export interface SettingsState {
   fontSize: number
   topicPosition: 'left' | 'right'
   showTopicTime: boolean
-  pinTopicsToTop: boolean
-  assistantIconType: AssistantIconType
   pasteLongTextAsFile: boolean
   pasteLongTextThreshold: number
   clickAssistantToShowTopic: boolean
@@ -233,6 +229,10 @@ export interface SettingsState {
   // UI
   navbarPosition: 'left' | 'top'
   showMessageOutline: boolean
+  /** 上次会话退出时所在的助手（启动落点记忆，PersistGate 保证 rehydrate 后才读） */
+  lastActiveAssistantId?: string
+  /** 上次会话退出时所在的话题（根行或分支行，配合根行 lastViewedBranchId 恢复精确落点） */
+  lastActiveTopicId?: string
 }
 
 export type MultiModelMessageStyle = 'horizontal' | 'vertical' | 'fold' | 'grid'
@@ -255,6 +255,8 @@ export const initialState: SettingsState = {
   launchToTray: false,
   trayOnClose: true,
   tray: true,
+  lastActiveAssistantId: undefined,
+  lastActiveTopicId: undefined,
   theme: ThemeMode.system,
   userTheme: {
     colorPrimary: '#00b96b',
@@ -265,8 +267,6 @@ export const initialState: SettingsState = {
   fontSize: 14,
   topicPosition: 'left',
   showTopicTime: false,
-  pinTopicsToTop: false,
-  assistantIconType: 'emoji',
   pasteLongTextAsFile: false,
   pasteLongTextThreshold: 1500,
   clickAssistantToShowTopic: true,
@@ -449,6 +449,10 @@ const settingsSlice = createSlice({
     setLanguage: (state, action: PayloadAction<LanguageVarious>) => {
       state.language = action.payload
     },
+    setLastActiveLocation: (state, action: PayloadAction<{ assistantId: string; topicId: string }>) => {
+      state.lastActiveAssistantId = action.payload.assistantId
+      state.lastActiveTopicId = action.payload.topicId
+    },
     setProxyMode: (state, action: PayloadAction<'system' | 'custom' | 'none'>) => {
       state.proxyMode = action.payload
     },
@@ -502,12 +506,6 @@ const settingsSlice = createSlice({
     },
     setShowTopicTime: (state, action: PayloadAction<boolean>) => {
       state.showTopicTime = action.payload
-    },
-    setPinTopicsToTop: (state, action: PayloadAction<boolean>) => {
-      state.pinTopicsToTop = action.payload
-    },
-    setAssistantIconType: (state, action: PayloadAction<AssistantIconType>) => {
-      state.assistantIconType = action.payload
     },
     setPasteLongTextAsFile: (state, action: PayloadAction<boolean>) => {
       state.pasteLongTextAsFile = action.payload
@@ -827,6 +825,7 @@ export const {
   setAssistantsTabSortType,
   setSendMessageShortcut,
   setLanguage,
+  setLastActiveLocation,
   setProxyMode,
   setProxyUrl,
   setProxyBypassRules,
@@ -844,8 +843,6 @@ export const {
   setWindowStyle,
   setTopicPosition,
   setShowTopicTime,
-  setPinTopicsToTop,
-  setAssistantIconType,
   setPasteLongTextAsFile,
   setAutoCheckUpdate,
   setRenderInputMessageAsMarkdown,

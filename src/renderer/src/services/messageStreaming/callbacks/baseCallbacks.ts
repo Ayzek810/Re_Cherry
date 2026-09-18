@@ -321,7 +321,7 @@ export const createBaseCallbacks = (deps: BaseCallbacksDependencies) => {
           })
         }
 
-        // 话题命名由 dsh 内核自动完成（session-title），此处不再触发
+        // 话题命名由 turn/end 触发（services/topicNaming.ts，V1 原理：轻量调用 + 设置面可控）
 
         // 处理usage估算
         // For OpenRouter, always use the accurate usage data from API, don't estimate

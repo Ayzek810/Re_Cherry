@@ -37,6 +37,8 @@ export interface KernelModelCompatInput {
     | 'ant-ling'
   supportsReasoningEffort?: boolean
   requiresReasoningContentOnAssistantMessages?: boolean
+  /** 网关是否接受 role: "developer"（硅基流动等 OpenAI 兼容网关不认，须显式关掉）。 */
+  supportsDeveloperRole?: boolean
 }
 
 export interface KernelModelInput {
@@ -49,6 +51,12 @@ export interface KernelModelInput {
   reasoningEfforts?: Record<string, string | null>
   /** 渲染进程按 provider 端点/模型家族给出的思考协议修正（缺省走 pi-ai 自动探测）。 */
   compat?: KernelModelCompatInput
+  /**
+   * 输入模态声明（pi-ai models[].input，v0.3.1 识图通道）。
+   * 视觉模型由渲染进程声明 ['text','image']；缺省不声明（目录外模型按纯文本保守处理，
+   * 图片会被内核降级为稳定 handle 文本而不是发上 wire）。
+   */
+  input?: string[]
 }
 
 /**
@@ -63,6 +71,17 @@ const PROTOCOL_BY_TYPE: Record<string, string> = {
   gateway: 'openai-completions',
   ollama: 'openai-completions',
   mistral: 'openai-completions'
+}
+
+/**
+ * 卫生化渲染进程声明的输入模态列表：
+ * 只保留 text/image 两个合法值（去重保序），且必须含 text（否则无法对话），
+ * 否则返回 undefined（不声明，走 pi-ai 目录默认），避免一条坏声明拖垮整个 provider 路由。
+ */
+function sanitizeModelInput(input: string[] | undefined): string[] | undefined {
+  if (input === undefined) return undefined
+  const values = [...new Set(input)].filter((value) => value === 'text' || value === 'image')
+  return values.includes('text') ? values : undefined
 }
 
 /**
@@ -127,11 +146,13 @@ export async function syncCherryProviders(ctx: Context, providers: readonly Kern
         : {
             models: provider.models.map((model) => {
               const reasoningEfforts = sanitizeReasoningEfforts(model.reasoningEfforts)
+              const input = sanitizeModelInput(model.input)
               return {
                 id: model.id,
                 name: model.name ?? model.id,
                 ...(reasoningEfforts === undefined ? {} : { reasoningEfforts }),
-                ...(model.compat === undefined ? {} : { compat: model.compat })
+                ...(model.compat === undefined ? {} : { compat: model.compat }),
+                ...(input === undefined ? {} : { input })
               }
             })
           })

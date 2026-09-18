@@ -167,11 +167,18 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   const { setTimeoutTimer } = useTimer()
   const isMultiSelectMode = useAppSelector((state) => state.runtime.chat.isMultiSelectMode)
 
+  // v0.3.1 识图通道补全：转述模型已配置时，无视觉主模型（含 @提及轮的被@模型）
+  // 的图片也放行——发送链注入 describe_images 由转述模型转录，内核 wire 不变。
+  // 未配置时此处退回原判定（视觉直读；无视觉=现状拦截）。
+  const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
+  const describerOpen = imageDescriberModel !== undefined
+
   const isVisionSupported = useMemo(
     () =>
+      describerOpen ||
       (mentionedModels.length > 0 && isVisionModels(mentionedModels)) ||
       (mentionedModels.length === 0 && isVisionAssistant),
-    [mentionedModels, isVisionAssistant]
+    [describerOpen, mentionedModels, isVisionAssistant]
   )
 
   const isGenerateImageSupported = useMemo(
