@@ -108,7 +108,7 @@ export default defineConfig({
     //   · threads + poolOptions.threads.maxThreads=4：仍崩（124 文件 / 2240 测试全过，退出码仍为违例）；
     //   · --pool=forks：连续 2 次 exit 0（71.3s / 65.0s）—— **且比 threads 的 88.5s 更快**。
     // main / scripts / shared 在两种池下都干净，崩溃只见于 renderer × threads 这一组合；故判定为环境层
-    // 间歇性原生崩溃（非测试失败、非本版代码引入）。详见 docs/v0.3.0-1_doc.md §13.3 与 §15.1。
+    // 间歇性原生崩溃（非测试失败、非本版代码引入）。详见 docs/archive/v0.3.0_doc.md 的 §13 与 §15（v0.3.0-1 分区内）。
     pool: 'forks'
   }
 })
