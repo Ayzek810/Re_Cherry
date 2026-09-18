@@ -675,6 +675,7 @@
       "content": "Content blocked by safety system, please modify and retry",
       "context_length": "Conversation too long, please clear history or start a new chat",
       "deprecated": "This model has been retired, please switch to another model",
+      "empty_response": "The model returned no content. Retry or switch models.",
       "go_to_settings": "Go to Settings",
       "knowledge": "Knowledge base vectorization failed",
       "mcp": "MCP server connection failed, check if service is running",
@@ -864,7 +865,9 @@
     "title": "Import External Conversations"
   },
   "kernelChat": {
-    "imageLoadFailed": "[Image attachment failed to load; reopen the topic to retry]"
+    "emptyResponse": "The model finished this turn but returned no content. Retry or switch models.",
+    "imageLoadFailed": "[Image attachment failed to load; reopen the topic to retry]",
+    "unknownModelError": "The model {{model}} used by this topic is no longer available from the current provider (it may have been delisted, or the provider configuration changed). Please reselect a model in the topic settings and retry."
   },
   "knowledge": {
     "dimensions_auto_set": "Auto-set embedding dimensions",

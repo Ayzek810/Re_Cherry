@@ -62,7 +62,9 @@ const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
       const availableWidth = parentElement ? parentElement.clientWidth : scrollElement.clientWidth
 
       // 确保容器不会超出可用宽度
-      const canScrollValue = scrollElement.scrollWidth > Math.min(availableWidth, scrollElement.clientWidth)
+      // v0.3.1-1：≥4px 溢出才显示滚动能力。零迟滞硬阈值在相邻 reflow 期间高频翻转
+      // （内容宽度在阈值上骑乘），是消息脚部横滚按钮反复消失重现的振荡源。
+      const canScrollValue = scrollElement.scrollWidth > Math.min(availableWidth, scrollElement.clientWidth) + 4
       setCanScroll(canScrollValue)
 
       // 检查是否滚动到最右侧
