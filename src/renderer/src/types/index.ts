@@ -213,9 +213,6 @@ export type AssistantSettings = {
   messageIdentity?: 'model' | 'assistant'
 }
 
-export type AssistantPreset = Omit<Assistant, 'model'> & {
-  group?: string[]
-}
 
 export type LegacyMessage = {
   id: string

@@ -2,7 +2,7 @@ import PrivacyPopup from '@renderer/components/Popups/PrivacyPopup'
 import { TopView } from '@renderer/components/TopView'
 import { LATEST_PRIVACY_POLICY_VERSION } from '@renderer/config/constant'
 import { useAppDispatch } from '@renderer/store'
-import { setEnableDataCollection, setPrivacyPolicyVersion } from '@renderer/store/settings'
+import { setPrivacyPolicyVersion } from '@renderer/store/settings'
 import { Button, Modal } from 'antd'
 import type { FC } from 'react'
 import { useCallback, useState } from 'react'
@@ -19,12 +19,10 @@ const PopupContainer: FC<Props> = ({ resolve }) => {
 
   const acknowledgeLatestPrivacyPolicy = useCallback(() => {
     dispatch(setPrivacyPolicyVersion(LATEST_PRIVACY_POLICY_VERSION))
-    // Special Note (Regarding This Policy Update): Due to adjustments in our data collection architecture associated with this update, all related toggles under [Settings] - [General Settings] - [Privacy Settings] will be reset to their default ON state upon activation of the new version.
-    // If you wish to maintain your previous OFF settings, please revisit the privacy settings page to make the necessary adjustments after upgrading. We apologize for any inconvenience this may cause and appreciate your understanding.
-    if (String(LATEST_PRIVACY_POLICY_VERSION) === '20260531') {
-      dispatch(setEnableDataCollection(true))
-      void window.api.config.set('enableDataCollection', true)
-    }
+    // v0.3.1-2：上游在此对 "20260531" 版政策做了一次性**强制重置**——把
+    // [设置]-[通用]-[隐私设置] 各开关一律置回默认**开**（含数据收集），从而把用户已关闭的开关
+    // 重新打开、继续向 cherry-studio 通道上报。本 fork 不再执行该重置：政策版本号照常记录，
+    // 用户自己的开关选择不被覆盖。
   }, [dispatch])
 
   const handleShowPrivacyPolicy = useCallback(() => {

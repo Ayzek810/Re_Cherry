@@ -1,7 +1,8 @@
-import AddAssistantPopup from '@renderer/components/Popups/AddAssistantPopup'
 import { useAssistants, useDefaultAssistant } from '@renderer/hooks/useAssistant'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShowTopics } from '@renderer/hooks/useStore'
+import AssistantSettingsPopup from '@renderer/pages/settings/AssistantSettings'
+import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Assistant, Topic } from '@renderer/types'
 import type { Tab } from '@renderer/types/chat'
@@ -55,17 +56,29 @@ const HomeTabs: FC<Props> = ({
 
   const showTab = position === 'left' && topicPosition === 'left'
 
+  /** 按给定来源新建助手并切过去。话题必须重发：来源身上那条话题的 assistantId 指向来源
+   *  （如默认助手），直接复制会造成归属不一致（既有隐患，本批一并修正）。 */
+  const createAssistant = (source: Assistant) => {
+    const id = uuid()
+    const assistant: Assistant = { ...source, id, topics: [getDefaultTopic(id)] }
+    addAssistant(assistant)
+    setActiveAssistant(assistant)
+    return assistant
+  }
+
+  /** 添加助手＝按「默认助手」这份只读模板呼出完整助手设置（五页）编辑**草稿**，
+   *  点「确认」才落库新建并切过去；X / Esc / 点遮罩＝什么都不建。模板一个字都不动
+   *  （用户裁决："默认助手应当是不可变的基本模板"）。要改模板请走设置 → 模型设置 → 默认助手。
+   *  v0.3.1-2：不再走预设挑选（预设链已整链移除）。 */
   const onCreateAssistant = async () => {
-    const assistant = await AddAssistantPopup.show()
-    if (assistant) {
-      setActiveAssistant(assistant)
+    const draft = await AssistantSettingsPopup.showDraft({ assistant: defaultAssistant })
+    if (draft) {
+      createAssistant(draft)
     }
   }
 
   const onCreateDefaultAssistant = () => {
-    const assistant = { ...defaultAssistant, id: uuid() }
-    addAssistant(assistant)
-    setActiveAssistant(assistant)
+    createAssistant(defaultAssistant)
   }
 
   useEffect(() => {

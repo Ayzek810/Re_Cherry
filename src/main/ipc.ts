@@ -362,6 +362,11 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       options.args = options.args || []
     }
 
+    // v0.3.1-2：内核为修正 Windows 沙箱 runner 的启动语义，在主进程 env 里设了
+    // `ELECTRON_RUN_AS_NODE=1`（见 kernel/index.ts 的说明）。`app.relaunch` 会继承当前环境，
+    // 若不清除，重启后的应用会以 **node** 启动而非 Electron 应用。这里在重启前显式剥掉。
+    delete process.env.ELECTRON_RUN_AS_NODE
+
     app.relaunch(options)
     app.exit(0)
   })

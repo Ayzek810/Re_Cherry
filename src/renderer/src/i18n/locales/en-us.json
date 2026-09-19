@@ -1602,7 +1602,9 @@
         "hint": "The sandbox read/write boundary; leave empty to use the default",
         "invalid": "Please enter an absolute path",
         "label": "Working Directory",
-        "placeholder": "Enter an absolute path, e.g. D:\\Workspace"
+        "placeholder": "Enter an absolute path, e.g. D:\\Workspace",
+        "select": "Change directory",
+        "selectTitle": "Select working directory"
       }
     },
     "assistant": {

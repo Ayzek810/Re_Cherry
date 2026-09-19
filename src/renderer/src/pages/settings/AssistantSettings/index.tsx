@@ -18,4 +18,10 @@ export default class AssistantSettingsPopup {
   static show(props: AssistantSettingPopupShowParams): Promise<Assistant> {
     return AgentSettingsPopup.show({ assistant: props.assistant, tab: 'essential' })
   }
+
+  /** 「添加助手」用：把 `assistant` 当模板，弹完整的助手设置编辑**草稿**（不落库、不改模板），
+   *  按「确认」回传草稿、取消回传 null。 */
+  static showDraft(props: AssistantSettingPopupShowParams): Promise<Assistant | null> {
+    return AgentSettingsPopup.showDraft({ assistant: props.assistant, tab: 'essential' })
+  }
 }

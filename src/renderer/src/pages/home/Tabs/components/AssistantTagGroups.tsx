@@ -23,7 +23,6 @@ interface AssistantTagGroupsProps {
   onToggleTagCollapse: (tag: string) => void
   onAssistantSwitch: (assistant: Assistant) => void
   onAssistantDelete: (assistant: Assistant) => void
-  addPreset: (assistant: Assistant) => void
   copyAssistant: (assistant: Assistant) => void
   onCreateDefaultAssistant: () => void
   handleSortByChange: (sortType: AssistantsSortType) => void
@@ -43,7 +42,6 @@ export const AssistantTagGroups: FC<AssistantTagGroupsProps> = (props) => {
     onToggleTagCollapse,
     onAssistantSwitch,
     onAssistantDelete,
-    addPreset,
     copyAssistant,
     onCreateDefaultAssistant,
     handleSortByChange,
@@ -63,7 +61,6 @@ export const AssistantTagGroups: FC<AssistantTagGroupsProps> = (props) => {
           sortBy={sortBy}
           onSwitch={onAssistantSwitch}
           onDelete={onAssistantDelete}
-          addPreset={addPreset}
           copyAssistant={copyAssistant}
           onCreateDefaultAssistant={onCreateDefaultAssistant}
           handleSortByChange={handleSortByChange}
@@ -77,7 +74,6 @@ export const AssistantTagGroups: FC<AssistantTagGroupsProps> = (props) => {
       sortBy,
       onAssistantSwitch,
       onAssistantDelete,
-      addPreset,
       copyAssistant,
       onCreateDefaultAssistant,
       handleSortByChange,

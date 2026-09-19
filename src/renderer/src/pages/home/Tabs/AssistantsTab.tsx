@@ -1,7 +1,6 @@
 import { createSelector } from '@reduxjs/toolkit'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { useAssistants } from '@renderer/hooks/useAssistant'
-import { useAssistantPresets } from '@renderer/hooks/useAssistantPresets'
 import { useAssistantsTabSortType } from '@renderer/hooks/useStore'
 import { useTags } from '@renderer/hooks/useTags'
 import type { RootState } from '@renderer/store'
@@ -36,7 +35,6 @@ const AssistantsTab: FC<AssistantsTabProps> = (props) => {
 
   // Assistant related hooks
   const { assistants, removeAssistant, copyAssistant, updateAssistants } = useAssistants()
-  const { addAssistantPreset } = useAssistantPresets()
   const { collapsedTags, toggleTagCollapse } = useTags()
   const { assistantsTabSortType = 'list', setAssistantsTabSortType } = useAssistantsTabSortType()
   const [dragging, setDragging] = useState(false)
@@ -148,7 +146,6 @@ const AssistantsTab: FC<AssistantsTabProps> = (props) => {
           onToggleTagCollapse={toggleTagCollapse}
           onAssistantSwitch={setActiveAssistant}
           onAssistantDelete={onDeleteAssistant}
-          addPreset={addAssistantPreset}
           copyAssistant={copyAssistant}
           onCreateDefaultAssistant={onCreateDefaultAssistant}
           handleSortByChange={handleSortByChange}
@@ -165,7 +162,6 @@ const AssistantsTab: FC<AssistantsTabProps> = (props) => {
           onDragEnd={() => setDragging(false)}
           onAssistantSwitch={setActiveAssistant}
           onAssistantDelete={onDeleteAssistant}
-          addPreset={addAssistantPreset}
           copyAssistant={copyAssistant}
           onCreateDefaultAssistant={onCreateDefaultAssistant}
           handleSortByChange={handleSortByChange}
