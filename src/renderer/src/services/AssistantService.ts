@@ -8,10 +8,8 @@ import {
 import { getStoreProviders } from '@renderer/hooks/useStore'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
-import { addAssistant } from '@renderer/store/assistants'
 import type {
   Assistant,
-  AssistantPreset,
   AssistantSettings,
   AssistantWorkModeConfig,
   Model,
@@ -185,25 +183,4 @@ export function getAssistantById(id: string) {
   return assistants.find((a) => a.id === id)
 }
 
-export async function createAssistantFromAgent(agent: AssistantPreset) {
-  const assistantId = uuid()
-  const topic = getDefaultTopic(assistantId)
 
-  const assistant: Assistant = {
-    ...agent,
-    id: assistantId,
-    name: agent.name,
-    emoji: agent.emoji,
-    topics: [topic],
-    model: agent.defaultModel,
-    type: 'assistant',
-    regularPhrases: agent.regularPhrases || [], // Ensured regularPhrases
-    settings: agent.settings || DEFAULT_ASSISTANT_SETTINGS
-  }
-
-  store.dispatch(addAssistant(assistant))
-
-  window.toast.success(i18n.t('message.assistant.added.content'))
-
-  return assistant
-}

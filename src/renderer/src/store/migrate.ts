@@ -2459,19 +2459,7 @@ const migrateConfig = {
       addMiniApp(state, 'ling')
       addMiniApp(state, 'huggingchat')
 
-      // Initialize assistants presets
-      if (state.assistants.presets === undefined) {
-        state.assistants.presets = []
-      }
 
-      // Migrate assistants presets
-      state.assistants.presets.forEach((preset) => {
-        if (!preset.settings) {
-          preset.settings = DEFAULT_ASSISTANT_SETTINGS
-        } else if (!preset.settings.toolUseMode) {
-          preset.settings.toolUseMode = DEFAULT_ASSISTANT_SETTINGS.toolUseMode
-        }
-      })
 
       // Migrate sidebar icons
       if (state.settings.sidebarIcons) {
@@ -3200,6 +3188,26 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      return state
+    }
+  },
+  '215': (state: RootState) => {
+    try {
+      // v0.3.1-2：关停上游遥测。历史来源有三处会把 data collection 置为开——
+      // 早期迁移（'208' 等）、渲染层缺省值、以及隐私政策更新弹卡对 '20260531' 版的一次性强制重置；
+      // 一旦为开，主进程 config 也会被推成开。这里把存量状态一次性翻为关，使设置页显示与实际一致
+      // （服务层另有硬性关闭，见 AnalyticsService 的 FORK_ANALYTICS_ENABLED）。
+      if (state.settings !== undefined && state.settings.enableDataCollection === true) {
+        state.settings.enableDataCollection = false
+        logger.info('migrate 215 success: data collection disabled in this fork')
+      }
+      // v0.3.1-2：预设系统整链移除，清掉持久化里的死键（无写入方，留着只会一直跟着用户数据走）
+      if (state.assistants !== undefined) {
+        delete (state.assistants as unknown as Record<string, unknown>).presets
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 215 error', error as Error)
       return state
     }
   }

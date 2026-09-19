@@ -152,7 +152,8 @@ export class ConfigManager {
   }
 
   getEnableDataCollection(): boolean {
-    return this.get<boolean>(ConfigKeys.EnableDataCollection, true)
+    // v0.3.1-2：本 fork 默认关闭数据收集（上游默认 true，且隐私政策更新会把开关强制重置为开）。
+    return this.get<boolean>(ConfigKeys.EnableDataCollection, false)
   }
 
   setEnableDataCollection(value: boolean) {

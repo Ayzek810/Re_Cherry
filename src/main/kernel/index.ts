@@ -180,6 +180,26 @@ export async function bootKernel(): Promise<Context> {
     // 命令行与后台作业（Step 4）：shell-env 环境注册表（DSH_* 托管变量）+ 沙箱 runner
     // + 沙箱化 pwsh 执行器（ctx.shell，按会话 sandbox/mode 收敛）+ 进程内作业注册表（ctx.jobs）。
     await ctx.plugin(shellEnv, { dshHome: join(kernelDir) })
+
+    // v0.3.1-2 修复：Windows 沙箱 runner 的启动语义。
+    //
+    // `dsh-sandbox-local.windowsAclRunnerInvocation()` 以 **`[process.execPath, runner.js]`** 前缀
+    // 启动受限 runner，其注释假设"前缀是 `[node, runner, …]`"。但本内核跑在 Electron 里，
+    // `process.execPath` 是 `Re_Cherry.exe` —— 不给 `ELECTRON_RUN_AS_NODE` 时该子进程会按
+    // **Electron 应用**启动：Chromium 起来加载资源（向被采集的 stderr 刷 `libpng warning: iCCP`）、
+    // 消息循环不退出 → 采集器等不到子进程结束 → **每次 pwsh 都在超时到点被判定
+    // `[timed out after Nms]` + `[exit code: 1]`**（正文其实已经产出）。
+    //
+    // 实测（tools/branch-jump-artifacts/probe-sandbox-runner.mjs，仅此一个变量）：
+    //   A 现状（无该变量）→ 20023ms 未退出、15 条 libpng；B 加该变量 → 87ms 干净退出、0 条 libpng。
+    //
+    // 生效范围与代价：`dsh-subprocess-local.childEnv()` 会把父进程 env 传下去（只剥离名字含
+    // KEY/PASSWORD/SECRET/TOKEN 的与 `DSH_*` 的），故内核 spawn 的子进程（含 runner 与 pwsh 本体）
+    // 都获得 node 语义；pwsh / ripgrep 等非 Electron 子进程会忽略该变量。
+    // 唯一已知副作用：`app.relaunch` 会继承当前环境 → 已在 ipc.ts 的 relaunch 处理器里显式清除，
+    // 避免"应用自重启变成 node 启动"。
+    process.env.ELECTRON_RUN_AS_NODE = '1'
+
     await ctx.plugin(LocalSandboxProvider, {})
     await ctx.plugin(SandboxPwshExecutor, {})
     await ctx.plugin(LocalJobRegistry, {})

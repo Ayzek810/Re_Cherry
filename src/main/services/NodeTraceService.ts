@@ -10,7 +10,8 @@ import * as path from 'path'
 import { ConfigKeys, configManager } from './ConfigManager'
 import { spanCacheService } from './SpanCacheService'
 
-export const TRACER_NAME = 'CherryStudio'
+// v0.3.1-2：上报器名改为本 fork 标识（原为上游 'CherryStudio'；此项仅出现在 trace 视图中，非功能标识）。
+export const TRACER_NAME = 'Re_Cherry'
 
 const logger = loggerService.withContext('NodeTraceService')
 

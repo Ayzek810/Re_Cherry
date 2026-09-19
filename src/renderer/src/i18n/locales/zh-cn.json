@@ -1602,7 +1602,9 @@
         "hint": "沙箱允许读写的边界；留空使用默认位置",
         "invalid": "请输入绝对路径",
         "label": "工作目录",
-        "placeholder": "输入绝对路径，如 D:\\Workspace"
+        "placeholder": "输入绝对路径，如 D:\\Workspace",
+        "select": "修改目录",
+        "selectTitle": "选择工作目录"
       }
     },
     "assistant": {

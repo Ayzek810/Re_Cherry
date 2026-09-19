@@ -163,14 +163,12 @@ export interface SettingsState {
   joplinUrl: string | null
   joplinExportReasoning: boolean
   /** This state is actaully default assistant preset */
-  defaultAgent: string | null
   // 思源笔记配置
   siyuanApiUrl: string | null
   siyuanToken: string | null
   siyuanBoxId: string | null
   siyuanRootPath: string | null
   // 订阅的助手地址
-  agentssubscribeUrl: string | null
   // MinApps
   maxKeepAliveMinapps: number
   showOpenedMinappsInSidebar: boolean
@@ -348,19 +346,18 @@ export const initialState: SettingsState = {
   joplinToken: '',
   joplinUrl: '',
   joplinExportReasoning: false,
-  defaultAgent: null,
   siyuanApiUrl: null,
   siyuanToken: null,
   siyuanBoxId: null,
   siyuanRootPath: null,
-  agentssubscribeUrl: '',
   // MinApps
   maxKeepAliveMinapps: 3,
   showOpenedMinappsInSidebar: true,
   minappsOpenLinkExternal: false,
   minAppRegion: 'auto',
   privacyPolicyVersion: LATEST_PRIVACY_POLICY_VERSION,
-  enableDataCollection: true,
+  // v0.3.1-2：默认关闭数据收集（上游默认 true，会向 cherry-studio 通道上报）。
+  enableDataCollection: false,
   enableSpellCheck: false,
   spellCheckLanguages: [],
   enableQuickPanelTriggers: false,

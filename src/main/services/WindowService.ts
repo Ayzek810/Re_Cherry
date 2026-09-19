@@ -16,7 +16,7 @@ import iconPath from '../../../build/icon.png?asset'
 import { titleBarOverlayDark, titleBarOverlayLight } from '../config'
 import { configManager } from './ConfigManager'
 import { contextMenu } from './ContextMenu'
-import { isSafeExternalUrl } from './security'
+import { isSafeExternalUrl, isSelfOriginNavigation } from './security'
 import { initSessionUserAgent } from './WebviewService'
 
 const DEFAULT_MINIWINDOW_WIDTH = 550
@@ -275,7 +275,10 @@ export class WindowService {
     })
 
     mainWindow.webContents.on('will-navigate', (event, url) => {
-      if (url.includes('localhost:517')) {
+      // v0.3.1-2：自身源豁免改为与「当前窗口自身 URL 的 origin」比对。
+      // 原先硬编码上游 dev 端口 `localhost:517`，本 fork 的端口是 DSH_DEV_PORT||5870，
+      // 豁免永不命中 → dev 下对自身源的整页导航被拦下并 shell.openExternal 丢进系统浏览器。
+      if (isSelfOriginNavigation(mainWindow.webContents.getURL(), url)) {
         return
       }
 
@@ -327,6 +330,10 @@ export class WindowService {
         } else {
           shell.openPath(filePath).catch((err) => logger.error('Failed to open file:', err))
         }
+      } else if (isSelfOriginNavigation(mainWindow.webContents.getURL(), details.url)) {
+        // v0.3.1-2：自身源绝不丢进系统浏览器（dev 下 window.open 自身页面曾被 openExternal 拉起，
+        // 与 will-navigate 同一根因）。这里静默拒绝，不 openExternal。
+        logger.warn(`Blocked window.open of app's own origin: ${details.url}`)
       } else if (isSafeExternalUrl(details.url)) {
         void shell.openExternal(details.url)
       } else {

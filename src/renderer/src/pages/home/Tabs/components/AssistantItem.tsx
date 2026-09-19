@@ -8,11 +8,10 @@ import AssistantSettingsPopup from '@renderer/pages/settings/AssistantSettings'
 import { isImageIdentity } from '@renderer/services/assistantIdentity'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Assistant, AssistantsSortType } from '@renderer/types'
-import { cn, uuid } from '@renderer/utils'
+import { cn } from '@renderer/utils'
 import { hasTopicPendingRequests } from '@renderer/utils/queue'
 import type { MenuProps } from 'antd'
 import { Dropdown } from 'antd'
-import { omit } from 'lodash'
 import {
   AlignJustify,
   ArrowDownAZ,
@@ -21,7 +20,6 @@ import {
   Check,
   MoreVertical,
   Plus,
-  Save,
   Settings2,
   Tag,
   Tags
@@ -40,7 +38,6 @@ interface AssistantItemProps {
   onSwitch: (assistant: Assistant) => void
   onDelete: (assistant: Assistant) => void
   onCreateDefaultAssistant: () => void
-  addPreset: (agent: any) => void
   copyAssistant: (assistant: Assistant) => void
   onTagClick?: (tag: string) => void
   handleSortByChange?: (sortType: AssistantsSortType) => void
@@ -54,7 +51,6 @@ const AssistantItem: FC<AssistantItemProps> = ({
   sortBy,
   onSwitch,
   onDelete,
-  addPreset,
   copyAssistant,
   handleSortByChange,
   sortByPinyinAsc: externalSortByPinyinAsc,
@@ -100,7 +96,6 @@ const AssistantItem: FC<AssistantItemProps> = ({
         allTags,
         assistants,
         updateAssistants,
-        addPreset,
         copyAssistant,
         onSwitch,
         onDelete,
@@ -116,7 +111,6 @@ const AssistantItem: FC<AssistantItemProps> = ({
       allTags,
       assistants,
       updateAssistants,
-      addPreset,
       copyAssistant,
       onSwitch,
       onDelete,
@@ -262,7 +256,6 @@ function getMenuItems({
   allTags,
   assistants,
   updateAssistants,
-  addPreset,
   copyAssistant,
   onSwitch,
   onDelete,
@@ -303,21 +296,6 @@ function getMenuItems({
           onOk: removeAllTopics
         })
       }
-    },
-    {
-      label: t('assistants.save.title'),
-      key: 'save-to-agent',
-      icon: <Save size={14} />,
-      onClick: async () => {
-        const preset = omit(assistant, ['model'])
-        preset.id = uuid()
-        preset.type = 'agent'
-        addPreset(preset)
-        window.toast.success(t('assistants.save.success'))
-      }
-    },
-    {
-      type: 'divider'
     },
     {
       label: t('assistants.tags.manage'),

@@ -1,8 +1,8 @@
 import { HStack } from '@renderer/components/Layout'
 import type { Assistant } from '@renderer/types'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
-import { Input } from 'antd'
-import { CheckCircle, FolderOpen, ShieldAlert } from 'lucide-react'
+import { Input, Tooltip } from 'antd'
+import { CheckCircle, FolderOpen, FolderOutput, ShieldAlert } from 'lucide-react'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,6 +37,21 @@ const PermissionModeSettings: FC<Props> = ({ assistant, updateAssistant }) => {
     const next = workingDir.trim()
     if (next === (assistant.workMode?.workingDir ?? '')) return
     updateAssistant({ workMode: mergeWorkMode(assistant, { workingDir: next === '' ? undefined : next }) })
+  }
+
+  /**
+   * 打开系统文件管理器选目录（与 设置 → 应用数据 的"修改目录"同一机制：
+   * `window.api.select({ properties: ['openDirectory','createDirectory'] })`）。
+   * 选完即存，无需等输入框失焦。
+   */
+  const handleSelectWorkingDir = async () => {
+    const selected = await window.api.select({
+      properties: ['openDirectory', 'createDirectory'],
+      title: t('settings.agentSettings.workDir.selectTitle')
+    })
+    if (!selected) return
+    setWorkingDir(selected)
+    updateAssistant({ workMode: mergeWorkMode(assistant, { workingDir: selected }) })
   }
 
   const dirInvalid = workingDir.trim().length > 0 && !isAbsolutePath(workingDir.trim())
@@ -102,6 +117,15 @@ const PermissionModeSettings: FC<Props> = ({ assistant, updateAssistant }) => {
             onChange={(e) => setWorkingDir(e.target.value)}
             onBlur={handleWorkingDirBlur}
           />
+          <Tooltip title={t('settings.agentSettings.workDir.select')}>
+            <FolderOutput
+              onClick={handleSelectWorkingDir}
+              style={{ cursor: 'pointer' }}
+              size={16}
+              className="flex-shrink-0"
+              aria-label={t('settings.agentSettings.workDir.select')}
+            />
+          </Tooltip>
         </HStack>
         <span className="text-xs" style={{ color: dirInvalid ? 'var(--color-error)' : 'var(--color-text-3)' }}>
           {dirInvalid ? t('settings.agentSettings.workDir.invalid') : t('settings.agentSettings.workDir.hint')}

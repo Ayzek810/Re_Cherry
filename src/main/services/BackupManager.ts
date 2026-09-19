@@ -51,6 +51,15 @@ interface ProgressData {
 }
 
 class BackupManager {
+  /**
+   * 「重置数据」要一并清空的 userData 根条目（v0.3.1-2 补齐）。
+   * 它们都不在 `Data/` 目录里，所以原来会整体存活：`provider-keys.json`＝provider key 的加密真源
+   * （`ProviderKeyStore`，safeStorage 密文）、`config.json`＝应用配置（`ConfigManager` 的 electron-store
+   * 默认名）、`kernel/`＝内核会话库 `sessions.db`、话题注册表 `topics.json`、pi-ai 路由 `settings.json`、
+   * 附件。用户裁决："你把这些也纳入重置范围不就完了"。
+   */
+  private static readonly RESET_ROOT_ENTRIES = ['kernel', 'provider-keys.json', 'config.json'] as const
+
   private tempDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup', 'temp')
   private backupDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup')
 
@@ -81,13 +90,22 @@ class BackupManager {
     const localStorageDest = path.join(userDataPath, 'Local Storage')
     const dataDest = getDataPath()
 
+    // v0.3.1-2：重置时 userData 根下这几样也要清（详见 RESET_ROOT_ENTRIES 的说明）
+    const pendingRootEntries: Array<{ name: string; staged: string; dest: string }> = []
+    for (const name of BackupManager.RESET_ROOT_ENTRIES) {
+      const staged = path.join(userDataPath, `${name}.restore`)
+      if (await fs.pathExists(staged)) {
+        pendingRootEntries.push({ name, staged, dest: path.join(userDataPath, name) })
+      }
+    }
+
     try {
       // Check if any restore markers exist
       const hasIndexedDBRestore = await fs.pathExists(indexedDBRestore)
       const hasLocalStorageRestore = await fs.pathExists(localStorageRestore)
       const hasDataRestore = await fs.pathExists(dataRestore)
 
-      if (!hasIndexedDBRestore && !hasLocalStorageRestore && !hasDataRestore) {
+      if (!hasIndexedDBRestore && !hasLocalStorageRestore && !hasDataRestore && pendingRootEntries.length === 0) {
         return
       }
 
@@ -112,6 +130,20 @@ class BackupManager {
         await fs.rename(dataRestore, dataDest)
       }
 
+      // Restore userData 根目录下的重置目标（内核数据 / provider key / 应用配置）
+      // 逐条独立处理：Windows 上 kernel/sessions.db 若仍被上一进程占着，remove 会失败——
+      // 那时只放弃这一条（并清掉它自己的标记），不能让外层 catch 把另外两条的标记一起清掉。
+      for (const entry of pendingRootEntries) {
+        try {
+          logger.info(`[handleStartupRestore] Found ${entry.name}.restore, completing restoration...`)
+          await fs.remove(entry.dest).catch(() => {})
+          await fs.rename(entry.staged, entry.dest)
+        } catch (error) {
+          logger.error(`[handleStartupRestore] Failed to reset ${entry.name}:`, error as Error)
+          await fs.remove(entry.staged).catch(() => {})
+        }
+      }
+
       logger.info('[handleStartupRestore] Restoration completed successfully')
     } catch (error) {
       logger.error('[handleStartupRestore] Failed to complete restoration:', error as Error)
@@ -119,6 +151,9 @@ class BackupManager {
       await fs.remove(indexedDBRestore).catch(() => {})
       await fs.remove(localStorageRestore).catch(() => {})
       await fs.remove(dataRestore).catch(() => {})
+      for (const entry of pendingRootEntries) {
+        await fs.remove(entry.staged).catch(() => {})
+      }
     }
   }
 
@@ -616,6 +651,10 @@ class BackupManager {
 
       logger.info('[restoreDirect] Restore staged successfully, relaunching app to apply...')
 
+      // v0.3.1-2：与 ipc.ts 的 relaunch 处理器同理——内核设过 ELECTRON_RUN_AS_NODE=1，
+      // app.relaunch 会继承环境，必须先剥掉，否则重启后应用会以 node 而非 Electron 启动。
+      delete process.env.ELECTRON_RUN_AS_NODE
+
       app.relaunch()
       app.exit(0)
     } catch (error) {
@@ -847,11 +886,27 @@ class BackupManager {
    * Stage an empty Data directory; handleStartupRestore swaps it in on next launch.
    * Avoids races with libsql / MemoryService / KnowledgeService recreating files
    * before relaunch.
+   *
+   * v0.3.1-2：`Data/` 之外的三样也一并预备（内核数据 / provider key / 应用配置）——它们都在 userData 根，
+   * 原来不在重置范围内，导致"重置后 key、会话历史、应用配置全都还在"。目录预备成空目录，文件预备成
+   * 对应的空 store（`{ keys: {} }` / `{}`），由下次启动的 handleStartupRestore 顶掉真身。
    */
   public async resetData() {
     const dataRestorePath = getDataPath() + '.restore'
     await fs.remove(dataRestorePath).catch(() => {})
     await fs.ensureDir(dataRestorePath)
+
+    const userDataPath = app.getPath('userData')
+    for (const name of BackupManager.RESET_ROOT_ENTRIES) {
+      const staged = path.join(userDataPath, `${name}.restore`)
+      await fs.remove(staged).catch(() => {})
+      if (path.extname(name)) {
+        // provider-keys.json 的 electron-store 形状是 { keys: {} }；config.json 空对象即回默认值
+        await fs.writeJson(staged, name === 'provider-keys.json' ? { keys: {} } : {})
+      } else {
+        await fs.ensureDir(staged)
+      }
+    }
   }
 
   /**

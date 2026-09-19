@@ -20,7 +20,7 @@ import { createSelector, createSlice } from '@reduxjs/toolkit'
 import { DEFAULT_CONTEXTCOUNT, DEFAULT_TEMPERATURE } from '@renderer/config/constant'
 import { TopicManager } from '@renderer/hooks/useTopic'
 import { DEFAULT_ASSISTANT_SETTINGS, getDefaultAssistant, getDefaultTopic } from '@renderer/services/AssistantService'
-import type { Assistant, AssistantPreset, AssistantSettings, Model, Topic } from '@renderer/types'
+import type { Assistant, AssistantSettings, Model, Topic } from '@renderer/types'
 import { isEmpty, uniqBy } from 'lodash'
 
 import type { RootState } from '.'
@@ -30,7 +30,6 @@ export interface AssistantsState {
   assistants: Assistant[]
   tagsOrder: string[]
   collapsedTags: Record<string, boolean>
-  presets: AssistantPreset[]
 }
 
 const initialState: AssistantsState = {
@@ -38,7 +37,6 @@ const initialState: AssistantsState = {
   assistants: [getDefaultAssistant()],
   tagsOrder: [],
   collapsedTags: {},
-  presets: []
 }
 
 const normalizeTopics = (topics: unknown): Topic[] => (Array.isArray(topics) ? topics : [])
@@ -323,43 +321,6 @@ const assistantsSlice = createSlice({
           : assistant
       )
     },
-    // Assistant Presets
-    setAssistantPresets: (state, action: PayloadAction<AssistantPreset[]>) => {
-      const presets = action.payload
-      state.presets = []
-      presets.forEach((p) => {
-        state.presets.push(p)
-      })
-    },
-    addAssistantPreset: (state, action: PayloadAction<AssistantPreset>) => {
-      state.presets.push(action.payload)
-    },
-    removeAssistantPreset: (state, action: PayloadAction<{ id: string }>) => {
-      state.presets = state.presets.filter((c) => c.id !== action.payload.id)
-    },
-    updateAssistantPreset: (state, action: PayloadAction<AssistantPreset>) => {
-      const preset = action.payload
-      const index = state.presets.findIndex((a) => a.id === preset.id)
-      if (index !== -1) {
-        state.presets[index] = preset
-      }
-    },
-    updateAssistantPresetSettings: (
-      state,
-      action: PayloadAction<{ assistantId: string; settings: Partial<AssistantSettings> }>
-    ) => {
-      for (const agent of state.presets) {
-        const settings = action.payload.settings
-        if (agent.id === action.payload.assistantId) {
-          for (const key in settings) {
-            if (!agent.settings) {
-              agent.settings = { ...DEFAULT_ASSISTANT_SETTINGS }
-            }
-            agent.settings[key] = settings[key]
-          }
-        }
-      }
-    }
   }
 })
 
@@ -383,11 +344,6 @@ export const {
   setTagsOrder,
   updateAssistantSettings,
   updateTagCollapse,
-  setAssistantPresets,
-  addAssistantPreset,
-  removeAssistantPreset,
-  updateAssistantPreset,
-  updateAssistantPresetSettings
 } = assistantsSlice.actions
 
 export const selectAllTopics = createSelector([(state: RootState) => state.assistants.assistants], (assistants) =>
