@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { copyFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
@@ -6,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent, AgentHandle } from '@deepseek-ai/dsh-agent'
 import type { EncodedImageAttachment, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
-import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
@@ -21,13 +22,26 @@ import { loggerService } from '@logger'
 import { EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
 import { KERNEL_REASONING_LEVELS, type KernelReasoningLevel } from '@shared/config/reasoning'
 import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
+import type { MCPTool } from '@types'
 import { app } from 'electron'
 
+import type { KnowledgeTurnBase, TurnDocument } from '../services/knowledge/KnowledgeService'
+import { knowledgeService } from '../services/knowledge/KnowledgeService'
+import { mcpService } from '../services/mcp/MCPService'
+import { preprocessChannel } from '../services/preprocess/preprocessChannel'
+import type { SkillTurnEntry } from '../services/skills/SkillService'
+import { skillService } from '../services/skills/SkillService'
 import * as askUserTool from './askUserTool'
 import * as describeImagesTool from './describeImageTool'
+import * as documentTool from './documentTool'
+import * as knowledgeSearchTool from './knowledgeSearchTool'
 import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
+import { createMcpBridgeModule } from './mcpBridge'
+import * as ocrDocumentTool from './ocrDocumentTool'
 import { isInjectedUserEvent } from './sessionEventView'
 import { resumeOrCreateSession } from './sessionResumeFallback'
+import * as skillTool from './skillTool'
+import * as webSearchTool from './webSearchTool'
 
 const logger = loggerService.withContext('KernelTopics')
 
@@ -81,6 +95,20 @@ const liveHandles = new Map<string, AgentHandle>()
 interface MountedToolsState {
   builtins: string[]
   externals: string[]
+  /**
+   * MCP 挂载单元的漂移签名（批次3）：`mcp:<serverId>` 挂载单元的 id 不含工具集信息，
+   * 服务器配置/工具清单变化（listTools 缓存内容）不会改 id——签名把每台服务器的
+   * 工具集哈希折叠进比对，变化即触发 dispose 重挂（工具面跟轮走的 MCP 补充维度）。
+   * 无 mcp 挂载单元时为 ''（与 idListEquals 同语义：无该维度则恒等）。
+   */
+  mcpSignature: string
+  /**
+   * 每轮登记漂移签名（批次5/6）：skill/read_document 的可用清单（cherry:skills /
+   * cherry:documents 快照节）是 setup 时静态计算的——挂载单元 id 不随清单内容变化，
+   * 启用集/附件集跨轮变更必须靠本签名触发重挂才对模型可见（v0.3.2 真机实锤：
+   * 注释曾声称"无需漂移签名"，实际首测即索引缺失）。无登记时为 ''。
+   */
+  turnRegSignature: string
   /** setup 时的 topic.systemPrompt 快照（闭包持行对象，行被 createTopic 换新后旧值不变）。 */
   systemPrompt: string
 }
@@ -104,7 +132,30 @@ const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => 
   // v0.3.1 识图通道补全：主模型无视觉 + 已配置转述模型时由渲染层注入 builtinTools；
   // 工具体 = describe_images（本仓模块）。图片 ref 的真相源是会话日志，
   // 工具执行时在日志内反查（不建并行登记表）。
-  { id: 'describe_images', mount: (agentCtx) => agentCtx.plugin(describeImagesTool) }
+  { id: 'describe_images', mount: (agentCtx) => agentCtx.plugin(describeImagesTool) },
+  // v0.3.2 批次2 网络搜索接线：渲染层 messageThunk 在助手网络搜索开启（webSearchProviderId
+  // 就绪）的轮把 'web_search' 并入 builtinTools；执行走主进程引擎（services/WebSearchService），
+  // 每轮提供商经 sendMessage options.webSearch 登记（见 sendMessage 内 setTurnProvider）。
+  { id: 'web_search', mount: (agentCtx) => agentCtx.plugin(webSearchTool) },
+  // v0.3.2 批次4 知识库接线：助手挂知识库（knowledge_bases 非空）的轮把 'knowledge_search'
+  // 并入 builtinTools；执行直调主进程 KnowledgeService（嵌入+余弦检索），每轮库清单经
+  // sendMessage options.knowledgeBases 登记（webSearch 同构）。
+  { id: 'knowledge_search', mount: (agentCtx) => agentCtx.plugin(knowledgeSearchTool) },
+  // v0.3.2 批次5 skills 接线：助手启用技能（enabledSkills 非空）的轮把 'skill' 并入
+  // builtinTools；可用技能的 name/description 索引由 setup 写入 RuntimeContextProjection
+  // 快照节（setup 静态计算——启用集跨轮变更靠 turnRegSignature 漂移重挂刷新），工具按
+  // name 反查磁盘 SKILL.md。
+  { id: 'skill', mount: (agentCtx) => agentCtx.plugin(skillTool) },
+  // v0.3.2 批次6 文档阅读（roadmap L29"聊天中文档阅读处理"）：触发消息带文件附件的
+  // 轮把 'read_document' 并入 builtinTools；文档名清单由 setup 写入快照节，工具按名
+  // 反查登记读全文（直读：PDF 文本层，无扫描件检测；空文本如实报错）。
+  { id: 'read_document', mount: (agentCtx) => agentCtx.plugin(documentTool) },
+  // v0.3.2 验收轮（2026-09-22 用户裁决）：OCR 分体独立内置工具——模型自行判断何时
+  // 调用（read_document 文本层空/乱、或用户明确要 OCR）。挂载条件 = 本轮有
+  // 文档附件（渲染层与 read_document 同轮并入）。执行按本轮登记的文档处理服务商
+  // 路由（用户第三轮裁决：挂进文档处理通道，LocalPaddle 只是通道里的本地条目）；
+  // 未登记/未配置时执行侧如实报可行动错误，不做静默降级。
+  { id: 'ocr_document', mount: (agentCtx) => agentCtx.plugin(ocrDocumentTool) }
 ]
 
 const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
@@ -167,10 +218,20 @@ export function buildToolFaceSection(builtins: string[], externals: string[]): s
         EXTERNAL_TOOL_CAPABILITIES[id] === undefined ? [] : [`  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`]
       )
     )
-  } else {
+  } else if (!externals.some((id) => id.startsWith('mcp:'))) {
+    // 本轮只有 MCP 工具时不说"没有任何工具"——MCP 工具的 schema 已在本请求里，
+    // 该行只针对文件/命令执行体缺席（批次3）。
     lines.push(
       '- You have NO file or command tools this turn. Do not simulate reading, writing, or executing anything; ' +
         'if the task requires them, say so plainly and let the user decide.'
+    )
+  }
+  const mcpIds = externals.filter((id) => id.startsWith('mcp:'))
+  if (mcpIds.length > 0) {
+    lines.push(
+      `- MCP (Model Context Protocol) tools are available this turn from ${mcpIds.length} connected server(s): ` +
+        'their schemas are included in THIS request. Call them like any other tool; results come from external servers.',
+      ...mcpIds.map((id) => `  - server: ${id.slice('mcp:'.length)}`)
     )
   }
   lines.push(
@@ -189,9 +250,59 @@ function idListEquals(a: string[], b: string[]): boolean {
   return a.every((id, index) => id === b[index])
 }
 
-function mountedStateEquals(mounted: MountedToolsState | undefined, builtins: string[], externals: string[]): boolean {
+function mountedStateEquals(
+  mounted: MountedToolsState | undefined,
+  builtins: string[],
+  externals: string[],
+  mcpSignature: string,
+  turnRegSignature: string
+): boolean {
   if (mounted === undefined) return false
-  return idListEquals(mounted.builtins, builtins) && idListEquals(mounted.externals, externals)
+  return (
+    idListEquals(mounted.builtins, builtins) &&
+    idListEquals(mounted.externals, externals) &&
+    mounted.mcpSignature === mcpSignature &&
+    mounted.turnRegSignature === turnRegSignature
+  )
+}
+
+/**
+ * 每轮登记漂移签名（批次5/6）：折叠 skill/read_document 本轮登记清单（技能
+ * name/description、文档 name/path/ext）为单串。清单随轮重写（sendMessage 内
+ * setTurnSkills/setTurnDocuments），快照节文本又是 setup 时静态计算——签名变化
+ * 即 dispose 重挂，索引才对模型新鲜。与 computeMcpSignature 同构；无登记为 ''。
+ */
+function computeTurnRegSignature(topicId: string): string {
+  const skills = skillService.getTurnSkills(topicId) ?? []
+  const documents = knowledgeService.getTurnDocuments(topicId) ?? []
+  if (skills.length === 0 && documents.length === 0) return ''
+  const payload = JSON.stringify({
+    skills: skills.map((skill) => [skill.name, skill.description]),
+    documents: documents.map((document) => [document.name, document.path, document.ext])
+  })
+  return createHash('sha256').update(payload).digest('hex').slice(0, 16)
+}
+
+/**
+ * MCP 挂载漂移签名（批次3）：对每个 `mcp:<serverId>` 外置单元，取主进程 MCPService
+ * 的工具集哈希（getToolsetSignature 走 listTools 缓存，服务器不可达 → 'unreachable'）
+ * 折叠成单串。仅同步自渲染层的配置缺失也编码进签名（missing），配置到位后下一轮
+ * 自然漂移重挂。无 mcp 单元返回 ''。
+ */
+async function computeMcpSignature(externals: string[]): Promise<string> {
+  const mcpIds = externals.filter((extId) => extId.startsWith('mcp:'))
+  if (mcpIds.length === 0) return ''
+  const parts: string[] = []
+  for (const extId of mcpIds) {
+    const server = mcpService.getServerById(extId.slice('mcp:'.length))
+    if (server === undefined) {
+      parts.push(`${extId}=missing`)
+      continue
+    }
+    const signature = await mcpService.getToolsetSignature(server).catch(() => 'unreachable')
+    parts.push(`${extId}=${signature}`)
+  }
+  return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
 }
 
 /**
@@ -962,28 +1073,110 @@ export async function destroyTurns(
   return { purgedTopics, truncated, focusTopicId }
 }
 
-export async function sendMessage(
-  ctx: Context,
-  id: string,
-  text: string,
-  options?: {
-    reasoningEffort?: string
-    /** 本轮启用的内置工具 id 列表（助手 builtinTools 的开集，见 @shared/config/agentTools）。 */
-    builtinTools?: string[]
-    /** 本轮启用的外置工具 id 列表（助手 externalTools 的开集；话题工作模式开关 = 该清单的宏）。 */
-    externalTools?: string[]
-    /** 外置工具的权限档位（沙箱/审批预设）；仅外置清单非空时落位。 */
-    tier?: WorkModeApprovalTier
-    /**
-     * 随消息附带的图片（base64 wire 形态，v0.3.1 识图通道）。
-     * 经 ctx.attachments 准入（容器/尺寸/字节预算校验 + 内容寻址落盘）后，
-     * 以 image 内容块并入用户消息；纯文本路由由内核降级为稳定 handle 文本。
-     */
-    images?: EncodedImageAttachment[]
-  }
-): Promise<void> {
+/** 每轮发送能力载荷（Dsh_TopicSend handler 校验后透传的权威形状；
+ * IPC 三层——preload 声明 / handler 白名单 / topicTree.send——必须与它逐字段对齐。
+ * v0.3.2 事故：handler 白名单停在 v0.3.1 五字段，批次2/4/5/6 新增的
+ * webSearch/knowledgeBases/skills/documents 被静默剥离，工具挂载了但每轮登记永远
+ * 落空（"no web search provider is configured for this conversation turn"）。 */
+export interface TopicSendOptions {
+  reasoningEffort?: string
+  /** 本轮启用的内置工具 id 列表（助手 builtinTools 的开集，见 @shared/config/agentTools）。 */
+  builtinTools?: string[]
+  /** 本轮启用的外置工具 id 列表（助手 externalTools 的开集；话题工作模式开关 = 该清单的宏）。 */
+  externalTools?: string[]
+  /** 外置工具的权限档位（沙箱/审批预设）；仅外置清单非空时落位。 */
+  tier?: WorkModeApprovalTier
+  /**
+   * 随消息附带的图片（base64 wire 形态，v0.3.1 识图通道）。
+   * 经 ctx.attachments 准入（容器/尺寸/字节预算校验 + 内容寻址落盘）后，
+   * 以 image 内容块并入用户消息；纯文本路由由内核降级为稳定 handle 文本。
+   */
+  images?: EncodedImageAttachment[]
+  /**
+   * 网络搜索（批次2）：本轮 web_search 工具使用的提供商 id。渲染层在助手
+   * 网络搜索开启且提供商就绪时随 builtinTools='web_search' 一并上行；
+   * 缺省/undefined = 本轮未启用，工具执行侧防线拒答。
+   */
+  webSearch?: { providerId: string }
+  /**
+   * 知识库检索（批次4）：本轮 knowledge_search 工具可检索的库清单。渲染层在
+   * 助手挂知识库（knowledge_bases 非空）时随 builtinTools='knowledge_search'
+   * 一并上行；缺省/undefined = 本轮未启用，工具执行侧防线拒答。
+   */
+  knowledgeBases?: KnowledgeTurnBase[]
+  /**
+   * 技能（批次5）：本轮 skill 工具可读的技能清单（enabledSkills ∩ 切片元数据）。
+   * 渲染层在助手启用技能时随 builtinTools='skill' 一并上行；缺省/undefined =
+   * 本轮未启用，工具执行侧防线拒答（索引进 RuntimeContextProjection 快照节）。
+   */
+  skills?: SkillTurnEntry[]
+  /**
+   * 文档阅读（批次6）：本轮 read_document 工具可读的文档清单（触发消息 FILE 附件）。
+   * 渲染层随 builtinTools='read_document' 一并上行；缺省/undefined = 本轮无文档
+   * 附件，工具执行侧防线拒答（名清单进 RuntimeContextProjection 快照节）。
+   */
+  documents?: TurnDocument[]
+  /**
+   * 文档处理通道（§7.17 三轮）：本轮 ocr_document 工具的服务商 id（渲染层上行
+   * preprocess.defaultProvider；缺省/undefined = 本轮未登记，工具执行侧如实报错，
+   * 不静默降级）。配置本体经 Dsh_SyncPreprocess 投影进主进程内存（apiKey 不走此通道）。
+   */
+  preprocess?: { providerId: string }
+}
+
+export async function sendMessage(ctx: Context, id: string, text: string, options?: TopicSendOptions): Promise<void> {
   const builtins = [...new Set(options?.builtinTools ?? [])].sort()
   const externals = [...new Set(options?.externalTools ?? [])].sort()
+  // 批次2 网络搜索：本轮提供商登记（web_search 工具执行时按 topicId 反查）。
+  // 即设即覆盖：每轮发送都会重写或置空，工具只在挂载轮可被调。
+  const webSearchKernel = (
+    ctx as unknown as { webSearch?: { setTurnProvider: (topicId: string, providerId: string | undefined) => void } }
+  ).webSearch
+  if (webSearchKernel !== undefined) {
+    webSearchKernel.setTurnProvider(id, options?.webSearch?.providerId)
+    // 诊断锚点（v0.3.2 真机事故）：登记缺失 = "no web search provider is configured"，
+    // 这行日志区分"本轮未启用"（providerId=undefined，正常）与"启用但登记失败"。
+    if (options?.webSearch?.providerId !== undefined) {
+      logger.info(`kernel: turn provider registered (topic=${id}, provider=${options.webSearch.providerId})`)
+    }
+  } else {
+    logger.error('kernel: webSearch seam not mounted; per-turn provider registration skipped')
+  }
+  // 批次4 知识检索：本轮库清单登记（knowledge_search 工具执行时按 topicId 反查）。
+  const knowledgeKernel = (
+    ctx as unknown as {
+      knowledge?: { setTurnBases: (topicId: string, bases: KnowledgeTurnBase[] | undefined) => void }
+    }
+  ).knowledge
+  if (knowledgeKernel !== undefined) {
+    knowledgeKernel.setTurnBases(id, options?.knowledgeBases)
+  } else {
+    logger.error('kernel: knowledge seam not mounted; per-turn base registration skipped')
+  }
+  // 批次5 技能：本轮可读技能登记（skill 工具执行时按 topicId 反查；索引进快照节）。
+  const skillKernel = (
+    ctx as unknown as { skills?: { setTurnSkills: (topicId: string, skills: SkillTurnEntry[] | undefined) => void } }
+  ).skills
+  if (skillKernel !== undefined) {
+    skillKernel.setTurnSkills(id, options?.skills)
+  } else {
+    logger.error('kernel: skills seam not mounted; per-turn skill registration skipped')
+  }
+  // 批次6 文档阅读：本轮附件文档登记（read_document 工具执行时按 topicId 反查）。
+  const documentKernel = (
+    ctx as unknown as {
+      documents?: { setTurnDocuments: (topicId: string, documents: TurnDocument[] | undefined) => void }
+    }
+  ).documents
+  if (documentKernel !== undefined) {
+    documentKernel.setTurnDocuments(id, options?.documents)
+  } else {
+    logger.error('kernel: documents seam not mounted; per-turn document registration skipped')
+  }
+  // §7.17 三轮 文档处理通道：本轮服务商登记（ocr_document 工具执行时按 topicId
+  // 反查，未登记 = 如实报错不静默降级）。配置本体（apiKey 等）走 Dsh_SyncPreprocess，
+  // 不经发送参数——webSearch 同构（id 登记 + 配置整体投影分离）。
+  preprocessChannel.setTurnProvider(id, options?.preprocess?.providerId)
   // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
   //（会话已持久化）并按新状态重挂——开关随时可切，生效点永远在下一轮开始之前。
   // systemPrompt 同判：assistant section 是 setup 时的静态文本，行被 createTopic 覆盖后
@@ -991,10 +1184,17 @@ export async function sendMessage(
   const mountedState = mountedTools.get(id)
   const desiredPrompt = topics.get(id)?.systemPrompt ?? ''
   const handle = liveHandles.get(id)
+  // MCP 漂移签名（批次3）：本轮期望工具集哈希 vs 活体挂载时快照——服务器配置/工具
+  // 清单变化时 id 清单不变，靠签名差异触发重挂（computeMcpSignature 走 listTools 缓存，
+  // 失败按 'unreachable' 计，服务恢复后下一轮自动重挂）。
+  const desiredMcpSignature = await computeMcpSignature(externals)
+  // 每轮登记漂移签名（批次5/6）：技能/文档清单跨轮变更同样 id 不变、靠签名触发重挂
+  //（登记已在本函数开头写入，快照节由重挂后的 setup 重建）。
+  const desiredTurnRegSignature = computeTurnRegSignature(id)
   if (
     handle !== undefined &&
     (mountedState === undefined ||
-      !mountedStateEquals(mountedState, builtins, externals) ||
+      !mountedStateEquals(mountedState, builtins, externals, desiredMcpSignature, desiredTurnRegSignature) ||
       mountedState.systemPrompt !== desiredPrompt)
   ) {
     await handle.dispose()
@@ -1021,16 +1221,26 @@ export async function sendMessage(
     }
     topic.updatedAt = Date.now()
   }
-  // 内容块拼接：文本块（非空时）+ 准入后的图片块。准入失败（超限/坏容器）整轮拒绝，
-  // 错误经 IPC 原样上抛——调用方可修正后重发，会话日志不留半轮。
+  // 内容块拼接：文本块（非空时）+ 准入后的图片块 + 文档附件引用块。准入失败
+  //（超限/坏容器）整轮拒绝，错误经 IPC 原样上抛——调用方可修正后重发，会话日志
+  // 不留半轮。文档块只存引用（字节留磁盘原路径，read_document 按路径直读）——
+  // 会话日志是唯一权威（不变量2），折叠可恢复 FILE 块；LLM 请求组装按
+  // merge-extensible 契约跳过未知块（kernelContentBlocks.ts 有记）。
   let images: ImageAttachmentRef[] = []
   if (options?.images !== undefined && options.images.length > 0) {
     images = [...(await admitEncodedImages(ctx.attachments, options.images))]
   }
   const imageBlocks = images.map((ref) => ({ type: 'image' as const, attachment: ref }))
-  const content: Array<{ type: 'text'; text: string } | { type: 'image'; attachment: ImageAttachmentRef }> = [
+  const documentBlocks = (options?.documents ?? []).map((document) => ({
+    type: 'document' as const,
+    name: document.name,
+    path: document.path,
+    ...(document.ext !== undefined ? { ext: document.ext } : {})
+  }))
+  const content: ContentBlock[] = [
     ...(text.length > 0 ? [{ type: 'text' as const, text }] : []),
-    ...imageBlocks
+    ...imageBlocks,
+    ...documentBlocks
   ]
   if (content.length === 0) {
     // 调用方（渲染层发送链）已挡空消息；这里兜底保持旧行为，避免空 content 的畸形事件。
@@ -1287,7 +1497,12 @@ async function ensureAgent(
     // 用户消息之后，最近因位置），状态变化即被模型以最高新鲜度看到，压掉它对自己历史回答
     // 的锚定（真机实锤：挂载/schema 全对，模型仍连续复读旧状态）。面没变不注入（dsh 去重）。
     // 文本刻意压到最短（无感注入：一词一句都是 token）。
-    if (externalsMounted.length > 0) {
+    // 批次5/6 修正（真机实锤）：cherry:skills / cherry:documents 每轮索引走同一运行时
+    // 快照投影——挂了这两个内置工具的轮不得抑制（曾按"仅外置"判定，索引被吞，模型看不到
+    // Attached skills、按用户原话瞎猜技能名被执行侧防线拒答）。web_search/knowledge_search
+    // 的登记在工具执行时才反查、无快照节，保持原抑制（上下文净化的收益不回吐）。
+    const snapshotDependentBuiltin = builtinsMounted.includes('skill') || builtinsMounted.includes('read_document')
+    if (externalsMounted.length > 0 || snapshotDependentBuiltin) {
       agentCtx.systemPrompt.context({
         name: 'cherry:tool-face-state',
         order: 0,
@@ -1307,9 +1522,65 @@ async function ensureAgent(
     for (const entry of EXTERNAL_MOUNTS) {
       if (externalsMounted.includes(entry.id)) await entry.mount(agentCtx)
     }
+    // MCP 挂载单元（批次3）：id 形如 `mcp:<serverId>`，由渲染层 messageThunk 按助手
+    // mcpMode/mcpServers 派生（manual=勾选集，auto=全部活跃——fork 无 hub，auto 语义
+    // 就地降级为全量，交付注记有记）。服务器配置经 Dsh_SyncMcpServers 同步进主进程
+    // 内存（同 webSearch 的 apiKey 只进主进程先例）；工具清单 mcpService.listTools（缓存）。
+    // 配置缺失/不可达时挂零工具桥或跳过并告警——不静默假装有工具。
+    for (const extId of externalsMounted.filter((item) => item.startsWith('mcp:'))) {
+      const server = mcpService.getServerById(extId.slice('mcp:'.length))
+      if (server === undefined) {
+        logger.warn(`kernel: mcp mount "${extId}" skipped — server config not synced to main process`)
+        continue
+      }
+      let tools: MCPTool[] = []
+      try {
+        tools = await mcpService.listTools(server)
+      } catch (error) {
+        logger.warn(
+          `kernel: mcp mount "${extId}" listTools failed — mounting empty bridge`,
+          error instanceof Error ? error : new Error(String(error))
+        )
+      }
+      await agentCtx.plugin(createMcpBridgeModule(server, tools))
+    }
     logger.info(
       `kernel: tools mounted for topic "${topic.id}" builtins=[${builtinsMounted.join(',') || '(none)'}] externals=[${externalsMounted.join(',') || '(none)'}]`
     )
+    // 技能索引（批次5）：skill 工具挂载的轮，把可用技能（本轮登记的
+    // enabledSkills ∩ 切片元数据）的 name/description 索引进 RuntimeContextProjection
+    // 快照节——文本为 setup 时静态计算，启用集跨轮变更靠 turnRegSignature 漂移重挂
+    // 刷新；模型按需用 skill 工具读 SKILL.md 全文（progressive disclosure）。
+    if (builtinsMounted.includes('skill')) {
+      const turnSkills = skillService.getTurnSkills(topic.id) ?? []
+      const index =
+        turnSkills.length > 0
+          ? turnSkills.map((skill) => `- ${skill.name}${skill.description ? `: ${skill.description}` : ''}`).join('\n')
+          : '(no skills are attached to this turn)'
+      agentCtx.systemPrompt.context({
+        name: 'cherry:skills',
+        order: 1,
+        text: `Attached skills (${turnSkills.length}); read one with the skill tool by its exact name:\n${index}`
+      })
+    }
+    // 文档清单（批次6）：read_document 挂载的轮，附件文档名索引进快照节（同上，逐轮新鲜）。
+    // OCR 分体（2026-09-22 用户裁决）：ocr_document 已挂载的轮顺带告知分工——
+    // 模型据此自主选择直读还是 OCR，无需在描述里重复文档清单。
+    if (builtinsMounted.includes('read_document')) {
+      const turnDocuments = knowledgeService.getTurnDocuments(topic.id) ?? []
+      const index =
+        turnDocuments.length > 0
+          ? turnDocuments.map((document) => `- ${document.name}${document.ext ? ` (${document.ext})` : ''}`).join('\n')
+          : '(no documents are attached to this turn)'
+      const ocrHint = builtinsMounted.includes('ocr_document')
+        ? ' PDFs are read from their text layer; if a PDF turns out to be scanned (no text layer), read it with the ocr_document tool, which processes it through the document-processing provider configured in settings.'
+        : ''
+      agentCtx.systemPrompt.context({
+        name: 'cherry:documents',
+        order: 1,
+        text: `Attached documents (${turnDocuments.length}); read one with the read_document tool by its exact name.${ocrHint}\n${index}`
+      })
+    }
   }
 
   // 工作目录：仅会话创建时可写入 header.cwd（持久化、不可变）；resume 路径沿用已存值。
@@ -1346,6 +1617,9 @@ async function ensureAgent(
   mountedTools.set(topic.id, {
     builtins: builtinsMounted,
     externals: externalsMounted,
+    mcpSignature: await computeMcpSignature(externalsMounted),
+    // 与上方快照节同源（登记已在 sendMessage 开头写入；话题直开轮为既有登记/空）
+    turnRegSignature: computeTurnRegSignature(topic.id),
     systemPrompt: topic.systemPrompt ?? ''
   })
   return handle.agent

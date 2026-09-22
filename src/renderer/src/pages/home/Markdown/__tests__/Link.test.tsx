@@ -1,18 +1,12 @@
+import type { Citation } from '@renderer/types'
 import { fireEvent, render, screen } from '@testing-library/react'
 import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { CitationRegistryContext } from '../CitationRegistryContext'
 import Link from '../Link'
 
 const mocks = vi.hoisted(() => ({
-  parseJSON: vi.fn(),
-  findCitationInChildren: vi.fn(),
-  CitationTooltip: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="citation-tooltip">{children}</div>
-  ),
-  CitationSchema: {
-    safeParse: vi.fn((input: any) => ({ success: !!input, data: input }))
-  },
   Hyperlink: ({ children, href }: { children: React.ReactNode; href: string }) => (
     <div data-testid="hyperlink" data-href={href}>
       {children}
@@ -20,22 +14,12 @@ const mocks = vi.hoisted(() => ({
   )
 }))
 
-vi.mock('@renderer/utils/json', () => ({
-  parseJSON: mocks.parseJSON
-}))
-
-vi.mock('@renderer/utils/markdown', () => ({
-  findCitationInChildren: mocks.findCitationInChildren
-}))
-
-vi.mock('../CitationTooltip', () => ({
-  default: mocks.CitationTooltip,
-  CitationSchema: mocks.CitationSchema
-}))
-
 vi.mock('../Hyperlink', () => ({
   default: mocks.Hyperlink
 }))
+
+// CitationTooltip 不 mock——真实组件，验证 capsules 行为（antd Tooltip 渲染节流下仅断言不崩溃）
+// Markdown 依赖里 antd/styled 已由 vitest 环境（jsdom）可用。
 
 describe('Link', () => {
   beforeEach(() => {
@@ -54,51 +38,13 @@ describe('Link', () => {
     expect(screen.getByText('Go to section')).toBeInTheDocument()
   })
 
-  it('should wrap with CitationTooltip when children include <sup> and citation data exists', () => {
-    mocks.findCitationInChildren.mockReturnValue('{"title":"ref"}')
-    mocks.parseJSON.mockReturnValue({ title: 'ref' })
-
+  it('should render normal external link inside Hyperlink', () => {
     const onParentClick = vi.fn()
     const { container } = render(
       <div onClick={onParentClick}>
-        <Link href="https://example.com">
-          <span>ref</span>
-          <sup>1</sup>
-        </Link>
+        <Link href="https://domain.com/path">Open</Link>
       </div>
     )
-
-    expect(screen.getByTestId('citation-tooltip')).toBeInTheDocument()
-
-    const anchor = container.querySelector('a') as HTMLAnchorElement
-    expect(anchor).not.toBeNull()
-    expect(anchor.getAttribute('target')).toBe('_blank')
-    expect(anchor.getAttribute('rel')).toBe('noreferrer')
-
-    fireEvent.click(anchor)
-    expect(onParentClick).not.toHaveBeenCalled()
-  })
-
-  it('should fall back to Hyperlink when <sup> exists but citation data is null', () => {
-    mocks.findCitationInChildren.mockReturnValue('{"title":"ref"}')
-    mocks.parseJSON.mockReturnValue(null)
-
-    render(
-      <Link href="https://example.com">
-        <span>text</span>
-        <sup>1</sup>
-      </Link>
-    )
-
-    expect(screen.getByTestId('hyperlink')).toBeInTheDocument()
-    expect(screen.queryByTestId('citation-tooltip')).toBeNull()
-  })
-
-  it('should render normal external link inside Hyperlink when not a citation', () => {
-    mocks.findCitationInChildren.mockReturnValue(undefined)
-    mocks.parseJSON.mockReturnValue(undefined)
-
-    const { container } = render(<Link href="https://domain.com/path">Open</Link>)
 
     const wrapper = screen.getByTestId('hyperlink')
     expect(wrapper).toBeInTheDocument()
@@ -108,20 +54,66 @@ describe('Link', () => {
     expect(anchor.getAttribute('href')).toBe('https://domain.com/path')
     expect(anchor.getAttribute('target')).toBe('_blank')
     expect(anchor.getAttribute('rel')).toBe('noreferrer')
+
+    fireEvent.click(anchor)
+    expect(onParentClick).not.toHaveBeenCalled()
   })
+})
 
-  it('should omit empty href for citation link (no href attribute when href="")', () => {
-    mocks.findCitationInChildren.mockReturnValue('{"title":"ref"}')
-    mocks.parseJSON.mockReturnValue({ title: 'ref' })
+describe('Link citation capsules（V2 统一引用机制）', () => {
+  const webCitation: Citation = {
+    number: 1,
+    url: 'https://example.com/page',
+    title: 'Example Page',
+    content: 'snippet'
+  }
 
+  // data-citation 编号经 children 递归查找——只能读元素 props，故直接传普通元素
+  // 模拟 react-markdown 传入的 sup 子节点（自定义组件的 props 里没有 data-citation）
+  it('renders citation link without crashing when registry has the number and URL matches', () => {
+    const registry = new Map<number, Citation>([[1, webCitation]])
     const { container } = render(
-      <Link href="">
-        text<sup>2</sup>
-      </Link>
+      <CitationRegistryContext value={registry}>
+        <Link href="https://example.com/page">
+          <span>
+            <span data-citation="1">1</span>
+          </span>
+        </Link>
+      </CitationRegistryContext>
     )
 
-    const anchor = container.querySelector('a') as HTMLAnchorElement
-    expect(anchor).not.toBeNull()
-    expect(anchor.hasAttribute('href')).toBe(false)
+    // registry 命中 + URL 一致 → 不走 Hyperlink（挂胶囊形态）
+    expect(screen.queryByTestId('hyperlink')).toBeNull()
+    expect(container.querySelector('a')).not.toBeNull()
+  })
+
+  it('falls back to Hyperlink when registry misses the number', () => {
+    const registry = new Map<number, Citation>()
+    render(
+      <CitationRegistryContext value={registry}>
+        <Link href="https://example.com/page">
+          <span>
+            <span data-citation="9">9</span>
+          </span>
+        </Link>
+      </CitationRegistryContext>
+    )
+
+    expect(screen.getByTestId('hyperlink')).toBeInTheDocument()
+  })
+
+  it('falls back to Hyperlink when href does not match the citation URL (anti-injection, V2)', () => {
+    const registry = new Map<number, Citation>([[1, webCitation]])
+    render(
+      <CitationRegistryContext value={registry}>
+        <Link href="https://evil.example.com/hijack">
+          <span>
+            <span data-citation="1">1</span>
+          </span>
+        </Link>
+      </CitationRegistryContext>
+    )
+
+    expect(screen.getByTestId('hyperlink')).toBeInTheDocument()
   })
 })

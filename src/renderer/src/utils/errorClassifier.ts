@@ -147,7 +147,8 @@ export function classifyError(error?: SerializedError, providerId?: string): Err
 
   // Knowledge base / embedding
   if (msg.includes('embedding') || msg.includes('vectorize') || msg.includes('knowledge base')) {
-    return { category: 'knowledge', i18nKey: 'error.diagnosis.knowledge', navTarget: null }
+    // v0.3.2 批次1：knowledge 页面回归（/knowledge 路由随 KnowledgePage 恢复），导航目标随之恢复
+    return { category: 'knowledge', i18nKey: 'error.diagnosis.knowledge', navTarget: '/knowledge' }
   }
 
   // OCR errors

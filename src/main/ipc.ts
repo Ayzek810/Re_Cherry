@@ -25,6 +25,8 @@ import { ExportService } from './services/ExportService'
 import { externalAppsService } from './services/ExternalAppsService'
 import { fileStorage as fileManager } from './services/FileStorage'
 import FileService from './services/FileSystemService'
+import { knowledgeService } from './services/knowledge/KnowledgeService'
+import { localModelService } from './services/localModel/localModelService'
 import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
 import NotificationService from './services/NotificationService'
@@ -34,6 +36,7 @@ import { proxyManager } from './services/ProxyManager'
 import { searchService } from './services/SearchService'
 import { isSafeExternalUrl } from './services/security'
 import { registerShortcuts, registerUniversalShortcuts, unregisterAllShortcuts } from './services/ShortcutService'
+import { skillService } from './services/skills/SkillService'
 import {
   addEndMessage,
   addStreamMessage,
@@ -362,9 +365,10 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       options.args = options.args || []
     }
 
-    // v0.3.1-2：内核为修正 Windows 沙箱 runner 的启动语义，在主进程 env 里设了
-    // `ELECTRON_RUN_AS_NODE=1`（见 kernel/index.ts 的说明）。`app.relaunch` 会继承当前环境，
-    // 若不清除，重启后的应用会以 **node** 启动而非 Electron 应用。这里在重启前显式剥掉。
+    // v0.3.2：沙箱 runner 的 node 语义已改为 dsh-subprocess-local 补丁按子进程注入
+    // （见 kernel/index.ts 的说明），内核不再设 ambient `ELECTRON_RUN_AS_NODE`。
+    // 这里保留防御性剥除：若用户系统环境同名变量存在，`app.relaunch` 继承后重启的
+    // 应用会以 **node** 启动而非 Electron 应用。
     delete process.env.ELECTRON_RUN_AS_NODE
 
     app.relaunch(options)
@@ -584,6 +588,65 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.SearchWindow_OpenUrl, async (_, uid: string, url: string) => {
     return await searchService.openUrlInSearchWindow(uid, url)
   })
+  // 批次2：刮取窗口显式关闭（上游 LocalSearchProvider finally 依赖；防按 uid 泄漏）
+  ipcMain.handle(IpcChannel.SearchWindow_Close, (_, uid: string) => {
+    return searchService.closeSearchWindow(uid)
+  })
+
+  // 知识库（批次4）：薄转发直调 KnowledgeService（不变量1）；嵌入模型引用只含
+  // providerId/modelId/dimensions，主进程自解析 apiHost/apiKey（不跨进程回传密钥）。
+  ipcMain.handle(IpcChannel.KnowledgeBase_Create, (_, base: { id: string }) => knowledgeService.createBase(base))
+  ipcMain.handle(IpcChannel.KnowledgeBase_Reset, (_, baseId: string) => knowledgeService.resetBase(baseId))
+  ipcMain.handle(IpcChannel.KnowledgeBase_Delete, (_, baseId: string) => knowledgeService.deleteBase(baseId))
+  ipcMain.handle(
+    IpcChannel.KnowledgeBase_Add,
+    (
+      _,
+      payload: {
+        base: {
+          id: string
+          chunkSize?: number
+          chunkOverlap?: number
+          documentCount?: number
+          preprocessProviderId?: string
+        }
+        item:
+          | { kind: 'file'; baseId: string; itemId: string; filePath: string }
+          | { kind: 'url'; baseId: string; itemId: string; url: string }
+          | { kind: 'note'; baseId: string; itemId: string; text: string }
+        embedding: { providerId: string; modelId: string; dimensions?: number }
+      }
+    ) => knowledgeService.addItem(payload.item, payload.base, payload.embedding)
+  )
+  ipcMain.handle(IpcChannel.KnowledgeBase_Remove, (_, payload: { baseId: string; uniqueIds: string[] }) =>
+    knowledgeService.removeItem(payload.baseId, payload.uniqueIds)
+  )
+  ipcMain.handle(
+    IpcChannel.KnowledgeBase_Search,
+    (
+      _,
+      payload: {
+        base: { id: string; chunkSize?: number; chunkOverlap?: number; documentCount?: number }
+        embedding: { providerId: string; modelId: string; dimensions?: number }
+        query: string
+      }
+    ) => knowledgeService.search(payload.base, payload.embedding, payload.query)
+  )
+
+  // 本地模型（v0.3.2 LocalPaddle）：下载生命周期薄转发 + 默认文档处理服务商推送落点。
+  ipcMain.handle(IpcChannel.LocalModel_GetStatus, () => localModelService.getStatus())
+  ipcMain.handle(IpcChannel.LocalModel_Download, () => localModelService.download())
+  ipcMain.handle(IpcChannel.LocalModel_Cancel, () => localModelService.cancel())
+  ipcMain.handle(IpcChannel.LocalModel_Remove, () => localModelService.remove())
+
+  // 技能（批次5）：薄转发直调 SkillService（磁盘 = 真相源；渲染层切片退为投影）。
+  ipcMain.handle(IpcChannel.Skill_InstallFromZip, (_, zipFilePath: string) => skillService.installFromZip(zipFilePath))
+  ipcMain.handle(IpcChannel.Skill_InstallFromDirectory, (_, directoryPath: string) =>
+    skillService.installFromDirectory(directoryPath)
+  )
+  ipcMain.handle(IpcChannel.Skill_InstallFromUrl, (_, url: string) => skillService.installFromUrl(url))
+  ipcMain.handle(IpcChannel.Skill_Uninstall, (_, folderName: string) => skillService.uninstall(folderName))
+  ipcMain.handle(IpcChannel.Skill_List, () => skillService.list())
 
   // webview
   ipcMain.handle(IpcChannel.Webview_SetOpenLinkExternal, (_, webviewId: number, isExternal: boolean) =>

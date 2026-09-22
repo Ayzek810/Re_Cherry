@@ -1,6 +1,6 @@
 {
   "name": "Re_Cherry",
-  "version": "0.3.1-2",
+  "version": "0.3.2",
   "private": true,
   "description": "A personalized AI assistant forked from Cherry Studio.",
   "desktopName": "Re_Cherry.desktop",
@@ -114,11 +114,18 @@
     "@libsql/client": "0.14.0",
     "font-list": "2.0.0",
     "gray-matter": "4.0.3",
+    "mammoth": "1.11.0",
     "node-stream-zip": "1.15.0",
     "officeparser": "4.2.0",
+    "onnxruntime-common": "1.25.1",
+    "onnxruntime-node": "1.25.1",
     "os-proxy-config": "1.1.2",
     "pdf-parse": "^2.4.5",
-    "turndown": "7.2.0"
+    "ppu-paddle-ocr": "6.0.0",
+    "sharp": "0.35.3",
+    "turndown": "7.2.0",
+    "turndown-plugin-gfm": "1.0.2",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.8",

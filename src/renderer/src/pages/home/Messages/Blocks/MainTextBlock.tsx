@@ -1,12 +1,18 @@
+/**
+ * 正文块。引用管线（统一引用机制，V2 迁移）：
+ * citationReferences → formatCitationsFromBlock 取 Citation[] → processContent
+ *（withCitationTags 把 [n] 变 sup 药丸）→ registry out-of-band 传给 Markdown
+ * 的 Link/CitationSup 挂悬浮胶囊。数据载体块不可见（不渲染为卡）。
+ */
 import { useSettings } from '@renderer/hooks/useSettings'
 import { getModelUniqId } from '@renderer/services/ModelService'
 import type { RootState } from '@renderer/store'
 import { selectFormattedCitationsByBlockId } from '@renderer/store/messageBlock'
 import { type Model } from '@renderer/types'
 import type { MainTextMessageBlock, Message } from '@renderer/types/newMessage'
-import { determineCitationSource, withCitationTags } from '@renderer/utils/citation'
+import { determineCitationSource, toTooltipCitation, withCitationTags } from '@renderer/utils/citation'
 import { Flex } from 'antd'
-import React, { useCallback } from 'react'
+import React, { useCallback, useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import styled from 'styled-components'
 
@@ -20,10 +26,12 @@ interface Props {
 }
 
 const MainTextBlock: React.FC<Props> = ({ block, citationBlockId, role, mentions = [] }) => {
-  // Use the passed citationBlockId directly in the selector
   const { renderInputMessageAsMarkdown } = useSettings()
 
   const rawCitations = useSelector((state: RootState) => selectFormattedCitationsByBlockId(state, citationBlockId))
+
+  // 悬浮胶囊所用安全形态（清 markdown/截断）——V2 trustedCitations 同语义
+  const trustedCitations = useMemo(() => rawCitations.map(toTooltipCitation), [rawCitations])
 
   // 创建引用处理函数，传递给 Markdown 组件在流式渲染中使用
   const processContent = useCallback(
@@ -38,6 +46,12 @@ const MainTextBlock: React.FC<Props> = ({ block, citationBlockId, role, mentions
       return withCitationTags(rawText, rawCitations, sourceType)
     },
     [block.citationReferences, citationBlockId, rawCitations]
+  )
+
+  // V2 安全加固：data-citation 只存编号，数据经 registry out-of-band 传递
+  const citationRegistry = useMemo(
+    () => (trustedCitations.length > 0 ? new Map(trustedCitations.map((c) => [c.number, c])) : undefined),
+    [trustedCitations]
   )
 
   return (
@@ -55,7 +69,7 @@ const MainTextBlock: React.FC<Props> = ({ block, citationBlockId, role, mentions
           {block.content}
         </p>
       ) : (
-        <Markdown block={block} postProcess={processContent} />
+        <Markdown block={block} postProcess={processContent} citationRegistry={citationRegistry} />
       )}
     </>
   )

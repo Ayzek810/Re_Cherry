@@ -1,3 +1,9 @@
+vi.mock('@main/services/SearchService', () => ({
+  searchService: new Proxy({}, { get: () => vi.fn() }),
+  SearchService: class {}
+}))
+vi.mock('@main/services/webSearchProviders/webFetch', () => ({ fetchWebContent: vi.fn(async () => ({ content: '' })) }))
+
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 

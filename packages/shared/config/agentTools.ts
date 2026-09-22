@@ -7,8 +7,8 @@
  * id 并在内核挂载注册表加一行即进设置页。
  */
 
-/** 内置工具 id（= dsh 工具名）。 */
-export const BUILTIN_TOOL_IDS = ['ask_user_question'] as const
+/** 内置工具 id（= dsh 工具名）。ocr_document 另受附件门（仅有文档附件的轮挂载）。 */
+export const BUILTIN_TOOL_IDS = ['ask_user_question', 'ocr_document'] as const
 
 export type BuiltinToolId = (typeof BUILTIN_TOOL_IDS)[number]
 

@@ -481,7 +481,7 @@ Numbered list:
     })
   })
 
-  describe('generateCitationTag', () => {
+  describe('generateCitationTag（V2 形态：data-citation 只存编号）', () => {
     it('should generate citation tag with valid URL', () => {
       const citation: Citation = {
         number: 1,
@@ -492,77 +492,61 @@ Numbered list:
 
       const result = generateCitationTag(citation)
 
-      expect(result).toContain('[<sup data-citation=')
-      expect(result).toContain('1</sup>](https://example.com)')
-      expect(result).toContain('Example Title')
+      expect(result).toBe(`[<sup data-citation='1'>1</sup>](https://example.com)`)
     })
 
-    it('should generate citation tag without URL when invalid', () => {
+    it('should generate bare sup when URL is not linkable (knowledge)', () => {
       const citation: Citation = {
         number: 2,
+        url: '',
+        title: 'Knowledge doc'
+      }
+
+      const result = generateCitationTag(citation)
+
+      // V2：无 URL 输出裸 <sup>，由 CitationSup 挂弹层（v1 的空括号形态已弃）
+      expect(result).toBe(`<sup data-citation='2'>2</sup>`)
+    })
+
+    it('should not wrap non-http URL', () => {
+      const citation: Citation = {
+        number: 5,
         url: 'invalid-url',
         title: 'Test Title'
       }
 
       const result = generateCitationTag(citation)
 
-      expect(result).toContain('[<sup data-citation=')
-      expect(result).toContain('2</sup>]()')
-      expect(result).not.toContain('](invalid-url)')
+      expect(result).toBe(`<sup data-citation='5'>5</sup>`)
     })
 
-    it('should handle citation without URL', () => {
-      const citation: Citation = {
-        number: 3,
-        url: '',
-        title: 'No URL Title'
-      }
-
-      const result = generateCitationTag(citation)
-
-      expect(result).toContain('[<sup data-citation=')
-      expect(result).toContain('3</sup>]()')
-    })
-
-    it('should use hostname when title is missing', () => {
-      const citation: Citation = {
-        number: 4,
-        url: 'https://example.com',
-        hostname: 'example.com'
-      }
-
-      const result = generateCitationTag(citation)
-
-      expect(result).toContain('example.com')
-    })
-
-    it('should handle citation with all empty values', () => {
-      const citation: Citation = {
-        number: 6,
-        url: '',
-        title: '',
-        hostname: '',
-        content: ''
-      }
-
-      const result = generateCitationTag(citation)
-
-      expect(result).toContain('[<sup data-citation=')
-      expect(result).toContain('6</sup>]()')
-    })
-
-    it('should escape pipe characters in title to prevent GFM table cell breakage', () => {
+    it('should not serialize payload into the attribute', () => {
       const citation: Citation = {
         number: 1,
         url: 'https://example.com',
-        title: 'Foo | Bar | Baz'
+        title: 'Example Title',
+        content: 'Some content here'
       }
 
       const result = generateCitationTag(citation)
 
-      // The | in title must be escaped as &#124; inside data-citation attribute
-      expect(result).not.toContain('Foo | Bar')
-      expect(result).toContain('&#124;')
+      // V2 安全加固：属性里只有编号，载荷走 out-of-band registry
+      expect(result).not.toContain('Example Title')
+      expect(result).not.toContain('Some content')
+    })
+
+    it('should not leak title/content into the attribute even for escape attempts', () => {
+      const citation: Citation = {
+        number: 1,
+        url: 'https://example.com',
+        title: `' onclick='alert(1)`,
+        content: `<script>alert(1)</script>`
+      }
+
+      const result = generateCitationTag(citation)
+
+      expect(result).not.toContain('alert')
+      expect(result).not.toContain('<script>')
     })
 
     it('should escape pipe characters in URL to prevent GFM table cell breakage', () => {
@@ -577,25 +561,6 @@ Numbered list:
       // The | in URL must be percent-encoded as %7C
       expect(result).toContain('%7C')
       expect(result).not.toMatch(/\]\(https:\/\/example\.com\/path\?a=1\|/)
-    })
-
-    it('should truncate content to 200 characters in data-citation', () => {
-      const longContent = 'a'.repeat(300)
-      const citation: Citation = {
-        number: 1,
-        url: 'https://example.com',
-        title: 'Test',
-        content: longContent
-      }
-
-      const result = generateCitationTag(citation)
-      const match = result.match(/data-citation='([^']+)'/)
-      expect(match).not.toBeNull()
-      if (match) {
-        const citationData = JSON.parse(match[1].replace(/&quot;/g, '"'))
-        expect(citationData.content.length).toBe(200)
-        expect(citationData.content).toBe(longContent.substring(0, 200))
-      }
     })
   })
 

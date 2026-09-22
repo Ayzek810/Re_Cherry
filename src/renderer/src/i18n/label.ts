@@ -5,6 +5,7 @@
  */
 
 import { loggerService } from '@logger'
+import { type BuiltinMCPServerName, BuiltinMCPServerNames } from '@renderer/types'
 
 import i18n from './index'
 
@@ -137,6 +138,7 @@ const titleKeyMap = {
   apps: 'title.apps',
   files: 'title.files',
   home: 'title.home',
+  knowledge: 'knowledge.base',
   settings: 'title.settings'
 } as const
 
@@ -157,7 +159,8 @@ export const getThemeModeLabel = (key: string): string => {
 const sidebarIconKeyMap = {
   assistants: 'assistants.title',
   minapp: 'minapp.title',
-  files: 'files.title'
+  files: 'files.title',
+  knowledge: 'knowledge.base'
 } as const
 
 export const getSidebarIconLabel = (key: string): string => {
@@ -223,4 +226,37 @@ const fileFieldKeyMap = {
 
 export const getFileFieldLabel = (key: string): string => {
   return getLabel(fileFieldKeyMap, key)
+}
+
+// ===== 以下自 CS_V1 i18n/label.ts 原样移植（批次1 MCPSettings 页面依赖）=====
+
+const mcpTypeKeyMap = {
+  inMemory: 'settings.mcp.types.inMemory',
+  sse: 'settings.mcp.types.sse',
+  stdio: 'settings.mcp.types.stdio',
+  streamableHttp: 'settings.mcp.types.streamableHttp'
+} as const
+
+export const getMcpTypeLabel = (key: string): string => {
+  return getLabel(mcpTypeKeyMap, key)
+}
+
+const builtInMcpDescriptionKeyMap: Record<BuiltinMCPServerName, string> = {
+  [BuiltinMCPServerNames.flomo]: 'settings.mcp.builtinServersDescriptions.flomo',
+  [BuiltinMCPServerNames.mcpAutoInstall]: 'settings.mcp.builtinServersDescriptions.mcp_auto_install',
+  [BuiltinMCPServerNames.memory]: 'settings.mcp.builtinServersDescriptions.memory',
+  [BuiltinMCPServerNames.sequentialThinking]: 'settings.mcp.builtinServersDescriptions.sequentialthinking',
+  [BuiltinMCPServerNames.braveSearch]: 'settings.mcp.builtinServersDescriptions.brave_search',
+  [BuiltinMCPServerNames.fetch]: 'settings.mcp.builtinServersDescriptions.fetch',
+  [BuiltinMCPServerNames.filesystem]: 'settings.mcp.builtinServersDescriptions.filesystem',
+  [BuiltinMCPServerNames.difyKnowledge]: 'settings.mcp.builtinServersDescriptions.dify_knowledge',
+  [BuiltinMCPServerNames.python]: 'settings.mcp.builtinServersDescriptions.python',
+  [BuiltinMCPServerNames.didiMCP]: 'settings.mcp.builtinServersDescriptions.didi_mcp',
+  [BuiltinMCPServerNames.browser]: 'settings.mcp.builtinServersDescriptions.browser',
+  [BuiltinMCPServerNames.nowledgeMem]: 'settings.mcp.builtinServersDescriptions.nowledge_mem',
+  [BuiltinMCPServerNames.hub]: 'settings.mcp.builtinServersDescriptions.hub'
+} as const
+
+export const getBuiltInMcpServerDescriptionLabel = (key: string): string => {
+  return getLabel(builtInMcpDescriptionKeyMap, key, t('settings.mcp.builtinServersDescriptions.no'))
 }

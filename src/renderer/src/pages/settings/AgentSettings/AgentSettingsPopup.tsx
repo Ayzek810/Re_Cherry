@@ -7,6 +7,8 @@ import { useTranslation } from 'react-i18next'
 import { BaseSettingsPopup, type SettingsMenuItem, type SettingsPopupTab } from './BaseSettingsPopup'
 import AdvancedSettings from './components/AdvancedSettings'
 import EssentialSettings from './components/EssentialSettings'
+import KnowledgeBaseSettings from './components/KnowledgeBaseSettings'
+import MCPSettings from './components/MCPSettings'
 import PermissionModeSettings from './components/PermissionModeSettings'
 import SkillsSettings from './components/SkillsSettings'
 import ToolsSettings from './components/ToolsSettings'
@@ -29,8 +31,8 @@ interface AgentSettingsShellProps {
 }
 
 /**
- * 智能体设置弹窗（V1 结构移植）。v0.3.0 验收调整：提示词栏目并入基础页，现为五页
- * （基础/权限模式/工具/技能/高级）。
+ * 智能体设置弹窗（V1 结构移植）。v0.3.0 验收调整：提示词栏目并入基础页，现为七页
+ * （基础/权限模式/工具/技能/MCP/知识库/高级；后两页为 v0.3.2 自 CS_V1 补齐）。
  *
  * 五页全是 props 驱动（不自己读 Redux），所以**数据来源由外层容器决定**：
  * - 编辑既有助手 → Redux 实体（`EditAssistantSettingsContainer`）；
@@ -56,6 +58,8 @@ const AgentSettingsShell: React.FC<AgentSettingsShellProps> = ({
       { key: 'permission-mode', label: t('settings.agentSettings.permissionMode.tab') },
       { key: 'tools', label: t('settings.agentSettings.tools.tab') },
       { key: 'skills', label: t('settings.agentSettings.skills.tab') },
+      { key: 'mcp', label: t('assistants.settings.mcp.title') },
+      { key: 'knowledge', label: t('common.knowledge_base') },
       { key: 'advanced', label: t('settings.agentSettings.advance.tab') }
     ],
     [t]
@@ -78,7 +82,23 @@ const AgentSettingsShell: React.FC<AgentSettingsShellProps> = ({
       case 'tools':
         return <ToolsSettings assistant={assistant} updateAssistant={updateAssistant} />
       case 'skills':
-        return <SkillsSettings />
+        return <SkillsSettings assistant={assistant} updateAssistant={updateAssistant} />
+      case 'mcp':
+        return (
+          <MCPSettings
+            assistant={assistant}
+            updateAssistant={updateAssistant}
+            updateAssistantSettings={updateAssistantSettings}
+          />
+        )
+      case 'knowledge':
+        return (
+          <KnowledgeBaseSettings
+            assistant={assistant}
+            updateAssistant={updateAssistant}
+            updateAssistantSettings={updateAssistantSettings}
+          />
+        )
       case 'advanced':
         return <AdvancedSettings />
       default:

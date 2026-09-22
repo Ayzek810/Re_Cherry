@@ -4,12 +4,12 @@ import Scrollbar from '@renderer/components/Scrollbar'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import type { Citation } from '@renderer/types'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
-import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Button, message, Popover, Skeleton } from 'antd'
 import { Check, Copy, FileSearch } from 'lucide-react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'
+import removeMarkdown from 'remove-markdown'
 import styled from 'styled-components'
 
 interface CitationsListProps {
@@ -37,6 +37,10 @@ const truncateText = (text: string, maxLength = 100) => {
   return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
 }
 
+/** 摘录展示形态：remove-markdown 剥结构符号但保留代码内容（cleanMarkdownContent
+ * 会把 `<string.h>`、点号一起剥掉，代码类知识库摘录成乱码——真机反馈）。 */
+const cleanMarkdown = (text: string): string => removeMarkdown(text).replace(/\s+/g, ' ').trim()
+
 const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
   const { t } = useTranslation()
 
@@ -47,7 +51,8 @@ const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
   const popoverContent = (
     <PopoverContentContainer>
       {citations.map((citation) => (
-        <PopoverContentItem key={citation.url || citation.number || citation.title}>
+        // number 在 formatCitationsFromBlock 里按集合重排 1..n，集合内唯一
+        <PopoverContentItem key={citation.number}>
           {citation.type === 'websearch' && (
             <PopoverContent>
               <WebSearchCitation citation={citation} />
@@ -151,7 +156,7 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
         return ''
       }
       const res = await fetchWebContent(citation.url, 'markdown')
-      return cleanMarkdownContent(res.content)
+      return cleanMarkdown(res.content)
     },
     enabled: Boolean(citation.url),
     select: (content) => truncateText(content, 100)
@@ -197,13 +202,16 @@ const KnowledgeCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
         <WebSearchCardHeader>
           {citation.showFavicon && <FileSearch width={16} />}
           <CitationLink className="text-nowrap" href={citation.url} onClick={(e) => handleLinkClick(citation.url, e)}>
-            {/* example title: User/path/example.pdf */}
-            {citation.title?.split('/').pop()}
+            {/* 展示名取路径末段（兼容 \ 与 /）；例：C:\User\path\example.pdf -> example.pdf */}
+            {citation.title?.split(/[\\/]/).pop() || citation.title}
           </CitationLink>
           <CitationIndex>{citation.number}</CitationIndex>
           {citation.content && <CopyButton content={citation.content} />}
         </WebSearchCardHeader>
-        <WebSearchCardContent className="selectable-text">{citation.content ?? ''}</WebSearchCardContent>
+        {/* chunk 原文可能很长且带 markdown 结构符号（真机反馈"乱码"），规范化后截 200 */}
+        <WebSearchCardContent className="selectable-text">
+          {truncateText(cleanMarkdown(citation.content ?? ''), 200)}
+        </WebSearchCardContent>
       </WebSearchCard>
     </ContextMenu>
   )

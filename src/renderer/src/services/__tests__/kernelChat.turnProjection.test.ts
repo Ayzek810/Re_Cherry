@@ -28,7 +28,7 @@ const TOPIC = 'topic-turn-projection'
 type Reason = { kind: string; error?: { message: string; code?: string } }
 
 const ev = (seq: number, type: string, data: unknown): SessionEvent =>
-  ({ session_id: SID, seq, time: 1000 + seq, type, data } as unknown as SessionEvent)
+  ({ session_id: SID, seq, time: 1000 + seq, type, data }) as unknown as SessionEvent
 
 const userMsg = (seq: number, text: string): SessionEvent =>
   ev(seq, 'user/message', { content: [{ type: 'text', text }] })
@@ -76,7 +76,7 @@ describe('kernelChat turn 投影（v0.3.1-1 空回复案）', () => {
     // message 换成了双语文案（i18n 未初始化时按键回退——非空字符串即命中投影层换写）
     expect(typeof errBlock.error?.message).toBe('string')
     expect((errBlock.error?.message ?? '').length).toBeGreaterThan(0)
-    expect((errBlock.error?.message ?? '')).not.toContain('pi-ai provider')
+    expect(errBlock.error?.message ?? '').not.toContain('pi-ai provider')
   })
 
   it('失败轮已有 assistant 内容：ERROR 块挂进既有回答消息末尾', async () => {

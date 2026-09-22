@@ -46,6 +46,56 @@ const api = {
   dshSyncProviders: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncProviders, providers),
   dshSyncImageDescriber: (config: { provider: string; model: string; prompt: string } | null) =>
     ipcRenderer.invoke(IpcChannel.Dsh_SyncImageDescriber, config),
+  dshSyncWebSearch: (config: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_SyncWebSearch, config),
+  dshSyncMcpServers: (servers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncMcpServers, servers),
+  dshSyncPreprocess: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncPreprocess, providers),
+  webSearch: {
+    check: (providerId: string) => ipcRenderer.invoke(IpcChannel.WebSearch_Check, providerId)
+  },
+  // MCP 设置页通道（批次3）：与主进程 MCPService 一一对应的薄转发（invoke）+ 日志事件订阅。
+  mcp: {
+    listTools: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_ListTools, server),
+    listPrompts: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_ListPrompts, server),
+    listResources: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_ListResources, server),
+    getServerVersion: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_GetServerVersion, server),
+    getServerLogs: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_GetServerLogs, server),
+    restartServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_RestartServer, server),
+    stopServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_StopServer, server),
+    removeServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_RemoveServer, server),
+    checkConnectivity: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_CheckConnectivity, server),
+    onServerLog: (callback: (log: unknown) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, log: unknown) => callback(log)
+      ipcRenderer.on(IpcChannel.Mcp_ServerLog, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.Mcp_ServerLog, listener)
+      }
+    }
+  },
+  // 知识库通道（批次4）：主进程 KnowledgeService 薄转发（嵌入引用只含 id，密钥主进程自解析）。
+  knowledgeBase: {
+    create: (base: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Create, base),
+    reset: (baseId: string) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Reset, baseId),
+    delete: (baseId: string) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Delete, baseId),
+    add: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Add, payload),
+    remove: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Remove, payload),
+    search: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Search, payload)
+  },
+  // 本地模型（v0.3.2 LocalPaddle）：下载生命周期；进度由渲染层轮询 getStatus。
+  localModel: {
+    getStatus: () => ipcRenderer.invoke(IpcChannel.LocalModel_GetStatus),
+    download: () => ipcRenderer.invoke(IpcChannel.LocalModel_Download),
+    cancel: () => ipcRenderer.invoke(IpcChannel.LocalModel_Cancel),
+    remove: () => ipcRenderer.invoke(IpcChannel.LocalModel_Remove)
+  },
+  // 技能通道（批次5）：主进程 SkillService 薄转发（磁盘 = 真相源，列表全量投影）。
+  skills: {
+    installFromZip: (zipFilePath: string) => ipcRenderer.invoke(IpcChannel.Skill_InstallFromZip, zipFilePath),
+    installFromDirectory: (directoryPath: string) =>
+      ipcRenderer.invoke(IpcChannel.Skill_InstallFromDirectory, directoryPath),
+    installFromUrl: (url: string) => ipcRenderer.invoke(IpcChannel.Skill_InstallFromUrl, url),
+    uninstall: (folderName: string) => ipcRenderer.invoke(IpcChannel.Skill_Uninstall, folderName),
+    list: () => ipcRenderer.invoke(IpcChannel.Skill_List)
+  },
   dshStreamSmoke: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_StreamSmoke, payload),
   dshComplete: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_Complete, payload),
   dshStreamComplete: (payload: unknown, onEvent: (data: unknown) => void) => {
@@ -79,6 +129,28 @@ const api = {
       tier?: WorkModeApprovalTier
       /** 随消息附带的图片（base64，v0.3.1 识图通道；内核准入后并入用户消息内容块）。 */
       images?: Array<{ mediaType: string; data: string; name?: string }>
+      /** 网络搜索（批次2）：本轮 web_search 的提供商（与 topics.TopicSendOptions 逐字段对齐）。 */
+      webSearch?: { providerId: string }
+      /** 知识库检索（批次4）：本轮可检索库清单。 */
+      knowledgeBases?: Array<{
+        id: string
+        chunkSize?: number
+        chunkOverlap?: number
+        documentCount?: number
+        threshold?: number
+        embedding: { providerId: string; modelId: string; dimensions: number }
+      }>
+      /** 技能（批次5）：本轮可读技能清单。 */
+      skills?: Array<{
+        id: string
+        folderName: string
+        name: string
+        description: string
+        contentHash?: string
+        author?: string | null
+      }>
+      /** 文档阅读（批次6）：本轮附件文档清单。 */
+      documents?: Array<{ name: string; path: string; ext?: string }>
     }
   ) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, options),
   /** 内核图片附件回放同步：按 ref 读回核验字节并落入文件仓（确定性 id，幂等）。 */
@@ -361,7 +433,8 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Nutstore_GetDirectoryContents, token, path)
   },
   searchService: {
-    openUrlInSearchWindow: (uid: string, url: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_OpenUrl, uid, url)
+    openUrlInSearchWindow: (uid: string, url: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_OpenUrl, uid, url),
+    closeSearchWindow: (uid: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_Close, uid)
   },
   webview: {
     setOpenLinkExternal: (webviewId: number, isExternal: boolean) =>

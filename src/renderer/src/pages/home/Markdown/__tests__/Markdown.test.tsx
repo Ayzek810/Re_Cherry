@@ -50,7 +50,6 @@ vi.mock('@renderer/utils/formats', () => ({
 }))
 
 vi.mock('@renderer/utils/markdown', () => ({
-  findCitationInChildren: vi.fn(() => '{"id": 1, "url": "https://example.com"}'),
   getCodeBlockId: vi.fn(() => 'code-block-1'),
   processLatexBrackets: vi.fn((str) => str)
 }))
@@ -72,8 +71,8 @@ vi.mock('@renderer/components/ImageViewer', () => ({
 
 vi.mock('../Link', () => ({
   __esModule: true,
-  default: ({ citationData, children, ...props }: any) => (
-    <a data-testid="citation-link" data-citation={citationData} {...props}>
+  default: ({ children, ...props }: any) => (
+    <a data-testid="plain-link" {...props}>
       {children}
     </a>
   )
@@ -292,7 +291,7 @@ describe('Markdown', () => {
   })
 
   describe('custom components', () => {
-    it('should integrate Link component for citations', () => {
+    it('should integrate Link component', () => {
       render(<Markdown block={createMainTextBlock()} />)
 
       expect(screen.getByTestId('has-link-component')).toBeInTheDocument()

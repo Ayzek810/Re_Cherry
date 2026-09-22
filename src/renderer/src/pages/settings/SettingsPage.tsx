@@ -3,15 +3,19 @@ import Scrollbar from '@renderer/components/Scrollbar'
 import ModelSettings from '@renderer/pages/settings/ModelSettings/ModelSettings'
 import { Divider as AntDivider } from 'antd'
 import {
+  Blocks,
   Brain,
   Cloud,
   Command,
+  FileCode,
+  Globe,
   HardDrive,
   Info,
   MonitorCog,
   Package,
   PictureInPicture2,
   Settings2,
+  Sparkles,
   Zap
 } from 'lucide-react'
 import type { FC } from 'react'
@@ -22,12 +26,16 @@ import styled from 'styled-components'
 import AboutSettings from './AboutSettings'
 import DataSettings from './DataSettings/DataSettings'
 import DisplaySettings from './DisplaySettings/DisplaySettings'
+import DocProcessSettings from './DocProcessSettings'
 import GeneralSettings from './GeneralSettings'
+import MCPSettings from './MCPSettings'
 import MemorySettings from './MemorySettings'
 import { ProviderList } from './ProviderSettings'
 import QuickAssistantSettings from './QuickAssistantSettings'
 import QuickPhraseSettings from './QuickPhraseSettings'
 import ShortcutSettings from './ShortcutSettings'
+import SkillsSettings from './SkillsSettings'
+import WebSearchSettings from './WebSearchSettings'
 
 const SettingsPage: FC = () => {
   const { pathname } = useLocation()
@@ -52,6 +60,30 @@ const SettingsPage: FC = () => {
             <MenuItem className={isRoute('/settings/model')}>
               <Package size={18} />
               {t('settings.model')}
+            </MenuItem>
+          </MenuItemLink>
+          <MenuItemLink to="/settings/websearch">
+            <MenuItem className={isRoute('/settings/websearch')}>
+              <Globe size={18} />
+              {t('settings.tool.websearch.title')}
+            </MenuItem>
+          </MenuItemLink>
+          <MenuItemLink to="/settings/docprocess">
+            <MenuItem className={isRoute('/settings/docprocess')}>
+              <FileCode size={18} />
+              {t('settings.tool.preprocess.title')}
+            </MenuItem>
+          </MenuItemLink>
+          <MenuItemLink to="/settings/mcp">
+            <MenuItem className={isRoute('/settings/mcp')}>
+              <Blocks size={18} />
+              {t('settings.mcp.title')}
+            </MenuItem>
+          </MenuItemLink>
+          <MenuItemLink to="/settings/skills">
+            <MenuItem className={isRoute('/settings/skills')}>
+              <Sparkles size={18} />
+              {t('settings.skills.title')}
             </MenuItem>
           </MenuItemLink>
           <Divider />
@@ -111,6 +143,10 @@ const SettingsPage: FC = () => {
           <Routes>
             <Route path="provider" element={<ProviderList />} />
             <Route path="model" element={<ModelSettings />} />
+            <Route path="websearch/*" element={<WebSearchSettings />} />
+            <Route path="docprocess" element={<DocProcessSettings />} />
+            <Route path="mcp/*" element={<MCPSettings />} />
+            <Route path="skills" element={<SkillsSettings />} />
 
             <Route path="quickphrase" element={<QuickPhraseSettings />} />
             <Route path="memory" element={<MemorySettings />} />

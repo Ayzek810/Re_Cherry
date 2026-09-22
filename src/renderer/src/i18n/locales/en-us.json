@@ -59,6 +59,10 @@
     },
     "presets": {
       "add": {
+        "knowledge_base": {
+          "label": "Knowledge Base",
+          "placeholder": "Select Knowledge Base"
+        },
         "prompt": {
           "variables": {
             "tip": {
@@ -98,12 +102,39 @@
         "image_failed": "Failed to process the image",
         "image_invalid": "Only image files are supported"
       },
+      "knowledge_base": {
+        "label": "Knowledge Base Settings",
+        "recognition": {
+          "label": "Use Knowledge Base",
+          "off": "Force Search",
+          "on": "Intent Recognition",
+          "tip": "The assistant will use the large model's intent recognition capability to determine whether to use the knowledge base for answering. This feature will depend on the model's capabilities"
+        }
+      },
       "max_tool_calls": {
         "label": "Max Tool Calls",
         "tip": "Maximum number of tool calls allowed in a single conversation. Higher values allow more complex multi-step operations but may increase token usage and response time."
       },
       "mcp": {
-        "label": "MCP Servers"
+        "description": "Default enabled MCP servers",
+        "enableFirst": "Enable this server in MCP settings first",
+        "label": "MCP Servers",
+        "mode": {
+          "auto": {
+            "description": "AI discovers and uses tools automatically",
+            "label": "Auto"
+          },
+          "disabled": {
+            "description": "No MCP tools",
+            "label": "Disabled"
+          },
+          "manual": {
+            "description": "Select specific MCP servers",
+            "label": "Manual"
+          }
+        },
+        "noServersAvailable": "No MCP servers available. Add servers in settings",
+        "title": "MCP Settings"
       },
       "model": "Model Settings",
       "prompt": "Prompt Settings",
@@ -245,6 +276,7 @@
       "file_error": "Error processing file",
       "file_not_supported": "Model does not support this file type",
       "file_not_supported_count": "{{count}} files are not supported",
+      "knowledge_base": "Knowledge Base",
       "new_topic": "New Topic {{Command}}",
       "paste_text_file_confirm": "Paste into input bar?",
       "pause": "Pause",
@@ -275,10 +307,34 @@
         "image_or_document": "Upload image or document file",
         "upload_from_local": "Upload local file..."
       },
-      "url_context": "URL Context"
+      "url_context": "URL Context",
+      "web_search": {
+        "builtin": {
+          "disabled_content": "The current model does not support web search",
+          "enabled_content": "Use the built-in web search function of the model",
+          "label": "Model Built-in"
+        },
+        "button": {
+          "ok": "Go to Settings"
+        },
+        "enable": "Enable web search",
+        "enable_content": "Need to check web search connectivity in settings first",
+        "label": "Web Search",
+        "no_web_search": {
+          "description": "Do not enable web search",
+          "label": "Disable Web Search"
+        },
+        "settings": "Web Search Settings"
+      }
     },
     "mcp": {
+      "error": {
+        "parse_tool_call": "Unable to convert to a valid tool call format: {{toolCall}}"
+      },
       "warning": {
+        "gemini_web_search": "Gemini does not support using native web search tools and function calling simultaneously",
+        "multiple_tools": "Multiple matching MCP tools exist, {{tool}} has been selected",
+        "no_tool": "No matching MCP tool found for {{tool}}",
         "url_context": "Gemini does not support using url context and function calling simultaneously"
       }
     },
@@ -870,15 +926,133 @@
     "unknownModelError": "The model {{model}} used by this topic is no longer available from the current provider (it may have been delisted, or the provider configuration changed). Please reselect a model in the topic settings and retry."
   },
   "knowledge": {
-    "dimensions_auto_set": "Auto-set embedding dimensions",
-    "dimensions_error_invalid": "Invalid embedding dimension",
-    "dimensions_size_placeholder": "Leave empty to not pass dimensions",
-    "dimensions_size_tooltip": "Embedding dimension size, the larger the value, the more tokens will be consumed. Leave empty to not pass dimensions parameter.",
-    "embedding_model_required": "Knowledge Base Embedding Model is required",
-    "error": {
-      "model_invalid": "No model selected"
+    "add": {
+      "title": "Add Knowledge Base"
     },
-    "provider_not_found": "Provider not found"
+    "add_directory": "Add Directory",
+    "add_file": "Add File",
+    "add_image": "Add Image",
+    "add_note": "Add Note",
+    "add_sitemap": "Website Map",
+    "add_url": "Add URL",
+    "add_video": "Add video",
+    "base": "Knowledge",
+    "cancel_index": "Cancel Indexing",
+    "chunk_overlap": "Chunk Overlap",
+    "chunk_overlap_placeholder": "Default (not recommended to change)",
+    "chunk_overlap_tooltip": "The amount of duplicate content between adjacent chunks, ensuring that the chunks are still contextually related, improving the overall effect of processing long text",
+    "chunk_size": "Chunk Size",
+    "chunk_size_change_warning": "Chunk size and overlap size changes only apply to new content",
+    "chunk_size_placeholder": "Default (not recommended to change)",
+    "chunk_size_too_large": "Chunk size cannot exceed model context limit ({{max_context}})",
+    "chunk_size_tooltip": "Split documents into chunks, each chunk size, not exceeding model context limit",
+    "clear_selection": "Clear selection",
+    "delete": "Delete",
+    "delete_confirm": "Are you sure you want to delete this knowledge base?",
+    "dimensions": "Embedding dimension",
+    "dimensions_auto_set": "Auto-set embedding dimensions",
+    "dimensions_default": "The model will use default embedding dimensions",
+    "dimensions_error_invalid": "Invalid embedding dimension",
+    "dimensions_set_right": "⚠️ Please ensure the model supports the set embedding dimension size",
+    "dimensions_size_placeholder": "Leave empty to not pass dimensions",
+    "dimensions_size_too_large": "The embedding dimension cannot exceed the model's context limit ({{max_context}}).",
+    "dimensions_size_tooltip": "Embedding dimension size, the larger the value, the more tokens will be consumed. Leave empty to not pass dimensions parameter.",
+    "directories": "Directories",
+    "directory_placeholder": "Enter Directory Path",
+    "document_count": "Requested Document Chunks",
+    "document_count_default": "Default",
+    "document_count_help": "The more document chunks requested, the more information is included, but the more tokens are consumed",
+    "drag_file": "Drag file here",
+    "drag_image": "Drag image here",
+    "edit_remark": "Edit Remark",
+    "edit_remark_placeholder": "Please enter remark content",
+    "embedding_model": "Embedding Model",
+    "embedding_model_required": "Knowledge Base Embedding Model is required",
+    "empty": "No knowledge base found",
+    "error": {
+      "failed_to_create": "Knowledge base creation failed",
+      "failed_to_edit": "Knowledge base editing failed",
+      "model_invalid": "No model selected",
+      "video": {
+        "local_file_missing": "Video file not found",
+        "youtube_url_missing": "YouTube video URL not found"
+      }
+    },
+    "file_hint": "Support {{file_types}}",
+    "image_hint": "Support {{image_types}}",
+    "images": "Images",
+    "index_all": "Index All",
+    "index_cancelled": "Indexing cancelled",
+    "index_started": "Indexing started",
+    "invalid_url": "Invalid URL",
+    "migrate": {
+      "button": {
+        "text": "Migrate"
+      },
+      "confirm": {
+        "content": "Detected changes in embedding model or dimension, cannot save configuration directly. Knowledge base migration will not delete the existing knowledge base, but will create a copy and then reprocess all knowledge base entries, which may consume a large number of tokens, please proceed with caution.",
+        "ok": "Start Migration",
+        "title": "Knowledge Base Migration"
+      },
+      "error": {
+        "failed": "Migration failed"
+      },
+      "source_dimensions": "Source Dimensions",
+      "source_model": "Source Model",
+      "target_dimensions": "Target Dimensions",
+      "target_model": "Target Model"
+    },
+    "model_info": "Model Info",
+    "name_required": "Knowledge Base Name is required",
+    "no_bases": "No knowledge bases available",
+    "no_match": "No matching content found in the knowledge base.",
+    "no_provider": "Knowledge base model provider is not set, the knowledge base will no longer be supported, please create a new knowledge base",
+    "not_set": "Not Set",
+    "not_support": "Knowledge base database engine updated, the knowledge base will no longer be supported, please create a new knowledge base",
+    "notes": "Notes",
+    "notes_placeholder": "Enter additional information or context for this knowledge base...",
+    "provider_not_found": "Provider not found",
+    "rename": "Rename",
+    "search": "Search knowledge base",
+    "search_placeholder": "Enter text to search",
+    "settings": {
+      "preprocessing": "Preprocessing",
+      "preprocessing_tooltip": "Preprocess uploaded files",
+      "title": "Knowledge Base Settings"
+    },
+    "sitemap_added": "Added successfully",
+    "sitemap_placeholder": "Enter Website Map URL",
+    "sitemaps": "Websites",
+    "source": "Source",
+    "status": "Status",
+    "status_completed": "Completed",
+    "status_embedding_completed": "Embedding Completed",
+    "status_embedding_failed": "Embedding Failed",
+    "status_failed": "Failed",
+    "status_new": "Added",
+    "status_pending": "Pending",
+    "status_preprocess_completed": "Preprocessing Completed",
+    "status_preprocess_failed": "Preprocessing Failed",
+    "status_processing": "Processing",
+    "subtitle_file": "subtitle file",
+    "threshold": "Matching threshold",
+    "threshold_placeholder": "Not set",
+    "threshold_too_large_or_small": "Threshold cannot be greater than 1 or less than 0",
+    "threshold_tooltip": "Used to evaluate the relevance between the user's question and the content in the knowledge base (0-1)",
+    "title": "Knowledge Base",
+    "topN": "Number of results returned",
+    "topN_placeholder": "Not set",
+    "topN_too_large_or_small": "The number of results returned cannot be greater than 30 or less than 1.",
+    "topN_tooltip": "The number of matching results returned; the larger the value, the more matching results, but also the more tokens consumed.",
+    "url_added": "URL added",
+    "url_placeholder": "Enter URL, multiple URLs separated by Enter",
+    "urls": "URLs",
+    "videos": "video",
+    "videos_file": "video file",
+    "wiring_pending": "Wiring pending: this action requires main-process knowledge base support (coming in a later batch)"
+  },
+  "launchpad": {
+    "apps": "Apps"
   },
   "lmstudio": {
     "keep_alive_time": {
@@ -1017,6 +1191,7 @@
       "success": "Download successfully"
     },
     "error": {
+      "chunk_overlap_too_large": "Chunk overlap cannot be greater than chunk size",
       "copy": "Copy failed",
       "dimension_too_large": "Content size is too large",
       "enter": {
@@ -1319,6 +1494,9 @@
     "all": "All",
     "custom_parameters": "Custom Parameters",
     "edit": "Edit Model",
+    "embedding_dimensions": "Embedding Dimensions",
+    "embedding_model": "Embedding Model",
+    "embedding_model_tooltip": "Add in Settings->Model Provider->Manage",
     "filter": {
       "by_tag": "Filter by tag"
     },
@@ -1342,6 +1520,8 @@
       "million_tokens": "M Tokens",
       "output": "Output Price"
     },
+    "rerank_model": "Reranker",
+    "rerank_model_tooltip": "Click the Manage button in Settings -> Model Services to add.",
     "search": {
       "placeholder": "Search models...",
       "tooltip": "Search models"
@@ -1536,7 +1716,8 @@
       "title": "About"
     },
     "advanced": {
-      "auto_switch_to_topics": "Auto switch to topic"
+      "auto_switch_to_topics": "Auto switch to topic",
+      "title": "Advanced Settings"
     },
     "agentSettings": {
       "advance": {
@@ -1575,6 +1756,9 @@
         "builtins": {
           "ask": {
             "name": "Ask (ask_user_question)"
+          },
+          "ocr": {
+            "name": "Document OCR (ocr_document)"
           }
         },
         "externalTitle": "External Tools",
@@ -2109,6 +2293,7 @@
     "input": {
       "clear": {
         "all": "Clear",
+        "knowledge_base": "Clear selected knowledge bases",
         "models": "Clear all models"
       }
     },
@@ -2129,12 +2314,259 @@
       "title": "Math Settings"
     },
     "mcp": {
+      "actions": "Actions",
+      "active": "Active",
+      "addError": "Failed to add server",
+      "addServer": {
+        "create": "Quick Create",
+        "importFrom": {
+          "connectionFailed": "Connection failed",
+          "dxt": "Import DXT Package",
+          "dxtFile": "DXT Package File",
+          "dxtHelp": "Select a .dxt file containing an MCP server package",
+          "dxtProcessFailed": "Failed to process DXT file",
+          "error": {
+            "multipleServers": "Cannot import from multiple servers"
+          },
+          "invalid": "Invalid input, please check JSON format",
+          "json": "Import from JSON",
+          "method": "Import Method",
+          "nameExists": "Server already exists: {{name}}",
+          "noDxtFile": "Please select a DXT file",
+          "oneServer": "Only one MCP server configuration at a time",
+          "placeholder": "Paste MCP server JSON config",
+          "selectDxtFile": "Select DXT File",
+          "tooltip": "Please copy the configuration JSON (prioritizing\n NPX or UVX configurations) from the MCP Servers introduction page and paste it into the input box."
+        },
+        "label": "Add Server"
+      },
+      "addSuccess": "Server added successfully",
+      "advancedSettings": "Advanced Settings",
+      "args": "Arguments",
+      "argsTooltip": "Each argument on a new line",
+      "baseUrlTooltip": "Remote server base URL",
+      "builtinServers": "Builtin Servers",
+      "builtinServersDescriptions": {
+        "brave_search": "An MCP server implementation integrating the Brave Search API, providing both web and local search functionalities. Requires configuring the BRAVE_API_KEY environment variable",
+        "browser": "Control a headless Electron window via Chrome DevTools Protocol. Tools: open URL, execute single-line JS, reset session.",
+        "didi_mcp": "DiDi MCP server providing ride-hailing services including map search, price estimation, order management, and driver tracking. Only available in Mainland China. Requires configuring the DIDI_API_KEY environment variable",
+        "dify_knowledge": "Dify's MCP server implementation provides a simple API to interact with Dify. Requires configuring the Dify Key",
+        "fetch": "MCP server for retrieving URL web content",
+        "filesystem": "A Node.js server implementing the Model Context Protocol (MCP) for file system operations. Requires configuration of directories allowed for access.",
+        "flomo": "Connect to flomo to quickly capture notes and ideas via AI. Requires flomo account authorization.",
+        "hub": "MCP hub service (@cherry/hub): aggregated browsing and installation of community MCP servers in the builtin list",
+        "mcp_auto_install": "Automatically install MCP service (beta)",
+        "memory": "Persistent memory implementation based on a local knowledge graph. This enables the model to remember user-related information across different conversations. Requires configuring the MEMORY_FILE_PATH environment variable.",
+        "no": "No description",
+        "nowledge_mem": "Requires Nowledge Mem app running locally. Keeps AI chats, tools, notes, agents, and files in private memory on your computer. Download from https://mem.nowledge.co/",
+        "python": "Execute Python code in a secure sandbox environment. Run Python with Pyodide, supporting most standard libraries and scientific computing packages",
+        "sequentialthinking": "A MCP server implementation that provides tools for dynamic and reflective problem solving through structured thinking processes"
+      },
+      "command": "Command",
+      "config_description": "Configure Model Context Protocol servers",
+      "customRegistryPlaceholder": "Enter private registry URL, e.g.: https://npm.company.com",
+      "deleteError": "Failed to delete server",
+      "deleteServer": "Delete Server",
+      "deleteServerConfirm": "Are you sure you want to delete this server?",
+      "deleteSuccess": "Server deleted successfully",
+      "dependenciesInstall": "Install Dependencies",
+      "dependenciesInstalling": "Installing dependencies...",
+      "description": "Description",
+      "disable": {
+        "description": "Do not enable MCP server functionality",
+        "label": "Disable MCP Server"
+      },
+      "discover": "Discover",
+      "duplicateName": "A server with this name already exists",
+      "editJson": "Edit JSON",
+      "editMcpJson": "Edit MCP Configuration",
+      "editServer": "Edit Server",
+      "env": "Environment Variables",
+      "envTooltip": "Format: KEY=value, one per line",
+      "errors": {
+        "32000": "MCP server failed to start, please check the parameters according to the tutorial",
+        "toolNotFound": "Tool {{name}} not found"
+      },
+      "fetch": {
+        "button": "Fetch Servers",
+        "success": "Successfully fetched MCP servers"
+      },
+      "findMore": "Find More MCP",
+      "headers": "Headers",
+      "headersTooltip": "Custom headers for HTTP requests",
+      "inMemory": "Memory",
+      "install": "Install",
+      "installError": "Failed to install dependencies",
+      "installHelp": "Get Installation Help",
+      "installSuccess": "Dependencies installed successfully",
+      "jsonFormatError": "JSON formatting error",
+      "jsonModeHint": "Edit the JSON representation of the MCP server configuration. Please ensure the format is correct before saving.",
+      "jsonSaveError": "Failed to save JSON configuration.",
+      "jsonSaveSuccess": "JSON configuration has been saved.",
+      "lanyun": {
+        "description": "Lanyun Technology Cloud Platform MCP Service",
+        "name": "Lanyun Technology"
+      },
+      "logoUrl": "Logo URL",
+      "logs": "Logs",
+      "longRunning": "Long Running Mode",
+      "longRunningTooltip": "When enabled, the server supports long-running tasks. When receiving progress notifications, the timeout will be reset and the maximum execution time will be extended to 10 minutes.",
+      "marketplaces": "Marketplaces",
+      "missingDependencies": "is Missing, please install it to continue.",
+      "more": {
+        "awesome": "Curated MCP Server List",
+        "composio": "Composio MCP Development Tools",
+        "glama": "Glama MCP Server Directory",
+        "higress": "Higress MCP Server",
+        "mcpso": "MCP Server Discovery Platform",
+        "mcpworld": "Baidu MCP Aggregation Platform",
+        "modelscope": "ModelScope Community MCP Server",
+        "official": "Official MCP Server Collection",
+        "pulsemcp": "Pulse MCP Server",
+        "smithery": "Smithery MCP Tools",
+        "zhipu": "Curated MCP, Fast Integration"
+      },
+      "name": "Name",
+      "newServer": "MCP Server",
+      "noDescriptionAvailable": "No description available",
+      "noLogs": "No logs yet",
+      "noServers": "No servers configured",
+      "not_support": "Model not supported",
+      "npx_list": {
+        "actions": "Actions",
+        "description": "Description",
+        "no_packages": "No packages found",
+        "npm": "NPM",
+        "package_name": "Package Name",
+        "scope_placeholder": "Enter npm scope (e.g. @your-org)",
+        "scope_required": "Please enter npm scope",
+        "search": "Search",
+        "search_error": "Search error",
+        "usage": "Usage",
+        "version": "Version"
+      },
+      "oauth": {
+        "callback": {
+          "message": "You can close this page and return to Cherry Studio",
+          "title": "Authentication Successful"
+        }
+      },
+      "prompts": {
+        "arguments": "Arguments",
+        "availablePrompts": "Available Prompts",
+        "genericError": "Get prompt Error",
+        "loadError": "Get prompts Error",
+        "noPromptsAvailable": "No prompts available",
+        "requiredField": "Required Field"
+      },
+      "protocolInstallWarning": {
+        "command": "Startup command",
+        "message": "This MCP was installed from an external source via protocol. Running unknown tools may harm your computer.",
+        "run": "Run",
+        "title": "Run external MCP?"
+      },
+      "provider": "Provider",
+      "providerPlaceholder": "Provider name",
+      "providerUrl": "Provider URL",
+      "providers": "Providers",
+      "registry": "Package Registry",
+      "registryDefault": "Default",
+      "registryTooltip": "Choose the registry for package installation to resolve network issues with the default registry.",
+      "requiresConfig": "Requires Configuration",
+      "resources": {
+        "availableResources": "Available Resources",
+        "blob": "Blob",
+        "blobInvisible": "Blob Invisible",
+        "genericError": "Resource acquisition error",
+        "mimeType": "MIME Type",
+        "noResourcesAvailable": "No resources available",
+        "size": "Size",
+        "text": "Text",
+        "uri": "URI"
+      },
+      "search": {
+        "placeholder": "Search MCP servers...",
+        "tooltip": "Search MCP servers"
+      },
+      "searchNpx": "Search MCP",
+      "serverPlural": "servers",
+      "serverSingular": "server",
+      "servers": "MCP Servers",
+      "sse": "Server-Sent Events (sse)",
+      "startError": "Start failed",
+      "stdio": "Standard Input/Output (stdio)",
+      "streamableHttp": "Streamable HTTP (streamableHttp)",
+      "sync": {
+        "button": "Sync",
+        "discoverMcpServers": "Discover MCP Servers",
+        "discoverMcpServersDescription": "Visit the platform to discover available MCP servers",
+        "error": "Sync MCP Servers error",
+        "getToken": "Get API Token",
+        "getTokenDescription": "Retrieve your personal API token from your account",
+        "noServersAvailable": "No MCP servers available",
+        "providerDescriptions": {
+          "302ai": "302.AI Platform MCP Service",
+          "bailian": "Alibaba Cloud Bailian Platform MCP Service",
+          "lanyun": "Lanyun Technology Cloud Platform MCP Service",
+          "mcprouter": "MCP Router Platform MCP Service",
+          "modelscope": "ModelScope Platform MCP Service",
+          "tokenflux": "TokenFlux Platform MCP Service"
+        },
+        "selectProvider": "Select Provider:",
+        "setToken": "Enter Your Token",
+        "success": "Sync MCP Servers successful",
+        "title": "Sync Servers",
+        "tokenPlaceholder": "Enter API token here",
+        "tokenRequired": "API Token is required",
+        "unauthorized": "Sync Unauthorized"
+      },
+      "system": "System",
+      "tabs": {
+        "description": "Description",
+        "general": "General",
+        "prompts": "Prompts",
+        "resources": "Resources",
+        "tools": "Tools"
+      },
+      "tags": "Tags",
+      "tagsPlaceholder": "Enter tags",
+      "timeout": "Timeout",
+      "timeoutTooltip": "Timeout in seconds for requests to this server, default is 60 seconds",
+      "title": "MCP Servers",
       "tools": {
         "autoApprove": {
-          "label": "Auto Approve"
+          "label": "Auto Approve",
+          "tooltip": {
+            "confirm": "Are you sure you want to run this MCP tool?",
+            "disabled": "Tool will require manual approval before running",
+            "enabled": "Tool will run automatically without confirmation",
+            "howToEnable": "Enable the tool first to use auto-approve"
+          }
         },
+        "availableTools": "Available Tools",
+        "enable": "Enable Tool",
+        "inputSchema": {
+          "enum": {
+            "allowedValues": "Allowed Values"
+          },
+          "label": "Input Schema"
+        },
+        "loadError": "Get tools Error",
+        "noToolsAvailable": "No tools available",
         "run": "Run"
-      }
+      },
+      "type": "Type",
+      "types": {
+        "inMemory": "In Memory",
+        "sse": "SSE",
+        "stdio": "STDIO",
+        "streamableHttp": "Streamable HTTP"
+      },
+      "updateError": "Failed to update server",
+      "updateSuccess": "Server updated successfully",
+      "url": "URL",
+      "user": "User",
+      "wiring_pending": "MCP server process management is not wired yet; this action will be enabled in a later batch"
     },
     "messages": {
       "grid_columns": "Message grid display columns",
@@ -2319,7 +2751,8 @@
       "check": {
         "warn": "Please be cautious when selecting this option. Incorrect selection may cause the model to malfunction!"
       },
-      "label": "More Settings"
+      "label": "More Settings",
+      "title": "More Settings"
     },
     "notification": {
       "assistant": "Assistant Message",
@@ -2449,6 +2882,18 @@
       "azure": {
         "apiversion": {
           "tip": "The API version of Azure OpenAI, if you want to use Response API, please enter the v1 version"
+        }
+      },
+      "basic_auth": {
+        "label": "HTTP authentication",
+        "password": {
+          "label": "Password",
+          "tip": "Enter your password"
+        },
+        "tip": "Applicable to instances deployed remotely (see the documentation). Currently, only the Basic scheme (RFC 7617) is supported.",
+        "user_name": {
+          "label": "Username",
+          "tip": "Left empty to disable"
         }
       },
       "bills": "Fee Bills",
@@ -2596,6 +3041,7 @@
       "installed": "Installed",
       "invalidFormat": "Only ZIP files and directories are supported",
       "localInstall": "Local Install",
+      "marketInstallUnsupported": "This registry entry has no direct download; install it from ZIP instead",
       "multiSelect": "Multi-select",
       "noFilterResults": "No matching skills",
       "noInstalled": "No skills installed",
@@ -2606,9 +3052,12 @@
       "searchTitle": "Search Skills",
       "selectFile": "Select a file to view",
       "title": "Skills",
+      "toggleNeedsAgent": "Skill enablement is managed per assistant in the assistant settings",
       "uninstall": "Uninstall",
+      "uninstallFailed": "Failed to uninstall skill: {{id}}",
       "uninstallSuccess": "Skill uninstalled: {{name}}",
       "viewSource": "View Source",
+      "wiring_pending": "Wiring pending: this action requires main-process skill management (coming in a later batch)",
       "zip": "ZIP"
     },
     "theme": {
@@ -2658,6 +3107,18 @@
         "title": "OCR service"
       },
       "preprocess": {
+        "local_paddle": {
+          "cancel": "Cancel Download",
+          "download": "Download Model",
+          "error_prefix": "Download failed",
+          "help": "Local OCR (PP-OCRv6, ~140 MB): when enabled, scanned PDFs are recognized locally during chat reading and knowledge base ingestion — no network or API key required",
+          "model_title": "Local Model",
+          "not_downloaded": "Model not downloaded (~140 MB, runs fully on this device)",
+          "ready": "Model ready — recognition runs fully on this device",
+          "remove": "Remove Model",
+          "retry": "Retry",
+          "unsupported": "Local OCR inference is not supported on this platform"
+        },
         "paddleocr": {
           "aistudio_access_token": "Access token of AI Studio Community",
           "api_url": "API URL",
@@ -2794,6 +3255,7 @@
     "apps": "Apps",
     "files": "Files",
     "home": "Home",
+    "knowledge": "Knowledge Base",
     "settings": "Settings"
   },
   "trace": {

@@ -1,0 +1,15 @@
+diff --git a/lib/index.js b/lib/index.js
+index 698efc9..7f5bd31 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -794,6 +794,10 @@ function spawnSubprocess(spec, internals = {}) {
+ 	const errMode = spec.stdio.stderr;
+ 	const stdinMode = spec.stdio.stdin;
+ 	const env = childEnv(spec.env);
++	// [re-cherry] runner 以 electron 二进制（process.execPath）启动需要 node 语义：按子进程
++	// 注入而非 ambient process.env——环境级污染会泄漏给 Chromium 自身子进程（GPU 进程
++	// 拿到即以 node 模式启动、全部 Chromium 开关报 bad option 后退出）。
++	if (program === process.execPath) env.ELECTRON_RUN_AS_NODE = "1";
+ 	const child = spawn(program, args, {
+ 		cwd: spec.cwd,
+ 		env,

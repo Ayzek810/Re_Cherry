@@ -14,7 +14,8 @@ interface Props {
 
 /** 静态 i18n 键映射（注册表 id → 词条键；显式写出以通过 i18n 动态键检查）。 */
 const BUILTIN_TOOL_I18N: Record<string, string> = {
-  ask_user_question: 'settings.agentSettings.tools.builtins.ask.name'
+  ask_user_question: 'settings.agentSettings.tools.builtins.ask.name',
+  ocr_document: 'settings.agentSettings.tools.builtins.ocr.name'
 }
 
 const EXTERNAL_TOOL_I18N: Record<string, string> = {

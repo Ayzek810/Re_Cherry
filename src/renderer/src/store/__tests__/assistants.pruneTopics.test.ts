@@ -33,7 +33,7 @@ function stateWith(topics: Topic[]): AssistantsStateLike {
     defaultAssistant: { id: 'default', topics: [] },
     assistants: [{ id: 'assistant-1', topics }],
     tagsOrder: [],
-    collapsedTags: {},
+    collapsedTags: {}
   } as unknown as AssistantsStateLike
 }
 
@@ -75,7 +75,7 @@ describe('assistants/pruneTopics', () => {
         { id: 'assistant-2', topics: [topic('a', { assistantId: 'assistant-2' })] }
       ],
       tagsOrder: [],
-      collapsedTags: {},
+      collapsedTags: {}
     } as unknown as AssistantsStateLike
 
     const next = assistantsReducer(state, pruneTopics({ assistantId: 'assistant-1', topicIds: ['a'] }))
