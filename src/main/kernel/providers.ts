@@ -114,6 +114,16 @@ export function credentialRefForProvider(providerId: string): CredentialRef {
 }
 
 /**
+ * 未知模型的上下文窗兜底（原 dsh-llm-pi-ai 默认 262144 偏小）：
+ * 网关命名空间的模型 id（如 deepseek-ai/DeepSeek-V4-Flash）不命中 pi-ai 目录，
+ * 小兜底让 isContextOverflow 的"成功响应 usage 复核"把 >262k 的合法轮次误报成
+ * 上下文溢出（真机持续复现）。调大只关掉 usage 猜测；真实溢出仍由 API 400
+ * 错误文本（isContextWindowExceededError / 溢出文案模式）如实归类，与窗值无关。
+ * 目录命中（路由键 + 模型 id 精确匹配）的模型仍用目录真值，不受此兜底影响。
+ */
+const KERNEL_DEFAULT_CONTEXT_WINDOW = 1_048_576
+
+/**
  * 把渲染进程的 provider 配置同步进内核：
  * 1. apiKey（可为逗号拼接的多 key）写入内存凭证服务，由凭证层切分并逐请求轮换
  * 2. provider 路由写进 `llm-pi-ai` settings 段，插件 watcher 触发重新注册
@@ -138,6 +148,7 @@ export async function syncCherryProviders(ctx: Context, providers: readonly Kern
     await ctx.credentials.set(ref, provider.apiKey)
     profiles[provider.id] = {
       apiKeyEnv: ref,
+      defaultContextWindow: KERNEL_DEFAULT_CONTEXT_WINDOW,
       ...(provider.name === undefined ? {} : { displayName: provider.name }),
       api: protocol,
       ...(provider.apiHost === undefined ? {} : { baseURL: provider.apiHost }),

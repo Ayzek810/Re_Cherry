@@ -3,6 +3,12 @@ import { rm, writeFile } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import { loggerService } from '@logger'
 import { app } from 'electron'
+vi.mock('@main/services/SearchService', () => ({
+  searchService: new Proxy({}, { get: () => vi.fn() }),
+  SearchService: class {}
+}))
+vi.mock('@main/services/webSearchProviders/webFetch', () => ({ fetchWebContent: vi.fn(async () => ({ content: '' })) }))
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {

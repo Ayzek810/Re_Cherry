@@ -5,7 +5,13 @@ import { isLocalAi } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import db from '@renderer/databases'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
-import { initKernelBridge, syncImageDescriberToKernel, syncProvidersToKernel } from '@renderer/services/kernelChat'
+import {
+  initKernelBridge,
+  syncImageDescriberToKernel,
+  syncPreprocessToKernel,
+  syncProvidersToKernel,
+  syncWebSearchToKernel
+} from '@renderer/services/kernelChat'
 import MemoryService from '@renderer/services/MemoryService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
@@ -157,6 +163,70 @@ export function useAppInit() {
   const kernelProviders = useAppSelector((state) => state.llm.providers)
   const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
   const imageDescriberPrompt = useAppSelector((state) => state.llm.imageDescriberPrompt)
+  // 批次2 网络搜索：websearch 切片（providers/blacklist/searchWithTime）变更即推内核
+  const webSearchState = useAppSelector((state) => state.websearch)
+
+  useEffect(() => {
+    void syncWebSearchToKernel({
+      providers: (webSearchState.providers ?? []).map((p) => ({
+        id: p.id,
+        name: p.name,
+        apiKey: p.apiKey,
+        apiHost: p.apiHost,
+        url: p.url,
+        engines: p.engines,
+        basicAuthUsername: p.basicAuthUsername,
+        basicAuthPassword: p.basicAuthPassword,
+        usingBrowser: p.usingBrowser
+      })),
+      // 订阅源黑名单（ublacklist 模式）平铺合并；excludeDomains 单独透传
+      blacklist: (webSearchState.subscribeSources ?? []).flatMap((s) => s.blacklist ?? []),
+      excludeDomains: webSearchState.excludeDomains ?? [],
+      searchWithTime: webSearchState.searchWithTime ?? false,
+      maxResults: webSearchState.maxResults ?? 5,
+      // 结果压缩投影（批次7）：embeddingModel(Model) 收窄为 {providerId, modelId} 引用，
+      // 密钥由主进程自解析（同知识库先例），不在此通道传 apiKey。
+      compression: webSearchState.compressionConfig
+        ? {
+            method: webSearchState.compressionConfig.method ?? 'none',
+            cutoffLimit: webSearchState.compressionConfig.cutoffLimit,
+            cutoffUnit: webSearchState.compressionConfig.cutoffUnit,
+            documentCount: webSearchState.compressionConfig.documentCount,
+            embedding: webSearchState.compressionConfig.embeddingModel
+              ? {
+                  providerId: webSearchState.compressionConfig.embeddingModel.provider,
+                  modelId: webSearchState.compressionConfig.embeddingModel.id,
+                  dimensions: webSearchState.compressionConfig.embeddingDimensions
+                }
+              : undefined
+          }
+        : undefined
+    })
+  }, [webSearchState])
+
+  // 批次3 MCP：mcp 切片 servers（配置含命令/env 密钥）整体投影进主进程 MCPService
+  // 内存（不落盘不进会话；内核桥挂载时按 serverId 反查）。
+  const mcpServers = useAppSelector((state) => state.mcp.servers)
+
+  useEffect(() => {
+    void window.api.dshSyncMcpServers(mcpServers ?? [])
+  }, [mcpServers])
+
+  // §7.17 三轮 文档处理通道：preprocess 切片 providers（含 apiKey，只进主进程内存，
+  // webSearch/MCP 同先例）整体投影进主进程内存配置表——ocr_document 工具与知识库
+  // 摄取的扫描件回退按此路由服务商。
+  const preprocessProviders = useAppSelector((state) => state.preprocess.providers)
+
+  useEffect(() => {
+    void syncPreprocessToKernel(
+      (preprocessProviders ?? []).map((provider) => ({
+        id: provider.id,
+        apiKey: provider.apiKey,
+        apiHost: provider.apiHost,
+        model: provider.model
+      }))
+    )
+  }, [preprocessProviders])
 
   useEffect(() => {
     // 把 provider 配置同步进内核（provider 变更时自动重同步）

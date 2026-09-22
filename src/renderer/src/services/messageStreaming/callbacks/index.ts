@@ -2,7 +2,6 @@ import type { Assistant } from '@renderer/types'
 
 import type { BlockManager } from '../BlockManager'
 import { createBaseCallbacks } from './baseCallbacks'
-import { createCitationCallbacks } from './citationCallbacks'
 import { createCompactCallbacks } from './compactCallbacks'
 import { createImageCallbacks } from './imageCallbacks'
 import { createTextCallbacks } from './textCallbacks'
@@ -52,12 +51,6 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     assistantMsgId
   })
 
-  const citationCallbacks = createCitationCallbacks({
-    blockManager,
-    assistantMsgId,
-    getState
-  })
-
   const videoCallbacks = createVideoCallbacks({ blockManager, assistantMsgId })
 
   const compactCallbacks = createCompactCallbacks({
@@ -69,13 +62,10 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     saveUpdatesToDB
   })
 
-  // 创建textCallbacks时传入citationCallbacks的getCitationBlockId方法和compactCallbacks的handleTextComplete方法
+  // 创建textCallbacks时传入compactCallbacks的handleTextComplete方法
   const textCallbacks = createTextCallbacks({
     blockManager,
-    getState,
     assistantMsgId,
-    getCitationBlockId: citationCallbacks.getCitationBlockId,
-    getCitationBlockIdFromTool: toolCallbacks.getCitationBlockId,
     handleCompactTextComplete: compactCallbacks.handleTextComplete
   })
 
@@ -86,7 +76,6 @@ export const createCallbacks = (deps: CallbacksDependencies) => {
     ...thinkingCallbacks,
     ...toolCallbacks,
     ...imageCallbacks,
-    ...citationCallbacks,
     ...videoCallbacks,
     ...compactCallbacks,
     // 清理资源的方法

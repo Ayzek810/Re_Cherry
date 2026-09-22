@@ -1,10 +1,7 @@
 import { DeleteIcon } from '@renderer/components/Icons'
 import { StreamlineGoodHealthAndWellBeing } from '@renderer/components/Icons/SVGIcon'
 import Scrollbar from '@renderer/components/Scrollbar'
-const usePreprocessProvider = (providerId?: string) => ({
-  provider: { id: providerId } as any,
-  updateProvider: () => {}
-})
+import { usePreprocessProvider } from '@renderer/hooks/usePreprocess'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { SettingHelpText } from '@renderer/pages/settings'
 import { isProviderSupportAuth } from '@renderer/services/ProviderService'
@@ -198,6 +195,8 @@ export const LlmApiKeyList: FC<SpecificApiKeyListProps> = ({ providerId, showHea
 
 export const DocPreprocessApiKeyList: FC<DocPreprocessApiKeyListProps> = ({ providerId, showHealthCheck = true }) => {
   const { provider, updateProvider } = usePreprocessProvider(providerId)
+  // v0.3.2 接真：provider 现读自 preprocess 切片；未知 id 时无表单可管。
+  if (!provider) return null
 
   return <ApiKeyList provider={provider} updateProvider={updateProvider} showHealthCheck={showHealthCheck} />
 }

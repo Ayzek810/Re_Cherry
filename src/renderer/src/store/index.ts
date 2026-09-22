@@ -36,19 +36,24 @@ import assistants from './assistants'
 import backup from './backup'
 import copilot from './copilot'
 import inputToolsReducer from './inputTools'
+import knowledge from './knowledge'
 import llm, { updateProviders } from './llm'
+import mcp from './mcp'
 import memory from './memory'
 import messageBlocksReducer from './messageBlock'
 import migrate from './migrate'
 import minapps from './minapps'
 import newMessagesReducer from './newMessage'
 import nutstore from './nutstore'
+import preprocess from './preprocess'
 import runtime from './runtime'
 import settings from './settings'
 import shortcuts from './shortcuts'
+import skills from './skills'
 import tabs from './tabs'
 import toolPermissions from './toolPermissions'
 import userQuestions from './userQuestions'
+import websearch from './websearch'
 
 const logger = loggerService.withContext('Store')
 
@@ -68,7 +73,14 @@ const rootReducer = combineReducers({
   messageBlocks: messageBlocksReducer,
   inputTools: inputToolsReducer,
   toolPermissions,
-  userQuestions
+  userQuestions,
+  // v0.3.2 加回四功能的状态切片（批次1 仅 UI 持久化；机制批次 2/3/4/5 接线）
+  websearch,
+  mcp,
+  knowledge,
+  skills,
+  // v0.3.2 验收轮：文档预处理服务商配置（设置页 /settings/preprocess 编辑）
+  preprocess
 })
 
 // v0.2.4 K3：写盘前剥离非空 provider apiKey（明文不落 localStorage）。
@@ -102,7 +114,7 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
   {
     key: 'cherry-studio',
     storage,
-    version: 215,
+    version: 218,
     blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions'],
     transforms: [stripProviderApiKeys],
     migrate

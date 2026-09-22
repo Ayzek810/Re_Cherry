@@ -118,8 +118,8 @@ describe('classifyError', () => {
   it('classifies embedding error as knowledge', () => {
     const result = classifyError(makeError({ message: 'embedding model failed' }))
     expect(result.category).toBe('knowledge')
-    // v0.2.4-1：knowledge 页面已从本 fork 移除，生产侧返回 null（v0.3.1 加回页面时同步恢复此断言）
-    expect(result.navTarget).toBeNull()
+    // v0.3.2 批次1：knowledge 页面回归，断言按 v0.2.4-1 的预告恢复
+    expect(result.navTarget).toBe('/knowledge')
   })
 
   it('classifies knowledge base error as knowledge', () => {

@@ -1,8 +1,24 @@
+/**
+ * 引用标记 → 渲染标签管线（V2 cherry-studio utils/citation.ts 迁移件；
+ * 生产链为 fork 的 kernelChat 投影——见 MainTextBlock）。
+ *
+ * V2 加固点（相对 v1.9.11）：
+ * - data-citation 属性只存编号，引用数据走 out-of-band registry（React context）
+ *   ——不再把 JSON 序列化进 HTML 属性（安全加固）。
+ * - 无 URL 的引用（知识库/记忆）输出裸 <sup>，由 Markdown 的 sup 组件
+ *   （CitationSup）挂弹层；v1 的空括号链接形态会被 rehype-harden 拆掉。
+ * - isLinkableCitationUrl 是 generateCitationTag / Link / CitationSup 三处
+ *   共用的同一判定。
+ */
 import type { GroundingSupport } from '@google/genai'
 import type { Citation, WebSearchSource } from '@renderer/types'
 import { WEB_SEARCH_SOURCE } from '@renderer/types'
+import removeMarkdown from 'remove-markdown'
 
-import { cleanMarkdownContent, encodeHTML } from './formats'
+/** 是否可作外链打开（知识库/记忆引用 url 为空）。 */
+export function isLinkableCitationUrl(url?: string): boolean {
+  return !!url && url.startsWith('http')
+}
 
 /**
  * 从多个 citationReference 中获取第一个有效的 source
@@ -20,6 +36,27 @@ export function determineCitationSource(
   return undefined
 }
 
+/** 知识库来源展示名：取路径末段（兼容 \ 与 /）。模型侧保留全路径，仅展示层收窄。 */
+function knowledgeBasename(source?: string): string | undefined {
+  if (!source) return undefined
+  return source.split(/[\\/]/).pop() || source
+}
+
+/**
+ * 悬浮胶囊所用的安全形态：
+ * - remove-markdown 剥结构符号（标题#/引用>/围栏/加粗）但保留代码内容——此前用
+ *   cleanMarkdownContent 连 `<string.h>` 的尖括号、点号一起剥，代码类知识库的
+ *   摘录被打成乱码（真机反馈）；摘录截 200 字符（V2 同语义）
+ * - 知识库标题取路径末段（Windows 反斜杠路径此前显示整条）
+ */
+export function toTooltipCitation(citation: Citation): Citation {
+  return {
+    ...citation,
+    title: (citation.type === 'knowledge' ? knowledgeBasename(citation.title) : citation.title?.trim()) || undefined,
+    content: removeMarkdown(citation.content ?? '').slice(0, 200) || undefined
+  }
+}
+
 /**
  * 把文本内容中的引用标记转换为完整的引用标签
  * - 标准化引用标记
@@ -33,16 +70,12 @@ export function determineCitationSource(
 export function withCitationTags(content: string, citations: Citation[], sourceType?: WebSearchSource): string {
   if (!content || citations.length === 0) return content
 
-  const formattedCitations = citations.map((citation) => ({
-    ...citation,
-    content: citation.content ? cleanMarkdownContent(citation.content) : citation.content
-  }))
-
-  const citationMap = new Map(formattedCitations.map((c) => [c.number, c]))
+  const cleaned = citations.map(toTooltipCitation)
+  const citationMap = new Map(cleaned.map((c) => [c.number, c]))
 
   const normalizedContent = normalizeCitationMarks(content, citationMap, sourceType)
 
-  return mapCitationMarksToTags(normalizedContent, citationMap)
+  return mapCitationMarksToTags(normalizedContent, new Map(cleaned.map((c) => [c.number, c])))
 }
 
 /**
@@ -211,28 +244,22 @@ export function mapCitationMarksToTags(content: string, citationMap: Map<number,
 }
 
 /**
- * 生成单个用于渲染的引用标签
+ * 生成单个用于渲染的引用标签（V2 形态）
  * @param citation 引用数据
  * @returns 渲染后的引用标签
+ *
+ * - 有 URL：[<sup data-citation='N'>N</sup>](url) —— Link 组件挂悬浮胶囊
+ * - 无 URL（知识库/记忆）：裸 <sup data-citation='N'>N</sup> —— CitationSup 挂胶囊
  */
 export function generateCitationTag(citation: Citation): string {
-  const supData = {
-    id: citation.number,
-    url: citation.url,
-    title: citation.title || citation.hostname || '',
-    content: citation.content?.substring(0, 200)
+  const supTag = `<sup data-citation='${citation.number}'>${citation.number}</sup>`
+  if (!isLinkableCitationUrl(citation.url)) {
+    // 知识库/记忆引用无 URL。v1 用空括号 [sup]() 包裹，rehype-harden 会把它
+    // 拆成 <span>…<sup/></span>，弹层（只挂 <a> 上）随之丢失。V2 改为输出
+    // 裸 sup，由 components.sup（CitationSup）挂弹层。
+    return supTag
   }
-  // encodeHTML only escapes &, <, >, ", ' — also escape | to prevent GFM table
-  // parser from treating it as a column separator inside table cells
-  const citationJson = encodeHTML(JSON.stringify(supData)).replace(/\|/g, '&#124;')
-
-  // 判断是否为有效链接
-  const isLink = citation.url && citation.url.startsWith('http')
-
   // Escape | in URL to avoid breaking GFM table cell parsing
-  const safeUrl = isLink ? citation.url.replace(/\|/g, '%7C') : ''
-
-  // 生成链接格式: [<sup data-citation='...'>N</sup>](url)
-  // 或者生成空括号格式: [<sup data-citation='...'>N</sup>]()
-  return `[<sup data-citation='${citationJson}'>${citation.number}</sup>]` + (isLink ? `(${safeUrl})` : '()')
+  const safeUrl = citation.url.replace(/\|/g, '%7C')
+  return `[${supTag}](${safeUrl})`
 }

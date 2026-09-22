@@ -7,13 +7,12 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { EncodedImageAttachment } from '@deepseek-ai/dsh-attachment'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { loggerService } from '@logger'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 
 import { uiSessionEvents } from './sessionEventView'
-import type { DestroyTurnsResult, KernelTopic } from './topics'
+import type { DestroyTurnsResult, KernelTopic, TopicSendOptions } from './topics'
 import {
   createTopic,
   deleteTopic,
@@ -112,17 +111,7 @@ export function registerAppServiceSeams(ctx: Context): void {
     delete: (id: string) => deleteTopic(ctx, id),
     destroyTurns: (topicId: string, anchorUserSeqs: number[]) => destroyTurns(ctx, topicId, anchorUserSeqs),
     fork: (sourceTopicId: string, anchorUserMessageSeq: number) => forkTopic(ctx, sourceTopicId, anchorUserMessageSeq),
-    send: (
-      id: string,
-      text: string,
-      options?: {
-        reasoningEffort?: string
-        builtinTools?: string[]
-        externalTools?: string[]
-        tier?: WorkModeApprovalTier
-        images?: EncodedImageAttachment[]
-      }
-    ) => sendMessage(ctx, id, text, options),
+    send: (id: string, text: string, options?: TopicSendOptions) => sendMessage(ctx, id, text, options),
     stop: (id: string) => stopTopic(ctx, id),
     isRunning: (id: string) => isTopicRunning(ctx, id),
     uiEvents: (id: string) => uiSessionEvents(sessionEvents(ctx, id))

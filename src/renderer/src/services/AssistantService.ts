@@ -8,14 +8,7 @@ import {
 import { getStoreProviders } from '@renderer/hooks/useStore'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
-import type {
-  Assistant,
-  AssistantSettings,
-  AssistantWorkModeConfig,
-  Model,
-  Provider,
-  Topic
-} from '@renderer/types'
+import type { Assistant, AssistantSettings, AssistantWorkModeConfig, Model, Provider, Topic } from '@renderer/types'
 import { WORK_MODE_APPROVAL_TIERS } from '@shared/config/workMode'
 import { v4 as uuid } from 'uuid'
 
@@ -182,5 +175,3 @@ export function getAssistantById(id: string) {
   const assistants = store.getState().assistants.assistants
   return assistants.find((a) => a.id === id)
 }
-
-

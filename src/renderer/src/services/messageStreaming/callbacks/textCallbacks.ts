@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
-import { WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { ProviderMetadata } from '@renderer/types/chunk'
-import type { CitationMessageBlock, MessageBlock } from '@renderer/types/newMessage'
+import type { MessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { createMainTextBlock } from '@renderer/utils/messageUtils/create'
 
@@ -11,22 +10,12 @@ const logger = loggerService.withContext('TextCallbacks')
 
 interface TextCallbacksDependencies {
   blockManager: BlockManager
-  getState: any
   assistantMsgId: string
-  getCitationBlockId: () => string | null
-  getCitationBlockIdFromTool: () => string | null
   handleCompactTextComplete?: (text: string, mainTextBlockId: string | null) => Promise<boolean>
 }
 
 export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
-  const {
-    blockManager,
-    getState,
-    assistantMsgId,
-    getCitationBlockId,
-    getCitationBlockIdFromTool,
-    handleCompactTextComplete
-  } = deps
+  const { blockManager, assistantMsgId, handleCompactTextComplete } = deps
 
   // 内部维护的状态
   let mainTextBlockId: string | null = null
@@ -54,15 +43,10 @@ export const createTextCallbacks = (deps: TextCallbacksDependencies) => {
     },
 
     onTextChunk: async (text: string, providerMetadata?: ProviderMetadata) => {
-      const citationBlockId = getCitationBlockId() || getCitationBlockIdFromTool()
-      const citationBlockSource = citationBlockId
-        ? (getState().messageBlocks.entities[citationBlockId] as CitationMessageBlock).response?.source
-        : WEB_SEARCH_SOURCE.WEBSEARCH
       if (text) {
         const blockChanges: Partial<MessageBlock> = {
           content: text,
-          status: MessageBlockStatus.STREAMING,
-          citationReferences: citationBlockId ? [{ citationBlockId, citationBlockSource }] : []
+          status: MessageBlockStatus.STREAMING
         }
         blockManager.smartBlockUpdate(mainTextBlockId!, blockChanges, MessageBlockType.MAIN_TEXT)
       }

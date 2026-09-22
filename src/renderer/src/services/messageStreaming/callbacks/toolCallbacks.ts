@@ -5,7 +5,7 @@ import { toolPermissionsActions } from '@renderer/store/toolPermissions'
 import type { MCPToolResponse, NormalToolResponse } from '@renderer/types'
 import type { ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { createCitationBlock, createToolBlock } from '@renderer/utils/messageUtils/create'
+import { createToolBlock } from '@renderer/utils/messageUtils/create'
 import { isPlainObject } from 'lodash'
 
 import type { BlockManager } from '../BlockManager'
@@ -26,7 +26,6 @@ export const createToolCallbacks = (deps: ToolCallbacksDependencies) => {
   // 内部维护的状态
   const toolCallIdToBlockIdMap = new Map<string, string>()
   let toolBlockId: string | null = null
-  let citationBlockId: string | null = null
 
   return {
     onToolCallPending: (toolResponse: ToolResponse) => {
@@ -154,17 +153,6 @@ export const createToolCallbacks = (deps: ToolCallbacksDependencies) => {
           }
         }
         blockManager.smartBlockUpdate(existingBlockId, changes, MessageBlockType.TOOL, true)
-        if (toolResponse.tool.name === 'builtin_knowledge_search' && toolResponse.response) {
-          const citationBlock = createCitationBlock(
-            assistantMsgId,
-            { knowledge: toolResponse.response },
-            {
-              status: MessageBlockStatus.SUCCESS
-            }
-          )
-          citationBlockId = citationBlock.id
-          void blockManager.handleBlockTransition(citationBlock, MessageBlockType.CITATION)
-        }
       } else {
         logger.warn(
           `[onToolCallComplete] Received unhandled tool status: ${toolResponse.status} for ID: ${toolResponse.id}`
@@ -172,9 +160,6 @@ export const createToolCallbacks = (deps: ToolCallbacksDependencies) => {
       }
 
       toolBlockId = null
-    },
-
-    // 暴露给 textCallbacks 使用的方法
-    getCitationBlockId: () => citationBlockId
+    }
   }
 }

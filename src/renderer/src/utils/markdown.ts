@@ -6,27 +6,29 @@ import type { Point, Position } from 'unist'
 import { visit } from 'unist-util-visit'
 
 /**
- * 更彻底的查找方法，递归搜索所有子元素
- * @param {any} children 子元素
- * @returns {string} 找到的 citation 或 ''
+ * 递归搜索子元素树，找 data-citation 属性并解析其编号
+ *（V2 markdownLight.findCitationInChildren 的编号制版本）
+ * @returns 找到的引用编号，否则 null
  */
-export const findCitationInChildren = (children: any): string => {
-  if (!children) return ''
+export const findCitationNumberInChildren = (children: unknown): number | null => {
+  if (!children) return null
 
-  // 直接搜索子元素
   for (const child of Array.isArray(children) ? children : [children]) {
-    if (typeof child === 'object' && child?.props?.['data-citation']) {
-      return child.props['data-citation']
-    }
-
-    // 递归查找更深层次
-    if (typeof child === 'object' && child?.props?.children) {
-      const found = findCitationInChildren(child.props.children)
-      if (found) return found
+    if (typeof child === 'object' && child !== null) {
+      const raw = (child as { props?: Record<string, unknown> }).props?.['data-citation']
+      if (typeof raw === 'string') {
+        const num = parseInt(raw, 10)
+        if (!Number.isNaN(num)) return num
+      }
+      const nested = (child as { props?: { children?: unknown } }).props?.children
+      if (nested) {
+        const found = findCitationNumberInChildren(nested)
+        if (found !== null) return found
+      }
     }
   }
 
-  return ''
+  return null
 }
 
 // 检查是否包含潜在的 LaTeX 模式

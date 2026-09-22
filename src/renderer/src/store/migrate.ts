@@ -24,12 +24,12 @@ import {
 } from '@renderer/config/constant'
 import { allMinApps } from '@renderer/config/minapps'
 import { isFunctionCallingModel, isNotSupportTextDeltaModel, qwenModel, SYSTEM_MODELS } from '@renderer/config/models'
+import { defaultPreprocessProviders } from '@renderer/config/preprocessProviders'
 import { SYSTEM_PROVIDERS } from '@renderer/config/providers'
 import { DEFAULT_SIDEBAR_ICONS } from '@renderer/config/sidebar'
 import { getModel } from '@renderer/hooks/useModel'
 import i18n from '@renderer/i18n'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
-const defaultPreprocessProviders: any[] = []
 import type { Assistant, Model, Provider, ProviderApiOptions, WebSearchProvider } from '@renderer/types'
 import { isBuiltinMCPServer, isSystemProvider, SystemProviderIds } from '@renderer/types'
 import { getDefaultGroupName, getLeadingEmoji, uuid } from '@renderer/utils'
@@ -2459,8 +2459,6 @@ const migrateConfig = {
       addMiniApp(state, 'ling')
       addMiniApp(state, 'huggingchat')
 
-
-
       // Migrate sidebar icons
       if (state.settings.sidebarIcons) {
         // Sidebar icons are already validated and normalized by the default migration
@@ -3208,6 +3206,51 @@ const migrateConfig = {
       return state
     } catch (error) {
       logger.error('migrate 215 error', error as Error)
+      return state
+    }
+  },
+  '216': (state: RootState) => {
+    try {
+      // v0.3.2 批次1：加回四功能的状态切片（websearch / mcp / knowledge / skills）。
+      // 全部是新增顶层切片，旧持久化态缺 key 时由 reducer initialState 缺省合并，无需变换；
+      // 本分支仅作为版本推进的显式记账，不做任何字段改写。
+      return state
+    } catch (error) {
+      logger.error('migrate 216 error', error as Error)
+      return state
+    }
+  },
+  '217': (state: RootState) => {
+    try {
+      // v0.3.2 批次1：knowledge 侧栏图标回归。旧持久化态里 sidebarIcons.visible 是存量
+      // 快照，不含 'knowledge'，必须补位，否则老用户看不到知识库入口（DEFAULT_SIDEBAR_ICONS
+      // 只作用于全新安装）。disabled 列表不动（用户显式停用的语义不受升级影响）。
+      const visible = state.settings?.sidebarIcons?.visible
+      if (Array.isArray(visible) && !visible.includes('knowledge')) {
+        visible.push('knowledge')
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 217 error', error as Error)
+      return state
+    }
+  },
+  '218': (state: RootState) => {
+    try {
+      // v0.3.2 LocalPaddle：preprocess.providers 是持久化数组，回水时整体覆盖
+      // initialState——新增的默认条目（local-paddle）永远不会出现在老安装的下拉里。
+      // 按 id 合并补缺：用户已改的 apiKey/apiHost 保留，缺失的默认条目追加
+      //（defaultProvider 不动——用户的选择不被升级改写）。
+      const providers = state.preprocess?.providers
+      if (Array.isArray(providers)) {
+        const missing = defaultPreprocessProviders.filter((d) => !providers.some((p) => p?.id === d.id))
+        if (missing.length > 0) {
+          state.preprocess = { ...state.preprocess, providers: [...providers, ...missing] }
+        }
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 218 error', error as Error)
       return state
     }
   }

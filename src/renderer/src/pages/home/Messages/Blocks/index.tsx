@@ -299,14 +299,13 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
               break
             }
             const mainTextBlock = block
-            // Find the associated citation block ID from the references
+            // 统一引用机制：从 citationReferences 取数据载体块指针传给正文块
             const citationBlockId = mainTextBlock.citationReferences?.[0]?.citationBlockId
 
             blockComponent = (
               <MainTextBlock
                 key={block.id}
                 block={mainTextBlock}
-                // Pass only the ID string
                 citationBlockId={citationBlockId}
                 role={message.role}
               />
@@ -324,6 +323,7 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
             blockComponent = <ToolBlockGroup key={block.id} blocks={[block]} role={message.role} />
             break
           case MessageBlockType.CITATION:
+            // 统一引用机制的独立清单卡："引用 N" 胶囊 + 来源列表（用户明确要求恢复）
             blockComponent = <CitationBlock key={block.id} block={block} />
             break
           case MessageBlockType.ERROR:

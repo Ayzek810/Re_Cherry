@@ -24,6 +24,8 @@ import remarkAlert from 'remark-github-blockquote-alert'
 import remarkMath from 'remark-math'
 import type { Pluggable } from 'unified'
 
+import { type CitationRegistry, CitationRegistryContext } from './CitationRegistryContext'
+import CitationSup from './CitationSup'
 import CodeBlock from './CodeBlock'
 import Link from './Link'
 import MarkdownSvgRenderer from './MarkdownSvgRenderer'
@@ -41,9 +43,11 @@ interface Props {
   block: MainTextMessageBlock | ThinkingMessageBlock | CompactMessageBlock
   // 可选的后处理函数，用于在流式渲染过程中处理文本（如引用标签转换）
   postProcess?: (text: string) => string
+  /** 引用 registry（V2 迁移）：编号 → 引用数据，供 Link/CitationSup 查表挂胶囊。 */
+  citationRegistry?: CitationRegistry
 }
 
-const Markdown: FC<Props> = ({ block, postProcess }) => {
+const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
   const { t } = useTranslation()
   const { mathEngine, mathEnableSingleDollar } = useSettings()
 
@@ -126,6 +130,7 @@ const Markdown: FC<Props> = ({ block, postProcess }) => {
   const components = useMemo(() => {
     return {
       a: (props: any) => <Link {...props} />,
+      sup: (props: any) => <CitationSup {...props} />,
       code: (props: any) => <CodeBlock {...props} blockId={block.id} />,
       table: (props: any) => <Table {...props} blockId={block.id} />,
       img: (props: any) => <ImageViewer style={{ maxWidth: 500, maxHeight: 500 }} {...props} />,
@@ -150,19 +155,21 @@ const Markdown: FC<Props> = ({ block, postProcess }) => {
 
   return (
     <div className="markdown">
-      <ReactMarkdown
-        rehypePlugins={rehypePlugins}
-        remarkPlugins={remarkPlugins}
-        components={components}
-        disallowedElements={DISALLOWED_ELEMENTS}
-        urlTransform={urlTransform}
-        remarkRehypeOptions={{
-          footnoteLabel: t('common.footnotes'),
-          footnoteLabelTagName: 'h4',
-          footnoteBackContent: ' '
-        }}>
-        {messageContent}
-      </ReactMarkdown>
+      <CitationRegistryContext value={citationRegistry}>
+        <ReactMarkdown
+          rehypePlugins={rehypePlugins}
+          remarkPlugins={remarkPlugins}
+          components={components}
+          disallowedElements={DISALLOWED_ELEMENTS}
+          urlTransform={urlTransform}
+          remarkRehypeOptions={{
+            footnoteLabel: t('common.footnotes'),
+            footnoteLabelTagName: 'h4',
+            footnoteBackContent: ' '
+          }}>
+          {messageContent}
+        </ReactMarkdown>
+      </CitationRegistryContext>
     </div>
   )
 }

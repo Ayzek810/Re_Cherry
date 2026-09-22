@@ -1,6 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit'
+import { selectFormattedCitationsByBlockId } from '@renderer/store/messageBlock'
 import type { Model } from '@renderer/types'
-import { WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { MainTextMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { render, screen } from '@testing-library/react'
@@ -42,32 +42,19 @@ vi.mock('@renderer/store/messageBlock', async () => {
   }
 })
 
+// Mock citation utilities（真实管线，隔离 markdown 清洗依赖）
+vi.mock('@renderer/utils/citation', async () => {
+  const actual = await import('@renderer/utils/citation')
+  return {
+    ...actual,
+    toTooltipCitation: (c: any) => c
+  }
+})
+
 // Mock utilities
 vi.mock('@renderer/utils/formats', () => ({
   cleanMarkdownContent: vi.fn((content: string) => content),
   encodeHTML: vi.fn((content: string) => content.replace(/"/g, '&quot;'))
-}))
-
-// Mock citation utilities
-vi.mock('@renderer/utils/citation', () => ({
-  withCitationTags: vi.fn((content: string, citations: any[]) => {
-    // Simple mock implementation that simulates citation processing
-    if (citations.length > 0) {
-      return `${content} [processed-citations]`
-    }
-    return content
-  }),
-  determineCitationSource: vi.fn((citationReferences: any[], citationBlock?: any) => {
-    // Mock implementation that returns the first valid source from citationReferences
-    if (citationBlock?.response?.source) {
-      return citationBlock.response.source
-    }
-    if (citationReferences?.length) {
-      const validReference = citationReferences.find((ref) => ref.citationBlockSource)
-      return validReference?.citationBlockSource
-    }
-    return undefined
-  })
 }))
 
 // Mock services
@@ -78,10 +65,13 @@ vi.mock('@renderer/services/ModelService', () => ({
 // Mock Markdown component
 vi.mock('@renderer/pages/home/Markdown/Markdown', () => ({
   __esModule: true,
-  default: ({ block, postProcess }: any) => {
+  default: ({ block, postProcess, citationRegistry }: any) => {
     const content = postProcess ? postProcess(block.content) : block.content
     return (
-      <div data-testid="mock-markdown" data-content={content}>
+      <div
+        data-testid="mock-markdown"
+        data-content={content}
+        data-registry-size={citationRegistry ? String(citationRegistry.size) : undefined}>
         Markdown: {content}
       </div>
     )
@@ -91,8 +81,6 @@ vi.mock('@renderer/pages/home/Markdown/Markdown', () => ({
 describe('MainTextBlock', () => {
   // Get references to mocked modules
   let mockGetModelUniqId: any
-  let mockWithCitationTags: any
-  let mockDetermineCitationSource: any
 
   // Create a mock store for Provider
   const mockStore = configureStore({
@@ -106,14 +94,12 @@ describe('MainTextBlock', () => {
 
     // Get the mocked functions
     const { getModelUniqId } = await import('@renderer/services/ModelService')
-    const { withCitationTags, determineCitationSource } = await import('@renderer/utils/citation')
     mockGetModelUniqId = getModelUniqId as any
-    mockWithCitationTags = withCitationTags as any
-    mockDetermineCitationSource = determineCitationSource as any
 
     // Default mock implementations
     mockUseSettings.mockReturnValue({ renderInputMessageAsMarkdown: false })
-    mockUseSelector.mockReturnValue([]) // Empty citations by default
+    // useSelector 默认返回空引用清单（生产 selector 恒返回数组；citation 用例各自覆写）
+    mockUseSelector.mockReturnValue([])
     mockGetModelUniqId.mockImplementation((model: Model) => `${model.id}-${model.name}`)
   })
 
@@ -141,7 +127,6 @@ describe('MainTextBlock', () => {
     block: MainTextMessageBlock
     role: 'user' | 'assistant'
     mentions?: Model[]
-    citationBlockId?: string
   }) => {
     return render(
       <Provider store={mockStore}>
@@ -263,155 +248,6 @@ describe('MainTextBlock', () => {
     })
   })
 
-  describe('content processing', () => {
-    it('should process content through format utilities', () => {
-      const block = createMainTextBlock({
-        content: 'Content to process',
-        citationReferences: [{ citationBlockSource: 'DEFAULT' as any }]
-      })
-      const mockCitations = [{ id: '1', content: 'Citation content', number: 1 }]
-
-      // Mock the useSelector calls - first call for citations, second call for citationBlock
-      mockUseSelector
-        .mockReturnValueOnce(mockCitations) // selectFormattedCitationsByBlockId
-        .mockReturnValueOnce(undefined) // messageBlocksSelectors.selectById
-
-      renderMainTextBlock({
-        block,
-        role: 'assistant',
-        citationBlockId: 'test-citations'
-      })
-
-      // Verify determineCitationSource was called with correct parameters
-      expect(mockDetermineCitationSource).toHaveBeenCalledWith(block.citationReferences)
-
-      // Verify citation processing was called with correct parameters
-      expect(mockWithCitationTags).toHaveBeenCalledWith('Content to process', mockCitations, 'DEFAULT')
-
-      // Verify the processed content is rendered
-      expect(screen.getByText('Markdown: Content to process [processed-citations]')).toBeInTheDocument()
-    })
-  })
-
-  describe('citation integration', () => {
-    it('should display content normally when no citations are present', () => {
-      const block = createMainTextBlock({ content: 'Content without citations' })
-      mockUseSelector.mockReturnValue([])
-
-      renderMainTextBlock({ block, role: 'assistant' })
-
-      expect(screen.getByText('Markdown: Content without citations')).toBeInTheDocument()
-      expect(mockUseSelector).toHaveBeenCalled()
-    })
-
-    it('should integrate with citation processing when all conditions are met', () => {
-      const block = createMainTextBlock({
-        content: 'Content with citation [1]',
-        citationReferences: [{ citationBlockSource: WEB_SEARCH_SOURCE.OPENAI }]
-      })
-
-      const mockCitations = [
-        {
-          id: '1',
-          number: 1,
-          url: 'https://example.com',
-          title: 'Example Citation',
-          content: 'Citation content'
-        }
-      ]
-
-      // Mock the useSelector calls - first call for citations, second call for citationBlock
-      mockUseSelector
-        .mockReturnValueOnce(mockCitations) // selectFormattedCitationsByBlockId
-        .mockReturnValueOnce(undefined) // messageBlocksSelectors.selectById
-
-      renderMainTextBlock({
-        block,
-        role: 'assistant',
-        citationBlockId: 'citation-test'
-      })
-
-      // Verify citation integration works
-      expect(mockUseSelector).toHaveBeenCalled()
-      expect(getRenderedMarkdown()).toBeInTheDocument()
-
-      // Verify determineCitationSource was called
-      expect(mockDetermineCitationSource).toHaveBeenCalledWith(block.citationReferences)
-
-      // Verify withCitationTags was called with correct parameters
-      expect(mockWithCitationTags).toHaveBeenCalledWith(
-        'Content with citation [1]',
-        mockCitations,
-        WEB_SEARCH_SOURCE.OPENAI
-      )
-
-      // Verify the processed content is rendered
-      expect(screen.getByText('Markdown: Content with citation [1] [processed-citations]')).toBeInTheDocument()
-    })
-
-    it('should skip citation processing when conditions are not met', () => {
-      const testCases = [
-        {
-          name: 'no citationReferences',
-          block: createMainTextBlock({ content: 'Content [1]' }),
-          citationBlockId: 'test'
-        },
-        {
-          name: 'no citationBlockId',
-          block: createMainTextBlock({
-            content: 'Content [1]',
-            citationReferences: [{ citationBlockSource: 'DEFAULT' as any }]
-          }),
-          citationBlockId: undefined
-        },
-        {
-          name: 'no citations data',
-          block: createMainTextBlock({
-            content: 'Content [1]',
-            citationReferences: [{ citationBlockSource: 'DEFAULT' as any }]
-          }),
-          citationBlockId: 'test'
-        }
-      ]
-
-      testCases.forEach(({ block, citationBlockId }) => {
-        mockUseSelector.mockReturnValue([]) // No citations
-
-        const { unmount } = renderMainTextBlock({
-          block,
-          role: 'assistant',
-          citationBlockId
-        })
-
-        expect(getRenderedMarkdown()).toBeInTheDocument()
-        // Should render original content without citation processing
-        expect(screen.getByText(`Markdown: ${block.content}`)).toBeInTheDocument()
-
-        unmount()
-      })
-    })
-
-    it('should handle multiple citations gracefully', () => {
-      const block = createMainTextBlock({
-        content: 'Multiple citations [1] and [2]',
-        citationReferences: [{ citationBlockSource: 'DEFAULT' as any }]
-      })
-
-      const multipleCitations = [
-        { id: '1', number: 1, url: 'https://first.com', title: 'First' },
-        { id: '2', number: 2, url: 'https://second.com', title: 'Second' }
-      ]
-
-      mockUseSelector.mockReturnValue(multipleCitations)
-
-      expect(() => {
-        renderMainTextBlock({ block, role: 'assistant', citationBlockId: 'multi-test' })
-      }).not.toThrow()
-
-      expect(getRenderedMarkdown()).toBeInTheDocument()
-    })
-  })
-
   describe('settings integration', () => {
     it('should respond to markdown rendering setting changes', () => {
       const block = createMainTextBlock({ content: 'Settings test content' })
@@ -438,26 +274,83 @@ describe('MainTextBlock', () => {
         renderMainTextBlock({
           block,
           role: 'assistant',
-          mentions: undefined,
-          citationBlockId: undefined
+          mentions: undefined
         })
       }).not.toThrow()
 
       expect(getRenderedMarkdown()).toBeInTheDocument()
     })
+  })
 
-    it('should integrate properly with Redux store for citations', () => {
+  describe('citation pipeline（统一引用机制）', () => {
+    // Helper: 带 store 注入的渲染（citationBlockId + redux selector mock）
+    const renderWithCitations = (
+      block: MainTextMessageBlock,
+      citationBlockId: string | undefined,
+      citations: any[]
+    ) => {
+      vi.mocked(selectFormattedCitationsByBlockId).mockImplementation(() => citations)
+      mockUseSelector.mockImplementation(() => citations)
+      return render(
+        <Provider store={mockStore}>
+          <MainTextBlock block={block} citationBlockId={citationBlockId} role="assistant" />
+        </Provider>
+      )
+    }
+
+    it('turns [n] into sup tags when citationReferences + citations exist', () => {
       const block = createMainTextBlock({
-        content: 'Redux integration test',
-        citationReferences: [{ citationBlockSource: 'DEFAULT' as any }]
+        content: 'Answer with source [1].',
+        citationReferences: [{ citationBlockId: 'cite-1' }]
       })
+      vi.mocked(selectFormattedCitationsByBlockId).mockImplementation(() => [
+        { number: 1, url: 'https://example.com/a', title: 'A', content: 'snippet A' }
+      ])
+      mockUseSelector.mockImplementation(() => [
+        { number: 1, url: 'https://example.com/a', title: 'A', content: 'snippet A' }
+      ])
 
-      mockUseSelector.mockReturnValue([])
-      renderMainTextBlock({ block, role: 'assistant', citationBlockId: 'redux-test' })
+      render(
+        <Provider store={mockStore}>
+          <MainTextBlock block={block} citationBlockId="cite-1" role="assistant" />
+        </Provider>
+      )
 
-      // Verify Redux integration
-      expect(mockUseSelector).toHaveBeenCalled()
-      expect(getRenderedMarkdown()).toBeInTheDocument()
+      const md = getRenderedMarkdown()!
+      expect(md).toHaveAttribute(
+        'data-content',
+        "Answer with source [<sup data-citation='1'>1</sup>](https://example.com/a)."
+      )
+      // V2 安全加固：registry out-of-band 传递，且只含安全形态
+      expect(md).toHaveAttribute('data-registry-size', '1')
+    })
+
+    it('emits bare sup (no link) for knowledge citations without URL', () => {
+      const block = createMainTextBlock({
+        content: 'From docs [1].',
+        citationReferences: [{ citationBlockId: 'cite-1' }]
+      })
+      const knowledge = [{ number: 1, url: '', title: 'doc.md', content: 'kb snippet' }]
+      vi.mocked(selectFormattedCitationsByBlockId).mockImplementation(() => knowledge)
+      mockUseSelector.mockImplementation(() => knowledge)
+
+      render(
+        <Provider store={mockStore}>
+          <MainTextBlock block={block} citationBlockId="cite-1" role="assistant" />
+        </Provider>
+      )
+
+      const md = getRenderedMarkdown()!
+      expect(md).toHaveAttribute('data-content', "From docs <sup data-citation='1'>1</sup>.")
+    })
+
+    it('leaves text untouched when no citationReferences', () => {
+      const block = createMainTextBlock({ content: 'No refs [1] here.' })
+      renderWithCitations(block, undefined, [{ number: 1, url: 'https://example.com', title: 'x' }])
+
+      const md = getRenderedMarkdown()!
+      expect(md).toHaveAttribute('data-content', 'No refs [1] here.')
+      expect(md).toHaveAttribute('data-registry-size', undefined as any)
     })
   })
 })

@@ -7,11 +7,11 @@
  * 行为级验证（§4.18）：本组件自带 assistant/updateAssistant 两个 prop，不依赖 store，
  * 故直接渲染即可断言"点按钮 → 弹选目录 → 选中路径写回助手"整条链。
  */
+import '@renderer/i18n'
+
 import type { Assistant } from '@renderer/types'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-
-import '@renderer/i18n'
 
 import PermissionModeSettings from '../PermissionModeSettings'
 
@@ -36,9 +36,7 @@ describe('工作目录 · 修改目录按钮', () => {
     const { select, button } = setup(undefined)
     fireEvent.click(button)
     await waitFor(() => expect(select).toHaveBeenCalledTimes(1))
-    expect(select).toHaveBeenCalledWith(
-      expect.objectContaining({ properties: ['openDirectory', 'createDirectory'] })
-    )
+    expect(select).toHaveBeenCalledWith(expect.objectContaining({ properties: ['openDirectory', 'createDirectory'] }))
   })
 
   it('选中目录后写回助手 workMode.workingDir，并显示在输入框', async () => {

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import type { EncodedImageAttachment, ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import * as fsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
@@ -24,14 +24,19 @@ import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { loggerService } from '@logger'
 import { getFilesDir } from '@main/utils/file'
+import type { KernelWebSearchConfig } from '@shared/config/types'
 import { isWorkModeApprovalTier, type WorkModeApprovalTier } from '@shared/config/workMode'
 import type { KernelApprovalDecisionPayload, KernelQuestionAnswerPayload } from '@shared/interaction/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { LightLlmCall } from '@shared/lightLlm/types'
-import type { FileMetadata } from '@types'
+import type { FileMetadata, MCPServer } from '@types'
 import { FILE_TYPE } from '@types'
 import { app, BrowserWindow, ipcMain } from 'electron'
 
+import type { KnowledgeTurnBase, TurnDocument } from '../services/knowledge/KnowledgeService'
+import { knowledgeService } from '../services/knowledge/KnowledgeService'
+import { preprocessChannel, type PreprocessProviderConfig } from '../services/preprocess/preprocessChannel'
+import type { SkillTurnEntry } from '../services/skills/SkillService'
 import {
   attachmentFileExtension,
   CherryAttachmentStore,
@@ -39,18 +44,23 @@ import {
   parseImageAttachmentRef
 } from './attachments'
 import { CherryCredentialProvider } from './credentials'
+import { DocumentKernelService } from './documentKernelService'
 import { registerDsmlRepair } from './dsmlRepair'
 import { ImageDescriberService } from './imageDescriber'
 import { installRequestImageHandleAnchor } from './imageHandleText'
 import type { KernelInteractionHub } from './interaction'
 import { registerInteractionHost } from './interaction'
+import { KnowledgeKernelService } from './knowledgeKernelService'
 import { lightOneShot, lightStream } from './lightLlm'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
+import { SkillKernelService } from './skillKernelService'
 import { installThinkingReplayTrim } from './thinkingReplay'
 import { isTopicNotFoundError } from './topicNotFoundError'
+import type { TopicSendOptions } from './topics'
 import { clearLiveHandles, getTopic, initTopics, listTopicBranches, listTopics, searchSessions } from './topics'
+import { WebSearchKernelService } from './webSearchService'
 
 const logger = loggerService.withContext('Kernel')
 
@@ -125,6 +135,20 @@ export async function bootKernel(): Promise<Context> {
     // 子类，super(ctx, 'imageDescriber')——直接给 ctx 赋属性会被声明制拒绝）。
     // 只持转述路由一份状态（Dsh_SyncImageDescriber 推送）；会话状态一概走日志真相源。
     await ctx.plugin(ImageDescriberService)
+    // 网络搜索服务缝（批次2）：ctx.webSearch——渲染层 websearch 切片同步投影
+    //（providers/blacklist/searchWithTime，Dsh_SyncWebSearch 推送）+ 每轮提供商登记。
+    // apiKey 只进主进程内存（引擎单例 services/WebSearchService），不落内核 settings.json。
+    await ctx.plugin(WebSearchKernelService)
+    // 知识检索每轮登记缝（批次4）：ctx.knowledge（webSearch 同构，状态本体在主进程
+    // KnowledgeService，嵌入路由随 Dsh_SyncProviders 快照刷新）。
+    await ctx.plugin(KnowledgeKernelService)
+    // 技能每轮登记缝（批次5）：ctx.skills（同构，状态本体在主进程 SkillService，
+    // SKILL.md 磁盘真相源新鲜读取）。
+    await ctx.plugin(SkillKernelService)
+    // 文档阅读每轮登记缝（批次6）：ctx.documents（同构，状态本体在主进程
+    // knowledgeService——v0.3.2 起文档处理系统同时服务知识库摄取与聊天读文件，
+    // 附件路径主进程直读）。
+    await ctx.plugin(DocumentKernelService)
 
     // LLM 层
     await ctx.plugin(LlmRuntime)
@@ -181,7 +205,7 @@ export async function bootKernel(): Promise<Context> {
     // + 沙箱化 pwsh 执行器（ctx.shell，按会话 sandbox/mode 收敛）+ 进程内作业注册表（ctx.jobs）。
     await ctx.plugin(shellEnv, { dshHome: join(kernelDir) })
 
-    // v0.3.1-2 修复：Windows 沙箱 runner 的启动语义。
+    // v0.3.1-2 修复（v0.3.2 改机制）：Windows 沙箱 runner 的启动语义。
     //
     // `dsh-sandbox-local.windowsAclRunnerInvocation()` 以 **`[process.execPath, runner.js]`** 前缀
     // 启动受限 runner，其注释假设"前缀是 `[node, runner, …]`"。但本内核跑在 Electron 里，
@@ -190,15 +214,15 @@ export async function bootKernel(): Promise<Context> {
     // 消息循环不退出 → 采集器等不到子进程结束 → **每次 pwsh 都在超时到点被判定
     // `[timed out after Nms]` + `[exit code: 1]`**（正文其实已经产出）。
     //
+    // v0.3.1-2 曾把该变量设到 ambient `process.env`（dsh childEnv 的父基底）——真机实锤
+    // （v0.3.2）Chromium 自身子进程同受其害：GPU 进程惰性重生时继承变量、以 node 模式
+    // 启动、全部 Chromium 开关报 `bad option` 后退出（exit_code=9）。故改为
+    // `patches/@deepseek-ai__dsh-subprocess-local@0.1.1-rc.2.patch`：spawnSubprocess 内按
+    // `program === process.execPath` 逐子进程注入——runner 获得 node 语义，pwsh/ripgrep
+    // 等与 Chromium 子进程的环境保持干净。ambient 变量不再在此设置。
     // 实测（tools/branch-jump-artifacts/probe-sandbox-runner.mjs，仅此一个变量）：
     //   A 现状（无该变量）→ 20023ms 未退出、15 条 libpng；B 加该变量 → 87ms 干净退出、0 条 libpng。
-    //
-    // 生效范围与代价：`dsh-subprocess-local.childEnv()` 会把父进程 env 传下去（只剥离名字含
-    // KEY/PASSWORD/SECRET/TOKEN 的与 `DSH_*` 的），故内核 spawn 的子进程（含 runner 与 pwsh 本体）
-    // 都获得 node 语义；pwsh / ripgrep 等非 Electron 子进程会忽略该变量。
-    // 唯一已知副作用：`app.relaunch` 会继承当前环境 → 已在 ipc.ts 的 relaunch 处理器里显式清除，
-    // 避免"应用自重启变成 node 启动"。
-    process.env.ELECTRON_RUN_AS_NODE = '1'
+    // ipc.ts / BackupManager 的 relaunch 清理保留（防用户系统环境同名变量外泄）。
 
     await ctx.plugin(LocalSandboxProvider, {})
     await ctx.plugin(SandboxPwshExecutor, {})
@@ -275,6 +299,8 @@ function registerKernelIpc(): void {
 
   ipcMain.handle(IpcChannel.Dsh_SyncProviders, async (_event, providers: KernelProviderInput[]) => {
     await syncCherryProviders(requireKernel(), providers)
+    // 批次4 知识库：嵌入客户端复用同一路由快照（apiHost/apiKey 只进主进程内存）。
+    knowledgeService.setProviders(providers)
     return { ok: true }
   })
 
@@ -311,6 +337,50 @@ function registerKernelIpc(): void {
       return { ok: true }
     }
   )
+
+  // 网络搜索配置同步（批次2）：渲染层 websearch 切片整体投影（providers 含 apiKey /
+  // blacklist / searchWithTime）。只落 ctx.webSearch（引擎 setConfig），不做字段级校验
+  // ——引擎执行时对缺失提供商自然明错；apiKey 仅存主进程内存。
+  ipcMain.handle(IpcChannel.Dsh_SyncWebSearch, async (_event, config: KernelWebSearchConfig) => {
+    const ctx = requireKernel()
+    const webSearch = (ctx as unknown as { webSearch?: { setConfig: (config: KernelWebSearchConfig) => void } })
+      .webSearch
+    if (webSearch === undefined) throw new Error('kernel: web search service not mounted')
+    webSearch.setConfig(config)
+    return { ok: true }
+  })
+
+  // 网络搜索连通性检查（批次2）：'test query' 真跑一次引擎（同一条真实执行路径，
+  // 比上游渲染层侧测更诚实）。引擎未同步该提供商时按其就绪判定自然失败。
+  ipcMain.handle(IpcChannel.WebSearch_Check, async (_event, providerId: string) => {
+    const { webSearchService } = await import('../services/WebSearchService')
+    return { ok: await webSearchService.check(providerId) }
+  })
+
+  // MCP 服务器配置同步（批次3）：渲染层 mcp 切片整体投影进主进程 MCPService 内存
+  //（命令/args/env 可能含密钥，与 webSearch 同先例只进主进程内存，不落盘不进会话）。
+  // 内核 MCP 桥（mcpBridge.ts）挂载时按 serverId 从这里反查配置。
+  ipcMain.handle(IpcChannel.Dsh_SyncMcpServers, async (_event, servers: unknown) => {
+    const { mcpService } = await import('../services/mcp/MCPService')
+    if (!Array.isArray(servers)) throw new Error('kernel: invalid mcp servers sync payload')
+    mcpService.setServers(servers as MCPServer[])
+    return { ok: true }
+  })
+
+  // 文档处理通道配置同步（§7.17 三轮）：preprocess 切片 providers 整体投影
+  //（apiKey 只进主进程内存，webSearch/MCP 同先例）。ocr_document 工具与知识库
+  // 摄取的 PDF 路由按此配置表反查服务商（V2 对齐：配置即路由）。
+  ipcMain.handle(IpcChannel.Dsh_SyncPreprocess, async (_event, providers: unknown) => {
+    if (!Array.isArray(providers)) throw new Error('kernel: invalid preprocess sync payload')
+    const configs = providers.map((provider) => {
+      if (typeof provider !== 'object' || provider === null || typeof (provider as { id?: unknown }).id !== 'string') {
+        throw new Error('kernel: invalid preprocess provider entry')
+      }
+      return provider as PreprocessProviderConfig
+    })
+    preprocessChannel.setConfig(configs)
+    return { ok: true }
+  })
 
   ipcMain.handle(
     IpcChannel.Dsh_StreamSmoke,
@@ -422,15 +492,19 @@ function registerKernelIpc(): void {
         externalTools?: string[]
         tier?: WorkModeApprovalTier
         images?: Array<{ mediaType?: unknown; data?: unknown; name?: unknown }>
+        webSearch?: { providerId?: unknown }
+        knowledgeBases?: unknown
+        skills?: unknown
+        documents?: unknown
+        preprocess?: { providerId?: unknown }
       }
     ) => {
-      const cleanOptions: {
-        reasoningEffort?: string
-        builtinTools?: string[]
-        externalTools?: string[]
-        tier?: WorkModeApprovalTier
-        images?: EncodedImageAttachment[]
-      } = {}
+      // 白名单重建（v0.3.1 形态）+ 批次2/4/5/6 能力载荷（webSearch/knowledgeBases/
+      // skills/documents）。事故教训（v0.3.2）：白名单漏字段 = 静默剥离——工具挂载了
+      // （builtinTools 在列）但每轮登记永远落空，真机表现为
+      // "no web search provider is configured for this conversation turn"。
+      // 新增字段必须三层同步：preload 声明 → 本 handler → topics.TopicSendOptions。
+      const cleanOptions: TopicSendOptions = {}
       if (options?.reasoningEffort !== undefined) {
         if (typeof options.reasoningEffort !== 'string') {
           throw new Error('kernel: invalid reasoningEffort in topic send options')
@@ -480,6 +554,82 @@ function registerKernelIpc(): void {
             ...(typeof image.name === 'string' && image.name.length > 0 ? { name: image.name } : {})
           }
         })
+      }
+      if (options?.webSearch !== undefined) {
+        const webSearch = options.webSearch
+        if (
+          typeof webSearch !== 'object' ||
+          webSearch === null ||
+          typeof webSearch.providerId !== 'string' ||
+          webSearch.providerId.length === 0
+        ) {
+          throw new Error('kernel: invalid webSearch in topic send options')
+        }
+        cleanOptions.webSearch = { providerId: webSearch.providerId }
+      }
+      if (options?.knowledgeBases !== undefined) {
+        if (!Array.isArray(options.knowledgeBases)) {
+          throw new Error('kernel: invalid knowledgeBases in topic send options')
+        }
+        cleanOptions.knowledgeBases = options.knowledgeBases.map((base) => {
+          // 只校验结构必需（id + 嵌入模型引用），其余字段（chunkSize/threshold/
+          // dimensions 等）按原样透传——v0.3.2 事故：dimensions 在
+          // KnowledgeEmbeddingRef 里本就可选（旧 base 无此值），过严校验把整条
+          // topic-send 炸掉，用户的知识库助手完全无法发消息。
+          if (
+            typeof base !== 'object' ||
+            base === null ||
+            typeof (base as { id?: unknown }).id !== 'string' ||
+            typeof (base as { embedding?: unknown }).embedding !== 'object' ||
+            (base as { embedding?: { providerId?: unknown; modelId?: unknown } }).embedding === null ||
+            typeof (base as { embedding: { providerId?: unknown } }).embedding.providerId !== 'string' ||
+            typeof (base as { embedding: { modelId?: unknown } }).embedding.modelId !== 'string'
+          ) {
+            throw new Error('kernel: invalid knowledge base entry in topic send options')
+          }
+          return base as KnowledgeTurnBase
+        })
+      }
+      if (options?.skills !== undefined) {
+        if (!Array.isArray(options.skills)) {
+          throw new Error('kernel: invalid skills in topic send options')
+        }
+        cleanOptions.skills = options.skills.map((skill) => {
+          if (
+            typeof skill !== 'object' ||
+            skill === null ||
+            typeof (skill as { id?: unknown }).id !== 'string' ||
+            typeof (skill as { folderName?: unknown }).folderName !== 'string' ||
+            typeof (skill as { name?: unknown }).name !== 'string' ||
+            typeof (skill as { description?: unknown }).description !== 'string'
+          ) {
+            throw new Error('kernel: invalid skill entry in topic send options')
+          }
+          return skill as SkillTurnEntry
+        })
+      }
+      if (options?.documents !== undefined) {
+        if (!Array.isArray(options.documents)) {
+          throw new Error('kernel: invalid documents in topic send options')
+        }
+        cleanOptions.documents = options.documents.map((document) => {
+          if (
+            typeof document !== 'object' ||
+            document === null ||
+            typeof (document as { name?: unknown }).name !== 'string' ||
+            typeof (document as { path?: unknown }).path !== 'string'
+          ) {
+            throw new Error('kernel: invalid document entry in topic send options')
+          }
+          return document as TurnDocument
+        })
+      }
+      if (options?.preprocess !== undefined) {
+        const providerId = (options.preprocess as { providerId?: unknown } | null)?.providerId
+        if (typeof providerId !== 'string' || providerId.length === 0) {
+          throw new Error('kernel: invalid preprocess in topic send options')
+        }
+        cleanOptions.preprocess = { providerId }
       }
       await topicTree(requireKernel()).send(id, text, cleanOptions)
       return { ok: true }

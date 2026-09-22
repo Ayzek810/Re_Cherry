@@ -35,6 +35,11 @@ vi.mock('electron', () => {
       removeAllListeners: vi.fn()
     },
     BrowserWindow: vi.fn(),
+    utilityProcess: {
+      // OCR utility 子进程（pdfOcr.test.ts 用 mockImplementation 覆盖行为）。
+      // 小写实例与运行时导出同名（大写 UtilityProcess 只是类型）。
+      fork: vi.fn()
+    },
     dialog: {
       showErrorBox: vi.fn(),
       showMessageBox: vi.fn(),

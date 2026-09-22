@@ -23,6 +23,7 @@ export * from './notification'
 export * from './plugin'
 export * from './provider'
 export * from './serialize'
+export * from './skill'
 
 export type McpMode = 'disabled' | 'auto' | 'manual'
 
@@ -80,6 +81,11 @@ export type Assistant = {
    * 随发送参数进内核按开关挂载，拨动下一轮生效。
    */
   externalTools?: Record<string, boolean>
+  /**
+   * 按助手启用的技能（skill folderName 列表；技能系统 v0.3.2 加回）。
+   * 批次1 仅 UI 状态持久化，触发机制批次5 接线。
+   */
+  enabledSkills?: string[]
 }
 
 /**
@@ -212,7 +218,6 @@ export type AssistantSettings = {
    */
   messageIdentity?: 'model' | 'assistant'
 }
-
 
 export type LegacyMessage = {
   id: string
@@ -472,7 +477,7 @@ export type GenerateImageResponse = {
   images: string[]
 }
 
-export type SidebarIcon = 'assistants' | 'minapp' | 'files'
+export type SidebarIcon = 'assistants' | 'minapp' | 'files' | 'knowledge'
 
 export type ExternalToolResult = {
   mcpTools?: MCPTool[]
@@ -526,6 +531,9 @@ export type WebSearchProviderResult = {
 export type WebSearchProviderResponse = {
   query?: string
   results: WebSearchProviderResult[]
+  /** 压缩摘要（WebSearchService.applyCompression 实际生效时附加；none/未压缩无此字段）。
+   * web_search 工具据此在结果文本里向用户报告压缩启用状态与前后条数。 */
+  compression?: { method: string; before: number; after: number }
 }
 
 export type AISDKWebSearchResult = Omit<Extract<LanguageModelV3Source, { sourceType: 'url' }>, 'sourceType'>

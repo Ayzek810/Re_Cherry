@@ -17,10 +17,19 @@ import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { toolPermissionsActions } from '@renderer/store/toolPermissions'
 import { type UserQuestionEntry, userQuestionsActions } from '@renderer/store/userQuestions'
-import type { Assistant, FileMetadata, Model } from '@renderer/types'
+import type {
+  Assistant,
+  FileMetadata,
+  KnowledgeReference,
+  Model,
+  WebSearchProviderResponse,
+  WebSearchSource
+} from '@renderer/types'
+import { FILE_TYPE, WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { SerializedError } from '@renderer/types/error'
 import {
   AssistantMessageStatus,
+  type CitationMessageBlock,
   type ErrorMessageBlock,
   type Message,
   type MessageBlock,
@@ -30,7 +39,9 @@ import {
 } from '@renderer/types/newMessage'
 import { renameAbortController } from '@renderer/utils/abortController'
 import {
+  createCitationBlock,
   createErrorBlock,
+  createFileBlock,
   createImageBlock,
   createMainTextBlock,
   createThinkingBlock,
@@ -78,6 +89,11 @@ interface TurnState {
   usage: { inputTokens: number; outputTokens: number }
   /** 是否已把 stub uuid 改写为 kernel id（在本轮第一条 assistant/message 时发生，与其后历史还原一致）。 */
   sawAssistantMessage: boolean
+  /** 当前生效的引用数据载体块（搜索工具出结果即设置，多搜索取最新——V1
+   * getCitationBlockId 同语义）：其后创建/收尾的正文块据此携带 citationReferences，
+   * 正文 [n] 经 withCitationTags → Link/CitationSup 变成可点药丸（统一引用机制）。 */
+  citationBlockId?: string
+  citationBlockSource?: WebSearchSource
 }
 
 const streams = new Map<string, TurnState>()
@@ -228,6 +244,70 @@ export function initKernelBridge(): void {
   logger.info('kernelChat: bridge initialized')
 }
 
+/**
+ * 网络搜索配置同步（批次2）：websearch 切片 → 主进程引擎（providers 含 apiKey、
+ * 黑名单、searchWithTime）。启动与切片变更时调用；apiKey 经此通道进主进程内存，
+ * 不落内核 settings.json。载荷形状 KernelWebSearchConfig（@shared/config/types）。
+ */
+export async function syncWebSearchToKernel(config: {
+  providers: Array<{
+    id: string
+    name: string
+    apiKey?: string
+    apiHost?: string
+    url?: string
+    engines?: string[]
+    basicAuthUsername?: string
+    basicAuthPassword?: string
+    usingBrowser?: boolean
+  }>
+  blacklist: string[]
+  excludeDomains: string[]
+  searchWithTime: boolean
+  maxResults: number
+  /** 结果压缩（websearch 切片 compressionConfig 的收窄投影；rag 的 embeddingModel 收窄为引用）。 */
+  compression?: {
+    method: 'none' | 'cutoff' | 'rag'
+    cutoffLimit?: number
+    cutoffUnit?: 'char' | 'token'
+    documentCount?: number
+    embedding?: { providerId: string; modelId: string; dimensions?: number }
+  }
+}): Promise<void> {
+  try {
+    await window.api.dshSyncWebSearch(config)
+  } catch (error) {
+    logger.error(
+      'kernelChat: failed to sync web search config to kernel',
+      error instanceof Error ? error : new Error(String(error))
+    )
+  }
+}
+
+/**
+ * 文档处理通道配置同步（§7.17 三轮）：preprocess 切片 providers（含 apiKey，只进
+ * 主进程内存，webSearch/MCP 同先例）→ 主进程内存配置表。ocr_document 工具与知识库
+ * 摄取的 PDF 路由按此配置表反查服务商（V2 对齐：配置即路由）。
+ * 启动与切片变更时调用。
+ */
+export async function syncPreprocessToKernel(
+  providers: Array<{
+    id: string
+    apiKey?: string
+    apiHost?: string
+    model?: string
+  }>
+): Promise<void> {
+  try {
+    await window.api.dshSyncPreprocess(providers)
+  } catch (error) {
+    logger.error(
+      'kernelChat: failed to sync preprocess providers to kernel',
+      error instanceof Error ? error : new Error(String(error))
+    )
+  }
+}
+
 /** 把渲染进程的 provider 配置同步进内核（应用启动与 provider 变更时调用）。 */
 export async function syncProvidersToKernel(providers: unknown[]): Promise<void> {
   try {
@@ -336,6 +416,8 @@ export async function sendToKernel(
     tier?: WorkModeApprovalTier
     /** 随消息附带的图片（已规范化进预算，v0.3.1 识图通道）。 */
     images?: KernelImageInput[]
+    /** 网络搜索（批次2）：本轮 web_search 工具的提供商（助手搜索开启且提供商就绪时上行）。 */
+    webSearch?: { providerId: string }
   }
 ): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)
@@ -497,7 +579,14 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
     case 'text-delta': {
       if (state.mainBlockId === undefined) {
         const mainBlock = createMainTextBlock(state.assistantMessageId, '', {
-          status: MessageBlockStatus.STREAMING
+          status: MessageBlockStatus.STREAMING,
+          ...(state.citationBlockId !== undefined
+            ? {
+                citationReferences: [
+                  { citationBlockId: state.citationBlockId, citationBlockSource: state.citationBlockSource }
+                ]
+              }
+            : {})
         })
         state.mainBlockId = mainBlock.id
         state.blockIds.push(mainBlock.id)
@@ -581,7 +670,16 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
   const finalBlocks: MessageBlock[] = []
   for (const block of data.message.content) {
     if (block.type === 'text' && block.text !== undefined && block.text.length > 0) {
-      const main = createMainTextBlock(state.assistantMessageId, block.text, { status: MessageBlockStatus.SUCCESS })
+      const main = createMainTextBlock(state.assistantMessageId, block.text, {
+        status: MessageBlockStatus.SUCCESS,
+        ...(state.citationBlockId !== undefined
+          ? {
+              citationReferences: [
+                { citationBlockId: state.citationBlockId, citationBlockSource: state.citationBlockSource }
+              ]
+            }
+          : {})
+      })
       finalBlocks.push(main)
       finalBlockIds.push(main.id)
     } else if (block.type === 'reasoning' && block.text !== undefined && block.text.length > 0) {
@@ -672,6 +770,67 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
   )
   // 工具出结果即该调用的审批生命周期结束（'invoking' 条目随之摘除）
   store.dispatch(toolPermissionsActions.removeByToolCallId({ toolCallId: resultBlock.toolCallId }))
+  // 统一引用机制：搜索类工具的结构化 meta → 隐形 CitationBlock 数据载体
+  //（不渲染成卡——UI 即正文药丸 + 悬浮胶囊；载体仅持有数据供正文引用）。
+  const citationBlock = buildSearchCitationBlock(state.assistantMessageId, event.data.meta, failed)
+  if (citationBlock !== undefined) {
+    state.citationBlockId = citationBlock.id
+    state.citationBlockSource = citationBlock.response?.source
+    state.blockIds.push(citationBlock.id)
+    store.dispatch(upsertManyBlocks([citationBlock]))
+    // 本 step 当前流式正文块立即补挂引用（先文后搜索、[n] 出现在同块的场景）
+    if (state.mainBlockId !== undefined) {
+      store.dispatch(
+        updateOneBlock({
+          id: state.mainBlockId,
+          changes: {
+            citationReferences: [
+              { citationBlockId: citationBlock.id, citationBlockSource: citationBlock.response?.source }
+            ]
+          }
+        })
+      )
+    }
+    syncMessageBlocks(topicId, state)
+  }
+}
+
+/** 搜索类工具 meta → 隐形 CitationBlock 数据载体（web-search / knowledge 两形态；
+ * 统一引用机制：无 meta 或失败返回 undefined；UI 层不渲染为卡，仅作 Citation[] 源）。
+ * 各放弃分支留 info/warn 日志——引用药丸缺失时按日志定位到具体环节。 */
+function buildSearchCitationBlock(messageId: string, meta: unknown, failed: boolean): CitationMessageBlock | undefined {
+  if (failed || meta === null || typeof meta !== 'object') return undefined
+  const payload = meta as { kind?: string; results?: unknown }
+  if (payload.kind === 'web-search') {
+    // WebSearchProviderResponse 包装形状 {results:[…]}：formatCitationsFromBlock 的
+    // WEBSEARCH 分支按 block.response.results.results 取条目（双层，V1 语义）。
+    if (!Array.isArray(payload.results) || payload.results.length === 0) {
+      logger.warn('kernelChat: web-search meta carried no results; skip citation block')
+      return undefined
+    }
+    const wrapper = { results: payload.results } as unknown as WebSearchProviderResponse
+    const block = createCitationBlock(messageId, {
+      response: {
+        results: wrapper,
+        source: WEB_SEARCH_SOURCE.WEBSEARCH
+      }
+    })
+    logger.info(`kernelChat: citation carrier (web-search) created with ${payload.results.length} entries`)
+    return block
+  }
+  if (payload.kind === 'knowledge') {
+    if (!Array.isArray(payload.results) || payload.results.length === 0) {
+      logger.warn('kernelChat: knowledge meta carried no results; skip citation block')
+      return undefined
+    }
+    const block = createCitationBlock(messageId, {
+      knowledge: payload.results as unknown as KnowledgeReference[]
+    })
+    logger.info(`kernelChat: citation carrier (knowledge) created with ${payload.results.length} entries`)
+    return block
+  }
+  logger.warn(`kernelChat: unrecognized search meta kind "${String(payload.kind)}"; skip citation block`)
+  return undefined
 }
 
 /** v0.3.1-1：turn/end kind=error → ErrorMessageBlock 载荷。
@@ -702,10 +861,7 @@ function serializedEmptyTurn(): SerializedError {
 
 /** v0.3.1-1：本轮是否产出过可见内容（非空正文/思考；工具卡本身即可见——
  * 纯工具轮是合法形态，不得按空响应误报）。 */
-function turnHasVisibleOutput(
-  state: TurnState,
-  entities: Record<string, MessageBlock | undefined>
-): boolean {
+function turnHasVisibleOutput(state: TurnState, entities: Record<string, MessageBlock | undefined>): boolean {
   return state.blockIds.some((blockId) => {
     const block = entities[blockId]
     if (block === undefined) return false
@@ -819,6 +975,9 @@ async function projectEventsToMessages(
     toolBlocks: Map<string, ToolMessageBlock>
     /** v0.3.1-1：本轮是否产出过可见内容（正文/思考/工具卡）——turn/end 空轮守门。 */
     sawVisibleOutput: boolean
+    /** 当前生效的引用数据载体块（与直播 TurnState 同语义，正文 [n] 药丸联动）。 */
+    citationBlockId?: string
+    citationBlockSource?: WebSearchSource
   } | null = null
 
   const closeReply = (): void => {
@@ -846,6 +1005,23 @@ async function projectEventsToMessages(
         for (const content of event.data.content) {
           if (content.type === 'text' && content.text.length > 0) {
             const block = createMainTextBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
+            blocks.push(block)
+            blockIds.push(block.id)
+          } else if (content.type === 'document') {
+            // 附件修复（v0.3.2）：文档引用块 → FILE 块。引用随会话日志持久
+            //（kernelContentBlocks.ts 的 merge-extensible 扩展点），字节留磁盘原路径。
+            const file: FileMetadata = {
+              id: `doc-${messageId}-${blocks.length}`,
+              name: content.name,
+              origin_name: content.name,
+              path: content.path,
+              size: 0,
+              ext: content.ext ?? '',
+              type: FILE_TYPE.DOCUMENT,
+              created_at: new Date().toISOString(),
+              count: 1
+            }
+            const block = createFileBlock(messageId, file, { status: MessageBlockStatus.SUCCESS })
             blocks.push(block)
             blockIds.push(block.id)
           } else if (content.type === 'image') {
@@ -903,7 +1079,16 @@ async function projectEventsToMessages(
         // 说话块顺序追加；tool-call 块由 tool/call + tool/result 事件负责（避免双卡）
         for (const block of event.data.message.content) {
           if (block.type === 'text' && block.text !== undefined && block.text.length > 0) {
-            const main = createMainTextBlock(reply.messageId, block.text, { status: MessageBlockStatus.SUCCESS })
+            const main = createMainTextBlock(reply.messageId, block.text, {
+              status: MessageBlockStatus.SUCCESS,
+              ...(reply.citationBlockId !== undefined
+                ? {
+                    citationReferences: [
+                      { citationBlockId: reply.citationBlockId, citationBlockSource: reply.citationBlockSource }
+                    ]
+                  }
+                : {})
+            })
             blocks.push(main)
             reply.blockIds.push(main.id)
             reply.sawVisibleOutput = true
@@ -961,6 +1146,15 @@ async function projectEventsToMessages(
         const failed = resultBlock.isError === true || event.data.error !== undefined
         toolBlock.content = text
         toolBlock.status = failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+        // 统一引用机制：与直播路径同构（隐形载体 + 正文引用联动；meta 持久化在
+        // 会话日志，重开话题即复现药丸与胶囊）。
+        const citationBlock = buildSearchCitationBlock(reply.messageId, event.data.meta, failed)
+        if (citationBlock !== undefined) {
+          reply.citationBlockId = citationBlock.id
+          reply.citationBlockSource = citationBlock.response?.source
+          blocks.push(citationBlock)
+          reply.blockIds.push(citationBlock.id)
+        }
         break
       }
       case 'turn/end': {

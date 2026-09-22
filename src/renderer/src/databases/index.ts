@@ -135,4 +135,14 @@ db.version(12).stores({
   message_blocks: null
 })
 
+// v13 曾短暂引入 message_files 关联表（Dexie 旁路存文档附件）——被 v14 撤销：
+// 附件引用改走内核会话日志的 'document' 内容块（merge-extensible 公开扩展点，
+// 见 src/renderer/src/types/kernelContentBlocks.ts），会话日志保持唯一权威（不变量2）。
+db.version(13).stores({
+  message_files: '&messageId, topicId'
+})
+db.version(14).stores({
+  message_files: null
+})
+
 export default db

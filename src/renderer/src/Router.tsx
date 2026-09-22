@@ -12,6 +12,8 @@ import { useOnboardingState } from './hooks/useOnboardingState'
 import { useNavbarPosition } from './hooks/useSettings'
 import FilesPage from './pages/files/FilesPage'
 import HomePage from './pages/home/HomePage'
+import KnowledgePage from './pages/knowledge/KnowledgePage'
+import LaunchpadPage from './pages/launchpad/LaunchpadPage'
 import { OnboardingPage } from './pages/onboarding'
 import SettingsPage from './pages/settings/SettingsPage'
 
@@ -25,6 +27,8 @@ const Router: FC = () => {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/files" element={<FilesPage />} />
+          <Route path="/knowledge" element={<KnowledgePage />} />
+          <Route path="/launchpad" element={<LaunchpadPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
         </Routes>
       </ErrorBoundary>

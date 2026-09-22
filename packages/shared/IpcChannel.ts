@@ -166,6 +166,7 @@ export enum IpcChannel {
 
   // Search Window
   SearchWindow_OpenUrl = 'search-window:open-url',
+  SearchWindow_Close = 'search-window:close',
 
   //Store Sync
   StoreSync_Subscribe = 'store-sync:subscribe',
@@ -214,6 +215,47 @@ export enum IpcChannel {
   // dsh kernel
   Dsh_SyncProviders = 'dsh:sync-providers',
   Dsh_SyncImageDescriber = 'dsh:sync-image-describer',
+  /** 网络搜索配置同步（批次2）：渲染层 websearch 切片 → 主进程 WebSearchService。 */
+  Dsh_SyncWebSearch = 'dsh:sync-web-search',
+  /** MCP 服务器配置同步（批次3）：渲染层 mcp 切片 → 主进程 MCPService（内存投影）。 */
+  Dsh_SyncMcpServers = 'dsh:sync-mcp-servers',
+  /**
+   * 文档处理通道配置同步（§7.17 三轮）：渲染层 preprocess 切片 providers（含 apiKey，
+   * 只进主进程内存）→ preprocessChannel 配置表；ocr_document 工具与知识库摄取按此路由。
+   */
+  Dsh_SyncPreprocess = 'dsh:sync-preprocess',
+  /** MCP 设置页通道（批次3）：服务器生命周期与发现（上游 Mcp_* 命名子集）。 */
+  Mcp_ListTools = 'mcp:list-tools',
+  Mcp_ListPrompts = 'mcp:list-prompts',
+  Mcp_ListResources = 'mcp:list-resources',
+  Mcp_GetServerVersion = 'mcp:get-server-version',
+  Mcp_GetServerLogs = 'mcp:get-server-logs',
+  Mcp_RestartServer = 'mcp:restart-server',
+  Mcp_StopServer = 'mcp:stop-server',
+  Mcp_RemoveServer = 'mcp:remove-server',
+  Mcp_CheckConnectivity = 'mcp:check-connectivity',
+  /** MCP 服务器日志事件（主 → 渲染，上游 Mcp_ServerLog 同语义）。 */
+  Mcp_ServerLog = 'mcp:server-log',
+  /** 知识库通道（批次4）：库文件生命周期 + 条目处理 + 检索（上游 KnowledgeBase_* 命名子集）。 */
+  KnowledgeBase_Create = 'knowledge-base:create',
+  KnowledgeBase_Reset = 'knowledge-base:reset',
+  KnowledgeBase_Delete = 'knowledge-base:delete',
+  KnowledgeBase_Add = 'knowledge-base:add',
+  KnowledgeBase_Remove = 'knowledge-base:remove',
+  KnowledgeBase_Search = 'knowledge-base:search',
+  /** 本地模型（v0.3.2 自 CS_V2 移植）：OCR 权重下载生命周期（进度渲染层轮询 getStatus）。 */
+  LocalModel_GetStatus = 'local-model:get-status',
+  LocalModel_Download = 'local-model:download',
+  LocalModel_Cancel = 'local-model:cancel',
+  LocalModel_Remove = 'local-model:remove',
+  /** 技能通道（批次5）：zip/目录/URL 安装 + 卸载真删盘 + 库扫描（上游 Skill_* 命名子集）。 */
+  Skill_InstallFromZip = 'skill:install-from-zip',
+  Skill_InstallFromDirectory = 'skill:install-from-directory',
+  Skill_InstallFromUrl = 'skill:install-from-url',
+  Skill_Uninstall = 'skill:uninstall',
+  Skill_List = 'skill:list',
+  /** 网络搜索连通性检查（批次2）：'test query' 真跑一次（设置页「检查」按钮）。 */
+  WebSearch_Check = 'web-search:check',
   Dsh_StreamSmoke = 'dsh:stream-smoke',
   Dsh_Complete = 'dsh:complete',
   Dsh_StreamComplete = 'dsh:stream-complete',

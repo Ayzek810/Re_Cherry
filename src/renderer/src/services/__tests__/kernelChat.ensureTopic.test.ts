@@ -49,6 +49,13 @@ vi.mock('@renderer/utils/reasoningKernel', () => ({
 let createTopic: ReturnType<typeof vi.fn>
 let getTopic: ReturnType<typeof vi.fn>
 
+/**
+ * 冷 import 容忍上限：loadEnsure 在 it() 内拉起整张 kernelChat 模块图（见文件头，
+ * 已桩掉最重的 reasoning 配置图，剩余部分实测 ~17s）。全量并行跑时机器热负载下
+ * 会越过 vitest 默认 20s（真机复现 3/3 超时、隔离跑必过）——按用例放宽，不改判定。
+ */
+const COLD_IMPORT_TIMEOUT_MS = 60_000
+
 function stubApi(knownTopic: unknown): void {
   createTopic = vi.fn().mockResolvedValue({ topic: { id: 'x' } })
   getTopic = vi.fn().mockResolvedValue(knownTopic === null ? {} : { topic: knownTopic })
@@ -73,14 +80,18 @@ beforeEach(() => {
 })
 
 describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
-  it('上次会话留下的行、内核已不认识 → **拒绝建册**（不 upsert，不复活墓碑 id）', async () => {
-    const { ensureKernelTopic: ensure } = await loadEnsure(['topic-stale'], null)
+  it(
+    '上次会话留下的行、内核已不认识 → **拒绝建册**（不 upsert，不复活墓碑 id）',
+    { timeout: COLD_IMPORT_TIMEOUT_MS },
+    async () => {
+      const { ensureKernelTopic: ensure } = await loadEnsure(['topic-stale'], null)
 
-    await expect(ensure('topic-stale', assistant)).rejects.toThrow(/refusing to recreate/)
-    expect(createTopic).not.toHaveBeenCalled()
-  })
+      await expect(ensure('topic-stale', assistant)).rejects.toThrow(/refusing to recreate/)
+      expect(createTopic).not.toHaveBeenCalled()
+    }
+  )
 
-  it('上次会话留下的行、内核认识 → 正常建册（幂等 upsert，不误拒）', async () => {
+  it('上次会话留下的行、内核认识 → 正常建册（幂等 upsert，不误拒）', { timeout: COLD_IMPORT_TIMEOUT_MS }, async () => {
     const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
 
     await expect(ensure('topic-live', assistant)).resolves.toBeUndefined()
@@ -89,7 +100,7 @@ describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
     )
   })
 
-  it('本进程内新建的行 → 不查库、直接建册（首发建册的正常路径）', async () => {
+  it('本进程内新建的行 → 不查库、直接建册（首发建册的正常路径）', { timeout: COLD_IMPORT_TIMEOUT_MS }, async () => {
     const { ensureKernelTopic: ensure } = await loadEnsure([], null)
 
     await expect(ensure('topic-new', assistant)).resolves.toBeUndefined()
@@ -97,22 +108,30 @@ describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
     expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-new' }))
   })
 
-  it('验C-1 集成半边：启动窗口内第一次问不到、随后问到 → **不拒绝**、照常建册', async () => {
-    // 旧实现在这里会因 `null` 放行而"碰巧"建册成功，但那是把"暂时不知道"当成"知道"：
-    // 若该行其实已被内核遗忘，upsert 就会复活墓碑 id。重试后拿到确定性答案，语义才成立。
-    const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
-    getTopic.mockRejectedValueOnce(new Error('No handler registered'))
+  it(
+    '验C-1 集成半边：启动窗口内第一次问不到、随后问到 → **不拒绝**、照常建册',
+    { timeout: COLD_IMPORT_TIMEOUT_MS },
+    async () => {
+      // 旧实现在这里会因 `null` 放行而"碰巧"建册成功，但那是把"暂时不知道"当成"知道"：
+      // 若该行其实已被内核遗忘，upsert 就会复活墓碑 id。重试后拿到确定性答案，语义才成立。
+      const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
+      getTopic.mockRejectedValueOnce(new Error('No handler registered'))
 
-    await expect(ensure('topic-live', assistant)).resolves.toBeUndefined()
-    expect(getTopic).toHaveBeenCalledTimes(2)
-    expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-live' }))
-  })
+      await expect(ensure('topic-live', assistant)).resolves.toBeUndefined()
+      expect(getTopic).toHaveBeenCalledTimes(2)
+      expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-live' }))
+    }
+  )
 
-  it('查询失败（内核不可达）→ **不拒绝**：建册走的是同一个内核，此时拒绝只会把主操作也挡掉', async () => {
-    const { ensureKernelTopic: ensure } = await loadEnsure(['topic-unknown'], null)
-    getTopic.mockRejectedValue(new Error('ipc down'))
+  it(
+    '查询失败（内核不可达）→ **不拒绝**：建册走的是同一个内核，此时拒绝只会把主操作也挡掉',
+    { timeout: COLD_IMPORT_TIMEOUT_MS },
+    async () => {
+      const { ensureKernelTopic: ensure } = await loadEnsure(['topic-unknown'], null)
+      getTopic.mockRejectedValue(new Error('ipc down'))
 
-    await expect(ensure('topic-unknown', assistant)).resolves.toBeUndefined()
-    expect(createTopic).toHaveBeenCalled()
-  })
+      await expect(ensure('topic-unknown', assistant)).resolves.toBeUndefined()
+      expect(createTopic).toHaveBeenCalled()
+    }
+  )
 })

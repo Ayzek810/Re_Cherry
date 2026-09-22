@@ -651,8 +651,9 @@ class BackupManager {
 
       logger.info('[restoreDirect] Restore staged successfully, relaunching app to apply...')
 
-      // v0.3.1-2：与 ipc.ts 的 relaunch 处理器同理——内核设过 ELECTRON_RUN_AS_NODE=1，
-      // app.relaunch 会继承环境，必须先剥掉，否则重启后应用会以 node 而非 Electron 启动。
+      // v0.3.2：与 ipc.ts 的 relaunch 处理器同理——runner 的 node 语义已按子进程注入
+      // （dsh-subprocess-local 补丁），内核不再设 ambient 变量；此剥除保留为对外部
+      // 环境同名变量的防御，否则重启后应用会以 node 而非 Electron 启动。
       delete process.env.ELECTRON_RUN_AS_NODE
 
       app.relaunch()

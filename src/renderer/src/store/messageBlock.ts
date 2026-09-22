@@ -23,10 +23,12 @@ import type {
   AISDKWebSearchResult,
   BaseTool,
   Citation,
+  FileMetadata,
+  KnowledgeBase,
   NormalToolResponse,
   WebSearchProviderResponse
 } from '@renderer/types'
-import { WEB_SEARCH_SOURCE } from '@renderer/types'
+import { isKnowledgeFileItem, WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { CitationMessageBlock, MessageBlock, ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
 
@@ -113,7 +115,30 @@ const selectBlockEntityById = (state: RootState, blockId: string | undefined): M
 }
 
 // --- Centralized Citation Formatting Logic ---
-export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined): Citation[] => {
+
+/** 知识库来源反查表：托管文件名（uuid.md）/路径末段 → { 展示名（origin_name），真实路径 }。
+ * 入库时 chunk metadata.source 只存了 basename（应用托管副本的 uuid 名），检索回显的
+ * "文件名"对用户就是乱码——经文件管理器元数据反查原始名与可打开路径（存量数据免重灌）。 */
+function buildKnowledgeFileIndex(bases: KnowledgeBase[]): Map<string, { title: string; path: string }> {
+  const index = new Map<string, { title: string; path: string }>()
+  for (const base of bases) {
+    for (const item of base.items) {
+      if (!isKnowledgeFileItem(item)) continue
+      const file = item.content as FileMetadata
+      const title = file.origin_name || file.name
+      const entry = { title, path: file.path }
+      index.set(file.name, entry)
+      const pathBasename = file.path.split(/[\\/]/).pop()
+      if (pathBasename) index.set(pathBasename, entry)
+    }
+  }
+  return index
+}
+
+export const formatCitationsFromBlock = (
+  block: CitationMessageBlock | undefined,
+  knowledgeFileIndex?: Map<string, { title: string; path: string }>
+): Citation[] => {
   if (!block) return []
 
   let formattedCitations: Citation[] = []
@@ -307,6 +332,13 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
           url = `http://file/${fileMatch[2]}`
         }
 
+        // 托管副本名反查：展示原始文件名，点击打开真实路径（未命中回退存储名）
+        const resolved = knowledgeFileIndex?.get(result.source)
+        if (resolved) {
+          title = resolved.title
+          url = resolved.path
+        }
+
         return {
           number: index + 1,
           url: url,
@@ -350,12 +382,16 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
 // --- End of Centralized Logic ---
 
 // Memoized selector that takes a block ID and returns formatted citations
-export const selectFormattedCitationsByBlockId = createSelector([selectBlockEntityById], (blockEntity): Citation[] => {
-  if (blockEntity?.type === MessageBlockType.CITATION) {
-    return formatCitationsFromBlock(blockEntity)
+//（knowledge 来源经文件管理器元数据反查原始名/真实路径）
+export const selectFormattedCitationsByBlockId = createSelector(
+  [selectBlockEntityById, (state: RootState) => state.knowledge.bases],
+  (blockEntity, bases): Citation[] => {
+    if (blockEntity?.type === MessageBlockType.CITATION) {
+      return formatCitationsFromBlock(blockEntity, buildKnowledgeFileIndex(bases))
+    }
+    return []
   }
-  return []
-})
+)
 
 // --- Active TodoWrite Block Selector ---
 export interface TodoWriteNormalToolResponse extends Omit<NormalToolResponse, 'tool' | 'arguments'> {

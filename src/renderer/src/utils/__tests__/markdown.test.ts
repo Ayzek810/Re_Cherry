@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   convertMathFormula,
-  findCitationInChildren,
   isHtmlCode,
   markdownToPlainText,
   processLatexBrackets,
@@ -15,69 +14,6 @@ import {
 } from '../markdown'
 
 describe('markdown', () => {
-  describe('findCitationInChildren', () => {
-    it('returns null when children is null or undefined', () => {
-      expect(findCitationInChildren(null)).toBe('')
-      expect(findCitationInChildren(undefined)).toBe('')
-    })
-
-    it('finds citation in direct child element', () => {
-      const children = [{ props: { 'data-citation': 'test-citation' } }]
-      expect(findCitationInChildren(children)).toBe('test-citation')
-    })
-
-    it('finds citation in nested child element', () => {
-      const children = [
-        {
-          props: {
-            children: [{ props: { 'data-citation': 'nested-citation' } }]
-          }
-        }
-      ]
-      expect(findCitationInChildren(children)).toBe('nested-citation')
-    })
-
-    it('returns null when no citation is found', () => {
-      const children = [{ props: { foo: 'bar' } }, { props: { children: [{ props: { baz: 'qux' } }] } }]
-      expect(findCitationInChildren(children)).toBe('')
-    })
-
-    it('handles single child object (non-array)', () => {
-      const child = { props: { 'data-citation': 'single-citation' } }
-      expect(findCitationInChildren(child)).toBe('single-citation')
-    })
-
-    it('handles deeply nested structures', () => {
-      const children = [
-        {
-          props: {
-            children: [
-              {
-                props: {
-                  children: [
-                    {
-                      props: {
-                        children: {
-                          props: { 'data-citation': 'deep-citation' }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        }
-      ]
-      expect(findCitationInChildren(children)).toBe('deep-citation')
-    })
-
-    it('handles non-object children gracefully', () => {
-      const children = ['text node', 123, { props: { 'data-citation': 'mixed-citation' } }]
-      expect(findCitationInChildren(children)).toBe('mixed-citation')
-    })
-  })
-
   describe('convertMathFormula', () => {
     it('should convert LaTeX block delimiters to $$$$', () => {
       // 验证将 LaTeX 块分隔符转换为 $$$$

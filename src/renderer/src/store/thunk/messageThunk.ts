@@ -22,8 +22,10 @@ import { BlockManager } from '@renderer/services/messageStreaming/BlockManager'
 import { createCallbacks } from '@renderer/services/messageStreaming/callbacks'
 import { endSpan } from '@renderer/services/SpanManagerService'
 import type { StreamProcessorCallbacks } from '@renderer/services/StreamProcessingService'
+import { isWebSearchEnabled } from '@renderer/services/WebSearchService'
 import store from '@renderer/store'
 import { moveTopicToHead, updateTopicUpdatedAt } from '@renderer/store/assistants'
+import { getEffectiveMcpMode } from '@renderer/types'
 import { type Assistant, type FileMetadata, type Model, type Topic } from '@renderer/types'
 import type { FileMessageBlock, ImageMessageBlock, Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
@@ -309,17 +311,116 @@ const fetchAndProcessAssistantResponseImpl = async (
       const describerModel = getState().llm.imageDescriberModel
       const wantsDescriber =
         assistant.model !== undefined && !isVisionModel(assistant.model) && describerModel !== undefined
+      // 批次2 网络搜索：助手开启（webSearchProviderId 或 enableWebSearch）且提供商就绪
+      // → 追加 web_search 工具并上行提供商；就绪判定与设置页/面板共用同一判据
+      //（services/WebSearchService.isWebSearchEnabled）。提供商缺省用全局默认提供商。
+      const webSearchProviderId = assistant.webSearchProviderId ?? getState().websearch.defaultProvider
+      const webSearchActive =
+        (assistant.webSearchProviderId !== undefined || assistant.enableWebSearch === true) &&
+        webSearchProviderId !== undefined &&
+        isWebSearchEnabled(webSearchProviderId)
+      // 批次5 技能：助手启用技能（enabledSkills ∩ 切片元数据）→ 追加 skill 工具并
+      // 上行本轮可读技能清单（索引进内核快照节，SKILL.md 由工具按需读）。
+      const enabledSkills = assistant.enabledSkills ?? []
+      const skillsActive = enabledSkills.length > 0
+      // 批次6 文档阅读：触发消息 FILE 附件块（非图片）→ read_document 登记载荷
+      //（展示名 + 绝对路径，主进程直读做文本层抽取；扫描件诚实诊断见主进程服务）。
+      const documentFiles = (triggeringUserMessage.blocks ?? [])
+        .map((blockId) => getState().messageBlocks.entities[blockId])
+        .filter(
+          (block): block is FileMessageBlock =>
+            block !== undefined && block.type === MessageBlockType.FILE && block.file !== undefined
+        )
+        .map((block) => block.file)
+      const documentsActive = documentFiles.length > 0
+      // ocr_document 进了助手工具页注册表（稀疏缺省 = 开）：附件门 + 开关双门控。
+      const ocrEnabled = assistant.builtinTools?.ocr_document !== false
+      const documentToolIds = documentsActive ? ['read_document', ...(ocrEnabled ? ['ocr_document'] : [])] : []
+      const builtinTools = [
+        // 附件门（§7.17）：read_document/ocr_document 只在触发消息带文件附件的轮挂载
+        //（无附件时 schema 是纯噪音）；ocr_document 之外的基础注册表项受助手工具页开关。
+        ...BUILTIN_TOOL_IDS.filter((toolId) => toolId !== 'ocr_document' && assistant.builtinTools?.[toolId] !== false),
+        ...(wantsDescriber ? ['describe_images'] : []),
+        ...(webSearchActive ? ['web_search'] : []),
+        // 批次4 知识检索：助手挂知识库即追加（每轮登记见 options.knowledgeBases）。
+        ...((assistant.knowledge_bases?.length ?? 0) > 0 ? ['knowledge_search'] : []),
+        ...(skillsActive ? ['skill'] : []),
+        ...documentToolIds
+      ]
+      // 批次3 MCP：助手 mcpMode 派生挂载单元清单（`mcp:<serverId>`）。manual = 勾选集
+      //（assistant.mcpServers ∩ 活跃）；auto = 全部活跃服务器（fork 无上游 hub 服务器，
+      // auto 语义就地降级为全量，交付注记有记）；disabled/空 = 无。服务器配置本身经
+      // useAppInit 的 Dsh_SyncMcpServers 同步进主进程，内核桥挂载时按 id 反查。
+      const mcpMode = getEffectiveMcpMode(assistant)
+      const selectedMcpIds = new Set((assistant.mcpServers ?? []).map((server) => server.id))
+      const mcpExternalIds =
+        mcpMode === 'disabled'
+          ? []
+          : getState()
+              .mcp.servers.filter(
+                (server) => server.isActive && (mcpMode === 'manual' ? selectedMcpIds.has(server.id) : true)
+              )
+              .map((server) => `mcp:${server.id}`)
       await kernelChat.sendToKernel(topicId, text, assistantMsgId, triggeringUserMessage.id, {
         reasoningEffort: kernelChat.assistantReasoningLevel(assistant),
-        builtinTools: wantsDescriber
-          ? [...BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false), 'describe_images']
-          : BUILTIN_TOOL_IDS.filter((toolId) => assistant.builtinTools?.[toolId] !== false),
-        externalTools:
-          topic?.workMode === true
+        builtinTools,
+        externalTools: [
+          ...(topic?.workMode === true
             ? EXTERNAL_TOOL_IDS.filter((toolId) => assistant.externalTools?.[toolId] !== false)
-            : [],
+            : []),
+          ...mcpExternalIds
+        ],
         tier: assistant.workMode?.approval,
-        images
+        images,
+        ...(webSearchActive ? { webSearch: { providerId: webSearchProviderId } } : {}),
+        // 批次4 知识检索：本轮可检索库清单（嵌入引用只含 id，主进程自解析密钥）。
+        ...((assistant.knowledge_bases?.length ?? 0) > 0
+          ? {
+              knowledgeBases: (assistant.knowledge_bases ?? []).map((base) => ({
+                id: base.id,
+                chunkSize: base.chunkSize,
+                chunkOverlap: base.chunkOverlap,
+                documentCount: base.documentCount,
+                threshold: base.threshold,
+                embedding: {
+                  providerId: base.model.provider,
+                  modelId: base.model.id,
+                  dimensions: base.dimensions
+                }
+              }))
+            }
+          : {}),
+        // 批次5 技能：本轮可读技能清单（enabledSkills ∩ 切片元数据，id = folderName）。
+        ...(skillsActive
+          ? {
+              skills: enabledSkills
+                .map((skillId) =>
+                  getState().skills.installedSkills.find(
+                    (skill) => skill.id === skillId || skill.folderName === skillId
+                  )
+                )
+                .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined)
+                .map((skill) => ({
+                  id: skill.id,
+                  folderName: skill.folderName,
+                  name: skill.name,
+                  description: skill.description ?? ''
+                }))
+            }
+          : {}),
+        // 批次6 文档阅读：本轮附件文档清单（展示名 + 绝对路径）。
+        ...(documentsActive
+          ? {
+              documents: documentFiles.map((file) => ({
+                name: file.origin_name || file.name,
+                path: file.path,
+                ext: file.ext
+              })),
+              // §7.17 三轮 文档处理通道：本轮 ocr_document 的服务商 = 设置 → 文档处理
+              // 的默认服务商（配置本体经 Dsh_SyncPreprocess 整体投影，这里只上行 id）。
+              preprocess: { providerId: getState().preprocess.defaultProvider }
+            }
+          : {})
       })
     } else {
       logger.error('kernelChat: triggering user message not found, skipping send')

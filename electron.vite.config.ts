@@ -38,10 +38,27 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
+        // 双入口：index = 主进程；ocrWorker = OCR worker 线程（多入口下 rollup
+        // 不允许 inlineDynamicImports——内部动态导入按 chunk 拆分到 out/main/，
+        // electron-builder files "**/*" 全量打包，无 §4.16 闭包缺口；外部依赖
+        // 照旧 externalize，不产生额外 chunk）。
+        input: {
+          index: resolve('src/main/index.ts'),
+          ocrWorker: resolve('src/main/services/localModel/ocrWorker.ts')
+        },
         external: ['bufferutil', 'utf-8-validate', 'electron', ...Object.keys(pkg.dependencies)],
         output: {
-          manualChunks: undefined, // 彻底禁用代码分割 - 返回 null 强制单文件打包
-          inlineDynamicImports: true // 内联所有动态导入，这是关键配置
+          format: 'cjs', // 主进程 bundle 形态（与单入口时代一致；package.json 无 "type" 字段）
+          // 资产去哈希 + 分位放置：@napi-rs/canvas 原生加载器按字面路径
+          // require('./skia.win32-x64-msvc.node')（相对 chunk 目录），哈希名或
+          // 错位都会让 GlobalFonts 变 undefined（真机 2026-09-22 实锤）——skia.node
+          // 必须与引用它的 chunk 同目录；icon/tray png 的加载器在 index.js（根）。
+          assetFileNames(assetInfo): string {
+            return (assetInfo.names?.some((n) => n.endsWith('.node')) ?? false)
+              ? 'chunks/[name][extname]'
+              : '[name][extname]'
+          },
+          manualChunks: undefined
         },
         onwarn(warning, warn) {
           if (warning.code === 'COMMONJS_VARIABLE_IN_ESM') return

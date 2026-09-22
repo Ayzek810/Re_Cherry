@@ -8,15 +8,15 @@
  *
  * 反证（§4.3）：每道护栏都配一条"去掉护栏即变红"的对照，避免假绿。
  */
-import PersistLoadingFallback from '@renderer/components/PersistLoadingFallback'
+import '@renderer/i18n'
+
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
+import PersistLoadingFallback from '@renderer/components/PersistLoadingFallback'
 import { render, screen } from '@testing-library/react'
 import type { FC } from 'react'
-import { PersistGate } from 'redux-persist/integration/react'
 import type { Persistor } from 'redux-persist'
+import { PersistGate } from 'redux-persist/integration/react'
 import { describe, expect, it, vi } from 'vitest'
-
-import '@renderer/i18n'
 
 const Boom: FC = () => {
   throw new Error('BOOM_MARKER')
