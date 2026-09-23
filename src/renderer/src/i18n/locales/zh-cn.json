@@ -1652,6 +1652,7 @@
       "auto": "自动"
     },
     "input_image_limit_exceeded": "参考图最多 4 张",
+    "model": "模型",
     "operation_failed": "操作失败",
     "param": {
       "batch_size": "生成张数",
@@ -1871,7 +1872,7 @@
             "name": "提问（ask_user_question）"
           },
           "generate_image": {
-            "hint": "需在绘画页选择模型后生效",
+            "hint": "选择绘画模型后才会挂载",
             "name": "聊天生图（generate_image）"
           },
           "ocr": {

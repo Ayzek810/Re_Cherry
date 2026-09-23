@@ -1,7 +1,14 @@
-import type { Assistant } from '@renderer/types'
+import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
+import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
+import { selectImageGenerationModels } from '@renderer/services/paintingModelSelection'
+import { useAppDispatch, useAppSelector } from '@renderer/store'
+import { setPaintingModel } from '@renderer/store/llm'
+import type { Assistant, Model, Provider } from '@renderer/types'
 import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
-import { Switch } from 'antd'
+import { Button, Switch } from 'antd'
+import { ChevronDown } from 'lucide-react'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -33,6 +40,20 @@ const EXTERNAL_TOOL_I18N: Record<string, string> = {
  */
 const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
   const { t } = useTranslation()
+  const dispatch = useAppDispatch()
+  const paintingModel = useAppSelector((state) => state.llm.paintingModel)
+
+  /** 生图候选谓词与绘画页选择器同源（paintingModelSelection 消化后的二值判定）。 */
+  const isPaintingCandidate = (model: Model): boolean =>
+    selectImageGenerationModels([{ id: model.provider, models: [model], enabled: true } as Provider]).length > 0
+
+  const openPaintingModelPicker = useCallback(async () => {
+    const selected = await SelectChatModelPopup.show({ model: paintingModel, filter: isPaintingCandidate })
+    if (selected) {
+      dispatch(setPaintingModel({ model: selected }))
+    }
+    // paintingModel 变化会重渲染，无需本地态
+  }, [dispatch, paintingModel])
 
   const isEnabled = (map: Record<string, boolean> | undefined, toolId: string): boolean => map?.[toolId] !== false
 
@@ -65,8 +86,9 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
       <SettingsItem divider={false}>
         <SettingsTitle>{t('settings.agentSettings.tools.builtinTitle')}</SettingsTitle>
         {renderToolGrid('builtinTools', BUILTIN_TOOL_IDS, BUILTIN_TOOL_I18N)}
-        {/* 批次5 双门用户开关：assistant.enableGenerateImage（工具面）；llm.paintingModel（模型面，
-            绘画页选择器镜像 dispatch）。非 builtinTools map 字段，独立 boolean 开关。 */}
+        {/* 批次5 双门：assistant.enableGenerateImage（工具面）+ llm.paintingModel（模型面）。
+            模型面在**设置页**配置（V2 的 feature.paintings.default_model_id 语义），绘画页只读它
+            播种新草稿、不再写全局值。 */}
         <ToolGrid>
           <ToolCard onClick={() => updateAssistant({ enableGenerateImage: !assistant.enableGenerateImage })}>
             <span className="truncate text-left text-sm">{t('settings.agentSettings.tools.builtins.generate_image.name')}</span>
@@ -78,6 +100,20 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
             />
           </ToolCard>
         </ToolGrid>
+        <PickerRow>
+          <span className="text-sm">{t('paintings.model')}</span>
+          <Button onClick={() => void openPaintingModelPicker()}>
+            {paintingModel ? (
+              <>
+                <ModelAvatar model={paintingModel} size={20} />
+                <PickerName>{paintingModel.name}</PickerName>
+              </>
+            ) : (
+              <PickerName>{t('paintings.select_model')}</PickerName>
+            )}
+            <ChevronDown size={14} />
+          </Button>
+        </PickerRow>
         <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
           {t('settings.agentSettings.tools.builtins.generate_image.hint')}
         </span>
@@ -103,6 +139,30 @@ const ToolGrid = styled.div`
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 8px;
   width: 100%;
+`
+
+const PickerRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+
+  .ant-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 260px;
+  }
+`
+
+const PickerName = styled.span`
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 const ToolCard = styled.div`
