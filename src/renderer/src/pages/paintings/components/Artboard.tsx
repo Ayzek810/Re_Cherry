@@ -5,12 +5,12 @@
  */
 import { loggerService } from '@logger'
 import ImageViewer from '@renderer/components/ImageViewer'
+import PaintingImageSkeleton from '@renderer/pages/paintings/components/PaintingImageSkeleton'
 import { usePaintingSizeInfo } from '@renderer/pages/paintings/hooks/usePaintingSizeInfo'
+import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
+import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { computeImageNaturalSize } from '@renderer/pages/paintings/utils/computeImageNaturalSize'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
-import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
-import PaintingImageSkeleton from '@renderer/pages/paintings/components/PaintingImageSkeleton'
-import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { Button, Tooltip } from 'antd'
 import { ImageDown, ImageUp, Palette, RefreshCcw, RotateCcwSquare, RotateCwSquare, ZoomIn, ZoomOut } from 'lucide-react'
 import {

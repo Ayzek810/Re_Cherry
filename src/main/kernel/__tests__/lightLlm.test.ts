@@ -221,7 +221,7 @@ describe('lightStream', () => {
     const plain = makeCtx([finishStop])
     await lightOneShot(plain.ctx, { provider: 'p', model: 'm', messages: [{ role: 'user', text: 'x' }] })
     const plainContent = (plain.captured[0].messages[0] as { content: Array<{ type: string }> }).content
-    expect(plainContent).toEqual([{ type: 'text' }])
+    expect(plainContent).toEqual([{ type: 'text', text: 'x' }])
 
     // 带 images：admitEncodedImages 被 mock，返回两个 ref → 最后一条 user 消息拼 image 块
     const withImages = makeCtx([finishStop])
@@ -240,7 +240,7 @@ describe('lightStream', () => {
     })
     const first = (withImages.captured[0].messages[0] as { content: Array<{ type: string; attachment?: unknown }> })
       .content
-    expect(first).toEqual([{ type: 'text' }])
+    expect(first).toEqual([{ type: 'text', text: '看图' }])
     const last = (withImages.captured[0].messages[2] as { content: Array<{ type: string; attachment?: unknown }> })
       .content
     expect(last).toHaveLength(3)

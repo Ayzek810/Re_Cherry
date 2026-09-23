@@ -145,6 +145,11 @@ describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
   const toolCall = (seq: number): SessionEvent =>
     ev(seq, 'tool/call', { callId: 'c1', name: 'generate_image', arguments: '{"prompt":"a cat"}' })
 
+  // 真实事件流里 tool/call 之前必有 assistant/message（模型输出承载）；tool-call 内容块本身
+  // 不生成工具卡（投影层注释：卡由 tool/call + tool/result 负责），它的作用是让本轮"有回复可言"。
+  const asstCarrier = (seq: number): SessionEvent =>
+    asstMsg(seq, [{ type: 'tool-call', id: 'c1', name: 'generate_image', arguments: '{"prompt":"a cat"}' }])
+
   const toolResult = (seq: number, meta: unknown, isError = false): SessionEvent =>
     ev(seq, 'tool/result', {
       message: {
@@ -159,9 +164,10 @@ describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
   it('成功结果（presentationMeta 含 images）→ 追加 IMAGE 块，generateImageResponse 元数据可渲染', async () => {
     const { messages, blocks } = await project([
       userMsg(2, '画一只猫'),
-      toolCall(3),
-      toolResult(4, { kind: 'generate-image', images: ['data:image/png;base64,aGk='] }),
-      turnEnd(5, { kind: 'completed' })
+      asstCarrier(3),
+      toolCall(4),
+      toolResult(5, { kind: 'generate-image', images: ['data:image/png;base64,aGk='] }),
+      turnEnd(6, { kind: 'completed' })
     ])
     const answer = messages[1]
     expect(answer.status).toBe('success')
@@ -174,9 +180,10 @@ describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
   it('meta kind 不匹配或缺 images：不投影 IMAGE 块（不误报）', async () => {
     const { blocks } = await project([
       userMsg(2, '画一只猫'),
-      toolCall(3),
-      toolResult(4, { kind: 'web-search', results: [] }),
-      turnEnd(5, { kind: 'completed' })
+      asstCarrier(3),
+      toolCall(4),
+      toolResult(5, { kind: 'web-search', results: [] }),
+      turnEnd(6, { kind: 'completed' })
     ])
     expect(blocks.filter((b) => (b as { type?: string }).type === MessageBlockType.IMAGE)).toHaveLength(0)
   })
@@ -184,9 +191,10 @@ describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
   it('失败结果（isError）：不投影 IMAGE 块', async () => {
     const { blocks } = await project([
       userMsg(2, '画一只猫'),
-      toolCall(3),
-      toolResult(4, { kind: 'generate-image', images: ['data:image/png;base64,aGk='] }, true),
-      turnEnd(5, { kind: 'completed' })
+      asstCarrier(3),
+      toolCall(4),
+      toolResult(5, { kind: 'generate-image', images: ['data:image/png;base64,aGk='] }, true),
+      turnEnd(6, { kind: 'completed' })
     ])
     expect(blocks.filter((b) => (b as { type?: string }).type === MessageBlockType.IMAGE)).toHaveLength(0)
   })

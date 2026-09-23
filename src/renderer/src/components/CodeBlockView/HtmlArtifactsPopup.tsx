@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import { HTML_PREVIEW_RESTRICTED_CSP, HTML_PREVIEW_RESTRICTED_SANDBOX, HtmlPreviewFrame } from './HtmlPreviewFrame'
+import { InteractiveHtmlPreview } from './InteractiveHtmlPreview'
 
 interface CodePanelProps {
   codeEditorRef: React.RefObject<CodeEditorHandles | null>
@@ -63,18 +64,24 @@ interface PreviewPanelProps {
   html: string
   previewTitle: string
   emptyText: string
+  /** 含活动内容的文档在弹窗里走交互式 webview（弹窗即显式查看动作，故不再单独设同意面）。 */
+  interactive?: boolean
 }
 
-const PreviewPanel = memo<PreviewPanelProps>(({ html, previewTitle, emptyText }) => {
+const PreviewPanel = memo<PreviewPanelProps>(({ html, previewTitle, emptyText, interactive = false }) => {
   return (
     <PreviewSection>
       {html.trim() ? (
-        <HtmlPreviewFrame
-          html={html}
-          title={previewTitle}
-          sandbox={HTML_PREVIEW_RESTRICTED_SANDBOX}
-          csp={HTML_PREVIEW_RESTRICTED_CSP}
-        />
+        interactive ? (
+          <InteractiveHtmlPreview html={html} title={previewTitle} />
+        ) : (
+          <HtmlPreviewFrame
+            html={html}
+            title={previewTitle}
+            sandbox={HTML_PREVIEW_RESTRICTED_SANDBOX}
+            csp={HTML_PREVIEW_RESTRICTED_CSP}
+          />
+        )
       ) : (
         <EmptyPreview>
           <p>{emptyText}</p>
@@ -89,12 +96,21 @@ interface HtmlArtifactsPopupProps {
   title: string
   html: string
   onSave?: (html: string) => void
+  /** 含活动内容的文档：预览面换成专用 partition 的沙箱 webview（见 InteractiveHtmlPreview）。 */
+  interactive?: boolean
   onClose: () => void
 }
 
 type ViewMode = 'split' | 'code' | 'preview'
 
-const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, html, onSave, onClose }) => {
+const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({
+  open,
+  title,
+  html,
+  onSave,
+  interactive = false,
+  onClose
+}) => {
   const { t } = useTranslation()
   const [viewMode, setViewMode] = useState<ViewMode>('split')
   const [isFullscreen, setIsFullscreen] = useState(true)
@@ -218,6 +234,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
                 html={html}
                 previewTitle={t('common.html_preview')}
                 emptyText={t('html_artifacts.empty_preview', 'No content to preview')}
+                interactive={interactive}
               />
             </PanelWrapper>
           </Splitter.Panel>

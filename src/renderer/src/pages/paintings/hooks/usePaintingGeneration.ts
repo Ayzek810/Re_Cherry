@@ -5,15 +5,15 @@
  * 生成主链路 = paintingPipeline.paintingGenerate → runPainting 落盘。
  */
 import { db } from '@renderer/databases'
+import { usePaintingSession } from '@renderer/pages/paintings/context/PaintingSessionContext'
 import { presentPaintingGenerateError } from '@renderer/pages/paintings/errors/paintingGenerateError'
 import { paintingDataToRecord } from '@renderer/pages/paintings/model/mappers/paintingRecordMappers'
 import { paintingGenerate } from '@renderer/pages/paintings/model/paintingPipeline'
 import { runPainting } from '@renderer/pages/paintings/model/runPainting'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
-import { usePaintingSession } from '@renderer/pages/paintings/context/PaintingSessionContext'
 import { lightImageAbort } from '@renderer/services/lightLlm'
-import type { Provider } from '@renderer/types'
 import { useAppSelector } from '@renderer/store'
+import type { Provider } from '@renderer/types'
 import { useCallback, useEffect, useRef } from 'react'
 
 function hasOutput(painting: PaintingData) {

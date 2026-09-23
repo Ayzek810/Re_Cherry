@@ -5,8 +5,8 @@
  * 组合消化（feature 不直接 import config/models）。弹窗返回 Model，本组件
  * 只负责触发与回显，选中上抛 { providerId, modelId }。
  */
-import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
+import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
 import { selectImageGenerationModels } from '@renderer/services/paintingModelSelection'
 import { useAppSelector } from '@renderer/store'
 import type { Model, Provider } from '@renderer/types'

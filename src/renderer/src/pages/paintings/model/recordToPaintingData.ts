@@ -4,8 +4,8 @@
  * modelId 也可能存成 provider:model 形态（历史数据防御）。文件解析从 DataApi
  * FileEntry 换成 Dexie 内嵌 FileMetadata（无 404 语义，直接透传）。
  */
-import type { PaintingRecord } from '@renderer/types'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
+import type { PaintingRecord } from '@renderer/types'
 
 /** fork 侧没有 unique-model-id 工具，按 V2 语义手工剥 provider: 前缀。 */
 export function normalizeStoredPaintingModel(value: unknown): string | undefined {

@@ -37,7 +37,9 @@ export function setLightLlmProviderRoutes(providers: Array<{ id?: string; apiHos
 
 function resolveRoute(providerId: string): ProviderRoute {
   const synced = routes.get(providerId)
-  const apiKey = synced?.apiKey ?? providerKeyStore.get(providerId) ?? ''
+  // 快照缺 key（渲染层未推 / 空串）时兜底 ProviderKeyStore；用 || 而非 ?? ——
+  // 空串不是 nullish，用 ?? 会让兜底永不可达（快照带 provider 但 key 为空时反而发无鉴权请求）。
+  const apiKey = synced?.apiKey || providerKeyStore.get(providerId) || ''
   const apiHost = synced?.apiHost ?? ''
   if (apiHost.length === 0) {
     throw new Error(`lightLlm: provider "${providerId}" has no apiHost configured`)

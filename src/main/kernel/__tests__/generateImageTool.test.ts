@@ -5,6 +5,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as GenerateImageToolModule from '../generateImageTool'
+
 const lightGenerateImageMock = vi.fn()
 
 vi.mock('../lightLlmModalities', () => ({
@@ -59,7 +61,7 @@ describe('generate_image 工具', () => {
 })
 
 /** defineTool 的 execute 闭包不直接导出——经 apply 注册到假 ToolRuntime 后触发。 */
-async function runExecute(tool: typeof import('../generateImageTool'), exec: ExecLike, args: Record<string, unknown>) {
+async function runExecute(tool: typeof GenerateImageToolModule, exec: ExecLike, args: Record<string, unknown>) {
   let captured:
     | { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> }
     | undefined

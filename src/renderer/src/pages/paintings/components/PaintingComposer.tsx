@@ -7,7 +7,7 @@
 import { LoadingOutlined, SettingOutlined } from '@ant-design/icons'
 import { PaintingImageAddButton, PaintingInputTray } from '@renderer/pages/paintings/components/PaintingImageGallery'
 import PaintingModelSelector, { type PaintingModelSelection } from '@renderer/pages/paintings/components/PaintingModelSelector'
-import { usePaintingComposerInputFiles } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
+import type { usePaintingComposerInputFiles } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
 import type { MaterializeInputs } from '@renderer/pages/paintings/hooks/usePaintingGenerationSubmit'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import type { Model } from '@renderer/types'

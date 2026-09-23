@@ -5,10 +5,12 @@ import { is } from '@electron-toolkit/utils'
 import { loggerService } from '@logger'
 import { isDev, isLinux, isMac, isWin } from '@main/constant'
 import { getFilesDir } from '@main/utils/file'
+import { hardenHtmlArtifactPreviewSession, hardenHtmlArtifactWebviews } from '@main/utils/htmlArtifactSecurity'
 import { getWindowsBackgroundMaterial } from '@main/utils/windowUtil'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
-import { app, BrowserWindow, nativeImage, nativeTheme, screen, shell } from 'electron'
+import { HTML_ARTIFACT_PREVIEW_PARTITION } from '@shared/utils/htmlArtifact'
+import { app, BrowserWindow, nativeImage, nativeTheme, screen, session, shell } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 import path, { join } from 'path'
 
@@ -37,6 +39,8 @@ export class WindowService {
   //to restore the focus status when miniWindow hides
   private wasMainWindowFocused: boolean = false
   private lastRendererProcessCrashTime: number = 0
+  /** 交互式 HTML 预览的专用会话（装配后只加固一次；见 htmlArtifactSecurity）。 */
+  private htmlArtifactPreviewSession: Electron.Session | null = null
 
   public static getInstance(): WindowService {
     if (!WindowService.instance) {
@@ -104,6 +108,12 @@ export class WindowService {
       }
     })
 
+    // 交互式 HTML 预览专用 partition：配置会话（权限/下载/请求白名单）后再挂窗口加固，见 htmlArtifactSecurity。
+    if (!this.htmlArtifactPreviewSession) {
+      this.htmlArtifactPreviewSession = session.fromPartition(HTML_ARTIFACT_PREVIEW_PARTITION)
+      hardenHtmlArtifactPreviewSession(this.htmlArtifactPreviewSession)
+    }
+
     this.setupMainWindow(this.mainWindow, mainWindowState)
 
     //preload miniWindow to resolve series of issues about miniWindow in Mac
@@ -123,6 +133,11 @@ export class WindowService {
 
     this.setupMaximize(mainWindow, mainWindowState.isMaximized)
     this.setupContextMenu(mainWindow)
+    // 注册在 setupContextMenu 的 dev 期 will-attach-webview（给所有 webview 塞 preload）之后：
+    // 预览 partition 的监听器后跑，才能把 preload 删掉（顺序即安全边界）。
+    if (this.htmlArtifactPreviewSession) {
+      hardenHtmlArtifactWebviews(mainWindow, this.htmlArtifactPreviewSession)
+    }
     this.setupSpellCheck(mainWindow)
     this.setupWindowEvents(mainWindow)
     this.setupWebContentsHandlers(mainWindow)

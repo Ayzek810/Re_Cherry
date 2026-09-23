@@ -5,8 +5,11 @@
  * readTextFileWithAutoEncoding 直读绝对路径）；图片经 file:// URL
  * （resourcesPath 来自 redux runtime，useAppInit 已填充）。
  */
+import { loggerService } from '@logger'
 import { useAppSelector } from '@renderer/store'
 import { useCallback, useEffect, useState } from 'react'
+
+const logger = loggerService.withContext('usePaintingTemplateCatalog')
 
 const PAINTING_TEMPLATE_RESOURCE_DIRECTORY = 'painting-templates'
 const PAINTING_TEMPLATE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -108,7 +111,7 @@ export function usePaintingTemplateCatalog() {
       setTemplates(loaded)
     } catch (error) {
       // 模板目录缺失/损坏只降级为空轮播，不阻塞绘画页。
-      console.error('[usePaintingTemplateCatalog] failed to load catalog', error)
+      logger.error('failed to load painting template catalog', error as Error)
       setTemplates([])
     } finally {
       setIsLoading(false)

@@ -5,9 +5,9 @@
  * （V2 recordsToPaintingDataList 语义，文件解析为 Dexie 内嵌直通）。
  */
 import { db } from '@renderer/databases'
-import { loggerService } from '@renderer/services/LoggerService'
 import { recordsToPaintingDataList } from '@renderer/pages/paintings/model/recordToPaintingData'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
+import { loggerService } from '@renderer/services/LoggerService'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const logger = loggerService.withContext('usePaintingHistory')
@@ -37,7 +37,7 @@ export function usePaintingHistory(): {
     try {
       let query = db.paintings.orderBy('createdAt').reverse()
       if (!reset && cursorRef.current !== undefined) {
-        query = db.paintings.where('createdAt').below(cursorRef.current).reverse() as typeof query
+        query = db.paintings.where('createdAt').below(cursorRef.current).reverse()
       }
       const rows = await query.limit(PAGE_SIZE).toArray()
       const mapped = await recordsToPaintingDataList(rows)

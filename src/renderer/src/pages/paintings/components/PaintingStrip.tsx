@@ -4,9 +4,9 @@
  * （受控 Modal）。paintingClasses 从 ① paintingPrimitives import。
  */
 import PaintingSkeletonSurface from '@renderer/pages/paintings/components/PaintingSkeletonSurface'
+import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
-import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import { Button, Modal } from 'antd'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import type { FC, UIEventHandler } from 'react'

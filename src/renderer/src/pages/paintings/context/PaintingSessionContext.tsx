@@ -4,12 +4,13 @@
  * 动作 + 参考图托盘状态 + 生成状态镜像（generatingById，瞬态不持久化——V2
  * cacheService.set(`painting.generation.${id}`) 的本地等价）。Provider 由页面挂。
  */
-import { usePaintingComposerInputFiles, type InputCapability } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
-import { supportsPaintingEdit } from '@renderer/services/paintingModelSelection'
-import { useAppSelector } from '@renderer/store'
+import { type InputCapability, usePaintingComposerInputFiles } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import type { PaintingGenerationState } from '@renderer/pages/paintings/model/utils/paintingGenerationParams'
-import React, { createContext, Dispatch, SetStateAction, use, useCallback, useMemo, useState } from 'react'
+import { supportsPaintingEdit } from '@renderer/services/paintingModelSelection'
+import { useAppSelector } from '@renderer/store'
+import type { Dispatch, SetStateAction} from 'react';
+import React, { createContext, use, useCallback, useMemo, useState } from 'react'
 
 export interface PaintingSessionValue {
   currentPainting: PaintingData
