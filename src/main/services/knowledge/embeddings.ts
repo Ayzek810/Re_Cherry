@@ -6,7 +6,7 @@
  * ——KnowledgeService 的既有引用面不变，路由快照同步也仍经本类转发
  * （Dsh_SyncProviders 同一载荷；密钥不回渲染层、不进会话日志，fork 偏离不变）。
  */
-import { lightEmbed, setLightLlmProviderRoutes, type LightEmbedRef } from '@main/kernel/lightLlmModalities'
+import { lightEmbed, type LightEmbedRef, setLightLlmProviderRoutes } from '@main/kernel/lightLlmModalities'
 
 export interface EmbeddingModelRef {
   providerId: string

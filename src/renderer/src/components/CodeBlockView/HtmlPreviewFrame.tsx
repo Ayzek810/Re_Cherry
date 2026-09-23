@@ -3,21 +3,18 @@ import { Parser } from 'htmlparser2'
 import { memo, type Ref } from 'react'
 
 export const HTML_PREVIEW_DEFAULT_BASE_URL = 'about:srcdoc'
-// `allow-same-origin` is required so the parent can read the iframe's `contentDocument`
-// for HTML-artifact screenshot capture (save / copy PNG). Without it the sandbox is an
-// opaque origin, `contentDocument` is null, and capture silently no-ops.
 
-export const HTML_PREVIEW_IFRAME_SANDBOX = 'allow-scripts allow-same-origin allow-forms'
-
-// Fully-restricted sandbox for previewing untrusted on-disk files. An empty `sandbox`
-// applies every restriction — no scripts, no forms, opaque origin — while still rendering
-// static HTML/CSS. Running NO scripts is the deliberate choice: the main window sets
-// `webSecurity: false` (windowRegistry.ts), which disables the same-origin policy, so
-// merely dropping `allow-same-origin` is NOT a reliable boundary — a script in an
-// opaque-origin iframe could still reach `parent.api` and the legacy `fs.read*` bridge to
-// read/exfiltrate arbitrary local files. Removing `allow-scripts` closes that hole
-// regardless of `webSecurity`. Pair with {@link HTML_PREVIEW_RESTRICTED_CSP}. Use this —
-// never the artifact sandbox above — for any file whose contents we don't control.
+// Fully-restricted sandbox: an empty `sandbox` applies every restriction — no scripts, no forms,
+// opaque origin — while still rendering static HTML/CSS, and it is the **default** here because
+// the fork (v0.3.3) removed HTML-artifact screenshot capture: nothing needs `allow-same-origin`
+// any more, so the permissive value must not be reachable by omission.
+// Running NO scripts is the deliberate choice: the main window sets `webSecurity: false`
+// (WindowService.ts), which disables the same-origin policy, so merely dropping
+// `allow-same-origin` is NOT a reliable boundary — a script in an opaque-origin iframe could
+// still reach `parent.api` and the file bridge to read/exfiltrate arbitrary local files.
+// Interactive documents that genuinely need scripts go through the consent-gated,
+// dedicated-partition webview instead (see InteractiveHtmlPreview). Pair with
+// {@link HTML_PREVIEW_RESTRICTED_CSP}.
 export const HTML_PREVIEW_RESTRICTED_SANDBOX = ''
 
 // Strict CSP for untrusted local-file previews, injected as a `<meta http-equiv>` tag.
@@ -32,8 +29,8 @@ interface HtmlPreviewFrameProps {
   title: string
   baseUrl?: string
   emptyText?: string
-  /** iframe `sandbox` value. Defaults to the artifact sandbox (same-origin, for
-   *  screenshot capture); pass {@link HTML_PREVIEW_RESTRICTED_SANDBOX} for untrusted files. */
+  /** iframe `sandbox` value. Defaults to the fully restricted (script-less) sandbox;
+   *  interactive documents needing scripts go through the consent-gated webview instead. */
   sandbox?: string
   /** Content-Security-Policy injected as a `<meta http-equiv>` tag. Pass
    *  {@link HTML_PREVIEW_RESTRICTED_CSP} for untrusted files; omit for trusted artifacts. */
@@ -92,7 +89,7 @@ export const HtmlPreviewFrame = memo<HtmlPreviewFrameProps>(
     title,
     baseUrl = HTML_PREVIEW_DEFAULT_BASE_URL,
     emptyText,
-    sandbox = HTML_PREVIEW_IFRAME_SANDBOX,
+    sandbox = HTML_PREVIEW_RESTRICTED_SANDBOX,
     csp,
     iframeRef
   }) => {

@@ -15,9 +15,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { loggerService } from '@logger'
-import { lightRerank } from './lightLlmModalities'
 
 import { knowledgeService } from '../services/knowledge/KnowledgeService'
+import { lightRerank } from './lightLlmModalities'
 
 const logger = loggerService.withContext('KnowledgeSearchTool')
 

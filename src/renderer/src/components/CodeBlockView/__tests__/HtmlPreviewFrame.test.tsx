@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import {
-  HTML_PREVIEW_IFRAME_SANDBOX,
   HTML_PREVIEW_RESTRICTED_CSP,
   HTML_PREVIEW_RESTRICTED_SANDBOX,
   HtmlPreviewFrame,
@@ -11,14 +10,16 @@ import {
 } from '../HtmlPreviewFrame'
 
 describe('HtmlPreviewFrame', () => {
-  it('renders non-empty HTML in an iframe with the shared sandbox and default srcdoc base', () => {
+  it('renders non-empty HTML in a fully restricted iframe by default', () => {
     const html = '<html><head><title>Preview</title></head><body><a href="#">Home</a></body></html>'
 
     render(<HtmlPreviewFrame html={html} title="common.html_preview" />)
     const iframe = screen.getByTitle('common.html_preview')
 
     expect(iframe).not.toBeNull()
-    expect(iframe).toHaveAttribute('sandbox', HTML_PREVIEW_IFRAME_SANDBOX)
+    // 默认即受限（截图下线后无任何理由默认放开脚本/同源）——省略 sandbox 不会放宽边界。
+    expect(iframe).toHaveAttribute('sandbox', HTML_PREVIEW_RESTRICTED_SANDBOX)
+    expect(iframe.getAttribute('sandbox')).not.toContain('allow-scripts')
     expect(iframe).toHaveAttribute('title', 'common.html_preview')
     expect(iframe?.getAttribute('srcdoc')).toContain('<base href="about:srcdoc">')
   })

@@ -42,8 +42,8 @@ export function usePaintingInitialDraft({
 }: UsePaintingInitialDraftInput): void {
   // fork settings slice 无 painting 默认 provider/model 字段——用空默认值常量
   // （'' = 无偏好，跟随 providerOptions 首项），不改 settings slice 结构。
-  const preferredProviderId = useAppSelector(() => '') as string
-  const preferredModelId = useAppSelector(() => '') as string
+  const preferredProviderId = useAppSelector(() => '')
+  const preferredModelId = useAppSelector(() => '')
   const bootstrapDraftIdRef = useRef(currentPainting.id)
 
   useEffect(() => {

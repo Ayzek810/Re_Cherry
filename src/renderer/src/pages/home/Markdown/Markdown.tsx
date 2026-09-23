@@ -29,10 +29,10 @@ import CitationSup from './CitationSup'
 import CodeBlock from './CodeBlock'
 import Link from './Link'
 import MarkdownSvgRenderer from './MarkdownSvgRenderer'
-import { remarkHtmlArtifact, transformMarkdownOutsideHtmlArtifacts } from './plugins/remarkHtmlArtifact'
 import rehypeHeadingIds from './plugins/rehypeHeadingIds'
 import rehypeScalableSvg from './plugins/rehypeScalableSvg'
 import remarkDisableConstructs from './plugins/remarkDisableConstructs'
+import { remarkHtmlArtifact, transformMarkdownOutsideHtmlArtifacts } from './plugins/remarkHtmlArtifact'
 import { scanStandaloneHtmlArtifact } from './standaloneHtmlArtifact'
 import Table from './Table'
 
@@ -185,6 +185,12 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     } as Partial<Components>
   }, [block.id, effectiveHtmlPreviewMode])
 
+  // Hook 必须在任何早退分支之前调用（下方 standaloneArtifact 早退还直接 return 组件）。
+  const urlTransform = useCallback((value: string) => {
+    if (value.startsWith('data:image/png') || value.startsWith('data:image/jpeg')) return value
+    return defaultUrlTransform(value)
+  }, [])
+
   // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
   // position 的 end 外推一个围栏长度，让 isOpenFenceBlock 恒判"已闭合"（V2 语境等价）。
   if (standaloneArtifact) {
@@ -211,11 +217,6 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
   if (/<style\b[^>]*>/i.test(messageContent)) {
     components.style = MarkdownShadowDOMRenderer as any
   }
-
-  const urlTransform = useCallback((value: string) => {
-    if (value.startsWith('data:image/png') || value.startsWith('data:image/jpeg')) return value
-    return defaultUrlTransform(value)
-  }, [])
 
   return (
     <div className="markdown">

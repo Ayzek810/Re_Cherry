@@ -3,8 +3,8 @@
  * db.paintings.put（V2 DataApi updatePainting → Dexie 行）。V2 deletePainting →
  * db.paintings.delete + 引用文件 FileManager.deleteFile。
  */
-import { db } from '@renderer/databases'
 import { loggerService } from '@logger'
+import { db } from '@renderer/databases'
 import { presentPaintingGenerateError } from '@renderer/pages/paintings/errors/paintingGenerateError'
 import { paintingDataToRecord } from '@renderer/pages/paintings/model/mappers/paintingRecordMappers'
 import { createDefaultPainting, type PaintingDraftDefaults } from '@renderer/pages/paintings/model/paintingPipeline'

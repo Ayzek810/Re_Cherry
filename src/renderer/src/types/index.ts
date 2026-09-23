@@ -479,8 +479,8 @@ export type GenerateImageResponse = {
 
 export type SidebarIcon = 'assistants' | 'minapp' | 'files' | 'knowledge' | 'translate' | 'paintings'
 
-export type { TranslateRecord, TranslateLanguageSelection } from './translate'
-export type { PaintingRecord, PaintingParams } from './painting'
+export type { PaintingParams, PaintingRecord } from './painting'
+export type { TranslateLanguageSelection, TranslateRecord } from './translate'
 
 export type ExternalToolResult = {
   mcpTools?: MCPTool[]

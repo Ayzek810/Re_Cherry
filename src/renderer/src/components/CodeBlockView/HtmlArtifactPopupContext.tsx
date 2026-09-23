@@ -1,4 +1,5 @@
 import type { HtmlArtifactKind } from '@renderer/pages/home/Markdown/plugins/remarkHtmlArtifact'
+import { htmlArtifactRequiresUserConsent } from '@renderer/utils/htmlArtifact'
 import { createContext, lazy, type ReactNode, Suspense, use, useCallback, useMemo, useState } from 'react'
 
 export interface HtmlArtifactPopupSession {
@@ -65,8 +66,15 @@ export function HtmlArtifactPopupHost({ children }: { children: ReactNode }) {
     })
   }, [])
   const closePopup = useCallback(() => {
-    setPopupSession(null)
-  }, [])
+    // 打开全屏弹窗本身就是显式查看动作（V2 语义）：关闭时把「这个 html 串」记为已批准，
+    // 消息内的卡片随之换成交互式预览。
+    setPopupSession((current) => {
+      if (current && current.kind === 'document' && htmlArtifactRequiresUserConsent(current.html)) {
+        approveInteractiveHtml(current.artifactId, current.html)
+      }
+      return null
+    })
+  }, [approveInteractiveHtml])
   const contextValue = useMemo<HtmlArtifactPopupContextValue>(
     () => ({
       approvedInteractiveHtmlById,
@@ -89,6 +97,9 @@ export function HtmlArtifactPopupHost({ children }: { children: ReactNode }) {
             title={popupSession.title}
             html={popupSession.html}
             onSave={popupSession.onSave}
+            interactive={
+              popupSession.kind === 'document' && htmlArtifactRequiresUserConsent(popupSession.html)
+            }
             onClose={closePopup}
           />
         </Suspense>

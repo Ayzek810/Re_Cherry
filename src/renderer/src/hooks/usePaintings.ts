@@ -4,8 +4,8 @@
  * （Dexie 行无排序字段，历史条永远按时间倒序展示）。
  */
 import { db } from '@renderer/databases'
-import type { PaintingRecord } from '@renderer/types'
 import { loggerService } from '@renderer/services/LoggerService'
+import type { PaintingRecord } from '@renderer/types'
 import { useCallback, useEffect, useState } from 'react'
 
 const logger = loggerService.withContext('usePaintings')

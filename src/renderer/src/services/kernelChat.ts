@@ -767,7 +767,7 @@ function buildGenerateImageBlock(
   }
   return createImageBlock(messageId, {
     status: MessageBlockStatus.SUCCESS,
-    metadata: { generateImageResponse: { type: 'url', images: images as string[] } }
+    metadata: { generateImageResponse: { type: 'url', images: images } }
   })
 }
 

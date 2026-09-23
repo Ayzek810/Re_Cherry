@@ -3,9 +3,8 @@
  * embed 两协议形状与批量语义、rerank 请求/响应形状与排序、image 生成/编辑的
  * 参数透传、取消注册表与响应归一。fetch 全 mock（node fetch 语义）。
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 import { providerKeyStore } from '@main/services/ProviderKeyStore'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   abortLightImage,
@@ -55,30 +54,43 @@ describe('路由解析', () => {
     fetchMock.mockResolvedValueOnce(okResponse({ data: [{ embedding: [1, 0] }] }))
     await lightEmbed({ providerId: 'silicon', modelId: 'm' }, ['x'])
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('https://api.siliconflow.cn/embeddings')
+    expect(url).toBe('https://api.siliconflow.cn/v1/embeddings')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-test')
   })
 
-  it('快照未命中兜底 ProviderKeyStore；都无 apiHost 明错', async () => {
+  it('快照内 apiKey 为空时兜底 ProviderKeyStore；无 apiHost 明错', async () => {
     vi.mocked(providerKeyStore.get).mockReturnValue('sk-fallback')
     setLightLlmProviderRoutes([{ id: 'other', apiHost: 'https://p.example.com', apiKey: '' }])
     fetchMock.mockResolvedValueOnce(okResponse({ data: [{ embedding: [1, 0] }] }))
-    await lightEmbed({ providerId: 'unknown-provider', modelId: 'm' }, ['x'])
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    await lightEmbed({ providerId: 'other', modelId: 'm' }, ['x'])
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://p.example.com/v1/embeddings')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-fallback')
 
+    // apiHost 只来自 provider 快照（KeyStore 只兜 key）→ 快照里没有的 provider 明错，不静默降级。
     await expect(lightEmbed({ providerId: 'nobody', modelId: 'm' }, ['x'])).rejects.toThrow('no apiHost configured')
   })
 })
 
 describe('lightEmbed', () => {
   it('openai 兼容：批量 input + dimensions 透传；data[].embedding 归一化', async () => {
-    fetchMock.mockResolvedValue(okResponse({ data: [{ embedding: [3, 4] }, { embedding: [0, 0] }] }))
+    fetchMock.mockResolvedValue(
+      okResponse({ data: [{ embedding: [3, 4] }, { embedding: [0, 0] }, { embedding: [1, 0] }] })
+    )
     const vectors = await lightEmbed({ providerId: 'silicon', modelId: 'm', dimensions: 768 }, ['a', 'b', 'c'])
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(JSON.parse(init.body as string)).toEqual({ model: 'm', input: ['a', 'b', 'c'], dimensions: 768 })
-    expect(vectors).toEqual([normalizeVector([3, 4]), normalizeVector([0, 0]), normalizeVector([0, 0])])
-    expect(vectors[0]).toEqual([0.6, 0.8])
+    expect(vectors).toEqual([normalizeVector([3, 4]), normalizeVector([0, 0]), normalizeVector([1, 0])])
+    // 归一化按 1/模长 缩放，末位有 1 ULP 误差 → 断言近似而非字面相等。
+    expect(vectors[0]?.[0]).toBeCloseTo(0.6, 12)
+    expect(vectors[0]?.[1]).toBeCloseTo(0.8, 12)
+  })
+
+  it('返回条数与输入不符：明错，不静默补零', async () => {
+    fetchMock.mockResolvedValue(okResponse({ data: [{ embedding: [3, 4] }, { embedding: [0, 0] }] }))
+    await expect(lightEmbed({ providerId: 'silicon', modelId: 'm' }, ['a', 'b', 'c'])).rejects.toThrow(
+      'embedding count mismatch'
+    )
   })
 
   it('ollama：/api/embeddings 端点、单条 prompt、embedding 单数形状', async () => {
@@ -111,7 +123,7 @@ describe('lightRerank', () => {
     )
     const result = await lightRerank({ providerId: 'silicon', modelId: 'rerank-m', query: 'q', documents: ['a', 'b', 'c'] })
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('https://api.siliconflow.cn/rerank')
+    expect(url).toBe('https://api.siliconflow.cn/v1/rerank')
     expect(JSON.parse(init.body as string)).toEqual({ model: 'rerank-m', query: 'q', documents: ['a', 'b', 'c'] })
     expect(result.results).toEqual([{ index: 2, score: 0.9 }, { index: 0, score: 0.5 }])
   })
@@ -152,7 +164,7 @@ describe('lightGenerateImage', () => {
       images: string[]
     }
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('https://api.siliconflow.cn/images/generations')
+    expect(url).toBe('https://api.siliconflow.cn/v1/images/generations')
     expect(JSON.parse(init.body as string)).toEqual({
       model: 'img-model',
       prompt: 'a cat',
@@ -206,7 +218,7 @@ describe('lightEditImage', () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('https://api.siliconflow.cn/images/edits')
+    expect(url).toBe('https://api.siliconflow.cn/v1/images/edits')
     const form = init.body as FormData
     expect(form.get('model')).toBe('img-model')
     expect(form.get('prompt')).toBe('make it blue')

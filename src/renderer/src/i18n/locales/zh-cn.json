@@ -765,6 +765,7 @@
     "lastError": "最后错误",
     "maxEmbeddingsPerCall": "每次调用的最大嵌入",
     "message": "错误信息",
+    "missing_required_fields": "缺少必填字段",
     "missing_user_message": "无法切换模型响应：原始用户消息已被删除。请发送新消息以获取此模型的响应",
     "model": {
       "exists": "模型已存在",
@@ -807,7 +808,6 @@
     "toolName": "工具名",
     "truncated": "数据已截断，原始大小",
     "truncatedBadge": "已截断",
-    "missing_required_fields": "缺少必填字段",
     "unknown": "未知错误",
     "usage": "用量",
     "user_message_not_found": "无法找到原始用户消息",
@@ -876,9 +876,12 @@
   },
   "html_artifacts": {
     "code": "代码",
-    "consent_required": "此 HTML 工件包含活动内容，预览前需要你的确认。",
     "empty_preview": "无内容可展示",
     "generating": "生成中",
+    "interactive_preview": {
+      "action": "查看网页",
+      "description": "此网页包含脚本或外部资源，打开后可能运行代码并连接网络。"
+    },
     "preview": "预览",
     "split": "分屏",
     "view_mode": "视图模式"
@@ -1049,6 +1052,29 @@
     "videos_file": "视频文件",
     "wiring_pending": "功能待接线：该操作需要主进程知识库支持（后续批次接入）"
   },
+  "languages": {
+    "arabic": "阿拉伯文",
+    "chinese": "简体中文",
+    "chinese-traditional": "繁体中文",
+    "english": "英文",
+    "french": "法文",
+    "german": "德文",
+    "indonesian": "印尼文",
+    "italian": "意大利文",
+    "japanese": "日文",
+    "korean": "韩文",
+    "malay": "马来文",
+    "polish": "波兰文",
+    "portuguese": "葡萄牙文",
+    "russian": "俄文",
+    "spanish": "西班牙文",
+    "thai": "泰文",
+    "turkish": "土耳其文",
+    "ukrainian": "乌克兰语",
+    "unknown": "未知",
+    "urdu": "乌尔都文",
+    "vietnamese": "越南文"
+  },
   "launchpad": {
     "apps": "应用"
   },
@@ -1137,7 +1163,6 @@
     "user_switched": "用户上下文已切换到 {{user}}"
   },
   "message": {
-    "empty_url": "图片地址为空",
     "api": {
       "check": {
         "model": {
@@ -1189,6 +1214,7 @@
       "failed": "下载失败",
       "success": "下载成功"
     },
+    "empty_url": "图片地址为空",
     "error": {
       "chunk_overlap_too_large": "分段重叠不能大于分段大小",
       "copy": "复制失败",
@@ -1591,6 +1617,86 @@
       "title": "欢迎使用 Re_Cherry"
     }
   },
+  "paintings": {
+    "add_image": "添加参考图",
+    "button": {
+      "delete": {
+        "image": {
+          "confirm": "确定要删除这幅画作吗？",
+          "label": "删除此画作"
+        }
+      },
+      "new": {
+        "image": "新建绘画"
+      },
+      "select": {
+        "image": "选择此画作"
+      }
+    },
+    "custom_height": "高度",
+    "custom_size": "自定义尺寸",
+    "custom_width": "宽度",
+    "edit": {
+      "image_required": "图生图模式需要至少一张参考图"
+    },
+    "generate": "生成",
+    "generate_failed": "生成失败",
+    "generating": "绘图进行中，请不要离开页面",
+    "history": "历史",
+    "image_file_required": "请先上传图片",
+    "image_file_retry": "部分参考图未能加载，请重试",
+    "image_handle_required": "请先上传图片",
+    "image_mix_failed": "图像混合失败",
+    "image_placeholder": "暂无图片",
+    "image_size_options": {
+      "auto": "自动"
+    },
+    "input_image_limit_exceeded": "参考图最多 4 张",
+    "operation_failed": "操作失败",
+    "param": {
+      "batch_size": "生成张数",
+      "guidance_scale": "引导系数",
+      "negative_prompt": "反向提示词",
+      "num_inference_steps": "推理步数",
+      "prompt": "提示词",
+      "quality": "质量",
+      "seed": "种子",
+      "size": "尺寸"
+    },
+    "prompt_placeholder": "描述你想生成的图像…",
+    "prompt_placeholder_upload": "添加参考图后描述编辑需求…",
+    "prompt_placeholder_upload_required": "此模型需要先添加参考图",
+    "prompt_required": "请输入提示词",
+    "proxy_required": "下载图片需要先配置代理",
+    "quality_options": {
+      "auto": "自动",
+      "hd": "高清",
+      "high": "高",
+      "low": "低",
+      "medium": "中",
+      "standard": "标准"
+    },
+    "req_error_model": "请先在设置中选择绘画模型",
+    "req_error_no_balance": "账户余额不足",
+    "req_error_token": "API 令牌无效，请检查服务商密钥",
+    "revealing": "正在呈现生成的图片",
+    "select_model": "选择绘画模型",
+    "settings": "绘画设置",
+    "showcase": {
+      "caption": "选择一个模板，或直接在下方输入描述开始生成",
+      "styles_label": "模板样式",
+      "title": "开始你的创作"
+    },
+    "text_desc_required": "请先输入图片描述",
+    "title": "绘画",
+    "unsupported_vendor": "不支持该服务商或模型",
+    "zhipu": {
+      "custom_size_divisible": "自定义尺寸必须能被16整除",
+      "custom_size_pixels": "自定义尺寸的总像素数不能超过2,097,152",
+      "custom_size_range": "自定义尺寸必须在512px-2048px之间",
+      "custom_size_required": "请设置自定义尺寸的宽度和高度"
+    }
+  },
   "preview": {
     "copy": {
       "image": "复制为图片",
@@ -1598,13 +1704,13 @@
     },
     "dialog": "打开预览窗口",
     "label": "预览",
+    "next": "下一张",
     "pan": "移动",
     "pan_down": "下移",
     "pan_left": "左移",
     "pan_right": "右移",
     "pan_up": "上移",
     "previous": "上一张",
-    "next": "下一张",
     "reset": "重置",
     "rotate_left": "向左旋转",
     "rotate_right": "向右旋转",
@@ -1764,12 +1870,12 @@
           "ask": {
             "name": "提问（ask_user_question）"
           },
+          "generate_image": {
+            "hint": "需在绘画页选择模型后生效",
+            "name": "聊天生图（generate_image）"
+          },
           "ocr": {
             "name": "文档 OCR（ocr_document）"
-          },
-          "generate_image": {
-            "name": "聊天生图（generate_image）",
-            "hint": "需在绘画页选择模型后生效"
           }
         },
         "externalTitle": "外置工具",
@@ -2312,11 +2418,6 @@
       "onboot": "开机自动启动",
       "title": "启动",
       "totray": "启动时最小化到托盘"
-    },
-    "tray": {
-      "onclose": "关闭时最小化到托盘",
-      "show": "显示托盘图标",
-      "title": "托盘"
     },
     "math": {
       "engine": {
@@ -3251,6 +3352,11 @@
         "time": "显示话题时间"
       }
     },
+    "tray": {
+      "onclose": "关闭时最小化到托盘",
+      "show": "显示托盘图标",
+      "title": "托盘"
+    },
     "use_system_title_bar": {
       "confirm": {
         "content": "更改标题栏样式需要重启应用才能生效，是否现在重启？",
@@ -3267,9 +3373,9 @@
     "files": "文件",
     "home": "首页",
     "knowledge": "知识库",
+    "paintings": "绘画",
     "settings": "设置",
-    "translate": "翻译",
-    "paintings": "绘画"
+    "translate": "翻译"
   },
   "trace": {
     "backList": "返回列表",
@@ -3288,36 +3394,16 @@
     "tokenUsage": "Token使用量",
     "traceWindow": "调用链窗口"
   },
-  "languages": {
-    "arabic": "阿拉伯文",
-    "chinese": "简体中文",
-    "chinese-traditional": "繁体中文",
-    "english": "英文",
-    "french": "法文",
-    "german": "德文",
-    "indonesian": "印尼文",
-    "italian": "意大利文",
-    "japanese": "日文",
-    "korean": "韩文",
-    "malay": "马来文",
-    "polish": "波兰文",
-    "portuguese": "葡萄牙文",
-    "russian": "俄文",
-    "spanish": "西班牙文",
-    "thai": "泰文",
-    "turkish": "土耳其文",
-    "ukrainian": "乌克兰语",
-    "unknown": "未知",
-    "urdu": "乌尔都文",
-    "vietnamese": "越南文"
-  },
-  "tray": {
-    "quit": "退出",
-    "show_mini_window": "快捷助手",
-    "show_window": "显示窗口"
-  },
   "translate": {
     "auto_detect": "自动检测",
+    "error": {
+      "auto_source": "自动检测模式下无法交换",
+      "empty": "未返回翻译结果",
+      "failed": "翻译失败",
+      "not_configured": "请先在翻译页选择翻译模型",
+      "not_pair": "源语言与目标语言不构成有效翻译方向",
+      "same_language": "源语言与目标语言相同"
+    },
     "exchange": "交换语言与文本",
     "history": "翻译历史",
     "history_empty": "暂无翻译记录",
@@ -3329,96 +3415,12 @@
     "settings": "翻译设置",
     "start": "翻译",
     "stop": "停止",
-    "title": "翻译",
-    "error": {
-      "auto_source": "自动检测模式下无法交换",
-      "empty": "未返回翻译结果",
-      "failed": "翻译失败",
-      "not_configured": "请先在翻译页选择翻译模型",
-      "not_pair": "源语言与目标语言不构成有效翻译方向",
-      "same_language": "源语言与目标语言相同"
-    }
+    "title": "翻译"
   },
-  "paintings": {
-    "title": "绘画",
-    "settings": "绘画设置",
-    "settings_empty": "绘画设置",
-    "history": "历史",
-    "operation_failed": "操作失败",
-    "image_file_retry": "部分参考图未能加载，请重试",
-    "param": {
-      "prompt": "提示词",
-      "size": "尺寸",
-      "batch_size": "生成张数",
-      "negative_prompt": "反向提示词",
-      "seed": "种子",
-      "num_inference_steps": "推理步数",
-      "guidance_scale": "引导系数",
-      "quality": "质量"
-    },
-    "prompt_placeholder": "描述你想生成的图像…",
-    "prompt_placeholder_upload": "添加参考图后描述编辑需求…",
-    "prompt_placeholder_upload_required": "此模型需要先添加参考图",
-    "generate": "生成",
-    "custom_width": "宽度",
-    "custom_height": "高度",
-    "add_image": "添加参考图",
-    "select_model": "选择绘画模型",
-    "proxy_required": "下载图片需要先配置代理",
-    "req_error_model": "请先在设置中选择绘画模型",
-    "image_placeholder": "暂无图片",
-    "generating": "绘图进行中，请不要离开页面",
-    "revealing": "正在呈现生成的图片",
-    "custom_size": "自定义尺寸",
-    "prompt_required": "请输入提示词",
-    "text_desc_required": "请先输入图片描述",
-    "image_file_required": "请先上传图片",
-    "image_handle_required": "请先上传图片",
-    "image_mix_failed": "图像混合失败",
-    "input_image_limit_exceeded": "参考图最多 4 张",
-    "generate_failed": "生成失败",
-    "req_error_token": "API 令牌无效，请检查服务商密钥",
-    "req_error_no_balance": "账户余额不足",
-    "zhipu": {
-      "custom_size_required": "请设置自定义尺寸的宽度和高度",
-      "custom_size_range": "自定义尺寸必须在512px-2048px之间",
-      "custom_size_divisible": "自定义尺寸必须能被16整除",
-      "custom_size_pixels": "自定义尺寸的总像素数不能超过2,097,152"
-    },
-    "unsupported_vendor": "不支持该服务商或模型",
-    "image_size_options": {
-      "auto": "自动"
-    },
-    "quality_options": {
-      "auto": "自动",
-      "low": "低",
-      "medium": "中",
-      "high": "高",
-      "standard": "标准",
-      "hd": "高清"
-    },
-    "edit": {
-      "image_required": "图生图模式需要至少一张参考图"
-    },
-    "button": {
-      "new": {
-        "image": "新建绘画"
-      },
-      "select": {
-        "image": "选择此画作"
-      },
-      "delete": {
-        "image": {
-          "label": "删除此画作",
-          "confirm": "确定要删除这幅画作吗？"
-        }
-      }
-    },
-    "showcase": {
-      "title": "开始你的创作",
-      "caption": "选择一个模板，或直接在下方输入描述开始生成",
-      "styles_label": "模板样式"
-    }
+  "tray": {
+    "quit": "退出",
+    "show_mini_window": "快捷助手",
+    "show_window": "显示窗口"
   },
   "update": {
     "install": "立即安装",
