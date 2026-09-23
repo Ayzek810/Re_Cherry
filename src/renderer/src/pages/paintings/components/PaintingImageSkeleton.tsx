@@ -1,3 +1,4 @@
+import { computeContainedImageBox } from '@renderer/pages/paintings/utils/computeContainedImageBox'
 import { cn } from '@renderer/utils/style'
 import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import { type CSSProperties, type FC, type ReactNode, useCallback, useLayoutEffect, useRef, useState } from 'react'
@@ -97,11 +98,13 @@ const PaintingImageSkeleton: FC<{
   // next (never upscaled past its own resolution). Falls back to the
   // declared-ratio box below when dimensions aren't known yet (`container`
   // unmeasured, or the reveal hasn't decoded the natural size).
-  let lockedSize: { width: number; height: number } | null = null
-  if (naturalWidth && naturalHeight && naturalWidth > 0 && naturalHeight > 0 && container && availableHeight != null) {
-    const scale = Math.min(1, container.width / naturalWidth, availableHeight / naturalHeight)
-    lockedSize = { width: naturalWidth * scale, height: naturalHeight * scale }
-  }
+  // fork 缝（v0.3.3-9）：算术抽到 `computeContainedImageBox`（与 Artboard 同一实现、同一组测试），
+  // 保证"完整展示"这条不变量只有一处定义。
+  const lockedSize = computeContainedImageBox(
+    naturalWidth && naturalHeight ? { width: naturalWidth, height: naturalHeight } : null,
+    container,
+    topBarHeight
+  )
 
   // Match the real image's `max-h-full max-w-full` + `object-contain` — resolve
   // the box to explicit pixels wherever its size is known (locked to the decoded
