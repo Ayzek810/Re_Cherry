@@ -9,7 +9,7 @@ import { loggerService } from '@logger'
 import { tabToImageGenerationMode } from '@renderer/pages/paintings/utils/paintingProviderMode'
 import { uuid } from '@renderer/utils'
 import type { ImageGenerationMode, ImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
-import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import type { LightImageResult } from '@shared/lightLlm/types'
 
 import { canonicalGenerate } from './canonicalGenerate'
@@ -64,8 +64,9 @@ export async function paintingGenerate(input: GenerateInput): Promise<LightImage
 
   if (modelId) {
     // fork 缝：V2 在此 try/catch 包 DataApi prefetch；fork 的目录是同步静态数据，
-    // 无失败面（取不到 = 该模型不在这条平面上，support 为 undefined）。
-    support = getImageGenerationSupport(input.provider.id, modelId) ?? undefined
+    // 无失败面。目录未收录时 `resolveImageGenerationSupport` 给通用兜底（v0.3.3-9）：
+    // 未登记的 provider/模型（用户自建 OpenAI 兼容 provider 等）照旧能生成。
+    support = resolveImageGenerationSupport(input.provider.id, modelId).support
     const modes = support?.modes
     effectiveMode =
       canonicalMode && modes?.[canonicalMode]

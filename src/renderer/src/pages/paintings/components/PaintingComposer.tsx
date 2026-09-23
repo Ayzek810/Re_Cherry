@@ -35,7 +35,7 @@ import type { Model } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types/file'
 import { cn } from '@renderer/utils/style'
 import { imageExts } from '@shared/config/constant'
-import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import { Settings2 } from 'lucide-react'
 import { type FC, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -142,10 +142,12 @@ const PaintingParamsButton: FC<{
   iconOnly?: boolean
 }> = ({ painting, onConfigChange, onGenerateRandomSeed, iconOnly }) => {
   const { t } = useTranslation()
-  // fork 缝（v0.3.3 批次6）：support 从 fork 目录按 (providerId, model) 解析，
-  // 字段面因此随模型能力变化（V2 是 useImageGenerationSupport 查询，同语义）。
+  // fork 缝（v0.3.3 批次6 / v0.3.3-9）：support 从 fork 目录按 (providerId, model) 解析，
+  // 字段面因此随模型能力变化（V2 是 useImageGenerationSupport 查询，同语义）。目录未收录时
+  // 用**通用兜底字段面**——V2 里"没字段就整块隐藏"可行是因为它的模型表就是 registry 表，
+  // fork 的绘画页按模型能力列模型（含用户自建 provider），隐藏等于把参数入口整块删掉。
   const support = useMemo(
-    () => getImageGenerationSupport(painting.providerId, painting.model) ?? undefined,
+    () => resolveImageGenerationSupport(painting.providerId, painting.model).support,
     [painting.providerId, painting.model]
   )
   const configItems = useMemo(

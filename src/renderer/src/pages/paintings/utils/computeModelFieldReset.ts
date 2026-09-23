@@ -11,7 +11,7 @@ import { loggerService } from '@logger'
 import type { BaseConfigItem } from '@renderer/pages/paintings/form/baseConfigItem'
 import { imageGenerationToFields } from '@renderer/pages/paintings/form/imageGenerationToFields'
 import type { ImageGenerationMode, ImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
-import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 
 const logger = loggerService.withContext('paintings/modelFieldReset')
 
@@ -46,11 +46,11 @@ export async function computeModelFieldReset(input: {
   const { providerId, oldModelId, newModelId, mode, currentValues = {} } = input
   if (oldModelId && oldModelId === newModelId) return {}
 
-  // fork 缝：V2 在此 await prefetch（可失败 → undefined）；fork 目录同步，
-  // 取不到即 undefined（该模型不在这条平面上）。
+  // fork 缝：V2 在此 await prefetch（可失败 → undefined）；fork 目录同步，未收录时
+  // `resolveImageGenerationSupport` 给通用兜底字段面（v0.3.3-9），厂商不在本平面才 undefined。
   const fetchSupport = (modelId: string): ImageGenerationSupport | undefined => {
     try {
-      return getImageGenerationSupport(providerId, modelId) ?? undefined
+      return resolveImageGenerationSupport(providerId, modelId).support
     } catch (error) {
       logger.warn('Failed to resolve image-generation-support', { providerId, modelId, error })
       return undefined

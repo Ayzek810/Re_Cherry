@@ -12,7 +12,7 @@ import { providerKeyStore } from '@main/services/ProviderKeyStore'
 import {
   buildImageWireBody,
   IMAGE_WIRE_PROFILES,
-  resolveImageWireProfile
+  imageWireProfileForProvider
 } from '@shared/lightLlm/imageGenerationCatalog'
 import type { LightImageEditCall, LightImageGenerateCall, LightImageResult } from '@shared/lightLlm/types'
 import { UNSUPPORTED_VENDOR_ERROR_PREFIX } from '@shared/lightLlm/types'
@@ -61,11 +61,15 @@ function endpoint(apiHost: string, path: string): string {
 
 /**
  * fork 缝：少数 OpenAI 兼容网关的 API 版本段不是 `/v1`（V2 各家 provider 的
- * `baseUrl` 各自携带版本，如智谱 `https://open.bigmodel.cn/api/paas/v4`），
- * `/v1` 去重规则对它们会拼出 `/api/paas/v4/v1/images/generations` 这种无效路径。
+ * `baseUrl` 各自携带版本，如智谱 `https://open.bigmodel.cn/api/paas/v4`、火山 Ark
+ * `https://ark.cn-beijing.volces.com/api/v3`），`/v1` 去重规则对它们会拼出
+ * `/api/paas/v4/v1/images/generations`、`/api/v3/v1/images/generations` 这种无效路径。
  * 按 host 后缀识别并去掉多余的 `/v1`；其余 host 保持 V2 等价行为。
+ *
+ * `v0.3.3-9`：补 `/api/v3`（火山 Ark 的图像接口就是 `{base}/images/generations`，
+ * seedream 系列走这里）——此前 doubao 被当作"范围外"拒绝，属于**误杀**。
  */
-const VERSIONED_API_HOST_SUFFIXES = ['/api/paas/v4']
+const VERSIONED_API_HOST_SUFFIXES = ['/api/paas/v4', '/api/v3']
 
 function imageEndpoint(apiHost: string, path: string): string {
   const base = apiHost.replace(/\/+$/, '')
@@ -218,9 +222,14 @@ export function abortLightImage(requestId: string): void {
  * 解析本请求要用的 v2 wire profile。缺省（`generate_image` 工具等无目录信息的
  * 调用方）走 `diffusion` 兼容档，只下发 `size`/`n` 两个基础字段；登记在表的
  * provider（openai / openrouter / dmxapi / zhipu / silicon …）按表改名。
+ *
+ * fork 缝（v0.3.3-9）：**未登记的 provider id 也落 `diffusion` 档**——fork 允许用户自建
+ * OpenAI 兼容 provider（以前就是 POST `/v1/images/generations`），在入口把它拒掉等于砍掉
+ * 用户自己的端点。只有 `OFF_PLANE_VENDOR_IDS`（V2 靠 `vendorTransport` 换端点的厂商）
+ * 才走明错，判定统一在 `imageWireProfileForProvider`。
  */
 function imageWireProfileFor(call: { provider: string; wireProfileId?: string }) {
-  return resolveImageWireProfile(call.wireProfileId ?? call.provider) ?? IMAGE_WIRE_PROFILES.diffusion
+  return imageWireProfileForProvider(call.wireProfileId ?? call.provider) ?? IMAGE_WIRE_PROFILES.diffusion
 }
 
 /**
@@ -282,9 +291,10 @@ export async function lightGenerateImage(
   assertNonEmptyString(call.provider, 'provider')
   assertNonEmptyString(call.model, 'model')
   assertNonEmptyString(call.prompt, 'prompt')
-  // fork 缝：范围外 provider 走明错（V2 由 registry 的 vendorTransport 决定端点，
-  // fork 无该层，故在进入请求前显式拒绝，绝不静默丢参数）。
-  if (resolveImageWireProfile(call.wireProfileId ?? call.provider) === undefined) {
+  // fork 缝：**明确不在本平面**的厂商走明错（V2 由 registry 的 vendorTransport 决定端点，
+  // fork 无该层，故在进入请求前显式拒绝，绝不静默丢参数）；未登记的 provider id（用户自建的
+  // OpenAI 兼容 provider）不在此列，按 `diffusion` 兼容档放行。
+  if (imageWireProfileForProvider(call.wireProfileId ?? call.provider) === undefined) {
     throw unsupportedVendor(call.provider, call.model)
   }
   const route = resolveRoute(call.provider)
@@ -324,7 +334,8 @@ export async function lightEditImage(call: LightImageEditCall, signal?: AbortSig
   if (!Array.isArray(call.inputImages) || call.inputImages.length === 0) {
     throw new Error('lightLlm: invalid inputImages')
   }
-  if (resolveImageWireProfile(call.wireProfileId ?? call.provider) === undefined) {
+  // 同 `lightGenerateImage`：不在本平面的厂商明错，未登记的 provider id 按兼容档放行。
+  if (imageWireProfileForProvider(call.wireProfileId ?? call.provider) === undefined) {
     throw unsupportedVendor(call.provider, call.model)
   }
   const route = resolveRoute(call.provider)
