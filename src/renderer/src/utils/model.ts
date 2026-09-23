@@ -3,6 +3,7 @@ import {
   isFunctionCallingModel,
   isReasoningModel,
   isRerankModel,
+  isTextToImageModel,
   isVisionModel,
   isWebSearchModel
 } from '@renderer/config/models'
@@ -22,6 +23,7 @@ export const getModelTags = (models: Model[]): Record<ModelTag, boolean> => {
     function_calling: false,
     web_search: false,
     rerank: false,
+    image_generation: false,
     free: false
   }
   const total = objectKeys(result).length
@@ -54,6 +56,11 @@ export const getModelTags = (models: Model[]): Record<ModelTag, boolean> => {
     if (!result.rerank && isRerankModel(model)) {
       satisfied += 1
       result.rerank = true
+    }
+    // 「生图」标签（窄语义 = V2 专用/文生图），与行内标签同一判据
+    if (!result.image_generation && isTextToImageModel(model)) {
+      satisfied += 1
+      result.image_generation = true
     }
     if (!result.free && isFreeModel(model)) {
       satisfied += 1

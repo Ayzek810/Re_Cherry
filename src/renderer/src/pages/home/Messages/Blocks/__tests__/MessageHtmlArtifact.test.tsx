@@ -2,12 +2,13 @@
  * 交互式 HTML 预览的同意门行为测试：静态文档与片段走无脚本受限帧；含活动内容的文档
  * 必须先经同意卡，批准只对「这一个 html 串」有效（内容一变即重新要求同意），
  * 批准后挂载专用 partition 的沙箱 webview。
+ * 另钉住卡片工具栏的两枚按钮：复制源代码、预览/代码切换。
  */
 import { HtmlArtifactPopupHost } from '@renderer/components/CodeBlockView/HtmlArtifactPopupContext'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import type * as ReactI18next from 'react-i18next'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { MessageHtmlArtifact } from '../MessageHtmlArtifact'
 
@@ -17,6 +18,11 @@ vi.mock('react-i18next', async (importOriginal) => {
   return { ...actual, useTranslation: () => ({ t: (key: string) => key }) }
 })
 
+// CodeViewer 需要 CodeStyleProvider 上下文与虚拟滚动测量，这里只钉"切到代码 = 渲染源码"这条契约。
+vi.mock('@renderer/components/CodeViewer', () => ({
+  default: ({ value }: { value: string }) => <pre data-testid="artifact-code-view">{value}</pre>
+}))
+
 const renderArtifact = (props: ComponentProps<typeof MessageHtmlArtifact>) =>
   render(
     <HtmlArtifactPopupHost>
@@ -25,6 +31,10 @@ const renderArtifact = (props: ComponentProps<typeof MessageHtmlArtifact>) =>
   )
 
 describe('MessageHtmlArtifact', () => {
+  beforeEach(() => {
+    window.toast = { success: vi.fn(), error: vi.fn() } as any
+  })
+
   it('gates a document with active content behind the consent card', () => {
     renderArtifact({ artifactId: 'artifact', html: '<script>alert(1)</script>', kind: 'document' })
 
@@ -94,5 +104,37 @@ describe('MessageHtmlArtifact', () => {
     const iframe = screen.getByTitle('common.html_preview')
     expect(iframe).toHaveAttribute('sandbox', '')
     expect(iframe.getAttribute('srcdoc')).toContain("default-src 'none'")
+  })
+
+  it('copies the html source with the toolbar copy button', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    renderArtifact({ artifactId: 'artifact', html: '<h1>Hello</h1>\n', kind: 'document' })
+
+    fireEvent.click(screen.getByLabelText('code_block.copy.source'))
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('<h1>Hello</h1>'))
+    expect(window.toast.success).toHaveBeenCalledWith('code_block.copy.success')
+  })
+
+  it('switches between the preview and the html source view', () => {
+    renderArtifact({ artifactId: 'artifact', html: '<h1>Hello</h1>', kind: 'document' })
+
+    // 预览面与源码面互斥，且预览**不卸载**（重建 iframe 要重解析整份文档）。
+    const iframe = screen.getByTitle('common.html_preview')
+    expect(iframe).toBeVisible()
+
+    fireEvent.click(screen.getByLabelText('html_artifacts.code'))
+
+    expect(screen.getByLabelText('html_artifacts.preview')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('artifact-code-view')).toHaveTextContent('<h1>Hello</h1>')
+    expect(iframe).not.toBeVisible()
+    expect(screen.getByTitle('common.html_preview')).toBe(iframe)
+
+    fireEvent.click(screen.getByLabelText('html_artifacts.preview'))
+
+    expect(screen.getByLabelText('html_artifacts.code')).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByTestId('artifact-code-view')).not.toBeInTheDocument()
+    expect(iframe).toBeVisible()
   })
 })

@@ -1,12 +1,11 @@
-import { getProviderByModel } from '@renderer/services/AssistantService'
 import type { Model } from '@renderer/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { isEmbeddingModel, isRerankModel } from '../embedding'
 import {
   isAutoEnableImageGenerationModel,
+  isChatCandidateModel,
   isGenerateImageModel,
-  isPureGenerateImageModel,
   isTextToImageModel,
   isVisionModel
 } from '../vision'
@@ -49,10 +48,6 @@ vi.mock('@renderer/hooks/useSettings', () => ({
   getStoreSetting: vi.fn()
 }))
 
-vi.mock('@renderer/services/AssistantService', () => ({
-  getProviderByModel: vi.fn()
-}))
-
 vi.mock('../embedding', () => ({
   isEmbeddingModel: vi.fn(),
   isRerankModel: vi.fn()
@@ -66,58 +61,109 @@ const createModel = (overrides: Partial<Model> = {}): Model => ({
   ...overrides
 })
 
-const providerMock = vi.mocked(getProviderByModel)
 const embeddingMock = vi.mocked(isEmbeddingModel)
 const rerankMock = vi.mocked(isRerankModel)
 
 describe('vision helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    providerMock.mockReturnValue({ type: 'openai-response' } as any)
     embeddingMock.mockReturnValue(false)
     rerankMock.mockReturnValue(false)
   })
 
-  describe('isGenerateImageModel', () => {
-    it('returns false for embedding/rerank models or missing providers', () => {
+  describe('isGenerateImageModel (宽语义：生图场景唯一判据)', () => {
+    it('returns false for embedding/rerank models', () => {
       embeddingMock.mockReturnValueOnce(true)
-      expect(isGenerateImageModel(createModel({ id: 'gpt-image-1' }))).toBe(false)
+      expect(isGenerateImageModel(createModel({ id: 'dall-e-3' }))).toBe(false)
 
       embeddingMock.mockReturnValue(false)
       rerankMock.mockReturnValueOnce(true)
-      expect(isGenerateImageModel(createModel({ id: 'gpt-image-1' }))).toBe(false)
-
-      rerankMock.mockReturnValue(false)
-      providerMock.mockReturnValueOnce(undefined as any)
-      expect(isGenerateImageModel(createModel({ id: 'gpt-image-1' }))).toBe(false)
+      expect(isGenerateImageModel(createModel({ id: 'dall-e-3' }))).toBe(false)
     })
 
-    it('detects OpenAI and third-party generative image models', () => {
-      expect(isGenerateImageModel(createModel({ id: 'gpt-4o-mini' }))).toBe(true)
-
-      providerMock.mockReturnValue({ type: 'custom' } as any)
-      expect(isGenerateImageModel(createModel({ id: 'gemini-2.5-flash-image' }))).toBe(true)
+    it('honours the user override in both directions, ahead of all data', () => {
+      // 手选 true：目录里没有的模型也成立（编辑弹窗那枚开关写的就是它）
+      expect(
+        isGenerateImageModel(
+          createModel({ id: 'gpt-4o', capabilities: [{ type: 'image_generation', isUserSelected: true }] })
+        )
+      ).toBe(true)
+      // 手选 false：目录命中的模型也被否决
+      expect(
+        isGenerateImageModel(
+          createModel({
+            id: 'dall-e-3',
+            capabilities: [{ type: 'image_generation', isUserSelected: false }]
+          })
+        )
+      ).toBe(false)
     })
 
-    it('returns false when openai-response model is not on allow list', () => {
-      expect(isGenerateImageModel(createModel({ id: 'gpt-4.2-experimental' }))).toBe(false)
+    it('trusts an image-generation endpoint declaration', () => {
+      expect(
+        isGenerateImageModel(createModel({ id: 'local-sd', provider: 'custom', endpoint_type: 'image-generation' }))
+      ).toBe(true)
+      expect(
+        isGenerateImageModel(
+          createModel({ id: 'local-sd', provider: 'custom', supported_endpoint_types: ['image-generation'] })
+        )
+      ).toBe(true)
+    })
+
+    it('reads the ported V2 registry catalog', () => {
+      expect(isGenerateImageModel(createModel({ id: 'dall-e-3', provider: 'openai' }))).toBe(true)
+      expect(isGenerateImageModel(createModel({ id: 'gpt-image-1', provider: 'openai' }))).toBe(true)
+      expect(isGenerateImageModel(createModel({ id: 'cogview-4', provider: 'zhipu' }))).toBe(true)
+      expect(isGenerateImageModel(createModel({ id: 'gemini-2-5-flash-image', provider: 'openrouter' }))).toBe(true)
+    })
+
+    it('falls back to no id list at all (chat models stay chat models)', () => {
+      expect(isGenerateImageModel(createModel({ id: 'gpt-4o' }))).toBe(false)
+      expect(isGenerateImageModel(createModel({ id: 'gpt-4o-mini' }))).toBe(false)
+      expect(isGenerateImageModel(createModel({ id: 'o3' }))).toBe(false)
+      expect(isGenerateImageModel(createModel({ id: 'midjourney-v6' }))).toBe(false)
+      expect(isGenerateImageModel(createModel({ id: 'gemini-2.5-flash' }))).toBe(false)
     })
   })
 
-  describe('isPureGenerateImageModel', () => {
-    it('requires both generate and text-to-image support', () => {
-      expect(isPureGenerateImageModel(createModel({ id: 'gpt-image-1' }))).toBe(true)
-      expect(isPureGenerateImageModel(createModel({ id: 'gpt-4o' }))).toBe(false)
-      expect(isPureGenerateImageModel(createModel({ id: 'gemini-2.5-flash-image-preview' }))).toBe(true)
+  describe('isTextToImageModel (窄语义：V2 IMAGE_GENERATION && !REASONING)', () => {
+    it('accepts dedicated text-to-image models', () => {
+      expect(isTextToImageModel(createModel({ id: 'dall-e-3', provider: 'openai' }))).toBe(true)
+      expect(isTextToImageModel(createModel({ id: 'gpt-image-1', provider: 'openai' }))).toBe(true)
+      expect(isTextToImageModel(createModel({ id: 'cogview-4', provider: 'zhipu' }))).toBe(true)
+    })
+
+    it('rejects image models that also carry reasoning in the registry', () => {
+      expect(isTextToImageModel(createModel({ id: 'gemini-2-5-flash-image', provider: 'openrouter' }))).toBe(false)
+      expect(isTextToImageModel(createModel({ id: 'gpt-5-image', provider: 'openrouter' }))).toBe(false)
+    })
+
+    it('rejects anything that is not an image model at all', () => {
+      expect(isTextToImageModel(createModel({ id: 'gpt-4o' }))).toBe(false)
+      // 名字像生图模型但没有数据依据：不再有名单兜底
+      expect(isTextToImageModel(createModel({ id: 'midjourney-v6' }))).toBe(false)
+    })
+
+    it('treats a user-marked model without registry reasoning as text-to-image', () => {
+      expect(
+        isTextToImageModel(
+          createModel({ id: 'gpt-4o', capabilities: [{ type: 'image_generation', isUserSelected: true }] })
+        )
+      ).toBe(true)
+    })
+  })
+
+  describe('isChatCandidateModel', () => {
+    it('is the negation of the image judgement', () => {
+      expect(isChatCandidateModel(createModel({ id: 'gpt-4o' }))).toBe(true)
+      expect(isChatCandidateModel(createModel({ id: 'dall-e-3', provider: 'openai' }))).toBe(false)
+
+      embeddingMock.mockReturnValueOnce(true)
+      expect(isChatCandidateModel(createModel({ id: 'gpt-4o' }))).toBe(false)
     })
   })
 
   describe('text-to-image helpers', () => {
-    it('matches predefined keywords', () => {
-      expect(isTextToImageModel(createModel({ id: 'midjourney-v6' }))).toBe(true)
-      expect(isTextToImageModel(createModel({ id: 'gpt-4o' }))).toBe(false)
-    })
-
     it('auto-enables image generation for supported models', () => {
       expect(isAutoEnableImageGenerationModel(createModel({ id: 'gemini-2.5-flash-image-ultra' }))).toBe(true)
     })

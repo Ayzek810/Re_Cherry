@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import { CopyIcon, DeleteIcon, EditIcon, RefreshIcon } from '@renderer/components/Icons'
 import InspectMessagePopup from '@renderer/components/Popups/InspectMessagePopup'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
-import { isEmbeddingModel, isRerankModel, isVisionModel } from '@renderer/config/models'
+import { isChatCandidateModel, isVisionModel } from '@renderer/config/models'
 import type { MessageMenubarButtonId, MessageMenubarScope } from '@renderer/config/registry/messageMenubar'
 import { DEFAULT_MESSAGE_MENUBAR_SCOPE, getMessageMenubarConfig } from '@renderer/config/registry/messageMenubar'
 import { useMessageEditing } from '@renderer/context/MessageEditingContext'
@@ -370,7 +370,7 @@ const MessageMenubar: FC<Props> = (props) => {
 
   // 按条件筛选能够提及的模型，该函数仅在isAssistantMessage时会用到
   const mentionModelFilter = useMemo(() => {
-    const defaultFilter = (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model)
+    const defaultFilter = (model: Model) => isChatCandidateModel(model)
 
     if (!isAssistantMessage) {
       return defaultFilter

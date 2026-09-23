@@ -1,6 +1,7 @@
 import CopyIcon from '@renderer/components/Icons/CopyIcon'
 import {
   EmbeddingTag,
+  ImageGenerationTag,
   ReasoningTag,
   RerankerTag,
   ToolsCallingTag,
@@ -12,6 +13,7 @@ import { endpointTypeOptions } from '@renderer/config/endpointTypes'
 import {
   isEmbeddingModel,
   isFunctionCallingModel,
+  isGenerateImageModel,
   isReasoningModel,
   isRerankModel,
   isVisionModel,
@@ -113,7 +115,10 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       ...(isFunctionCallingModel(model) ? (['function_calling'] as const) : []),
       ...(isWebSearchModel(model) ? (['web_search'] as const) : []),
       ...(isEmbeddingModel(model) ? (['embedding'] as const) : []),
-      ...(isRerankModel(model) ? (['rerank'] as const) : [])
+      ...(isRerankModel(model) ? (['rerank'] as const) : []),
+      // v0.3.3-18：生图能力位（宽语义 = `isGenerateImageModel`）——用户手选即最高优先，
+      // 与 V2 `EditModelDrawer` 把主类型选成 image 时写 `IMAGE_GENERATION` 同一件事。
+      ...(isGenerateImageModel(model) ? (['image_generation'] as const) : [])
     ],
     [model]
   )
@@ -160,9 +165,12 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   }, [modelCapabilities])
 
   const ModelCapability = () => {
-    const isRerankDisabled = selectedTypes.includes('embedding')
-    const isEmbeddingDisabled = selectedTypes.includes('rerank')
-    const isOtherDisabled = selectedTypes.includes('rerank') || selectedTypes.includes('embedding')
+    // 排他标签组（v0.3.3-18）：嵌入 / 重排 / 生图 三者互斥，且任一被选中即禁用其余"能力"标签
+    // —— 一个模型不可能既是嵌入模型、又是重排模型、又是生图模型。
+    const exclusiveTypes: ModelType[] = ['embedding', 'rerank', 'image_generation']
+    const selectedExclusive = exclusiveTypes.filter((type) => selectedTypes.includes(type))
+    const isExclusiveDisabled = (type: ModelType) => selectedExclusive.some((selected) => selected !== type)
+    const isOtherDisabled = selectedExclusive.length > 0
 
     const handleResetTypes = () => {
       setModelCapabilities(originalModelCapabilities)
@@ -218,14 +226,21 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
             disabled={isOtherDisabled}
             onClick={() => updateType('function_calling')}
           />
+          {/* 排他组：生图 / 重排 / 嵌入（三枚同组互斥，且任一被选中即禁用上面那四个能力标签）。
+              与嵌入/重排一样**不传 showLabel** —— 那三枚用文字当图标，再渲染 children 会变成「生图 生图」。 */}
+          <ImageGenerationTag
+            inactive={isExclusiveDisabled('image_generation') || !selectedTypes.includes('image_generation')}
+            disabled={isExclusiveDisabled('image_generation')}
+            onClick={() => updateType('image_generation')}
+          />
           <RerankerTag
-            disabled={isRerankDisabled}
-            inactive={isRerankDisabled || !selectedTypes.includes('rerank')}
+            disabled={isExclusiveDisabled('rerank')}
+            inactive={isExclusiveDisabled('rerank') || !selectedTypes.includes('rerank')}
             onClick={() => updateType('rerank')}
           />
           <EmbeddingTag
-            inactive={isEmbeddingDisabled || !selectedTypes.includes('embedding')}
-            disabled={isEmbeddingDisabled}
+            inactive={isExclusiveDisabled('embedding') || !selectedTypes.includes('embedding')}
+            disabled={isExclusiveDisabled('embedding')}
             onClick={() => updateType('embedding')}
           />
         </Flex>

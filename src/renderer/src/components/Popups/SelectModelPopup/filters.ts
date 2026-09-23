@@ -3,6 +3,7 @@ import {
   isFunctionCallingModel,
   isReasoningModel,
   isRerankModel,
+  isTextToImageModel,
   isVisionModel,
   isWebSearchModel
 } from '@renderer/config/models'
@@ -20,6 +21,7 @@ const initialTagSelection: Record<ModelTag, boolean> = {
   function_calling: false,
   web_search: false,
   rerank: false,
+  image_generation: false,
   free: false
 }
 
@@ -35,6 +37,8 @@ export function useModelTagFilter() {
       function_calling: isFunctionCallingModel,
       web_search: isWebSearchModel,
       rerank: isRerankModel,
+      // 「生图」= 专用/文生图（V2 narrow：IMAGE_GENERATION && !REASONING），与行内标签同一判据
+      image_generation: isTextToImageModel,
       free: isFreeModel
     }),
     []

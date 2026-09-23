@@ -35,6 +35,7 @@ vi.mock('@renderer/components/Tags/Model', () => ({
   ToolsCallingTag: mocks.createTagComponent('function_calling'),
   WebSearchTag: mocks.createTagComponent('web_search'),
   RerankerTag: mocks.createTagComponent('rerank'),
+  ImageGenerationTag: mocks.createTagComponent('image_generation'),
   FreeTag: mocks.createTagComponent('free')
 }))
 
@@ -50,12 +51,22 @@ function createSelection(overrides: Partial<Record<ModelTag, boolean>> = {}): Re
     function_calling: true,
     web_search: true,
     rerank: true,
+    image_generation: true,
     free: true
   }
   return { ...base, ...overrides }
 }
 
-const allTags: ModelTag[] = ['vision', 'embedding', 'reasoning', 'function_calling', 'web_search', 'rerank', 'free']
+const allTags: ModelTag[] = [
+  'vision',
+  'embedding',
+  'reasoning',
+  'function_calling',
+  'web_search',
+  'rerank',
+  'image_generation',
+  'free'
+]
 
 describe('TagFilterSection', () => {
   beforeEach(() => {

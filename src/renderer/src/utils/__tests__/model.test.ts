@@ -10,7 +10,8 @@ vi.mock('@renderer/config/models', () => ({
   isReasoningModel: vi.fn().mockImplementation((m: Model) => m.id === 'reasoning'),
   isFunctionCallingModel: vi.fn().mockImplementation((m: Model) => m.id === 'tool'),
   isWebSearchModel: vi.fn().mockImplementation((m: Model) => m.id === 'search'),
-  isRerankModel: vi.fn().mockImplementation((m: Model) => m.id === 'rerank')
+  isRerankModel: vi.fn().mockImplementation((m: Model) => m.id === 'rerank'),
+  isTextToImageModel: vi.fn().mockImplementation((m: Model) => m.id === 'text2image')
 }))
 
 describe('model', () => {
@@ -65,6 +66,10 @@ describe('model', () => {
       ...baseModel,
       id: 'free'
     }
+    const text2ImageModel: Model = {
+      ...baseModel,
+      id: 'text2image'
+    }
 
     it('should get correct tags', () => {
       const models_1 = [visionModel, embeddingModel, reasoningModel, searchModel]
@@ -73,6 +78,7 @@ describe('model', () => {
         embedding: true,
         reasoning: true,
         rerank: false,
+        image_generation: false,
         free: false,
         function_calling: false,
         web_search: true
@@ -85,11 +91,17 @@ describe('model', () => {
         embedding: false,
         reasoning: false,
         rerank: true,
+        image_generation: false,
         free: true,
         function_calling: true,
         web_search: false
       }
       expect(getModelTags(models_2)).toStrictEqual(expected_2)
+    })
+
+    it('should set image_generation when a text-to-image model is present', () => {
+      expect(getModelTags([baseModel]).image_generation).toBe(false)
+      expect(getModelTags([baseModel, text2ImageModel]).image_generation).toBe(true)
     })
   })
 

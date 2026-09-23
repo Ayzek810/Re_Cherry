@@ -3,6 +3,7 @@ import {
   isFunctionCallingModel,
   isReasoningModel,
   isRerankModel,
+  isTextToImageModel,
   isVisionModel,
   isWebSearchModel
 } from '@renderer/config/models'
@@ -16,6 +17,7 @@ import styled from 'styled-components'
 import {
   EmbeddingTag,
   FreeTag,
+  ImageGenerationTag,
   ReasoningTag,
   RerankerTag,
   ToolsCallingTag,
@@ -84,6 +86,8 @@ const ModelTagsWithLabel: FC<ModelTagsProps> = ({
       {showToolsCalling && isFunctionCallingModel(model) && (
         <ToolsCallingTag size={size} showTooltip={showTooltip} showLabel={shouldShowLabel} />
       )}
+      {/* v0.3.3-18：生图标签（窄语义 = V2 的专用/文生图）。与嵌入/重排同形态，只传 size。 */}
+      {isTextToImageModel(model) && <ImageGenerationTag size={size} />}
       {isEmbeddingModel(model) && <EmbeddingTag size={size} />}
       {showFree && isFreeModel(model) && <FreeTag size={size} />}
       {isRerankModel(model) && <RerankerTag size={size} />}

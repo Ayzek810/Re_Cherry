@@ -1,7 +1,7 @@
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
 import { isLocalAi } from '@renderer/config/env'
-import { isEmbeddingModel, isRerankModel, isWebSearchModel } from '@renderer/config/models'
+import { isChatCandidateModel, isWebSearchModel } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { getProviderName } from '@renderer/services/ProviderService'
@@ -23,7 +23,8 @@ const SelectModelButton: FC<Props> = ({ assistant }) => {
   const timerRef = useRef<NodeJS.Timeout>(undefined)
   const provider = useProvider(model?.provider)
 
-  const modelFilter = (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model)
+  // 对话选单：唯一判据 `isChatCandidateModel`（嵌入/重排/生图模型都不能对话）
+  const modelFilter = (model: Model) => isChatCandidateModel(model)
 
   const onSelectModel = async (event: React.MouseEvent<HTMLElement>) => {
     event.currentTarget.blur()

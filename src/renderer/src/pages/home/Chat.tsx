@@ -6,7 +6,7 @@ import MultiSelectActionPopup from '@renderer/components/Popups/MultiSelectionPo
 import PromptPopup from '@renderer/components/Popups/PromptPopup'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
 import { QuickPanelProvider } from '@renderer/components/QuickPanel'
-import { isEmbeddingModel, isRerankModel, isWebSearchModel } from '@renderer/config/models'
+import { isChatCandidateModel, isWebSearchModel } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
@@ -88,7 +88,8 @@ const Chat: FC<Props> = (props) => {
   })
 
   useShortcut('select_model', async () => {
-    const modelFilter = (m: Model) => !isEmbeddingModel(m) && !isRerankModel(m)
+    // 与聊天窗模型钮同一个判据（键盘入口不能有第二套口径）
+    const modelFilter = (m: Model) => isChatCandidateModel(m)
     const selectedModel = await SelectChatModelPopup.show({
       model: assistant?.model,
       filter: modelFilter

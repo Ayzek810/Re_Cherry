@@ -3,7 +3,7 @@ import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { DeleteIcon } from '@renderer/components/Icons'
 import { HStack } from '@renderer/components/Layout'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
-import { isEmbeddingModel, isRerankModel, isTextToImageModel } from '@renderer/config/models'
+import { isChatCandidateModel } from '@renderer/config/models'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
@@ -77,11 +77,8 @@ const QuickAssistantSettings: FC = () => {
   } = useSettings()
   const dispatch = useAppDispatch()
   const { quickAssistantModel } = useAppSelector((state) => state.llm)
-  // 与"默认模型设置"（AssistantModelSettings）同款：弹窗选模型；排除嵌入/重排/绘图
-  const modelFilter = useCallback(
-    (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model) && !isTextToImageModel(model),
-    []
-  )
+  // 与"默认模型设置"同款：统一判据（嵌入/重排/生图都不能对话）
+  const modelFilter = useCallback((model: Model) => isChatCandidateModel(model), [])
 
   const onSelectModel = useCallback(async () => {
     const selected = await SelectChatModelPopup.show({ model: quickAssistantModel ?? undefined, filter: modelFilter })

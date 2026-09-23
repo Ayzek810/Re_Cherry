@@ -1562,6 +1562,8 @@
       "embedding": "Embedding",
       "free": "Free",
       "function_calling": "Tool",
+      "image": "Image",
+      "image_generation": "Image Gen",
       "reasoning": "Reasoning",
       "rerank": "Reranker",
       "select": "Model Types",

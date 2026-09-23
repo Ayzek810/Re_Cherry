@@ -34,7 +34,7 @@ import {
   isVisionModels,
   isZhipuModel
 } from '../utils'
-import { isGenerateImageModel, isTextToImageModel, isVisionModel } from '../vision'
+import { isChatCandidateModel, isGenerateImageModel, isTextToImageModel, isVisionModel } from '../vision'
 import { isOpenAIWebSearchChatCompletionOnlyModel } from '../websearch'
 
 vi.mock('@renderer/hooks/useStore', () => ({
@@ -81,6 +81,7 @@ vi.mock('@renderer/config/models/embedding', () => ({
 }))
 
 vi.mock('../vision', () => ({
+  isChatCandidateModel: vi.fn(),
   isGenerateImageModel: vi.fn(),
   isTextToImageModel: vi.fn(),
   isVisionModel: vi.fn()
@@ -109,6 +110,7 @@ const createModel = (overrides: Partial<Model> = {}): Model => ({
 const embeddingMock = vi.mocked(isEmbeddingModel)
 const rerankMock = vi.mocked(isRerankModel)
 const visionMock = vi.mocked(isVisionModel)
+const chatCandidateMock = vi.mocked(isChatCandidateModel)
 const textToImageMock = vi.mocked(isTextToImageModel)
 const generateImageMock = vi.mocked(isGenerateImageModel)
 const reasoningMock = vi.mocked(isOpenAIReasoningModel)
@@ -120,6 +122,7 @@ describe('model utils', () => {
     embeddingMock.mockReturnValue(false)
     rerankMock.mockReturnValue(false)
     visionMock.mockReturnValue(true)
+    chatCandidateMock.mockReturnValue(true)
     textToImageMock.mockReturnValue(false)
     generateImageMock.mockReturnValue(true)
     reasoningMock.mockReturnValue(false)
@@ -664,24 +667,21 @@ describe('model utils', () => {
     })
 
     describe('agentModelFilter', () => {
-      it('returns true for regular models', () => {
-        expect(agentModelFilter(createModel())).toBe(true)
+      // 与所有"挑对话模型"的出口同一判据，逐字委托给 isChatCandidateModel
+      it('delegates to the shared chat-candidate predicate', () => {
+        const model = createModel()
+        expect(agentModelFilter(model)).toBe(true)
+        expect(chatCandidateMock).toHaveBeenCalledWith(model)
       })
 
-      it('filters out embedding models', () => {
-        embeddingMock.mockReturnValueOnce(true)
+      it('filters out models the shared predicate rejects', () => {
+        chatCandidateMock.mockReturnValueOnce(false)
         expect(agentModelFilter(createModel({ id: 'text-embedding' }))).toBe(false)
-      })
 
-      it('filters out rerank models', () => {
-        embeddingMock.mockReturnValue(false)
-        rerankMock.mockReturnValueOnce(true)
+        chatCandidateMock.mockReturnValueOnce(false)
         expect(agentModelFilter(createModel({ id: 'rerank' }))).toBe(false)
-      })
 
-      it('filters out text-to-image models', () => {
-        rerankMock.mockReturnValue(false)
-        textToImageMock.mockReturnValueOnce(true)
+        chatCandidateMock.mockReturnValueOnce(false)
         expect(agentModelFilter(createModel({ id: 'gpt-image-1' }))).toBe(false)
       })
     })

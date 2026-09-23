@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   isFunctionCallingModel: vi.fn(),
   isWebSearchModel: vi.fn(),
   isRerankModel: vi.fn(),
+  isTextToImageModel: vi.fn(),
   isFreeModel: vi.fn()
 }))
 
@@ -19,6 +20,7 @@ vi.mock('@renderer/config/models', () => ({
   isFunctionCallingModel: mocks.isFunctionCallingModel,
   isReasoningModel: mocks.isReasoningModel,
   isRerankModel: mocks.isRerankModel,
+  isTextToImageModel: mocks.isTextToImageModel,
   isVisionModel: mocks.isVisionModel,
   isWebSearchModel: mocks.isWebSearchModel
 }))
@@ -52,6 +54,7 @@ describe('useModelTagFilter', () => {
       function_calling: false,
       web_search: false,
       rerank: false,
+      image_generation: false,
       free: false
     })
     expect(result.current.selectedTags).toEqual([])
@@ -100,6 +103,17 @@ describe('useModelTagFilter', () => {
     expect(ok).toBe(true)
     expect(mocks.isVisionModel).toHaveBeenCalledTimes(1)
     expect(mocks.isVisionModel).toHaveBeenCalledWith(model)
+  })
+
+  it('tagFilter routes image_generation to the narrow text-to-image predicate', () => {
+    const { result } = renderHook(() => useModelTagFilter())
+    const model = createModel()
+
+    act(() => result.current.toggleTag('image_generation'))
+    mocks.isTextToImageModel.mockReturnValueOnce(true)
+
+    expect(result.current.tagFilter(model)).toBe(true)
+    expect(mocks.isTextToImageModel).toHaveBeenCalledWith(model)
   })
 
   it('tagFilter requires all selected tags to match (AND logic)', () => {

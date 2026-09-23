@@ -5,7 +5,7 @@ import EmojiPicker from '@renderer/components/EmojiPicker'
 import { DeleteIcon } from '@renderer/components/Icons'
 import { HSpaceBetweenStack, HStack } from '@renderer/components/Layout'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
-import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
+import { isChatCandidateModel } from '@renderer/config/models'
 import useAssistantIdentityImage from '@renderer/hooks/useAssistantIdentityImage'
 import { usePromptProcessor } from '@renderer/hooks/usePromptProcessor'
 import { createIdentityImage, releaseIdentityImage } from '@renderer/services/assistantIdentity'
@@ -101,7 +101,7 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
     }
   }
 
-  const modelFilter = (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model)
+  const modelFilter = (model: Model) => isChatCandidateModel(model)
 
   const onSelectModel = async () => {
     const selectedModel = await SelectChatModelPopup.show({ model: defaultModel, filter: modelFilter })

@@ -13,7 +13,7 @@ import {
   MAX_TOOL_CALLS,
   MIN_TOOL_CALLS
 } from '@renderer/config/constant'
-import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
+import { isChatCandidateModel } from '@renderer/config/models'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { SettingRow } from '@renderer/pages/settings'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
@@ -218,7 +218,7 @@ const AssistantModelSettings: FC<Props> = ({ assistant, updateAssistant, updateA
     setMaxToolCalls(DEFAULT_ASSISTANT_SETTINGS.maxToolCalls)
     updateAssistantSettings(DEFAULT_ASSISTANT_SETTINGS)
   }
-  const modelFilter = (model: Model) => !isEmbeddingModel(model) && !isRerankModel(model)
+  const modelFilter = (model: Model) => isChatCandidateModel(model)
 
   const onSelectModel = useCallback(async () => {
     const currentModel = defaultModel ? assistant?.model : undefined
