@@ -17,6 +17,8 @@ type Props = {
   onSourceChange: (value: TranslateLangCode | 'auto') => void
   target: TranslateLangCode
   onTargetChange: (value: TranslateLangCode) => void
+  /** V1 语义（`TranslatePage.tsx:743-745`）：auto 源语言检测到的实际语言，追加在自动检测项后。 */
+  detectedLanguage?: TranslateLangCode | null
   languageLabel: (code: TranslateLangCode | 'auto') => string
   exchangeDisabled: boolean
   onExchange: () => void
@@ -30,6 +32,7 @@ const TranslateLanguageBar: FC<Props> = ({
   onSourceChange,
   target,
   onTargetChange,
+  detectedLanguage,
   languageLabel,
   exchangeDisabled,
   onExchange
@@ -45,9 +48,16 @@ const TranslateLanguageBar: FC<Props> = ({
     [languageLabel]
   )
 
+  /** V1 `TranslatePage.tsx:743-745`：自动检测项的文案是 `自动检测 (检测到的语言)`。 */
   const sourceOptions = useMemo(
-    () => [{ value: 'auto' as const, label: `🌐 ${languageLabel('auto')}` }, ...languageOptions],
-    [languageLabel, languageOptions]
+    () => [
+      {
+        value: 'auto' as const,
+        label: `🌐 ${languageLabel('auto')}${detectedLanguage ? ` (${languageLabel(detectedLanguage)})` : ''}`
+      },
+      ...languageOptions
+    ],
+    [detectedLanguage, languageLabel, languageOptions]
   )
 
   return (

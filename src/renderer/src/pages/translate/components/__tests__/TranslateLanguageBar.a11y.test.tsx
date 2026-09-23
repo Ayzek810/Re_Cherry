@@ -20,6 +20,11 @@ vi.mock('antd', () => ({
       data-testid={`select-${String(props.value)}`}
       data-aria-label={String(props['aria-label'] ?? '')}
       data-options-count={Array.isArray(props.options) ? props.options.length : 0}
+      data-options-labels={
+        Array.isArray(props.options)
+          ? (props.options as Array<{ label?: unknown }>).map((option) => String(option.label)).join('|')
+          : ''
+      }
     />
   ),
   Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>
@@ -68,5 +73,23 @@ describe('TranslateLanguageBar · 可访问名', () => {
       container.querySelector('[data-testid="select-zh-cn"]')?.getAttribute('data-options-count')
     )
     expect(sourceOptions).toBe(targetOptions + 1)
+  })
+
+  it('检测到语言后，自动检测项显示 `自动检测 (检测到的语言)`（V1 TranslatePage:743-745）', () => {
+    const { container } = render(
+      <TranslateLanguageBar
+        source="auto"
+        onSourceChange={vi.fn()}
+        target="zh-cn"
+        onTargetChange={vi.fn()}
+        detectedLanguage="ja-jp"
+        languageLabel={languageLabel}
+        exchangeDisabled={false}
+        onExchange={vi.fn()}
+      />
+    )
+
+    const labels = container.querySelector('[data-testid="select-auto"]')?.getAttribute('data-options-labels') ?? ''
+    expect(labels.split('|')[0]).toBe('🌐 label:auto (label:ja-jp)')
   })
 })

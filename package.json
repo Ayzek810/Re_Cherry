@@ -113,6 +113,7 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "@libsql/client": "0.14.0",
     "font-list": "2.0.0",
+    "franc-min": "6.2.0",
     "gray-matter": "4.0.3",
     "mammoth": "1.11.0",
     "node-stream-zip": "1.15.0",
