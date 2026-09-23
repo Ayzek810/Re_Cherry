@@ -1,7 +1,7 @@
 import { HStack } from '@renderer/components/Layout'
 import ModelSelector from '@renderer/components/ModelSelector'
 import { InfoTooltip } from '@renderer/components/TooltipIcons'
-import { isEmbeddingModel, isRerankModel, isTextToImageModel, isVisionModel } from '@renderer/config/models'
+import { isChatCandidateModel, isVisionModel } from '@renderer/config/models'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useProviders } from '@renderer/hooks/useProvider'
@@ -47,10 +47,8 @@ const ModelSettings: FC<ModelSettingsProps> = ({
   const dispatch = useAppDispatch()
   const paintingModel = useAppSelector((state) => state.llm.paintingModel)
 
-  const modelPredicate = useCallback(
-    (m: Model) => !isEmbeddingModel(m) && !isRerankModel(m) && !isTextToImageModel(m),
-    []
-  )
+  // 对话/默认模型选单：统一判据（嵌入/重排/生图都不能对话）
+  const modelPredicate = useCallback((m: Model) => isChatCandidateModel(m), [])
 
   const defaultModelValue = useMemo(
     () => (hasModel(defaultModel) ? getModelUniqId(defaultModel) : undefined),
@@ -183,7 +181,9 @@ const ModelSettings: FC<ModelSettingsProps> = ({
               placeholder={t('settings.models.empty')}
             />
           </HStack>
-          {showDescription && <SettingDescription>{t('settings.models.painting_model_description')}</SettingDescription>}
+          {showDescription && (
+            <SettingDescription>{t('settings.models.painting_model_description')}</SettingDescription>
+          )}
         </SettingGroup>
       )}
     </SettingContainer>

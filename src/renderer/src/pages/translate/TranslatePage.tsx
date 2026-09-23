@@ -6,6 +6,7 @@
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
+import { isChatCandidateModel } from '@renderer/config/models'
 import { langCodeToI18nKey, type TranslateLangCode } from '@renderer/config/translateLanguages'
 import { db } from '@renderer/databases'
 import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'
@@ -14,7 +15,12 @@ import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setTranslateModel } from '@renderer/store/llm'
 import type { TranslateRecord } from '@renderer/types/translate'
 import { cn } from '@renderer/utils/style'
-import { buildTranslatePrompt, detectLanguage, determineTargetLanguage, TRANSLATE_PROMPT } from '@renderer/utils/translate'
+import {
+  buildTranslatePrompt,
+  detectLanguage,
+  determineTargetLanguage,
+  TRANSLATE_PROMPT
+} from '@renderer/utils/translate'
 import { CirclePause, History, Languages, SlidersHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -179,7 +185,11 @@ const TranslatePage = () => {
   }, [source, target, sourceText, outputText, t])
 
   const selectModel = useCallback(async () => {
-    const selected = await SelectChatModelPopup.show({ model: translateModel ?? undefined })
+    // 翻译模型必须是能对话的模型：用统一判据（此前不传 filter，嵌入/重排/生图都能被选中）
+    const selected = await SelectChatModelPopup.show({
+      model: translateModel ?? undefined,
+      filter: isChatCandidateModel
+    })
     if (selected) dispatch(setTranslateModel({ model: selected }))
   }, [dispatch, translateModel])
 

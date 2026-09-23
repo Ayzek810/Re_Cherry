@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isEmbeddingModel, isRerankModel } from '../embedding'
 import { isDeepSeekHybridInferenceModel } from '../reasoning'
 import { isFunctionCallingModel } from '../tooluse'
-import { isPureGenerateImageModel, isTextToImageModel } from '../vision'
+import { isTextToImageModel } from '../vision'
 
 vi.mock('@renderer/hooks/useStore', () => ({
   getStoreProviders: vi.fn(() => [])
@@ -50,7 +50,8 @@ vi.mock('../embedding', () => ({
 }))
 
 vi.mock('../vision', () => ({
-  isPureGenerateImageModel: vi.fn(),
+  // 能力型谓词（工具调用/推理/联网）用的是 V2 的窄义专用生图排除：
+  // `isTextToImageModel = IMAGE_GENERATION && !REASONING`
   isTextToImageModel: vi.fn()
 }))
 
@@ -68,7 +69,6 @@ const createModel = (overrides: Partial<Model> = {}): Model => ({
 
 const embeddingMock = vi.mocked(isEmbeddingModel)
 const rerankMock = vi.mocked(isRerankModel)
-const pureImageMock = vi.mocked(isPureGenerateImageModel)
 const textToImageMock = vi.mocked(isTextToImageModel)
 const deepSeekHybridMock = vi.mocked(isDeepSeekHybridInferenceModel)
 
@@ -77,7 +77,6 @@ describe('isFunctionCallingModel', () => {
     vi.clearAllMocks()
     embeddingMock.mockReturnValue(false)
     rerankMock.mockReturnValue(false)
-    pureImageMock.mockReturnValue(false)
     textToImageMock.mockReturnValue(false)
     deepSeekHybridMock.mockReturnValue(false)
   })
@@ -88,6 +87,12 @@ describe('isFunctionCallingModel', () => {
 
   it('returns false when model is classified as embedding/rerank/image', () => {
     embeddingMock.mockReturnValueOnce(true)
+    expect(isFunctionCallingModel(createModel())).toBe(false)
+
+    rerankMock.mockReturnValueOnce(true)
+    expect(isFunctionCallingModel(createModel())).toBe(false)
+
+    textToImageMock.mockReturnValueOnce(true)
     expect(isFunctionCallingModel(createModel())).toBe(false)
   })
 

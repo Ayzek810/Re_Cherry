@@ -153,6 +153,12 @@ export interface ImageGenerationCatalogEntry {
     /** Set when the v2 block is pipeline-generated (no hand-written override). */
     note?: string
   }
+  /**
+   * v2 `capabilities` for this model (creator 声明 + provider override 的 force/add/remove），原样带出。
+   * fork 用它实现 v2 的 narrow 语义：`isTextToImageModel = IMAGE_GENERATION && !REASONING`
+   * （v2 `src/shared/utils/model.ts:84-86`）—— 「专用 / 文生图」= 有生图能力且**不带 reasoning**。
+   */
+  capabilities: readonly string[]
   support: ImageGenerationSupport
 }
 
@@ -628,6 +634,115 @@ const CREATOR_SUPPORTS: Record<string, ModeSupportTable> = {
   } // packages/provider-registry/src/creators/zhipu.ts:105
 }
 
+/** v2 `capabilities` per entry (creator 声明 + provider override 的 force/add/remove)。 */
+const ENTRY_CAPABILITIES: Record<string, readonly string[]> = {
+  'dmxapi/dall-e-3': ['function-call', 'image-generation', 'file-input'],
+  'dmxapi/doubao-seedream-4-0': ['image-generation'],
+  'dmxapi/doubao-seedream-4-5': ['image-generation'],
+  'dmxapi/gemini-2-5-flash-image': ['reasoning', 'image-recognition', 'image-generation', 'file-input'],
+  'dmxapi/gpt-image-1-5': ['image-recognition', 'image-generation', 'file-input'],
+  'dmxapi/musesteamer-air-image': [],
+  'dmxapi/nano-banana': [],
+  'dmxapi/nano-banana-2': [],
+  'openrouter/flux-2-flex': ['image-generation'],
+  'openrouter/flux-2-klein-4b': ['image-recognition', 'image-generation'],
+  'openrouter/flux-2-max': ['image-recognition', 'image-generation'],
+  'openrouter/flux-2-pro': ['image-generation'],
+  'openrouter/gemini-2-5-flash-image': ['reasoning', 'image-recognition', 'image-generation', 'file-input'],
+  'openrouter/gemini-3-1-flash-image': [
+    'reasoning',
+    'image-recognition',
+    'image-generation',
+    'video-recognition',
+    'structured-output',
+    'file-input'
+  ],
+  'openrouter/gemini-3-1-flash-image-preview': ['reasoning', 'image-recognition', 'image-generation', 'file-input'],
+  'openrouter/gemini-3-1-flash-lite-image': [
+    'function-call',
+    'reasoning',
+    'image-recognition',
+    'image-generation',
+    'structured-output',
+    'file-input'
+  ],
+  'openrouter/gemini-3-pro-image': [
+    'function-call',
+    'reasoning',
+    'image-recognition',
+    'image-generation',
+    'structured-output',
+    'file-input'
+  ],
+  'openrouter/gemini-3-pro-image-preview': ['reasoning', 'image-recognition', 'image-generation', 'file-input'],
+  'openrouter/gpt-5-4-image-2': [
+    'reasoning',
+    'image-recognition',
+    'image-generation',
+    'structured-output',
+    'file-input'
+  ],
+  'openrouter/gpt-5-image': ['reasoning', 'image-recognition', 'image-generation', 'structured-output', 'file-input'],
+  'openrouter/gpt-5-image-mini': [
+    'reasoning',
+    'image-recognition',
+    'image-generation',
+    'structured-output',
+    'file-input'
+  ],
+  'openrouter/gpt-image-1': ['image-recognition', 'image-generation', 'file-input'],
+  'openrouter/gpt-image-1-mini': ['image-recognition', 'image-generation', 'file-input'],
+  'openrouter/gpt-image-2': ['image-recognition', 'image-generation', 'file-input'],
+  'openrouter/grok-imagine-image-2-0': ['image-recognition', 'image-generation', 'file-input'],
+  'openrouter/grok-imagine-image-quality': ['image-recognition', 'image-generation', 'file-input'],
+  'openrouter/krea-2-large': ['image-generation'],
+  'openrouter/krea-2-medium': ['image-generation'],
+  'openrouter/krea-2-medium-turbo': ['image-generation'],
+  'openrouter/mai-image-2-5': ['image-recognition', 'image-generation'],
+  'openrouter/mai-image-2-5-pro': ['image-recognition', 'image-generation'],
+  'openrouter/qwen-image-3': ['image-recognition', 'image-generation'],
+  'openrouter/qwen-image-3-pro': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v3': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-1': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-1-pro': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-1-pro-vector': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-1-utility': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-1-utility-pro': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-1-vector': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-pro': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-pro-vector': ['image-recognition', 'image-generation'],
+  'openrouter/recraft-v4-vector': ['image-recognition', 'image-generation'],
+  'openrouter/riverflow-v2-5-fast': ['image-recognition', 'image-generation'],
+  'openrouter/riverflow-v2-5-pro': ['image-recognition', 'image-generation'],
+  'openrouter/riverflow-v2-fast': ['image-recognition', 'image-generation'],
+  'openrouter/riverflow-v2-pro': ['image-recognition', 'image-generation'],
+  'openrouter/seedream-4-5': ['image-recognition', 'image-generation'],
+  'openrouter/seedream-5-0-lite': ['image-recognition', 'image-generation'],
+  'openrouter/seedream-5-0-pro': ['image-recognition', 'image-generation'],
+  'zhipu/cogview-4': ['image-generation'],
+  'zhipu/glm-image': ['image-generation'],
+  'alibaba/qwen-image': ['image-generation'],
+  'alibaba/qwen-image-3-0': ['image-recognition', 'image-generation'],
+  'alibaba/qwen-image-3-0-pro': ['image-recognition', 'image-generation'],
+  'alibaba/qwen-image-edit': ['image-recognition', 'image-generation', 'file-input'],
+  'alibaba/wan2-6-image': ['image-generation'],
+  'alibaba/wan2-6-t2i': ['image-generation'],
+  'alibaba/wan2-7-image': ['image-generation'],
+  'alibaba/wan2-7-image-pro': ['image-generation'],
+  'black-forest-labs/flux-2-flex': ['image-generation'],
+  'black-forest-labs/flux-2-pro': ['image-generation'],
+  'black-forest-labs/flux-kontext-max': ['image-generation'],
+  'black-forest-labs/flux-kontext-pro': ['image-generation'],
+  'openai/dall-e-2': ['image-generation'],
+  'openai/dall-e-3': ['function-call', 'image-generation', 'file-input'],
+  'openai/gpt-image-1': ['image-recognition', 'image-generation', 'file-input'],
+  'openai/gpt-image-1-mini': ['image-recognition', 'image-generation', 'file-input'],
+  'openai/gpt-image-2': ['image-recognition', 'image-generation', 'file-input'],
+  'tencent/hy-image-lite': ['image-generation'],
+  'tencent/hy-image-v3-0': ['image-generation']
+}
+
 const PROVIDER_PROVENANCE: Record<string, { file: string; line?: number; note?: string }> = {
   'dmxapi/dall-e-3': { file: 'packages/provider-registry/src/providers/dmxapi.ts', line: 106 },
   'dmxapi/doubao-seedream-4-0': { file: 'packages/provider-registry/src/providers/dmxapi.ts', line: 112 },
@@ -926,6 +1041,7 @@ export function getImageGenerationCatalogEntry(
       owner: providerId,
       modelId,
       provenance: { source: 'provider', ...PROVIDER_PROVENANCE[providerId + '/' + modelId] },
+      capabilities: ENTRY_CAPABILITIES[providerId + '/' + modelId] ?? [],
       support: toSupport(providerId + '/' + modelId, providerTable)
     }
   }
@@ -935,6 +1051,7 @@ export function getImageGenerationCatalogEntry(
       owner: providerId,
       modelId,
       provenance: { source: 'creator', ...CREATOR_PROVENANCE[providerId + '/' + modelId] },
+      capabilities: ENTRY_CAPABILITIES[providerId + '/' + modelId] ?? [],
       support: toSupport(providerId + '/' + modelId, creatorTable)
     }
   }
@@ -1083,6 +1200,12 @@ export const IMAGE_WIRE_PROFILES: Record<string, ImageWireProfile> = {
 /** Default profile for an unregistered provider (v2 DEFAULT_DIFFUSION_REGISTRATION). */
 export const DEFAULT_IMAGE_WIRE_PROFILE_ID = 'diffusion'
 
+/** The profile for `providerId`, or `undefined` when the provider is off this plane. */
+export function resolveImageWireProfile(providerId: string | undefined): ImageWireProfile | undefined {
+  if (!providerId) return undefined
+  return IMAGE_WIRE_PROFILES[providerId]
+}
+
 /**
  * 明确**不在本平面**的厂商 id：V2 靠 registry 的 `vendorTransport` 换成各自的端点
  * （dashscope `/api/v1/services/...`、ppio/aihubmix/tokenhub 网关、google `/v1beta/models`、
@@ -1158,9 +1281,7 @@ const GENERIC_ALWAYS_KEYS: readonly CanonicalParamKey[] = ['size', 'numImages']
 /**
  * 目录未收录时的通用字段面；厂商明确不在本平面则返回 `undefined`（与主进程的明错一致）。
  */
-export function buildGenericImageGenerationSupport(
-  providerId: string | undefined
-): ImageGenerationSupport | undefined {
+export function buildGenericImageGenerationSupport(providerId: string | undefined): ImageGenerationSupport | undefined {
   const profile = imageWireProfileForProvider(providerId)
   if (!profile) return undefined
   const supports: Partial<Record<CanonicalParamKey, SupportSpec>> = {}
@@ -1191,12 +1312,6 @@ export function resolveImageGenerationSupport(
   if (support) return { support, source: 'catalog' }
   const generic = buildGenericImageGenerationSupport(providerId)
   return generic ? { support: generic, source: 'generic' } : { support: undefined, source: 'off-plane' }
-}
-
-/** The profile for `providerId`, or `undefined` when the provider is off this plane. */
-export function resolveImageWireProfile(providerId: string | undefined): ImageWireProfile | undefined {
-  if (!providerId) return undefined
-  return IMAGE_WIRE_PROFILES[providerId]
 }
 
 /**

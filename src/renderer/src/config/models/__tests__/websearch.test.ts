@@ -20,14 +20,11 @@ vi.mock('../embedding', () => ({
   isRerankModel: (...args: any[]) => isRerankModel(...args)
 }))
 
-const isPureGenerateImageModel = vi.hoisted(() => vi.fn())
 const isTextToImageModel = vi.hoisted(() => vi.fn())
 const isGenerateImageModel = vi.hoisted(() => vi.fn())
 vi.mock('../vision', () => ({
-  isPureGenerateImageModel: (...args: any[]) => isPureGenerateImageModel(...args),
   isTextToImageModel: (...args: any[]) => isTextToImageModel(...args),
-  isGenerateImageModel: (...args: any[]) => isGenerateImageModel(...args),
-  isModernGenerateImageModel: vi.fn()
+  isGenerateImageModel: (...args: any[]) => isGenerateImageModel(...args)
 }))
 
 const providerMocks = vi.hoisted(() => ({
@@ -108,7 +105,6 @@ const resetMocks = () => {
   providerMock.mockReturnValue(createProvider())
   isEmbeddingModel.mockReturnValue(false)
   isRerankModel.mockReturnValue(false)
-  isPureGenerateImageModel.mockReturnValue(false)
   isTextToImageModel.mockReturnValue(false)
   providerMocks.isGeminiProvider.mockReturnValue(false)
   providerMocks.isNewApiProvider.mockReturnValue(false)

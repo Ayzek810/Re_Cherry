@@ -2,7 +2,7 @@ import { loggerService } from '@logger'
 import InputEmbeddingDimension from '@renderer/components/InputEmbeddingDimension'
 import ModelSelector from '@renderer/components/ModelSelector'
 import { InfoTooltip } from '@renderer/components/TooltipIcons'
-import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
+import { isChatCandidateModel, isEmbeddingModel, isRerankModel } from '@renderer/config/models'
 import { useModel } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId } from '@renderer/services/ModelService'
@@ -94,7 +94,8 @@ const MemorySettingsModal: FC<MemorySettingsModalProps> = ({ visible, onSubmit, 
     }
   }
 
-  const llmPredicate = useCallback((m: Model) => !isEmbeddingModel(m) && !isRerankModel(m), [])
+  // 记忆用的 LLM 也要能对话（统一判据）
+  const llmPredicate = useCallback((m: Model) => isChatCandidateModel(m), [])
 
   const embeddingPredicate = useCallback((m: Model) => isEmbeddingModel(m) && !isRerankModel(m), [])
 

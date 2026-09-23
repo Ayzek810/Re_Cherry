@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
+import { isChatCandidateModel } from '@renderer/config/models'
 import SelectProviderModelPopup from '@renderer/pages/settings/ProviderSettings/SelectProviderModelPopup'
 import { checkApi } from '@renderer/services/ApiService'
 import type { Model, Provider } from '@renderer/types'
@@ -281,7 +281,8 @@ export function isLlmProvider(provider: ApiProvider): provider is Provider {
 
 // 获取模型用于检查
 async function getModelForCheck(provider: Provider, t: TFunction): Promise<Model | null> {
-  const modelsToCheck = provider.models.filter((model) => !isEmbeddingModel(model) && !isRerankModel(model))
+  // 健康检查打的是 chat 端点，只挑能对话的模型（生图/嵌入/重排模型必然失败）
+  const modelsToCheck = provider.models.filter((model) => isChatCandidateModel(model))
 
   if (isEmpty(modelsToCheck)) {
     window.toast.error({

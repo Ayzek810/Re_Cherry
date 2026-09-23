@@ -63,6 +63,13 @@ exports[`TagFilterSection > rendering > should match snapshot 1`] = `
       rerank
     </button>
     <button
+      aria-label="tag-image_generation"
+      data-inactive="false"
+      type="button"
+    >
+      image_generation
+    </button>
+    <button
       aria-label="tag-free"
       data-inactive="false"
       type="button"

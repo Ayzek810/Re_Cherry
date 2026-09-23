@@ -311,7 +311,20 @@ export type User = {
   email: string
 }
 
-export type ModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
+/**
+ * 模型能力类型。`image_generation` 对应 V2 的 `MODEL_CAPABILITY.IMAGE_GENERATION`
+ * （`cherry-studio v2/packages/provider-registry/src/schemas/enums.ts`），由
+ * `isGenerateImageModel` 读取；用户可在「编辑模型」里手选覆盖（`isUserSelected`）。
+ */
+export type ModelType =
+  | 'text'
+  | 'vision'
+  | 'embedding'
+  | 'reasoning'
+  | 'function_calling'
+  | 'web_search'
+  | 'rerank'
+  | 'image_generation'
 
 export type ModelTag = Exclude<ModelType, 'text'> | 'free'
 

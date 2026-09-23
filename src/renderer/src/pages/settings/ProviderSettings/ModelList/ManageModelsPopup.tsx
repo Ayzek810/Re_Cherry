@@ -6,6 +6,7 @@ import {
   groupQwenModels,
   isEmbeddingModel,
   isFunctionCallingModel,
+  isGenerateImageModel,
   isReasoningModel,
   isRerankModel,
   isVisionModel,
@@ -102,6 +103,11 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
             return isFunctionCallingModel(model)
           case 'rerank':
             return isRerankModel(model)
+          // V2 的模型列表用「图片」筛选 tab 区分生图模型（宽语义：能生图）
+          // —— `ModelTypeFilterTabs` 的 `'image'` → `modelListDerivedState.ts` 的
+          // `case 'image': return isGenerateImageModel(model)`。
+          case 'image':
+            return isGenerateImageModel(model)
           default:
             return true
         }
@@ -313,6 +319,8 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
             { label: t('models.all'), key: 'all' },
             { label: t('models.type.reasoning'), key: 'reasoning' },
             { label: t('models.type.vision'), key: 'vision' },
+            // V2 同位置也有这枚（键 `models.type.image` = 「图片」/「Image」）
+            { label: t('models.type.image'), key: 'image' },
             { label: t('models.type.websearch'), key: 'websearch' },
             { label: t('models.type.free'), key: 'free' },
             { label: t('models.type.embedding'), key: 'embedding' },

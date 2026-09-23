@@ -1,4 +1,4 @@
-import { isAnthropicModel, isGeminiModel, isPureGenerateImageModel } from '@renderer/config/models'
+import { isAnthropicModel, isChatCandidateModel, isGeminiModel } from '@renderer/config/models'
 import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputbar/types'
 import { getProviderByModel } from '@renderer/services/AssistantService'
 import { isSupportUrlContextProvider } from '@renderer/utils/provider'
@@ -14,7 +14,7 @@ const urlContextTool = defineTool({
     return (
       !!provider &&
       isSupportUrlContextProvider(provider) &&
-      !isPureGenerateImageModel(model) &&
+      isChatCandidateModel(model) &&
       (isGeminiModel(model) || isAnthropicModel(model))
     )
   },

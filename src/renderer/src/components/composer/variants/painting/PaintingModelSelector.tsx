@@ -9,10 +9,9 @@ import type { PaintingData } from '@renderer/pages/paintings/model/types/paintin
 import { useAppSelector } from '@renderer/store'
 import type { Model } from '@renderer/types'
 import { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
 
 interface PaintingModelSelectorProps {
-  /** V2 标志：工具栏里不重复标题。fork 缝有意忽略它——用户要求显式「绘画模型」标签（见下方 fork 缝注释）。 */
+  /** V2 标志：工具栏里不重复标题（V2 作曲条就这么传，fork 照旧不显示标题）。 */
   hideTitle?: boolean
   /** V2 `renderContextControls` 的图标态（v0.3.3-7 接上）：窄窗时只留头像 + 箭头。 */
   iconOnly?: boolean
@@ -22,7 +21,6 @@ interface PaintingModelSelectorProps {
 }
 
 const PaintingModelSelector = ({ painting, onSelect, className, iconOnly }: PaintingModelSelectorProps) => {
-  const { t } = useTranslation()
   const providers = useAppSelector((state) => state.llm.providers)
   const model = useMemo<Model | undefined>(
     () =>
@@ -32,19 +30,11 @@ const PaintingModelSelector = ({ painting, onSelect, className, iconOnly }: Pain
     [painting.model, painting.providerId, providers]
   )
 
-  // fork 缝：用户要求显式「绘画模型」标签；V2 在作曲条传 hideTitle 刻意隐藏，这里有意偏离（去掉本行即回 V2 原样）。
-  // 文案复用 fork 既有键 settings.models.painting_model（绘画模型 / Painting Model），不新增 locale 键；
-  // 标签放在模型按钮之前且 shrink-0，不吃模型按钮自身的宽度上限（className 包裹层保持原样）。
+  // V2 原样：作曲条里只有模型控件本身，不自造标题（用户裁决：不要在这里加「绘画模型」标签，
+  // 那个标签属于模型设置里的能力标注）。
   return (
-    <span className="flex items-center gap-1.5">
-      {/* fork 缝（v0.3.3-12，用户裁决"永久可见"）：标签**不参与**图标态的让位——
-          v0.3.3-7 曾让它在 `iconOnly` 下转 `sr-only`，而那一批同时把溢出检测接成了真通路
-          （此前恒 false），于是标签在正常窗宽下就会被收走（用户："tmd 显式标签在哪里"）。
-          窄窗让位改由**模型名/provider 名**承担（见下方 view 的 iconOnly），标签始终可见。 */}
-      <span className="shrink-0 text-muted-foreground text-xs">{t('settings.models.painting_model')}</span>
-      <span className={className}>
-        <PaintingModelSelectorView model={model} onSelect={onSelect} iconOnly={iconOnly} />
-      </span>
+    <span className={className}>
+      <PaintingModelSelectorView model={model} onSelect={onSelect} iconOnly={iconOnly} />
     </span>
   )
 }

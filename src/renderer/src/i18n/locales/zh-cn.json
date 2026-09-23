@@ -1562,6 +1562,8 @@
       "embedding": "嵌入",
       "free": "免费",
       "function_calling": "工具",
+      "image": "图片",
+      "image_generation": "生图",
       "reasoning": "推理",
       "rerank": "重排",
       "select": "模型类型",
