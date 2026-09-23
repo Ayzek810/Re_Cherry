@@ -11,7 +11,8 @@ import type { PaintingData } from '@renderer/pages/paintings/model/types/paintin
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { computeImageNaturalSize } from '@renderer/pages/paintings/utils/computeImageNaturalSize'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
-import { Button, Tooltip } from 'antd'
+// fork 缝：原 `import { Button, Tooltip } from 'antd'` —— 工具栏按钮换回原生 button 后 Button 不再使用。
+import { Tooltip } from 'antd'
 import { ImageDown, ImageUp, Palette, RefreshCcw, RotateCcwSquare, RotateCwSquare, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   type FC,
@@ -168,16 +169,20 @@ const ArtboardToolButton: FC<{
   label: string
   onClick: () => void
 }> = ({ children, disabled, label, onClick }) => {
+  // fork 缝：V2 的 Button（@cherrystudio/ui）渲染原生 button、只吃 className；antd Button 的 .ant-btn
+  // 自带 height/padding/line-height（CSS-in-JS 注入晚于 Tailwind 层），会把 toolbarButton 的圆形工具
+  // 按钮撑成 32px 高的胶囊。换回原生 button：className/aria-label/onClick/disabled 逐字保留（disabled
+  // 用原生属性，语义等价）；Tooltip 保留 antd（rc-trigger 直接挂在子节点上，原生 button 同样可挂）。
   return (
     <Tooltip title={label} placement="right" mouseEnterDelay={0.8}>
-      <Button
-        type="text"
+      <button
+        type="button"
         disabled={disabled}
         aria-label={label}
         onClick={onClick}
         className={paintingClasses.toolbarButton}>
         {children}
-      </Button>
+      </button>
     </Tooltip>
   )
 }

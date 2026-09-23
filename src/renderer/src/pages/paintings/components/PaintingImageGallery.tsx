@@ -19,9 +19,15 @@ import styled from 'styled-components'
 
 export const PaintingImageAddButton: FC<{ onPick: () => void; selecting: boolean }> = ({ onPick, selecting }) => {
   const { t } = useTranslation()
+  // fork 缝：AddButton 已换成原生 button（styled(Button) → styled.button，见本文件下部定义）：
+  // V2 的按钮只吃 className，antd .ant-btn 的 height/padding/border 会与那条 36px 圆形加图按钮打架。
+  // antd 专有的 `icon` prop 无原生对应物，等价展开为子节点（antd 内部即 <span class="ant-btn-icon">）。
+  // disabled 走原生 disabled；onClick/aria-label 逐字保留。
   return (
     <Tooltip title={t('paintings.add_image')}>
-      <AddButton icon={<PlusOutlined />} disabled={selecting} onClick={onPick} aria-label={t('paintings.add_image')} />
+      <AddButton type="button" disabled={selecting} onClick={onPick} aria-label={t('paintings.add_image')}>
+        <PlusOutlined />
+      </AddButton>
     </Tooltip>
   )
 }
@@ -139,7 +145,10 @@ const RemoveButton = styled.button.attrs({ className: 'tile-remove' })`
   transition: opacity 0.15s;
 `
 
-const AddButton = styled(Button)`
+// fork 缝：V2 的按钮是原生 button（@cherrystudio/ui Button，只吃 className），fork 曾用 antd Button，
+// 其 .ant-btn 的 height/padding/border/border-radius 会覆盖下面这条 36px 圆形按钮的声明（同为单类
+// 特异度、注入顺序决定胜负）。改 styled.button，样式对象逐字不变（display 本已是 inline-flex）。
+const AddButton = styled.button`
   width: 36px;
   height: 36px;
   flex-shrink: 0;
