@@ -46,12 +46,14 @@ import {
 import { CherryCredentialProvider } from './credentials'
 import { DocumentKernelService } from './documentKernelService'
 import { registerDsmlRepair } from './dsmlRepair'
+import { setTurnGenerateImageConfig } from './generateImageTool'
 import { ImageDescriberService } from './imageDescriber'
 import { installRequestImageHandleAnchor } from './imageHandleText'
 import type { KernelInteractionHub } from './interaction'
 import { registerInteractionHost } from './interaction'
 import { KnowledgeKernelService } from './knowledgeKernelService'
 import { lightOneShot, lightStream } from './lightLlm'
+import { abortLightImage, lightEditImage, lightGenerateImage, setLightLlmProviderRoutes } from './lightLlmModalities'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
@@ -301,6 +303,8 @@ function registerKernelIpc(): void {
     await syncCherryProviders(requireKernel(), providers)
     // 批次4 知识库：嵌入客户端复用同一路由快照（apiHost/apiKey 只进主进程内存）。
     knowledgeService.setProviders(providers)
+    // 轻量 AI 服务面非 chat 模态（embed/rerank/image）共用同一路由快照。
+    setLightLlmProviderRoutes(providers)
     return { ok: true }
   })
 
@@ -429,6 +433,28 @@ function registerKernelIpc(): void {
     return { ok: true }
   })
 
+  // ---- 轻量图像模态（绘画页/生图工具的执行缝；实现见 lightLlmModalities.ts） ----
+
+  ipcMain.handle(
+    IpcChannel.Dsh_LightImage,
+    async (
+      _event,
+      payload: { mode: 'generate' | 'edit' } & Record<string, unknown>
+    ): Promise<{ type: 'url' | 'base64'; images: string[] }> => {
+      if (payload?.mode === 'edit') {
+        return await lightEditImage(payload as unknown as Parameters<typeof lightEditImage>[0])
+      }
+      return await lightGenerateImage(payload as unknown as Parameters<typeof lightGenerateImage>[0])
+    }
+  )
+
+  ipcMain.handle(IpcChannel.Dsh_LightImageAbort, (_event, requestId: unknown) => {
+    if (typeof requestId === 'string' && requestId.length > 0) {
+      abortLightImage(requestId)
+    }
+    return { ok: true }
+  })
+
   // ---- 话题 ----
 
   ipcMain.handle(IpcChannel.Dsh_TopicList, () => {
@@ -497,6 +523,7 @@ function registerKernelIpc(): void {
         skills?: unknown
         documents?: unknown
         preprocess?: { providerId?: unknown }
+        generateImage?: { providerId?: unknown; modelId?: unknown }
       }
     ) => {
       // 白名单重建（v0.3.1 形态）+ 批次2/4/5/6 能力载荷（webSearch/knowledgeBases/
@@ -631,6 +658,22 @@ function registerKernelIpc(): void {
         }
         cleanOptions.preprocess = { providerId }
       }
+      if (options?.generateImage !== undefined) {
+        const generateImage = options.generateImage
+        if (
+          typeof generateImage !== 'object' ||
+          generateImage === null ||
+          typeof generateImage.providerId !== 'string' ||
+          generateImage.providerId.length === 0 ||
+          typeof generateImage.modelId !== 'string' ||
+          generateImage.modelId.length === 0
+        ) {
+          throw new Error('kernel: invalid generateImage in topic send options')
+        }
+        cleanOptions.generateImage = { providerId: generateImage.providerId, modelId: generateImage.modelId }
+      }
+      // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
+      setTurnGenerateImageConfig(id, cleanOptions.generateImage)
       await topicTree(requireKernel()).send(id, text, cleanOptions)
       return { ok: true }
     }

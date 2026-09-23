@@ -1,16 +1,15 @@
 import type { CodeEditorHandles } from '@renderer/components/CodeEditor'
 import CodeEditor from '@renderer/components/CodeEditor'
-import { CopyIcon, FilePngIcon } from '@renderer/components/Icons'
 import { isMac } from '@renderer/config/constant'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { classNames } from '@renderer/utils'
-import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
-import { captureScrollableIframeAsBlob, captureScrollableIframeAsDataURL } from '@renderer/utils/image'
-import { Button, Dropdown, Modal, Splitter, Tooltip, Typography } from 'antd'
-import { Camera, Check, Code, Eye, Maximize2, Minimize2, SaveIcon, SquareSplitHorizontal, X } from 'lucide-react'
+import { Button, Modal, Splitter, Tooltip, Typography } from 'antd'
+import { Check, Code, Eye, Maximize2, Minimize2, SaveIcon, SquareSplitHorizontal, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
+
+import { HTML_PREVIEW_RESTRICTED_CSP, HTML_PREVIEW_RESTRICTED_SANDBOX, HtmlPreviewFrame } from './HtmlPreviewFrame'
 
 interface CodePanelProps {
   codeEditorRef: React.RefObject<CodeEditorHandles | null>
@@ -61,21 +60,20 @@ const CodePanel = memo<CodePanelProps>(({ codeEditorRef, html, onSave, saved, on
 })
 
 interface PreviewPanelProps {
-  previewFrameRef: React.RefObject<HTMLIFrameElement | null>
   html: string
   previewTitle: string
   emptyText: string
 }
 
-const PreviewPanel = memo<PreviewPanelProps>(({ previewFrameRef, html, previewTitle, emptyText }) => {
+const PreviewPanel = memo<PreviewPanelProps>(({ html, previewTitle, emptyText }) => {
   return (
     <PreviewSection>
       {html.trim() ? (
-        <PreviewFrame
-          ref={previewFrameRef}
-          srcDoc={html}
+        <HtmlPreviewFrame
+          html={html}
           title={previewTitle}
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          sandbox={HTML_PREVIEW_RESTRICTED_SANDBOX}
+          csp={HTML_PREVIEW_RESTRICTED_CSP}
         />
       ) : (
         <EmptyPreview>
@@ -103,7 +101,6 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
   const [saved, setSaved] = useTemporaryValue(false, 2000)
   const [splitSizes, setSplitSizes] = useState<string[]>(['50%', '50%'])
   const codeEditorRef = useRef<CodeEditorHandles>(null)
-  const previewFrameRef = useRef<HTMLIFrameElement>(null)
 
   const panelSizes = viewMode === 'split' ? splitSizes : viewMode === 'code' ? ['100%', 0] : [0, '100%']
 
@@ -136,29 +133,6 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
     codeEditorRef.current?.save?.()
     setSaved(true)
   }, [setSaved])
-
-  const handleCapture = useCallback(
-    async (to: 'file' | 'clipboard') => {
-      const title = extractHtmlTitle(html)
-      const fileName = getFileNameFromHtmlTitle(title) || 'html-artifact'
-
-      if (to === 'file') {
-        const dataUrl = await captureScrollableIframeAsDataURL(previewFrameRef)
-        if (dataUrl) {
-          void window.api.file.saveImage(fileName, dataUrl)
-        }
-      }
-      if (to === 'clipboard') {
-        await captureScrollableIframeAsBlob(previewFrameRef, async (blob) => {
-          if (blob) {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-            window.toast.success(t('message.copy.success'))
-          }
-        })
-      }
-    },
-    [html, t]
-  )
 
   const renderHeader = () => (
     <ModalHeader onDoubleClick={() => setIsFullscreen(!isFullscreen)} className={classNames({ drag: isFullscreen })}>
@@ -193,28 +167,6 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
       </HeaderCenter>
 
       <HeaderRight onDoubleClick={(e) => e.stopPropagation()}>
-        <Dropdown
-          trigger={['click']}
-          menu={{
-            items: [
-              {
-                label: t('html_artifacts.capture.to_file'),
-                key: 'capture_to_file',
-                icon: <FilePngIcon size={14} className="lucide-custom" />,
-                onClick: () => handleCapture('file')
-              },
-              {
-                label: t('html_artifacts.capture.to_clipboard'),
-                key: 'capture_to_clipboard',
-                icon: <CopyIcon size={14} className="lucide-custom" />,
-                onClick: () => handleCapture('clipboard')
-              }
-            ]
-          }}>
-          <Tooltip title={t('html_artifacts.capture.label')} mouseLeaveDelay={0}>
-            <Button type="text" icon={<Camera size={16} />} className="nodrag" />
-          </Tooltip>
-        </Dropdown>
         <Button
           onClick={() => setIsFullscreen(!isFullscreen)}
           type="text"
@@ -263,7 +215,6 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
           <Splitter.Panel size={panelSizes[1]} min={viewMode === 'split' ? '25%' : 0}>
             <PanelWrapper $hidden={viewMode === 'code'}>
               <PreviewPanel
-                previewFrameRef={previewFrameRef}
                 html={html}
                 previewTitle={t('common.html_preview')}
                 emptyText={t('html_artifacts.empty_preview', 'No content to preview')}
@@ -436,13 +387,6 @@ const PreviewSection = styled.div`
   width: 100%;
   background: var(--color-background);
   overflow: hidden;
-`
-
-const PreviewFrame = styled.iframe`
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: var(--color-background);
 `
 
 const EmptyPreview = styled.div`

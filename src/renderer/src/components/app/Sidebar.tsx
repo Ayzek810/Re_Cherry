@@ -13,7 +13,7 @@ import { getSidebarIconLabel, getThemeModeLabel } from '@renderer/i18n/label'
 import { ThemeMode } from '@renderer/types'
 import { isEmoji } from '@renderer/utils'
 import { Avatar, Tooltip } from 'antd'
-import { BookOpen, Folder, LayoutGrid, MessageSquare, Monitor, Moon, Settings, Sun } from 'lucide-react'
+import { BookOpen, Folder, Languages, LayoutGrid, MessageSquare, Monitor, Moon, Palette, Settings, Sun } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -117,14 +117,18 @@ const MainMenus: FC = () => {
     assistants: <MessageSquare size={18} className="icon" />,
     minapp: <LayoutGrid size={18} className="icon" />,
     files: <Folder size={18} className="icon" />,
-    knowledge: <BookOpen size={18} className="icon" />
+    knowledge: <BookOpen size={18} className="icon" />,
+    translate: <Languages size={18} className="icon" />,
+    paintings: <Palette size={18} className="icon" />
   }
 
   const pathMap = {
     assistants: '/',
     minapp: '/apps',
     files: '/files',
-    knowledge: '/knowledge'
+    knowledge: '/knowledge',
+    translate: '/translate',
+    paintings: '/paintings'
   }
 
   return sidebarIcons.visible

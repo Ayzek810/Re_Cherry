@@ -16,6 +16,7 @@ import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messag
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { replacePromptVariables } from '@renderer/utils/prompt'
 import { kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
+import { encodeImageBlobForKernel, type KernelImageInput } from '@renderer/services/kernelImages'
 import { defaultLanguage } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { Divider } from 'antd'
@@ -69,6 +70,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
   const [clipboardText, setClipboardText] = useState('')
   const lastClipboardTextRef = useRef<string | null>(null)
+
+  // v0.3.3 批次5 收图入口：粘贴的图片（快捷助手视觉通路，LightLlmCall.images 批次1 已备）
+  const [clipboardImage, setClipboardImage] = useState<KernelImageInput | null>(null)
 
   const [isPinned, setIsPinned] = useState(false)
 
@@ -205,7 +209,11 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       case 'Backspace':
         {
           if (userInputText.length === 0) {
-            void clearClipboard()
+            if (clipboardImage !== null) {
+              setClipboardImage(null)
+            } else {
+              void clearClipboard()
+            }
           }
         }
         break
@@ -236,6 +244,43 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUserInputText(e.target.value)
   }
+
+  // v0.3.3 批次5 收图入口：粘贴图片 → 规范化为内核附件载荷（单张，后贴覆盖前贴）。
+  const handlePasteImage = useCallback(async (items: DataTransferItemList) => {
+    const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
+    if (imageItem === undefined) return
+    try {
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        const file = imageItem.getAsFile()
+        if (file !== null) {
+          resolve(file)
+        } else {
+          reject(new Error('clipboard image unavailable'))
+        }
+      })
+      const payload = await encodeImageBlobForKernel(blob, imageItem.type.replace('/', '.'))
+      setClipboardImage(payload)
+      window.toast.success(t('miniwindow.image.attached'))
+    } catch (error) {
+      logger.warn('Failed to attach pasted image:', error as Error)
+      window.toast.error(t('miniwindow.image.attach_failed'))
+    }
+  }, [t])
+
+  // 全局粘贴监听（小窗无输入框聚焦时也能收图；文本粘贴不受影响）。
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items
+      if (items === undefined || items.length === 0) return
+      const hasImage = Array.from(items).some((item) => item.type.startsWith('image/'))
+      if (hasImage) {
+        event.preventDefault()
+        void handlePasteImage(items)
+      }
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [handlePasteImage])
 
   const handleError = (error: Error) => {
     setIsLoading(false)
@@ -276,6 +321,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
         setIsFirstMessage(false)
         setUserInputText('')
+        setClipboardImage(null)
 
         const model = currentAssistant.model
         if (!model || !model.provider) {
@@ -363,6 +409,18 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
             system: system || undefined,
             messages: context,
             reasoningEffort,
+            // v0.3.3 批次5：随触发消息上行的图片（粘贴收图；主聊天同语义——附最后一条 user）
+            ...(clipboardImage !== null
+              ? {
+                  images: [
+                    {
+                      mediaType: clipboardImage.mediaType as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif',
+                      data: clipboardImage.data,
+                      ...(clipboardImage.name !== undefined ? { name: clipboardImage.name } : {})
+                    }
+                  ]
+                }
+              : {}),
             source: 'cherry-quick-assistant'
           },
           (event) => {
@@ -436,7 +494,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         logger.error('Quick assistant error:', err as Error)
       }
     },
-    [userContent, currentAssistant, quickAssistantReasoningEffort]
+    [userContent, currentAssistant, quickAssistantReasoningEffort, clipboardImage]
   )
 
   const handlePause = useCallback(() => {
@@ -533,6 +591,24 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     })
   }, [referenceText, route, t, currentAssistant])
 
+  /** v0.3.3 批次5：粘贴图片预览条（有图才渲染；Backspace/发送后清除）。 */
+  const imagePreview = clipboardImage !== null
+    ? (
+      <ImagePreviewRow>
+        <ImageThumb src={`data:${clipboardImage.mediaType};base64,${clipboardImage.data}`} alt="" />
+        <ImagePreviewName>{clipboardImage.name ?? t('miniwindow.image.attached')}</ImagePreviewName>
+        <ImagePreviewRemove
+          onClick={() => {
+            setClipboardImage(null)
+            focusInput()
+          }}
+          className="nodrag">
+          ×
+        </ImagePreviewRemove>
+      </ImagePreviewRow>
+    )
+    : null
+
   // Memoize footer props
   const baseFooterProps = useMemo(
     () => ({
@@ -561,6 +637,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
                 handleChange={handleChange}
                 ref={inputBarRef}
               />
+              {imagePreview}
               <Divider style={{ margin: '10px 0' }} />
             </>
           )}
@@ -594,6 +671,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
             handleChange={handleChange}
             ref={inputBarRef}
           />
+          {imagePreview}
           <Divider style={{ margin: '10px 0' }} />
           <ClipboardPreview referenceText={referenceText} clearClipboard={clearClipboard} t={t} />
           <Main>
@@ -643,6 +721,50 @@ const ErrorMsg = styled.div`
   margin-bottom: 12px;
   font-size: 13px;
   word-break: break-all;
+`
+
+const ImagePreviewRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  background-color: var(--color-background-opacity);
+  border-radius: 8px;
+  -webkit-app-region: none;
+`
+
+const ImageThumb = styled.img`
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+`
+
+const ImagePreviewName = styled.span`
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const ImagePreviewRemove = styled.button`
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  flex-shrink: 0;
+
+  &:hover {
+    color: var(--color-text);
+  }
 `
 
 export default HomeWindow

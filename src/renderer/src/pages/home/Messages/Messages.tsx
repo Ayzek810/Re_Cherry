@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import ContextMenu from '@renderer/components/ContextMenu'
 import { LoadingIcon } from '@renderer/components/Icons'
+import { HtmlArtifactPopupHost } from '@renderer/components/CodeBlockView/HtmlArtifactPopupContext'
 import { LOAD_MORE_COUNT } from '@renderer/config/constant'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useChatContext } from '@renderer/hooks/useChatContext'
@@ -259,50 +260,52 @@ const Messages: React.FC<MessagesProps> = ({
   }, [displayMessages, parallelAnswers])
 
   return (
-    <MessagesContainer
-      id="messages"
-      className="messages-container"
-      ref={scrollContainerRef}
-      key={assistant.id}
-      onScroll={handleScrollPosition}>
-      <NarrowLayout style={{ display: 'flex', flexDirection: 'column-reverse' }}>
-        <InfiniteScroll
-          dataLength={displayMessages.length}
-          next={loadMoreMessages}
-          hasMore={hasMore}
-          loader={null}
-          scrollableTarget="messages"
-          inverse
-          style={{ overflow: 'visible' }}>
-          <ContextMenu>
-            <ScrollContainer>
-              {groupedMessages.map(([key, groupMessages]) => (
-                <MessageGroup
-                  key={key}
-                  messages={groupMessages}
-                  topic={topic}
-                  registerMessageElement={registerMessageElement}
-                />
-              ))}
-              {isLoadingMore && (
-                <LoaderContainer>
-                  <LoadingIcon color="var(--color-text-2)" />
-                </LoaderContainer>
-              )}
-            </ScrollContainer>
-          </ContextMenu>
-        </InfiniteScroll>
+    <HtmlArtifactPopupHost>
+      <MessagesContainer
+        id="messages"
+        className="messages-container"
+        ref={scrollContainerRef}
+        key={assistant.id}
+        onScroll={handleScrollPosition}>
+        <NarrowLayout style={{ display: 'flex', flexDirection: 'column-reverse' }}>
+          <InfiniteScroll
+            dataLength={displayMessages.length}
+            next={loadMoreMessages}
+            hasMore={hasMore}
+            loader={null}
+            scrollableTarget="messages"
+            inverse
+            style={{ overflow: 'visible' }}>
+            <ContextMenu>
+              <ScrollContainer>
+                {groupedMessages.map(([key, groupMessages]) => (
+                  <MessageGroup
+                    key={key}
+                    messages={groupMessages}
+                    topic={topic}
+                    registerMessageElement={registerMessageElement}
+                  />
+                ))}
+                {isLoadingMore && (
+                  <LoaderContainer>
+                    <LoadingIcon color="var(--color-text-2)" />
+                  </LoaderContainer>
+                )}
+              </ScrollContainer>
+            </ContextMenu>
+          </InfiniteScroll>
 
-        {showPrompt && <Prompt assistant={assistant} key={assistant.prompt} topic={topic} />}
-      </NarrowLayout>
-      {messageNavigation === 'anchor' && <MessageAnchorLine messages={displayMessages} />}
-      <SelectionBox
-        isMultiSelectMode={isMultiSelectMode}
-        scrollContainerRef={scrollContainerRef}
-        messageElements={messageElements.current}
-        handleSelectMessage={handleSelectMessage}
-      />
-    </MessagesContainer>
+          {showPrompt && <Prompt assistant={assistant} key={assistant.prompt} topic={topic} />}
+        </NarrowLayout>
+        {messageNavigation === 'anchor' && <MessageAnchorLine messages={displayMessages} />}
+        <SelectionBox
+          isMultiSelectMode={isMultiSelectMode}
+          scrollContainerRef={scrollContainerRef}
+          messageElements={messageElements.current}
+          handleSelectMessage={handleSelectMessage}
+        />
+      </MessagesContainer>
+    </HtmlArtifactPopupHost>
   )
 }
 

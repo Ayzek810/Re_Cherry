@@ -137,24 +137,48 @@ export async function encodeImageFileForKernel(file: FileMetadata): Promise<Kern
   }
 
   try {
-    const scale = Math.min(1, MAX_LONG_EDGE / Math.max(bitmap.width, bitmap.height))
-    const width = Math.max(1, Math.round(bitmap.width * scale))
-    const height = Math.max(1, Math.round(bitmap.height * scale))
-    const canvas = new OffscreenCanvas(width, height)
-    const ctx = canvas.getContext('2d')
-    if (ctx === null) throw new Error('OffscreenCanvas 2d context unavailable')
-    ctx.drawImage(bitmap, 0, 0, width, height)
-    const encoded = await encodeCanvas(canvas)
-    if (encoded.data.length === 0) {
-      throw new Error(`Image "${file.origin_name}" could not be encoded within the request budget`)
-    }
-    return {
-      mediaType: encoded.mediaType,
-      data: encoded.data,
-      ...(file.origin_name ? { name: file.origin_name } : {})
-    }
+    return await encodeBitmapToPayload(bitmap, file.origin_name)
   } finally {
     bitmap.close()
+  }
+}
+
+/**
+ * 把一个原始图片 Blob（剪贴板/粘贴来源）规范化为内核附件载荷新形态。
+ * 与 encodeImageFileForKernel 同一条 canvas 管线（EXIF 摆正由解码器处理；
+ * 预算/转码/首帧语义一致）；解码失败即抛错，不做静默降级。
+ */
+export async function encodeImageBlobForKernel(blob: Blob, name?: string): Promise<KernelImageInput> {
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await createImageBitmap(blob)
+  } catch (error) {
+    throw new Error(`Unsupported image: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  try {
+    return await encodeBitmapToPayload(bitmap, name)
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** 位图 → 预算内 wire 载荷（文件/剪贴板两入口共用的规范化尾段）。 */
+async function encodeBitmapToPayload(bitmap: ImageBitmap, originName?: string): Promise<KernelImageInput> {
+  const scale = Math.min(1, MAX_LONG_EDGE / Math.max(bitmap.width, bitmap.height))
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = new OffscreenCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  if (ctx === null) throw new Error('OffscreenCanvas 2d context unavailable')
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  const encoded = await encodeCanvas(canvas)
+  if (encoded.data.length === 0) {
+    throw new Error(`Image "${originName ?? 'clipboard'}" could not be encoded within the request budget`)
+  }
+  return {
+    mediaType: encoded.mediaType,
+    data: encoded.data,
+    ...(originName ? { name: originName } : {})
   }
 }
 

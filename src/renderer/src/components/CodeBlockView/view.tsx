@@ -38,6 +38,11 @@ interface Props {
   children: string
   language: string
   onSave?: (newContent: string) => void
+  /** V2 移植：false 时隐藏保存按钮与编辑器（流式文档工件只读展示）。 */
+  editable?: boolean
+  isStreaming?: boolean
+  showToolbar?: boolean
+  maxHeight?: string | number
 }
 
 /**
@@ -56,7 +61,8 @@ interface Props {
  * - quick 工具
  * - core 工具
  */
-export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave }) => {
+export const CodeBlockView: React.FC<Props> = memo(
+  ({ children, language, onSave, editable = true, isStreaming = false, showToolbar = true, maxHeight }) => {
   const { t } = useTranslation()
   const { codeEditor, codeExecution, codeImageTools, codeCollapsible, codeWrappable } = useSettings()
 
@@ -245,15 +251,16 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
 
   // 代码编辑器的保存按钮
   useSaveTool({
-    enabled: codeEditor.enabled && !isInSpecialView,
+    enabled: codeEditor.enabled && !isStreaming && !isInSpecialView,
     sourceViewRef,
     setTools
   })
 
   // 源代码视图组件
+  const collapsedHeight = maxHeight ?? MAX_COLLAPSED_CODE_HEIGHT
   const sourceView = useMemo(
     () =>
-      codeEditor.enabled ? (
+      codeEditor.enabled && editable ? (
         <CodeEditor
           className="source-view"
           ref={sourceViewRef}
@@ -261,7 +268,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
           language={language}
           onSave={onSave}
           onHeightChange={handleHeightChange}
-          maxHeight={`${MAX_COLLAPSED_CODE_HEIGHT}px`}
+          maxHeight={`${collapsedHeight}px`}
           options={{ stream: true }}
           expanded={shouldExpand}
           wrapped={shouldWrap}
@@ -274,11 +281,22 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
           onHeightChange={handleHeightChange}
           expanded={shouldExpand}
           wrapped={shouldWrap}
-          maxHeight={`${MAX_COLLAPSED_CODE_HEIGHT}px`}
+          maxHeight={`${collapsedHeight}px`}
           onRequestExpand={codeCollapsible ? () => setExpandOverride(true) : undefined}
         />
       ),
-    [children, codeCollapsible, codeEditor.enabled, handleHeightChange, language, onSave, shouldExpand, shouldWrap]
+    [
+      children,
+      codeCollapsible,
+      codeEditor.enabled,
+      collapsedHeight,
+      editable,
+      handleHeightChange,
+      language,
+      onSave,
+      shouldExpand,
+      shouldWrap
+    ]
   )
 
   // 特殊视图组件映射
@@ -327,7 +345,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
   return (
     <CodeBlockWrapper className="code-block" $isInSpecialView={isInSpecialView}>
       {renderHeader}
-      <CodeToolbar tools={tools} />
+      {showToolbar ? <CodeToolbar tools={tools} /> : null}
       {renderContent}
       {isExecutable && executionResult && (
         <StatusBar>

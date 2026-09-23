@@ -265,13 +265,14 @@ export async function syncWebSearchToKernel(config: {
   excludeDomains: string[]
   searchWithTime: boolean
   maxResults: number
-  /** 结果压缩（websearch 切片 compressionConfig 的收窄投影；rag 的 embeddingModel 收窄为引用）。 */
+  /** 结果压缩（websearch 切片 compressionConfig 的收窄投影；rag 的 embeddingModel/rerankModel 收窄为引用）。 */
   compression?: {
     method: 'none' | 'cutoff' | 'rag'
     cutoffLimit?: number
     cutoffUnit?: 'char' | 'token'
     documentCount?: number
     embedding?: { providerId: string; modelId: string; dimensions?: number }
+    rerank?: { providerId: string; modelId: string }
   }
 }): Promise<void> {
   try {
@@ -418,6 +419,8 @@ export async function sendToKernel(
     images?: KernelImageInput[]
     /** 网络搜索（批次2）：本轮 web_search 工具的提供商（助手搜索开启且提供商就绪时上行）。 */
     webSearch?: { providerId: string }
+    /** 聊天生图（批次5）：本轮 generate_image 工具的绘画模型（双门开时上行）。 */
+    generateImage?: { providerId: string; modelId: string }
   }
 ): Promise<void> {
   pendingStubs.set(topicId, assistantMessageId)
@@ -744,6 +747,30 @@ function projectToolCall(topicId: string, event: Extract<SessionEvent, { type: '
   syncMessageBlocks(topicId, state)
 }
 
+/**
+ * generate_image 工具结果 → IMAGE 块（直播/回放共用）。结构化图片列表经
+ * presentationMeta 随 tool/result 事件 meta 上行（webSearch 引用机制同构，
+ * 会话日志持久化、回放复现）；images 非全字符串或为空 = 非本工具的成功形状，
+ * 返回 undefined 不投影。type 取 'url'（ImageBlock 渲染层按字符串直用，
+ * data URL 与 http URL 同路）。
+ */
+function buildGenerateImageBlock(
+  messageId: string,
+  meta: unknown
+): ReturnType<typeof createImageBlock> | undefined {
+  if (meta === null || typeof meta !== 'object') return undefined
+  const kind = (meta as { kind?: unknown }).kind
+  const images = (meta as { images?: unknown }).images
+  if (kind !== 'generate-image') return undefined
+  if (!Array.isArray(images) || images.length === 0 || !images.every((image) => typeof image === 'string')) {
+    return undefined
+  }
+  return createImageBlock(messageId, {
+    status: MessageBlockStatus.SUCCESS,
+    metadata: { generateImageResponse: { type: 'url', images: images as string[] } }
+  })
+}
+
 /** 工具调用结束：按 callId 回填同一块（结果文本 + 成功/失败）。 */
 function projectToolResult(topicId: string, event: Extract<SessionEvent, { type: 'tool/result' }>): void {
   const state = streams.get(topicId)
@@ -770,6 +797,19 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
   )
   // 工具出结果即该调用的审批生命周期结束（'invoking' 条目随之摘除）
   store.dispatch(toolPermissionsActions.removeByToolCallId({ toolCallId: resultBlock.toolCallId }))
+  // 批次5 聊天生图：generate_image 成功结果 → IMAGE 块。结构化载荷在事件 meta
+  // （presentationMeta 正规通道，webSearch 同构）；直播与回放两路共用
+  // buildGenerateImageBlock。base64 data URL 原样进元数据不落盘——
+  // saveBase64Image 每次生成新 uuid，回放重落盘会堆积重复文件；数据已在会话
+  // 日志，块元数据仅内存投影。
+  if (!failed && toolBlock.toolName === 'generate_image') {
+    const imageBlock = buildGenerateImageBlock(state.assistantMessageId, event.data.meta)
+    if (imageBlock !== undefined) {
+      state.blockIds.push(imageBlock.id)
+      store.dispatch(upsertManyBlocks([imageBlock]))
+      syncMessageBlocks(topicId, state)
+    }
+  }
   // 统一引用机制：搜索类工具的结构化 meta → 隐形 CitationBlock 数据载体
   //（不渲染成卡——UI 即正文药丸 + 悬浮胶囊；载体仅持有数据供正文引用）。
   const citationBlock = buildSearchCitationBlock(state.assistantMessageId, event.data.meta, failed)
@@ -1146,6 +1186,15 @@ async function projectEventsToMessages(
         const failed = resultBlock.isError === true || event.data.error !== undefined
         toolBlock.content = text
         toolBlock.status = failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+        // 批次5 聊天生图回放投影：与直播路径同构（buildGenerateImageBlock 共用，
+        // 载荷在事件 meta——presentationMeta 通道，回放复现）。
+        if (!failed && toolBlock.toolName === 'generate_image') {
+          const imageBlock = buildGenerateImageBlock(reply.messageId, event.data.meta)
+          if (imageBlock !== undefined) {
+            blocks.push(imageBlock)
+            reply.blockIds.push(imageBlock.id)
+          }
+        }
         // 统一引用机制：与直播路径同构（隐形载体 + 正文引用联动；meta 持久化在
         // 会话日志，重开话题即复现药丸与胶囊）。
         const citationBlock = buildSearchCitationBlock(reply.messageId, event.data.meta, failed)

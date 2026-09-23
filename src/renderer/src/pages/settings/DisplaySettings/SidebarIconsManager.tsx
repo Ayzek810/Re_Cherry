@@ -6,7 +6,7 @@ import { useAppDispatch } from '@renderer/store'
 import { setSidebarIcons } from '@renderer/store/settings'
 import type { SidebarIcon } from '@renderer/types'
 import { message } from 'antd'
-import { BookOpen, Folder, LayoutGrid, MessageSquareQuote } from 'lucide-react'
+import { BookOpen, Folder, Languages, LayoutGrid, MessageSquareQuote, Palette } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -108,7 +108,9 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
         assistants: <MessageSquareQuote size={16} />,
         minapp: <LayoutGrid size={16} />,
         files: <Folder size={16} />,
-        knowledge: <BookOpen size={16} />
+        knowledge: <BookOpen size={16} />,
+        translate: <Languages size={16} />,
+        paintings: <Palette size={16} />
       }) satisfies Record<SidebarIcon, ReactNode>,
     []
   )

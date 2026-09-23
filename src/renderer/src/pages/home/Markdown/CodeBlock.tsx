@@ -1,6 +1,7 @@
 import { CodeBlockView, HtmlArtifactsCard } from '@renderer/components/CodeBlockView'
-import { isWin } from '@renderer/config/constant'
+import { isWin, MAX_COLLAPSED_CODE_HEIGHT } from '@renderer/config/constant'
 import { useSettings } from '@renderer/hooks/useSettings'
+import { MessageHtmlArtifact } from '@renderer/pages/home/Messages/Blocks/MessageHtmlArtifact'
 import { ClickableFilePath } from '@renderer/pages/home/Messages/Tools/MessageAgentTools/ClickableFilePath'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import store from '@renderer/store'
@@ -10,15 +11,21 @@ import { getCodeBlockId, isOpenFenceBlock } from '@renderer/utils/markdown'
 import type { Node } from 'mdast'
 import React, { memo, useCallback, useMemo } from 'react'
 
+import type { InlineHtmlPreviewMode } from './Markdown'
+import { classifyHtmlArtifactSource } from './plugins/remarkHtmlArtifact'
+
 interface Props {
   children: string
   className?: string
+  inlineHtmlPreviewMode?: InlineHtmlPreviewMode
+  /** standalone 工件直渲染时由调用方传入；ReactMarkdown 常规路径由 isOpenFence 推导。 */
+  isStreaming?: boolean
   node?: Omit<Node, 'type'>
   blockId: string // Message block id
   [key: string]: any
 }
 
-const CodeBlock: React.FC<Props> = ({ children, className, node, blockId }) => {
+const CodeBlock: React.FC<Props> = ({ children, className, inlineHtmlPreviewMode, isStreaming = false, node, blockId }) => {
   const languageMatch = /language-([\w-+]+)/.exec(className || '')
   const isMultiline = children?.includes('\n')
   const detectedLanguage = languageMatch?.[1] ?? (isMultiline ? 'text' : null)
@@ -36,7 +43,7 @@ const CodeBlock: React.FC<Props> = ({ children, className, node, blockId }) => {
 
   // 消息块
   const msgBlock = messageBlocksSelectors.selectById(store.getState(), blockId)
-  const isStreaming = useMemo(() => msgBlock?.status === MessageBlockStatus.STREAMING, [msgBlock?.status])
+  const isBlockStreaming = useMemo(() => msgBlock?.status === MessageBlockStatus.STREAMING, [msgBlock?.status])
 
   const handleSave = useCallback(
     (newContent: string) => {
@@ -54,9 +61,45 @@ const CodeBlock: React.FC<Props> = ({ children, className, node, blockId }) => {
   if (language !== null) {
     // Fancy code block
     if (codeFancyBlock) {
-      if (language === 'html') {
+      if (language.toLowerCase() === 'html') {
         const isOpenFence = isOpenFenceBlock(children?.length, languageMatch?.[1]?.length, node?.position)
-        return <HtmlArtifactsCard html={children} onSave={handleSave} isStreaming={isStreaming && isOpenFence} />
+        const isHtmlArtifactStreaming =
+          inlineHtmlPreviewMode === 'generating' || isStreaming || isBlockStreaming || isOpenFence
+        // The single classification for the whole artifact pipeline: it picks the streaming
+        // surface here and travels down as `kind` to decide the safety gate once complete.
+        const htmlKind = classifyHtmlArtifactSource(children)
+
+        if (inlineHtmlPreviewMode) {
+          // Too short to classify yet — render nothing rather than pick a surface we would
+          // have to swap out a few characters later.
+          if (isHtmlArtifactStreaming && htmlKind === undefined) return null
+
+          if (isHtmlArtifactStreaming && htmlKind === 'document') {
+            return (
+              <CodeBlockView
+                language={language}
+                editable={false}
+                isStreaming={isHtmlArtifactStreaming}
+                maxHeight={MAX_COLLAPSED_CODE_HEIGHT}
+                showToolbar={false}>
+                {children}
+              </CodeBlockView>
+            )
+          }
+
+          return (
+            <MessageHtmlArtifact
+              artifactId={`${blockId}:${id}`}
+              html={children}
+              onSave={handleSave}
+              editable={id !== undefined}
+              kind={htmlKind ?? 'fragment'}
+              isStreaming={isHtmlArtifactStreaming}
+            />
+          )
+        }
+
+        return <HtmlArtifactsCard html={children} onSave={handleSave} isStreaming={isBlockStreaming && isOpenFence} />
       }
     }
 

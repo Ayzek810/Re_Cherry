@@ -807,6 +807,7 @@
     "toolName": "Tool Name",
     "truncated": "Data truncated, original size",
     "truncatedBadge": "Truncated",
+    "missing_required_fields": "Missing required fields",
     "unknown": "Unknown error",
     "usage": "Usage",
     "user_message_not_found": "Cannot find original user message to resend",
@@ -874,16 +875,13 @@
     "title": "Topics Search"
   },
   "html_artifacts": {
-    "capture": {
-      "label": "Capture Page",
-      "to_clipboard": "Copy to Clipboard",
-      "to_file": "Save as Image"
-    },
     "code": "Code",
+    "consent_required": "This HTML artifact contains active content and needs your consent before preview.",
     "empty_preview": "No content to display",
     "generating": "Generating",
     "preview": "Preview",
-    "split": "Split"
+    "split": "Split",
+    "view_mode": "View mode"
   },
   "import": {
     "chatgpt": {
@@ -1139,6 +1137,7 @@
     "user_switched": "User context switched to {{user}}"
   },
   "message": {
+    "empty_url": "Image URL is empty",
     "api": {
       "check": {
         "model": {
@@ -1479,6 +1478,10 @@
       "esc_close": "close",
       "esc_pause": "pause"
     },
+    "image": {
+      "attach_failed": "Failed to attach image",
+      "attached": "Image attached"
+    },
     "input": {
       "placeholder": {
         "empty": "Ask {{model}} for help...",
@@ -1602,6 +1605,10 @@
     "pan_up": "Pan Up",
     "reset": "Reset",
     "source": "View Source Code",
+    "previous": "Previous",
+    "next": "Next",
+    "rotate_left": "Rotate Left",
+    "rotate_right": "Rotate Right",
     "zoom_in": "Zoom In",
     "zoom_out": "Zoom Out"
   },
@@ -1759,6 +1766,10 @@
           },
           "ocr": {
             "name": "Document OCR (ocr_document)"
+          },
+          "generate_image": {
+            "name": "Chat image generation (generate_image)",
+            "hint": "Requires a model selected on the Paintings page"
           }
         },
         "externalTitle": "External Tools",
@@ -2301,6 +2312,11 @@
       "onboot": "Start Automatically on Boot",
       "title": "Launch",
       "totray": "Minimize to Tray on Launch"
+    },
+    "tray": {
+      "onclose": "Minimize to Tray on Close",
+      "show": "Show Tray Icon",
+      "title": "Tray"
     },
     "math": {
       "engine": {
@@ -3235,11 +3251,6 @@
         "time": "Show topic time"
       }
     },
-    "tray": {
-      "onclose": "Minimize to Tray on Close",
-      "show": "Show Tray Icon",
-      "title": "Tray"
-    },
     "use_system_title_bar": {
       "confirm": {
         "content": "Changing the title bar style requires restarting the app to take effect. Do you want to restart now?",
@@ -3256,7 +3267,9 @@
     "files": "Files",
     "home": "Home",
     "knowledge": "Knowledge Base",
-    "settings": "Settings"
+    "settings": "Settings",
+    "translate": "Translate",
+    "paintings": "Paintings"
   },
   "trace": {
     "backList": "Back To List",
@@ -3279,6 +3292,133 @@
     "quit": "Quit",
     "show_mini_window": "Quick Assistant",
     "show_window": "Show Window"
+  },
+  "languages": {
+    "arabic": "Arabic",
+    "chinese": "Chinese (Simplified)",
+    "chinese-traditional": "Chinese (Traditional)",
+    "english": "English",
+    "french": "French",
+    "german": "German",
+    "indonesian": "Indonesian",
+    "italian": "Italian",
+    "japanese": "Japanese",
+    "korean": "Korean",
+    "malay": "Malay",
+    "polish": "Polish",
+    "portuguese": "Portuguese",
+    "russian": "Russian",
+    "spanish": "Spanish",
+    "thai": "Thai",
+    "turkish": "Turkish",
+    "ukrainian": "Ukrainian",
+    "unknown": "Unknown",
+    "urdu": "Urdu",
+    "vietnamese": "Vietnamese"
+  },
+  "translate": {
+    "auto_detect": "Auto Detect",
+    "exchange": "Swap languages and text",
+    "history": "Translation History",
+    "history_empty": "No translation records",
+    "input_placeholder": "Enter text to translate",
+    "model": "Translation Model",
+    "model_hint_prefix": "Current model: ",
+    "output_empty": "Translation will appear here",
+    "select_model": "Select translation model",
+    "settings": "Translation Settings",
+    "start": "Translate",
+    "stop": "Stop",
+    "title": "Translate",
+    "error": {
+      "auto_source": "Cannot swap in auto-detect mode",
+      "empty": "No translation returned",
+      "failed": "Translation failed",
+      "not_configured": "Select a translation model on the Translate page first",
+      "not_pair": "Source and target languages do not form a valid translation pair",
+      "same_language": "Source and target languages are the same"
+    }
+  },
+  "paintings": {
+    "title": "Paintings",
+    "settings": "Painting Settings",
+    "settings_empty": "Painting settings",
+    "history": "History",
+    "operation_failed": "Operation failed",
+    "image_file_retry": "Some reference images failed to load, please retry",
+    "param": {
+      "prompt": "Prompt",
+      "size": "Size",
+      "batch_size": "Batch Size",
+      "negative_prompt": "Negative Prompt",
+      "seed": "Seed",
+      "num_inference_steps": "Inference Steps",
+      "guidance_scale": "Guidance Scale",
+      "quality": "Quality"
+    },
+    "prompt_placeholder": "Describe the image you want to generate…",
+    "prompt_placeholder_upload": "Add a reference image, then describe the edit…",
+    "prompt_placeholder_upload_required": "This model requires a reference image first",
+    "generate": "Generate",
+    "custom_width": "Width",
+    "custom_height": "Height",
+    "add_image": "Add Reference Image",
+    "select_model": "Select Painting Model",
+    "proxy_required": "Configure a proxy before downloading images",
+    "req_error_model": "Select a painting model in Settings first",
+    "image_placeholder": "No image yet",
+    "generating": "Drawing in progress. Please do not leave this page.",
+    "revealing": "Revealing generated image",
+    "custom_size": "Custom size",
+    "prompt_required": "Please enter a prompt",
+    "text_desc_required": "Please enter image description first",
+    "image_file_required": "Please upload an image first",
+    "image_handle_required": "Please upload an image first.",
+    "image_mix_failed": "Failed to mix images",
+    "input_image_limit_exceeded": "Up to 4 reference images",
+    "generate_failed": "Generation failed",
+    "req_error_token": "Invalid API token, check the provider key",
+    "req_error_no_balance": "Insufficient account balance",
+    "zhipu": {
+      "custom_size_required": "Please set custom width and height",
+      "custom_size_range": "Custom size must be between 512px-2048px",
+      "custom_size_divisible": "Custom size must be divisible by 16",
+      "custom_size_pixels": "Total pixels of custom size cannot exceed 2,097,152"
+    },
+    "unsupported_vendor": "The provider or model is not supported",
+    "image_size_options": {
+      "auto": "Auto"
+    },
+    "quality_options": {
+      "auto": "Auto",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "standard": "Standard",
+      "hd": "HD"
+    },
+    "edit": {
+      "image_required": "Image-to-image mode requires at least one reference image"
+    },
+    "button": {
+      "new": {
+        "image": "New Painting"
+      },
+      "select": {
+        "image": "Select this painting"
+      },
+      "delete": {
+        "image": {
+          "label": "Delete this painting",
+          "confirm": "Delete this painting?"
+        }
+      }
+    },
+    "showcase": {
+      "title": "Start Creating",
+      "caption": "Pick a template or type a description below to generate",
+      "styles_label": "Template styles"
+    }
   },
   "update": {
     "install": "Install",

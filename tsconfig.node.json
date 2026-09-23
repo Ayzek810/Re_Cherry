@@ -8,6 +8,7 @@
     "src/preload/**/*",
     "src/renderer/src/services/traceApi.ts",
     "src/renderer/src/types/*",
+    "src/renderer/src/config/translateLanguages.ts",
     "packages/mcp-trace/**/*",
     "packages/shared/**/*"
   ],

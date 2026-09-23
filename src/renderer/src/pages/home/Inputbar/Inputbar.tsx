@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 import {
-  isAutoEnableImageGenerationModel,
   isGenerateImageModel,
   isGenerateImageModels,
   isVisionModel,
@@ -416,16 +415,9 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
     setSelectedKnowledgeBases(assistant.knowledge_bases ?? [])
   }, [assistant.knowledge_bases, setSelectedKnowledgeBases])
 
-  useEffect(() => {
-    // Auto-enable/disable image generation based on model capabilities
-    if (isGenerateImageModel(model)) {
-      if (isAutoEnableImageGenerationModel(model) && !assistant.enableGenerateImage) {
-        updateAssistant({ ...assistant, enableGenerateImage: true })
-      }
-    } else if (assistant.enableGenerateImage) {
-      updateAssistant({ ...assistant, enableGenerateImage: false })
-    }
-  }, [assistant, model, updateAssistant])
+  // v0.3.3 批次5：删除 V1 的 enableGenerateImage 自动翻转语义——生图挂载门改由
+  // generate_image 内核工具的双门（助手开关 + llm.paintingModel 已配置）决定，
+  // 开关归用户（助手设置页），不再随模型能力被静默改写。
 
   if (isMultiSelectMode) {
     return null

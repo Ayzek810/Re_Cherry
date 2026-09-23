@@ -1,7 +1,10 @@
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
+import { parseDataUrl } from '@shared/utils'
 import imageCompression from 'browser-image-compression'
 import * as htmlToImage from 'html-to-image'
+import { Base64 } from 'js-base64'
+import mime from 'mime'
 
 const logger = loggerService.withContext('Utils:image')
 
@@ -187,231 +190,6 @@ export const captureScrollableAsBlob = async (elRef: React.RefObject<HTMLElement
 
 /**
  * 捕获 iframe 内部文档的完整内容快照
- */
-export async function captureScrollableIframe(
-  iframeRef: React.RefObject<HTMLIFrameElement | null>
-): Promise<HTMLCanvasElement | undefined> {
-  const iframe = iframeRef.current
-  if (!iframe?.contentDocument?.defaultView) return undefined
-
-  const doc = iframe.contentDocument
-  const win = iframe.contentWindow!
-
-  // 禁用动画以确保捕获静态状态
-  const disableAnimations = () => {
-    const style = doc.createElement('style')
-    style.textContent = `*, *::before, *::after {
-      animation: none !important;
-      transition: none !important;
-      // transform: none !important;
-    }`
-    doc.head.appendChild(style)
-    return style
-  }
-
-  // 内联字体以避免跨域问题
-  const inlineFonts = async () => {
-    const fontFaceRegex = /@font-face[\s\S]*?\}/g
-    const fontUrlRegex = /url\((['"]?)([^)"']+)\1\)/g
-    const fontExtRegex = /\.(woff2?|ttf|otf)(\?|#|$)/i
-
-    const fetchAsDataUrl = async (url: string): Promise<string> => {
-      try {
-        const res = await fetch(url, { mode: 'cors', credentials: 'omit' })
-        if (!res.ok) return url
-        const blob = await res.blob()
-        return new Promise((resolve) => {
-          const reader = new FileReader()
-          reader.onloadend = () => resolve(reader.result as string)
-          reader.onerror = () => resolve(url)
-          reader.readAsDataURL(blob)
-        })
-      } catch {
-        return url
-      }
-    }
-
-    const processCss = async (cssText: string, baseUrl: string): Promise<string[]> => {
-      const fontBlocks: string[] = []
-      let match: RegExpExecArray | null
-
-      while ((match = fontFaceRegex.exec(cssText)) !== null) {
-        let block = match[0]
-        const fontUrls: Array<[string, string]> = []
-
-        let urlMatch: RegExpExecArray | null
-        fontUrlRegex.lastIndex = 0
-        while ((urlMatch = fontUrlRegex.exec(block)) !== null) {
-          const url = urlMatch[2]
-          if (!url.startsWith('data:') && fontExtRegex.test(url)) {
-            try {
-              const absoluteUrl = new URL(url, baseUrl).href
-              fontUrls.push([urlMatch[0], absoluteUrl])
-            } catch {
-              // ignore
-            }
-          }
-        }
-
-        // 并行处理所有字体URL
-        const dataUrls = await Promise.all(
-          fontUrls.map(async ([original, url]) => {
-            const dataUrl = await fetchAsDataUrl(url)
-            return [original, `url(${dataUrl})`] as const
-          })
-        )
-
-        dataUrls.forEach(([original, replacement]) => {
-          block = block.replace(original, replacement)
-        })
-
-        fontBlocks.push(block)
-      }
-
-      return fontBlocks
-    }
-
-    const allFontBlocks: string[] = []
-
-    // 处理外部样式表
-    const externalSheets = doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
-    await Promise.all(
-      Array.from(externalSheets).map(async (link) => {
-        if (!link.href) return
-        try {
-          const res = await fetch(link.href, { mode: 'cors', credentials: 'omit' })
-          if (res.ok) {
-            const cssText = await res.text()
-            const blocks = await processCss(cssText, link.href)
-            allFontBlocks.push(...blocks)
-          }
-        } catch {
-          // ignore
-        }
-      })
-    )
-
-    // 处理内联样式
-    const inlineStyles = doc.querySelectorAll('style')
-    await Promise.all(
-      Array.from(inlineStyles).map(async (style) => {
-        const cssText = style.textContent || ''
-        const blocks = await processCss(cssText, doc.baseURI)
-        allFontBlocks.push(...blocks)
-      })
-    )
-
-    return allFontBlocks.join('\n')
-  }
-
-  const animationStyle = disableAnimations()
-  let injectedFontStyle: HTMLStyleElement | null = null
-
-  const ensureFontStyle = (css: string): HTMLStyleElement => {
-    const EXISTING = doc.head.querySelector('style[data-cs-inline-fonts="true"]') as HTMLStyleElement | null
-    if (EXISTING) {
-      if (css && css.trim()) {
-        EXISTING.textContent = `${EXISTING.textContent || ''}\n${css}`
-      }
-      return EXISTING
-    }
-    const style = doc.createElement('style')
-    style.setAttribute('data-cs-inline-fonts', 'true')
-    style.textContent = css
-    doc.head.appendChild(style)
-    return style
-  }
-
-  try {
-    // 等待渲染稳定
-    await new Promise((r) => win.requestAnimationFrame(() => win.requestAnimationFrame(() => r(null))))
-
-    // 强制加载懒加载图片
-    doc.querySelectorAll('img[loading="lazy"]').forEach((img) => img.setAttribute('loading', 'eager'))
-
-    // 获取字体CSS
-    const fontEmbedCSS = await inlineFonts()
-
-    // 将字体 CSS 注入到 iframe 文档中，确保注册到 FontFaceSet
-    if (fontEmbedCSS && fontEmbedCSS.trim().length > 0) {
-      injectedFontStyle = ensureFontStyle(fontEmbedCSS)
-      // 访问一次以避免被标记为未使用
-      if (injectedFontStyle.parentNode == null) {
-        doc.head.appendChild(injectedFontStyle)
-      }
-    }
-
-    // 等待字体就绪，避免序列化时回退到系统字体
-    await Promise.race([
-      (doc as any).fonts?.ready ?? Promise.resolve(),
-      new Promise((resolve) => setTimeout(resolve, 1000))
-    ])
-
-    // 计算尺寸
-    const { documentElement: de, body: b } = doc
-    const totalWidth = Math.max(b.scrollWidth, de.scrollWidth, b.clientWidth, de.clientWidth)
-    const totalHeight = Math.max(b.scrollHeight, de.scrollHeight, b.clientHeight, de.clientHeight)
-
-    logger.verbose('Capturing iframe:', { totalWidth, totalHeight })
-
-    // 限制最大尺寸，按比例缩放
-    const MAX_SIZE = 32767
-    const scale = Math.min(1, MAX_SIZE / Math.max(totalWidth, totalHeight))
-    const pixelRatio = (win.devicePixelRatio || 1) * scale
-
-    const styles = win.getComputedStyle(b)
-    const backgroundColor = styles.backgroundColor || '#ffffff'
-    const color = styles.color || '#000000'
-
-    return await htmlToImage.toCanvas(de, {
-      fontEmbedCSS,
-      backgroundColor,
-      cacheBust: true,
-      pixelRatio,
-      skipAutoScale: true,
-      width: Math.floor(totalWidth),
-      height: Math.floor(totalHeight),
-      style: {
-        backgroundColor,
-        color,
-        width: `${totalWidth}px`,
-        height: `${totalHeight}px`,
-        overflow: 'visible',
-        display: 'block'
-      }
-    })
-  } catch (error) {
-    logger.error('Error capturing iframe:', error as Error)
-    return undefined
-  } finally {
-    // 恢复动画
-    animationStyle.remove()
-  }
-}
-
-export const captureScrollableIframeAsDataURL = async (iframeRef: React.RefObject<HTMLIFrameElement | null>) => {
-  return captureScrollableIframe(iframeRef).then((canvas) => {
-    if (canvas) {
-      return canvas.toDataURL('image/png')
-    }
-    return Promise.resolve(undefined)
-  })
-}
-
-export const captureScrollableIframeAsBlob = async (
-  iframeRef: React.RefObject<HTMLIFrameElement | null>,
-  func: BlobCallback
-) => {
-  await captureScrollableIframe(iframeRef).then((canvas) => {
-    canvas?.toBlob(func, 'image/png')
-  })
-}
-
-/**
- * 将 SVG 元素转换为 Canvas 元素。
- * @param svgElement 要转换的 SVG 元素
- * @param scale 缩放比例
- * @returns {Promise<HTMLCanvasElement>} 转换后的 Canvas 元素
  */
 export const svgToCanvas = (svgElement: SVGElement, scale = 3): Promise<HTMLCanvasElement> => {
   // 获取 SVG 尺寸信息
@@ -629,4 +407,42 @@ export const convertImageToPng = async (blob: Blob): Promise<Blob> => {
 
     img.src = url
   })
+}
+
+/**
+ * 任意来源（data:/file:/http(s)）的图像统一取为 Blob——V2 getImageBlobFromSource
+ * 的 fork 移植（绘画骨架取色/自然尺寸解码共用）。data: 走 parseDataUrl + Base64
+ * 解码；file:// 走 window.api.fs.read（ImageViewer 同款三分支）；http(s) 走 fetch。
+ * 非 image/* MIME 视为未知类型（octet-stream），拒绝解码。
+ */
+export async function getImageBlobFromSource(src: string): Promise<Blob> {
+  let blob: Blob
+
+  if (src.startsWith('data:')) {
+    const parseResult = parseDataUrl(src)
+    if (!parseResult || !parseResult.mediaType || !parseResult.isBase64) {
+      throw new Error('Invalid base64 image data URL')
+    }
+    const byteArray = Base64.toUint8Array(parseResult.data)
+    blob = new Blob([byteArray.slice()], { type: parseResult.mediaType })
+  } else if (src.startsWith('file://')) {
+    const bytes = await window.api.fs.read(src)
+    const mimeType = mime.getType(src) || 'application/octet-stream'
+    blob = new Blob([bytes], { type: mimeType })
+  } else {
+    const response = await fetch(src)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`)
+    }
+    blob = await response.blob()
+  }
+
+  return assertImageBlob(blob)
+}
+
+function assertImageBlob(blob: Blob): Blob {
+  if (!blob.type.startsWith('image/')) {
+    throw new Error(`Not an image blob: ${blob.type || 'unknown'}`)
+  }
+  return blob
 }

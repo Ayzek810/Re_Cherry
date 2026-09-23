@@ -1,8 +1,25 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { lightOneShot, lightStream } from '../lightLlm'
+
+// admitEncodedImages mock：记录调用并返回固定 ref 形状（真实准入由 dsh-attachment 自测）。
+const admitCalls: Array<unknown[]> = []
+let admitError: Error | undefined
+vi.mock('@deepseek-ai/dsh-attachment', () => ({
+  admitEncodedImages: async (_attachments: unknown, images: unknown[]) => {
+    admitCalls.push(images)
+    if (admitError !== undefined) throw admitError
+    return (images as Array<{ name?: string }>).map((image, index) => ({
+      attachmentId: `att-${index}`,
+      sha256: `hash${index}`,
+      mediaType: 'image/png',
+      bytes: 2,
+      ...(image.name !== undefined ? { name: image.name } : {})
+    }))
+  }
+}))
 
 /**
  * 轻量 LLM 服务机测：真 BlockAssembler + 真消息工厂，只 fake ctx.llm.stream 与
@@ -197,5 +214,60 @@ describe('lightStream', () => {
       () => {}
     )
     expect((captured[0].reasoningEffort as unknown as string) ?? undefined).toBe('medium')
+  })
+
+  it('images 准入：ref 附到最后一条 user 消息；无 images 时 content 形状不变', async () => {
+    // 无 images：纯文本块（现行为回归钉）
+    const plain = makeCtx([finishStop])
+    await lightOneShot(plain.ctx, { provider: 'p', model: 'm', messages: [{ role: 'user', text: 'x' }] })
+    const plainContent = (plain.captured[0].messages[0] as { content: Array<{ type: string }> }).content
+    expect(plainContent).toEqual([{ type: 'text' }])
+
+    // 带 images：admitEncodedImages 被 mock，返回两个 ref → 最后一条 user 消息拼 image 块
+    const withImages = makeCtx([finishStop])
+    await lightOneShot(withImages.ctx, {
+      provider: 'p',
+      model: 'm',
+      messages: [
+        { role: 'user', text: '看图' },
+        { role: 'assistant', text: '好' },
+        { role: 'user', text: '第二问' }
+      ],
+      images: [
+        { mediaType: 'image/png', data: 'aGk=', name: 'a.png' },
+        { mediaType: 'image/jpeg', data: 'aGk=' }
+      ]
+    })
+    const first = (withImages.captured[0].messages[0] as { content: Array<{ type: string; attachment?: unknown }> })
+      .content
+    expect(first).toEqual([{ type: 'text' }])
+    const last = (withImages.captured[0].messages[2] as { content: Array<{ type: string; attachment?: unknown }> })
+      .content
+    expect(last).toHaveLength(3)
+    expect(last[0]?.type).toBe('text')
+    expect(last[1]?.type).toBe('image')
+    expect(last[2]?.type).toBe('image')
+    expect(admitCalls).toHaveLength(1)
+    expect(admitCalls[0]).toEqual([
+      { mediaType: 'image/png', data: 'aGk=', name: 'a.png' },
+      { mediaType: 'image/jpeg', data: 'aGk=' }
+    ])
+  })
+
+  it('images 准入失败整轮拒绝（错误上抛，调用方 catch）', async () => {
+    admitError = new Error('too many images')
+    try {
+      const { ctx } = makeCtx([finishStop])
+      await expect(
+        lightOneShot(ctx, {
+          provider: 'p',
+          model: 'm',
+          messages: [{ role: 'user', text: 'x' }],
+          images: [{ mediaType: 'image/png', data: 'aGk=' }]
+        })
+      ).rejects.toThrow('too many images')
+    } finally {
+      admitError = undefined
+    }
   })
 })

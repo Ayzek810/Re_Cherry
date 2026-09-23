@@ -140,3 +140,54 @@ describe('kernelChat turn 投影（v0.3.1-1 空回复案）', () => {
     expect(errorBlocksOf(blocks)).toHaveLength(0)
   })
 })
+
+describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
+  const toolCall = (seq: number): SessionEvent =>
+    ev(seq, 'tool/call', { callId: 'c1', name: 'generate_image', arguments: '{"prompt":"a cat"}' })
+
+  const toolResult = (seq: number, meta: unknown, isError = false): SessionEvent =>
+    ev(seq, 'tool/result', {
+      message: {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'Generated 1 image(s)' }], isError }
+        ]
+      },
+      ...(meta !== undefined ? { meta } : {})
+    })
+
+  it('成功结果（presentationMeta 含 images）→ 追加 IMAGE 块，generateImageResponse 元数据可渲染', async () => {
+    const { messages, blocks } = await project([
+      userMsg(2, '画一只猫'),
+      toolCall(3),
+      toolResult(4, { kind: 'generate-image', images: ['data:image/png;base64,aGk='] }),
+      turnEnd(5, { kind: 'completed' })
+    ])
+    const answer = messages[1]
+    expect(answer.status).toBe('success')
+    const imageBlocks = blocks.filter((b) => (b as { type?: string }).type === MessageBlockType.IMAGE)
+    expect(imageBlocks).toHaveLength(1)
+    const metadata = (imageBlocks[0] as { metadata?: { generateImageResponse?: { images?: string[] } } }).metadata
+    expect(metadata?.generateImageResponse?.images).toEqual(['data:image/png;base64,aGk='])
+  })
+
+  it('meta kind 不匹配或缺 images：不投影 IMAGE 块（不误报）', async () => {
+    const { blocks } = await project([
+      userMsg(2, '画一只猫'),
+      toolCall(3),
+      toolResult(4, { kind: 'web-search', results: [] }),
+      turnEnd(5, { kind: 'completed' })
+    ])
+    expect(blocks.filter((b) => (b as { type?: string }).type === MessageBlockType.IMAGE)).toHaveLength(0)
+  })
+
+  it('失败结果（isError）：不投影 IMAGE 块', async () => {
+    const { blocks } = await project([
+      userMsg(2, '画一只猫'),
+      toolCall(3),
+      toolResult(4, { kind: 'generate-image', images: ['data:image/png;base64,aGk='] }, true),
+      turnEnd(5, { kind: 'completed' })
+    ])
+    expect(blocks.filter((b) => (b as { type?: string }).type === MessageBlockType.IMAGE)).toHaveLength(0)
+  })
+})

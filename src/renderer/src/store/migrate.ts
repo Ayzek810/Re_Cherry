@@ -3253,6 +3253,34 @@ const migrateConfig = {
       logger.error('migrate 218 error', error as Error)
       return state
     }
+  },
+  '220': (state: RootState) => {
+    try {
+      // v0.3.3 批次3+4：翻译页与绘画页回归。四件事：
+      // ① llm 切片新增 translateModel（翻译模型）字段——旧持久化态没有此字段，
+      //    显式落 undefined = 未配置（照 '214' imageDescriberModel 先例）。
+      // ② llm 切片新增 paintingModel（绘画模型）字段，同上。
+      // ③ translate 侧栏图标补位（照 '217' knowledge 先例——存量 sidebarIcons.visible
+      //    快照不含新图标，不补位老用户看不到入口）。
+      // ④ paintings 侧栏图标补位，同上。
+      if (state.llm !== undefined) {
+        state.llm.translateModel = undefined
+        state.llm.paintingModel = undefined
+      }
+      const visible = state.settings?.sidebarIcons?.visible
+      if (Array.isArray(visible)) {
+        if (!visible.includes('translate')) {
+          visible.push('translate')
+        }
+        if (!visible.includes('paintings')) {
+          visible.push('paintings')
+        }
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 220 error', error as Error)
+      return state
+    }
   }
 }
 

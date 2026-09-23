@@ -4,4 +4,4 @@ import type { SidebarIcon } from '@renderer/types'
  * 默认显示的侧边栏图标
  * 这些图标会在侧边栏中默认显示
  */
-export const DEFAULT_SIDEBAR_ICONS: SidebarIcon[] = ['assistants', 'minapp', 'files', 'knowledge']
+export const DEFAULT_SIDEBAR_ICONS: SidebarIcon[] = ['assistants', 'minapp', 'files', 'knowledge', 'translate', 'paintings']

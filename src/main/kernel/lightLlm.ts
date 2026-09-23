@@ -14,6 +14,7 @@
  * 由 syncCherryProviders 维护，轻量调用自动继承（含开发者角色/enable_thinking 修正）。
  */
 import type { Context } from '@deepseek-ai/cordis'
+import { admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { AssistantMessage, UserMessage } from '@deepseek-ai/dsh-llm'
 import { BlockAssembler, createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
@@ -59,17 +60,35 @@ async function assembleCall(
   const requested = call.reasoningEffort ?? reasoningDefault
   const reasoningEffort =
     requested === undefined ? undefined : await reasoningSeam(ctx).resolveRequest(call.provider, call.model, requested)
-  const messages = call.messages.map((message) =>
-    message.role === 'user'
-      ? createUserMessage({
-          content: [{ type: 'text', text: message.text }],
-          source: { kind: 'plugin', plugin: source }
-        })
-      : createAssistantMessage({
-          content: [{ type: 'text', text: message.text }],
-          source: { provider: call.provider, model: call.model }
-        })
-  )
+  // 图片准入（快捷助手视觉通路）：与主聊天同一条 admitEncodedImages 批量准入
+  // （限额/校验/有序提交），失败整轮拒绝；ref 附到最后一条 user 消息的 content
+  //（主聊天同语义：图片属于触发消息——单轮调用首尾同条，多轮历史不错位）。
+  const imageRefs =
+    call.images !== undefined && call.images.length > 0
+      ? [...(await admitEncodedImages(ctx.attachments, call.images))]
+      : []
+  const lastUserIndex = (() => {
+    for (let i = call.messages.length - 1; i >= 0; i -= 1) {
+      if (call.messages[i].role === 'user') return i
+    }
+    return -1
+  })()
+  const messages = call.messages.map((message, index) => {
+    if (message.role !== 'user') {
+      return createAssistantMessage({
+        content: [{ type: 'text', text: message.text }],
+        source: { provider: call.provider, model: call.model }
+      })
+    }
+    const attach = index === lastUserIndex && imageRefs.length > 0
+    return createUserMessage({
+      content: [
+        { type: 'text', text: message.text },
+        ...(attach ? imageRefs.map((ref) => ({ type: 'image' as const, attachment: ref })) : [])
+      ],
+      source: { kind: 'plugin', plugin: source }
+    })
+  })
   return {
     options: {
       provider: call.provider,
