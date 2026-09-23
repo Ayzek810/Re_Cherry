@@ -437,12 +437,19 @@ export async function getImageBlobFromSource(src: string): Promise<Blob> {
     blob = await response.blob()
   }
 
-  return assertImageBlob(blob)
+  return assertImageBlob(blob, src)
 }
 
-function assertImageBlob(blob: Blob): Blob {
-  if (!blob.type.startsWith('image/')) {
-    throw new Error(`Not an image blob: ${blob.type || 'unknown'}`)
+function assertImageBlob(blob: Blob, src: string): Blob {
+  // `octet-stream` 是**误标**而不是"非图片"的判决：无扩展名的本地文件条目、以及不报 MIME 的
+  // 远端都会落到这里，而字节本身仍能像 `<img>` 一样解码（V2 `assertImageBlob` 同款注释与判定）。
+  // fork 缝（v0.3.3-10）：本条曾退化成"非 image/* 一律拒绝"，于是绘画文件（`file://` + 存储名
+  // 无扩展名 ⇒ mime 查不到类型）**恒定失败**——自然尺寸取不到（实机日志 "Not an image blob:
+  // application/octet-stream"）、骨架取色也静默降级。判定按 V2 恢复。
+  const type = blob.type.trim()
+  const unknown = type === 'application/octet-stream'
+  if (type && !unknown && !type.startsWith('image/')) {
+    throw new Error(`Source is not an image (content type ${type}): ${src}`)
   }
   return blob
 }

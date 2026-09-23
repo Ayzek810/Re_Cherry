@@ -540,7 +540,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
                 letterboxing the bar past its real edges. */}
             <div
               data-testid="artboard-image-layout"
-              className="flex h-full max-h-full max-w-full flex-col items-stretch"
+              className="flex h-full max-h-full w-full max-w-full flex-col items-stretch"
               style={{
                 ...(displayedImageBoxSize ? { width: displayedImageBoxSize.width } : undefined)
               }}>
@@ -551,9 +551,12 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
               )}
               {/* fork 缝（v0.3.3-9）：V2 只靠 `displayedImageBoxSize` 这个显式盒子，算不出来
                   （尺寸未量到、提示条比容器还高）时就退化成"上对齐填满 + 被 `overflow-hidden` 裁掉"。
-                  这里再套一层**高度确定**的图片区（父级 `h-full` + 自身 `min-h-0 flex-1`），
-                  让 `max-h-full`/`object-contain` 真正生效——"完整展示"于是成为 CSS 层的硬保证，
-                  显式盒子只负责把尺寸对齐到像素级（提示条宽度跟着它走）。 */}
+                  这里再套一层**两个方向都确定**的图片区：列 `h-full w-full`（w-full 会被上面的
+                  `style.width` 覆盖）+ 图片区 `min-h-0 flex-1`，于是 `max-h-full`/`max-w-full`/
+                  `object-contain` 真正生效——"完整展示"成为 CSS 层的硬保证（两个方向都不会溢出），
+                  显式盒子只负责把尺寸对齐到像素级（提示条宽度跟着它走）。
+                  另：`preview={false}` 让 ImageViewer 渲染**裸 `<img>`**（v0.3.3-10），
+                  上面这些 `max-*`/`object-contain` 才落在 `<img>` 而不是 antd 的包裹 div 上。 */}
               <div className="flex min-h-0 flex-1 items-center justify-center">
                 <ImageViewer
                   alt=""
