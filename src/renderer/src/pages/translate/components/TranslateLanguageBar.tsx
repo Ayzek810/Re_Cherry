@@ -52,6 +52,10 @@ const TranslateLanguageBar: FC<Props> = ({
 
   return (
     <div className={cn('flex min-w-0 shrink-0 items-center gap-3', className)}>
+      {/* fork 缝：V2:162-171 在源语言 Combobox 的取值渲染里带一个 `sr-only` 的
+          `translate.source_language` 标签。fork 的 antd Select 没有 renderValue 插槽，
+          改用 Select 的 `aria-label`（rc-select 的 props 继承 React.AriaAttributes，
+          落在可访问性根上）达到同一"控件有名字"的效果。 */}
       <Select
         className={LANGUAGE_SELECT_CLASS}
         value={source}
@@ -60,6 +64,7 @@ const TranslateLanguageBar: FC<Props> = ({
         showSearch
         optionFilterProp="label"
         popupMatchSelectWidth={false}
+        aria-label={t('translate.source_language')}
       />
       <Tooltip title={t('translate.exchange')}>
         <button
@@ -71,6 +76,11 @@ const TranslateLanguageBar: FC<Props> = ({
           <ArrowLeftRight size={14} className="lucide-custom" />
         </button>
       </Tooltip>
+      {/* fork 缝：V2:218-227 同样在目标语言 Combobox 的取值渲染里带 `sr-only` 的
+          `translate.target_language` 标签，fork 改用 `aria-label`（同源语言）。
+          仍缺一项：V2 还会把**检测到的语言**显示在源语言取值处，fork 无检测引擎
+          （V2 走 `franc-min` + `useDetectLang`，fork 无该依赖）——保留"自动检测"占位，
+          见 `未清债.md`。 */}
       <Select
         className={LANGUAGE_SELECT_CLASS}
         value={target}
@@ -79,6 +89,7 @@ const TranslateLanguageBar: FC<Props> = ({
         showSearch
         optionFilterProp="label"
         popupMatchSelectWidth={false}
+        aria-label={t('translate.target_language')}
       />
     </div>
   )

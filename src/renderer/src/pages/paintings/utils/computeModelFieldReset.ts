@@ -1,42 +1,67 @@
 /**
- * 表单字段重置补丁（v0.3.3 批次4，② 薄适配）：V2 computeModelFieldReset 主体
- * 保留——旧键清空/新默认播种/越界重置三段逻辑原样；数据源从 DataApi registry
- * support 换本地 PAINTING_PARAM_TABLE（imageGenerationToFields 的表驱动形态）。
+ * 表单字段重置补丁（v0.3.3 批次6，V2 移植）：V2
+ * `src/renderer/pages/paintings/utils/computeModelFieldReset.ts` 主体照抄——
+ * 旧键清空 / 新默认播种 / 越界重置三段逻辑逐行相同。
+ *
+ * fork 缝：V2 的 support 经 DataApi prefetch（old/new 各一次），fork 改为从
+ * `@shared/lightLlm/imageGenerationCatalog` 按 (providerId, modelId) 同步解析，
+ * 解析序（provider override → creator 默认）与 V2 `getImageGenerationSupport` 同。
  */
 import { loggerService } from '@logger'
 import type { BaseConfigItem } from '@renderer/pages/paintings/form/baseConfigItem'
 import { imageGenerationToFields } from '@renderer/pages/paintings/form/imageGenerationToFields'
+import type { ImageGenerationMode, ImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 
 const logger = loggerService.withContext('paintings/modelFieldReset')
 
 /**
  * Diff a painting's form-field state against the model it's about to use.
  * Returns a patch to merge into `painting.params` that:
- *   1. Nulls fields the old model wrote but the new model doesn't accept.
- *   2. Populates the new model's table-declared defaults (`initialValue`)
- *      for any field the user hasn't set yet.
- *   3. Resets carry-over values the new model can't accept: enum/select
- *      values absent from the new `options` list, and range/slider values
- *      outside the new `[min, max]` window.
+ *   1. Nulls fields the old model wrote but the new model doesn't accept
+ *      (otherwise stale `aspectRatio` / `styleType` / etc. would leak to the
+ *      wire on a model that rejects them).
+ *   2. Populates the new model's declared defaults (`spec.default`) for any
+ *      field the user hasn't set yet — without this, widgets display a default
+ *      visually via `item.initialValue` but never commit it to state, so
+ *      `canonicalGenerate` reads `undefined` and the transport omits the field.
+ *   3. Resets carry-over values the new model can't accept: enum/select values
+ *      absent from the new `options` list, and range/slider values outside the
+ *      new `[min, max]` window.
  *
  * Apply alongside `{ model: newModelId }` in `usePaintingModelSwitch` so
  * post-switch state contains exactly the fields the new model accepts AND
  * the visible defaults match what the wire will actually receive.
  *
- * Returns `{}` when the new model has no table entry — no info, no patch.
+ * Returns `{}` when the new model has no catalog block (custom or user-named
+ * models without an `imageGeneration` entry) — no info, no patch.
  */
 export async function computeModelFieldReset(input: {
+  providerId: string
   oldModelId: string | undefined
   newModelId: string
-  mode: PaintingDataMode | undefined
+  mode: ImageGenerationMode | undefined
   currentValues?: Record<string, unknown>
 }): Promise<Record<string, unknown>> {
-  const { oldModelId, newModelId, mode, currentValues = {} } = input
+  const { providerId, oldModelId, newModelId, mode, currentValues = {} } = input
   if (oldModelId && oldModelId === newModelId) return {}
 
-  // fork 缝：参数表全模型通用（无 per-model registry），old/new 字段面相同——
-  // 只有 mode 变化会改变字段面。这里按 mode 派生一次。
-  const newItems = imageGenerationToFields({ mode })
+  // fork 缝：V2 在此 await prefetch（可失败 → undefined）；fork 目录同步，
+  // 取不到即 undefined（该模型不在这条平面上）。
+  const fetchSupport = (modelId: string): ImageGenerationSupport | undefined => {
+    try {
+      return getImageGenerationSupport(providerId, modelId) ?? undefined
+    } catch (error) {
+      logger.warn('Failed to resolve image-generation-support', { providerId, modelId, error })
+      return undefined
+    }
+  }
+
+  const oldSupport = oldModelId ? fetchSupport(oldModelId) : undefined
+  const newSupport = fetchSupport(newModelId)
+
+  const oldItems = oldSupport ? imageGenerationToFields(oldSupport, { mode }) : []
+  const newItems = newSupport ? imageGenerationToFields(newSupport, { mode }) : []
   if (newItems.length === 0) return {}
 
   const collectKeys = (items: BaseConfigItem[]): Set<string> => {
@@ -44,7 +69,8 @@ export async function computeModelFieldReset(input: {
     for (const item of items) {
       if (item.key) keys.add(item.key)
       // `customSize` widget aliases multiple persisted fields under one
-      // BaseConfigItem. Collect each so the reset doesn't half-clear the trio.
+      // BaseConfigItem (zhipu cogview). Collect each so the reset doesn't
+      // half-clear the trio.
       const widget = item as { widthKey?: string; heightKey?: string; sizeKey?: string }
       if (widget.widthKey) keys.add(widget.widthKey)
       if (widget.heightKey) keys.add(widget.heightKey)
@@ -53,15 +79,14 @@ export async function computeModelFieldReset(input: {
     return keys
   }
 
+  const oldKeys = collectKeys(oldItems)
   const newKeys = collectKeys(newItems)
 
   const patch: Record<string, unknown> = {}
-  // 1. 旧键不在新字段面 → 清空（fork 表全模型通用，仅 customSize 伴随键可能残留）。
-  for (const key of Object.keys(currentValues)) {
+  for (const key of oldKeys) {
     if (!newKeys.has(key)) patch[key] = undefined
   }
 
-  // 2/3. 新字段面：播种默认 + 越界重置。
   for (const item of newItems) {
     if (!item.key) continue
     if (Object.prototype.hasOwnProperty.call(patch, item.key)) continue
@@ -69,15 +94,15 @@ export async function computeModelFieldReset(input: {
     const currentValue = currentValues[item.key]
     const isMissing = currentValue === undefined || currentValue === null || currentValue === ''
 
-    // Field the user never set: seed the table default so the widget's visible
-    // default matches the wire. Default-less field stays unset.
+    // Field the user never set: seed the new model's declared default so the
+    // widget's visible default matches the wire. Default-less field stays unset.
     if (isMissing) {
       if (item.initialValue !== undefined) patch[item.key] = item.initialValue
       continue
     }
 
     // Field carried a value over from the previous model. Validate it against
-    // the new model's constraints; reset to the default (or `undefined`
+    // the new model's constraints; reset to the new default (or `undefined`
     // when there's none) whenever it no longer fits.
     const options = typeof item.options === 'function' ? item.options(item, currentValues) : (item.options ?? [])
     if (options.length > 0) {
@@ -98,8 +123,3 @@ export async function computeModelFieldReset(input: {
 
   return patch
 }
-
-type PaintingDataMode = 'generate' | 'edit'
-
-// logger 保留给后续 per-model 表扩展（fork 当前无 per-model 差异）。
-void logger

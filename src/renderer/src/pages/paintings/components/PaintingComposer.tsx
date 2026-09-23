@@ -17,9 +17,13 @@ import { getComposerToolConfig } from '@renderer/components/composer/tools/regis
 import { Button, Popover, PopoverContent, PopoverTrigger } from '@renderer/components/composer/ui'
 // fork 缝：V2 从 `./PaintingImageGallery` / `./PaintingModelSelector` 引页部件；
 // fork 这两个原件是 props 驱动且页面还在用，故改引 composer 缝里的同义替身。
-import { PaintingImageAddButton, PaintingImageGallery } from '@renderer/components/composer/variants/painting/PaintingImageGallery'
+import {
+  PaintingImageAddButton,
+  PaintingImageGallery
+} from '@renderer/components/composer/variants/painting/PaintingImageGallery'
 import PaintingModelSelector from '@renderer/components/composer/variants/painting/PaintingModelSelector'
 import {
+  COMPOSER_ICON_ONLY_SELECTOR_BUTTON_CLASS,
   COMPOSER_SELECTOR_BUTTON_CLASS,
   ComposerToolbarControls
 } from '@renderer/components/composer/variants/shared/ComposerControlScaffolding'
@@ -31,6 +35,7 @@ import type { Model } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types/file'
 import { cn } from '@renderer/utils/style'
 import { imageExts } from '@shared/config/constant'
+import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import { Settings2 } from 'lucide-react'
 import { type FC, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -133,11 +138,19 @@ const PaintingParamsButton: FC<{
   painting: PaintingData
   onConfigChange: (updates: Partial<PaintingData>) => void
   onGenerateRandomSeed?: (key: string) => void
-}> = ({ painting, onConfigChange, onGenerateRandomSeed }) => {
+  /** fork 缝（v0.3.3-7）：工具栏放不下时进图标态（V2 同源）——只留齿轮，参数摘要是按钮的 aria-label。 */
+  iconOnly?: boolean
+}> = ({ painting, onConfigChange, onGenerateRandomSeed, iconOnly }) => {
   const { t } = useTranslation()
+  // fork 缝（v0.3.3 批次6）：support 从 fork 目录按 (providerId, model) 解析，
+  // 字段面因此随模型能力变化（V2 是 useImageGenerationSupport 查询，同语义）。
+  const support = useMemo(
+    () => getImageGenerationSupport(painting.providerId, painting.model) ?? undefined,
+    [painting.providerId, painting.model]
+  )
   const configItems = useMemo(
-    () => imageGenerationToFields(undefined, { mode: tabToImageGenerationMode(painting.mode) }),
-    [painting.mode]
+    () => imageGenerationToFields(support, { mode: tabToImageGenerationMode(painting.mode) }),
+    [support, painting.mode]
   )
   const summary = useMemo(() => paramsSummary(painting.params, configItems, t), [painting.params, configItems, t])
 
@@ -150,10 +163,14 @@ const PaintingParamsButton: FC<{
           type="button"
           variant="ghost"
           size="sm"
-          className={cn(COMPOSER_SELECTOR_BUTTON_CLASS, 'text-muted-foreground')}
+          className={cn(
+            COMPOSER_SELECTOR_BUTTON_CLASS,
+            iconOnly && COMPOSER_ICON_ONLY_SELECTOR_BUTTON_CLASS,
+            'text-muted-foreground'
+          )}
           aria-label={summary ? `${t('common.settings')}: ${summary}` : t('common.settings')}>
           <Settings2 className="size-4" />
-          {summary && (
+          {summary && !iconOnly && (
             <span className="max-w-55 truncate" title={summary}>
               {summary}
             </span>
@@ -295,15 +312,22 @@ const PaintingComposerInner: FC<PaintingComposerInnerProps> = ({
           <ComposerToolbarControls
             inputAdapter={inputAdapter}
             unifiedPanelControl={unifiedPanelControl}
-            renderContextControls={() => (
+            renderContextControls={({ iconOnly }) => (
               <>
                 <PaintingModelSelector
                   hideTitle
+                  iconOnly={iconOnly}
                   painting={painting}
                   onSelect={onModelSelect}
-                  className={cn(COMPOSER_SELECTOR_BUTTON_CLASS, 'w-auto max-w-[200px] border border-border-subtle')}
+                  className={cn(
+                    COMPOSER_SELECTOR_BUTTON_CLASS,
+                    iconOnly
+                      ? COMPOSER_ICON_ONLY_SELECTOR_BUTTON_CLASS
+                      : 'w-auto max-w-[200px] border border-border-subtle'
+                  )}
                 />
                 <PaintingParamsButton
+                  iconOnly={iconOnly}
                   painting={painting}
                   onConfigChange={onConfigChange}
                   onGenerateRandomSeed={onGenerateRandomSeed}
@@ -325,17 +349,16 @@ const PaintingComposerInner: FC<PaintingComposerInnerProps> = ({
 const PaintingComposer: FC<PaintingComposerProps> = (props) => {
   const { painting } = props
   const models = useAppSelector((state) => state.llm.providers)
-  const model = useMemo(
-    () => {
-      // fork 缝：V2 `useModels({ providerId })` 是异步模型目录；fork 的模型目录就在 redux
-      // providers 里，这里按 providerId 取该 provider 的模型并沿用 V2 的 id 匹配谓词。
-      const list = painting.providerId
-        ? (models.find((provider) => provider.id === painting.providerId)?.models ?? [])
-        : models.flatMap((provider) => provider.models)
-      return painting.model ? list.find((entry) => entry.provider === painting.providerId && entry.id === painting.model) : undefined
-    },
-    [models, painting.providerId, painting.model]
-  )
+  const model = useMemo(() => {
+    // fork 缝：V2 `useModels({ providerId })` 是异步模型目录；fork 的模型目录就在 redux
+    // providers 里，这里按 providerId 取该 provider 的模型并沿用 V2 的 id 匹配谓词。
+    const list = painting.providerId
+      ? (models.find((provider) => provider.id === painting.providerId)?.models ?? [])
+      : models.flatMap((provider) => provider.models)
+    return painting.model
+      ? list.find((entry) => entry.provider === painting.providerId && entry.id === painting.model)
+      : undefined
+  }, [models, painting.providerId, painting.model])
   // fork 缝：V2 `isEditImageModel(model)`（@shared/utils/model）→ fork 的
   // `supportsPaintingEdit`（paintingModelSelection，同义谓词）。
   const couldAddImageFile = model ? supportsPaintingEdit(model) : false

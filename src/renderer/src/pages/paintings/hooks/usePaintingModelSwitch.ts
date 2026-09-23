@@ -39,6 +39,7 @@ export function usePaintingModelSwitch({ painting, onPaintingChange }: UsePainti
         // Returns `{}` when either model is unknown, so custom-id paintings
         // stay untouched.
         const resetPatch = await computeModelFieldReset({
+          providerId: currentProviderId,
           oldModelId: painting.model,
           newModelId: modelId,
           mode: tabToImageGenerationMode(painting.mode),

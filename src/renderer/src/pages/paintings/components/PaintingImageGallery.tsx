@@ -6,6 +6,7 @@
  */
 import { DownloadOutlined, PlusOutlined } from '@ant-design/icons'
 import HorizontalScrollContainer from '@renderer/components/HorizontalScrollContainer'
+import ImageViewer from '@renderer/components/ImageViewer'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
 import type { FileMetadata } from '@renderer/types'
 import { download } from '@renderer/utils/download'
@@ -40,23 +41,32 @@ export const PaintingInputTray: FC<{
   if (files.length === 0) return null
   return (
     <TrayWrap>
-      <HorizontalScrollContainer dependencies={[files.length]} gap="6px">
-        {files.map((file) => (
-          <Tile key={file.id}>
-            <TileImage src={getPaintingFileUrl(file)} alt={file.origin_name} preview={false} />
-            <RemoveButton
-              type="button"
-              aria-label={t('common.delete')}
-              title={t('common.delete')}
-              onClick={(event) => {
-                event.stopPropagation()
-                onRemove(file.id)
-              }}>
-              <X size={12} />
-            </RemoveButton>
-          </Tile>
-        ))}
-      </HorizontalScrollContainer>
+      {/* fork 缝：V2 `pages/paintings/components/PaintingImageGallery.tsx:104-110` 的
+          `ImageViewer … preview={{ items: previewItems }}` —— 点缩略图开大图、可左右翻页。
+          fork 侧**不能照抄 items 形态**：antd 5.27 的 `Image` 只把 `preview` 交给单图预览
+          （rc-image 7.12 的 `items` 在 `PreviewGroup` 上），`preview={{items}}` 会被类型门禁
+          拒收且运行时也无人消费；改用 antd Image 自带的 `PreviewGroup` 组灯箱：组内每张
+          Image 自动注册，点任一张即从该张打开并可翻页（等价交互，且保留 fork `ImageViewer`
+          的右键复制/下载菜单）。 */}
+      <Image.PreviewGroup>
+        <HorizontalScrollContainer dependencies={[files.length]} gap="6px">
+          {files.map((file) => (
+            <Tile key={file.id}>
+              <TileImage src={getPaintingFileUrl(file)} alt={file.origin_name} draggable={false} preview />
+              <RemoveButton
+                type="button"
+                aria-label={t('common.delete')}
+                title={t('common.delete')}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onRemove(file.id)
+                }}>
+                <X size={12} />
+              </RemoveButton>
+            </Tile>
+          ))}
+        </HorizontalScrollContainer>
+      </Image.PreviewGroup>
     </TrayWrap>
   )
 }
@@ -113,11 +123,20 @@ const Tile = styled.span`
   }
 `
 
-const TileImage = styled(Image)`
+// fork 缝：V2:104-108 的 `ImageViewer className="size-full cursor-pointer object-cover"`。
+// fork 的 `ImageViewer` 是 antd Image + 复制/下载右键菜单的薄包装（`components/ImageViewer.tsx`），
+// 与上面的 `Image.PreviewGroup` 组灯箱配合；`.ant-image` 包装层仍需撑满 56px 格子
+// （antd 5 默认 inline-block，否则缩略图会缩成图片原始尺寸）。
+const TileImage = styled(ImageViewer)`
   width: 100%;
   height: 100%;
-  object-fit: cover;
   cursor: pointer;
+
+  .ant-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
 
   .ant-image-img {
     width: 100%;

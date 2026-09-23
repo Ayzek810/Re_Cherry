@@ -33,9 +33,15 @@ const Footer: FC<FooterProps> = ({
     onEsc()
   })
 
-  useHotkeys('c', () => {
-    handleCopy()
-  })
+  // 翻译路由的 C 由 TranslateWindow 自己接管（它持有译文）；否则一次按键会写两遍剪贴板、
+  // 弹两个成功提示。其余路由仍由本组件负责。
+  useHotkeys(
+    'c',
+    () => {
+      handleCopy()
+    },
+    { enabled: route !== 'translate' }
+  )
 
   const handleCopy = () => {
     if (loading || !onCopy) return

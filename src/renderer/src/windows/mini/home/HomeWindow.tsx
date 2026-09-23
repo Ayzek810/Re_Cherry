@@ -83,6 +83,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   const [isOutputted, setIsOutputted] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
+  // 翻译路由的译文（由 TranslateWindow 上报）：翻译不建话题，故 `handleCopy` 拿不到
+  // "最后一条助手消息"——此前翻译路由里 Footer 的「按 C 复制」胶囊点了没有任何反应。
+  const [translateResult, setTranslateResult] = useState('')
 
   const currentTopic = useRef<Topic>(getDefaultTopic(MINI_ASSISTANT_ID))
   const currentAskId = useRef('')
@@ -105,13 +108,44 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     void i18n.changeLanguage(language || navigator.language || defaultLanguage)
   }, [language])
 
+  // fork 缝：V2 quickAssistant `HomeWindow.tsx:239-246` 的 `clear()`
+  // （`stopChat()` + `setMessages([])` + `clearExecutionMessages()` + `setFlowError(null)` + `setIsPreparing(false)`）：
+  // fork 等价物是「作废在途流 + 清该话题消息 + 复位执行态」三件。V2 的 `setMessages([])` 只清
+  // provider 里的消息数组（= fork 按 topicId 存的消息），故这里只清当前话题的消息。
+  const clearConversation = useCallback(() => {
+    // ① 停流：dsh:complete 无中途取消，置位 cancelledRef 丢弃结果；同时在途流真取消
+    //   （复刻 handlePause 的 requestId 约定：在途流的 requestId 就是该助手消息 id）。
+    cancelledRef.current = true
+    const topicId = currentTopic.current?.id
+    if (topicId) {
+      const state = store.getState()
+      const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
+      const streaming = messageIds
+        .map((id) => state.messages.entities[id])
+        .find((m) => m !== undefined && m.role === 'assistant' && m.status === AssistantMessageStatus.PROCESSING)
+      if (streaming) void lightStreamAbort(streaming.id)
+    }
+    // ② 清该话题消息（V2 `setMessages([])`）。
+    if (topicId) store.dispatch(newMessagesActions.clearTopicMessages(topicId))
+    // ③ 复位执行态：话题回默认、加载/输出标志与执行 id 归零（V2 `clearExecutionMessages()` + `setIsPreparing(false)`）。
+    currentTopic.current = getDefaultTopic(MINI_ASSISTANT_ID)
+    currentAskId.current = ''
+    setIsLoading(false)
+    setIsOutputted(false)
+  }, [])
+
   // Reset state when switching to home route
   useEffect(() => {
     if (route === 'home') {
+      // fork 缝：V2 HomeWindow.tsx:251-257 在 `route === 'home'` 时调 `clear()`——从
+      // 总结/解释（或对话）返回 home 必须丢掉该话题的上下文；fork 此前只复位两个标志位，
+      // 消息仍留在 store 里，下次进总结/解释看到的还是上一轮内容。`setIsFirstMessage`/`setError(null)`
+      // 是 fork 既有语义（对应 V2 的 `setIsFirstMessage` / `setFlowError`），保留不动。
       setIsFirstMessage(true)
       setError(null)
+      clearConversation()
     }
-  }, [route])
+  }, [route, clearConversation])
 
   const focusInput = useCallback(() => {
     if (inputBarRef.current) {
@@ -579,6 +613,14 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   }, [isLoading, route, handleCloseWindow, handlePause])
 
   const handleCopy = useCallback(() => {
+    // 翻译路由没有话题（译文由 TranslateWindow 自己持有并上报）：复制译文，而不是"最后一条助手消息"。
+    if (route === 'translate') {
+      if (!translateResult) return
+      void navigator.clipboard.writeText(translateResult)
+      window.toast.success(t('message.copy.success'))
+      return
+    }
+
     if (!currentTopic.current) return
 
     const messages = selectMessagesForTopic(store.getState(), currentTopic.current.id)
@@ -589,7 +631,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       void navigator.clipboard.writeText(content)
       window.toast.success(t('message.copy.success'))
     }
-  }, [currentTopic, t])
+  }, [currentTopic, route, t, translateResult])
 
   const backgroundColor = useMemo(() => {
     // ONLY MAC: when transparent style + light theme: use vibrancy effect
@@ -645,7 +687,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       return (
         <Container style={{ backgroundColor }} $draggable={draggable}>
           <ClipboardPreview referenceText={referenceText} clearClipboard={clearClipboard} t={t} />
-          <TranslateWindow text={userContent} />
+          <TranslateWindow text={userContent} onResultChange={setTranslateResult} />
           <Divider style={{ margin: '10px 0' }} />
           <Footer key="footer" {...baseFooterProps} onCopy={handleCopy} />
         </Container>

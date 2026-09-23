@@ -70,32 +70,51 @@ export type LightLlmStreamEvent =
 
 // ---- 图像模态（绘画页 / generate_image 工具的执行缝；OpenAI 兼容平面直连） ----
 
-/** 图像生成请求（参数透传族可缺省；异步 poll 型厂商不支持，命中明错）。 */
+/**
+ * 图像生成请求（v0.3.3 批次6，V2 绘画参数来源移植）。
+ *
+ * fork 缝：V2 把「表单 canonical 参数袋」整包交给主进程，由 `splitParamValues` +
+ * `WIRE_REGISTRY`/`buildVendorProviderOptions` 拆分下发；fork 的同一平面（单次
+ * POST /v1/images/generations）里，参数袋经 `paramValues` 整包上行，主进程按
+ * `wireProfileId` 所选 profile（`@shared/lightLlm/imageGenerationCatalog` 里的
+ * `IMAGE_WIRE_PROFILES`，与 V2 `wireProfile.ts` 同表）做 canonical → wire 改名。
+ * 因此**不再**具名透传 5 个固定扩展键——那正是"看得见却静默丢弃"的来源。
+ */
 export interface LightImageGenerateCall {
   provider: string
   model: string
   prompt: string
-  /** 输出尺寸（如 "1024x1024"；原样透传 size）。 */
-  imageSize: string
-  /** 生成张数。 */
-  batchSize: number
-  negativePrompt?: string
-  seed?: string
-  numInferenceSteps?: number
-  guidanceScale?: number
-  quality?: string
+  /**
+   * v2 wire profile id（= provider id）。缺省时按 `diffusion` 兼容档处理（未登记
+   * provider 也走这一档）：`generate_image` 工具无目录信息，仍按旧行为下发
+   * `size`/`n` 两个基础字段。
+   */
+  wireProfileId?: string
+  /** 表单 canonical 参数袋（键 = `CanonicalParamKey`）；空/''/null/'auto' 不下发。 */
+  paramValues?: Record<string, unknown>
+  /** 该模型声明的 canonical 键（缺省 = 不过滤，兼容 `generate_image` 工具）。 */
+  supportedParams?: string[]
   /** 渲染层经 Dsh_LightImageAbort 取消时用；主进程直调可传 AbortSignal。 */
   requestId?: string
 }
 
-/** 图像编辑请求（逐张 multipart /images/edits）。 */
+/**
+ * 图像编辑请求（逐张 multipart /images/edits）。
+ *
+ * fork 缝：与生成同因——`size` 由参数袋的 `size` 派生（兼容期仍接受
+ * `imageSize`/`batchSize` 旧拼写），并按同一 profile 追加编辑端点可收的字段。
+ */
 export interface LightImageEditCall {
   provider: string
   model: string
   prompt: string
   /** 输入图（data URL 或裸 base64）。 */
   inputImages: string[]
-  imageSize?: string
+  wireProfileId?: string
+  /** 表单 canonical 参数袋（编辑模式）。 */
+  paramValues?: Record<string, unknown>
+  /** 该模型声明的 canonical 键（缺省 = 不过滤）。 */
+  supportedParams?: string[]
   requestId?: string
 }
 
@@ -103,4 +122,20 @@ export interface LightImageEditCall {
 export interface LightImageResult {
   type: 'url' | 'base64'
   images: string[]
+}
+
+// ---- 图像模态的明错契约（v0.3.3 批次6） ----
+
+/**
+ * fork 缝：V2 的 provider 路由表在渲染层可查（registry），fork 的目录在
+ * `@shared/lightLlm/imageGenerationCatalog`，主进程同样可读——两侧都用它判定
+ * 「这个 provider 是否在这条 OpenAI 兼容平面上」。不在平面上（dashscope / ppio /
+ * aihubmix / tokenhub 的异步 job、ollama、minimax 的 wire profile 分支、
+ * google、bytedance）时抛此**明错**，绝不静默丢参数。
+ */
+export const UNSUPPORTED_VENDOR_ERROR_PREFIX = 'lightLlm: unsupported vendor'
+
+/** 是否属于「该模型/服务商暂不支持」类错误（渲染层据此翻 `paintings.unsupported_vendor`）。 */
+export function isUnsupportedVendorError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(UNSUPPORTED_VENDOR_ERROR_PREFIX)
 }

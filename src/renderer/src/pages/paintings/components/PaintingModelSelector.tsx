@@ -29,9 +29,11 @@ interface PaintingModelSelectorProps {
   model: Model | undefined
   onSelect: (selection: PaintingModelSelection) => void
   disabled?: boolean
+  /** fork 缝（v0.3.3-7）：作曲条窄窗下的图标态——只留头像 + 箭头，模型名转屏读专用（保名）。 */
+  iconOnly?: boolean
 }
 
-const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect, disabled }) => {
+const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect, disabled, iconOnly }) => {
   const { t } = useTranslation()
   const providers = useAppSelector((state) => state.llm.providers)
 
@@ -51,12 +53,16 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect
   return (
     // fork 缝：styled(Button) → styled.button（见下方定义）。antd Button 默认渲染
     // <button type="button">，原生 button 在 form 内默认 type="submit"，故显式补 type="button"。
-    <SelectorButton type="button" onClick={() => void openSelector()} disabled={disabled}>
+    <SelectorButton
+      type="button"
+      onClick={() => void openSelector()}
+      disabled={disabled}
+      aria-label={model ? model.name : t('paintings.select_model')}>
       {model ? (
         <>
           <ModelAvatar model={model} size={20} />
-          <ModelName>{model.name}</ModelName>
-          {providerName && <ProviderName>{providerName}</ProviderName>}
+          <ModelName className={iconOnly ? 'sr-only' : undefined}>{model.name}</ModelName>
+          {providerName && !iconOnly && <ProviderName>{providerName}</ProviderName>}
         </>
       ) : (
         <ModelName>{t('paintings.select_model')}</ModelName>

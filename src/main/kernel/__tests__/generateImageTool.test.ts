@@ -29,11 +29,13 @@ describe('generate_image 工具', () => {
     const tool = await loadTool()
     const exec = { agent: { session: { id: 'topic-a' } } } as unknown as ExecLike
     await expect(
-      tool.apply === undefined ? Promise.reject(new Error('no apply')) : runExecute(tool, exec, { prompt: 'x', imageSize: '1024x1024', count: 1 })
+      tool.apply === undefined
+        ? Promise.reject(new Error('no apply'))
+        : runExecute(tool, exec, { prompt: 'x', imageSize: '1024x1024', count: 1 })
     ).rejects.toThrow('no painting model registered')
   })
 
-  it('登记后执行：参数钳制（count 1-4）并透传给 lightGenerateImage', async () => {
+  it('登记后执行：参数钳制（count 1-10）并透传 canonical 参数袋给 lightGenerateImage', async () => {
     const tool = await loadTool()
     tool.setTurnGenerateImageConfig('topic-b', { providerId: 'p', modelId: 'm' })
     const exec = { agent: { session: { id: 'topic-b' } } } as unknown as ExecLike
@@ -42,7 +44,13 @@ describe('generate_image 工具', () => {
       images: string[]
     }
     expect(lightGenerateImageMock).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'p', model: 'm', prompt: 'a cat', imageSize: '512x512', batchSize: 4 })
+      expect.objectContaining({
+        provider: 'p',
+        model: 'm',
+        prompt: 'a cat',
+        // v0.3.3 批次6：canonical 键名（V2 的 size/numImages）；上限随 numImages 声明放宽到 10
+        paramValues: { size: '512x512', numImages: 10 }
+      })
     )
     expect(result.count).toBe(1)
     expect(result.images).toEqual(['data:image/png;base64,aGk='])
@@ -62,9 +70,7 @@ describe('generate_image 工具', () => {
 
 /** defineTool 的 execute 闭包不直接导出——经 apply 注册到假 ToolRuntime 后触发。 */
 async function runExecute(tool: typeof GenerateImageToolModule, exec: ExecLike, args: Record<string, unknown>) {
-  let captured:
-    | { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> }
-    | undefined
+  let captured: { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> } | undefined
   const fakeTools = {
     register: (definition: { execute: (args: Record<string, unknown>, exec: unknown) => Promise<unknown> }) => {
       captured = definition

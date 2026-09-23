@@ -1,4 +1,5 @@
 import InfoTooltip from '@renderer/components/TooltipIcons/InfoTooltip'
+import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,7 +12,8 @@ import { tabToImageGenerationMode } from '../utils/paintingProviderMode'
 import PaintingSectionTitle from './PaintingSectionTitle'
 
 // 原语 antd 化：V2 @cherrystudio/ui InfoTooltip(content) → fork InfoTooltip
-// （antd Tooltip 包装，文案走 title）；registry support → 本地参数表派生。
+// （antd Tooltip 包装，文案走 title）；registry support → fork 目录
+// （@shared/lightLlm/imageGenerationCatalog，与 V2 ProviderRegistryService 同序）。
 
 function resolveItemOptions(item: BaseConfigItem, painting: Record<string, unknown>) {
   return typeof item.options === 'function' ? item.options(item, painting) : (item.options ?? [])
@@ -39,9 +41,15 @@ const PaintingSettings: FC<PaintingSettingsProps> = ({ painting, onConfigChange,
   // that `canonicalGenerate` partitions into AI SDK args vs provider bag at
   // request time. Top-level PaintingData fields are not visible to the wire.
   const paintingParams = painting.params ?? {}
+  // fork 缝（v0.3.3 批次6）：V2 经 useImageGenerationSupport(providerId, model) 查询；
+  // fork 目录是同步静态数据，按 painting 的 (providerId, model) 解析。
+  const support = useMemo(
+    () => getImageGenerationSupport(painting.providerId, painting.model) ?? undefined,
+    [painting.providerId, painting.model]
+  )
   const configItems = useMemo(
-    () => imageGenerationToFields(undefined, { mode: tabToImageGenerationMode(painting.mode) }),
-    [painting.mode]
+    () => imageGenerationToFields(support, { mode: tabToImageGenerationMode(painting.mode) }),
+    [support, painting.mode]
   )
 
   return (

@@ -1,4 +1,5 @@
 import { cn } from '@renderer/utils/style'
+import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import { type CSSProperties, type FC, type ReactNode, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -41,7 +42,11 @@ const PaintingImageSkeleton: FC<{
   topBar?: ReactNode
 }> = ({ imageUrl, naturalWidth, naturalHeight, onRevealReady, painting, topBar }) => {
   const { t } = useTranslation()
-  const { ratio } = usePaintingSizeInfo(painting)
+  // 目录是同步静态数据（V2 此处是 useImageGenerationSupport 查询），无需 memo。
+  const { ratio } = usePaintingSizeInfo(
+    painting,
+    getImageGenerationSupport(painting.providerId, painting.model) ?? undefined
+  )
 
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [container, setContainer] = useState<{ width: number; height: number } | null>(null)

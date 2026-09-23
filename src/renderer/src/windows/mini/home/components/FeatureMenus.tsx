@@ -44,7 +44,7 @@ const FeatureMenus = ({
       },
       {
         icon: <Languages size={16} color="var(--color-text)" />,
-        title: t('translate.title'),
+        title: t('miniwindow.feature.translate'),
         onClick: () => {
           if (text) {
             setRoute('translate')

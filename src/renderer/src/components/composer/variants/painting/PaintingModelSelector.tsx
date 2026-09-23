@@ -8,18 +8,21 @@ import PaintingModelSelectorView, {
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import { useAppSelector } from '@renderer/store'
 import type { Model } from '@renderer/types'
+import { cn } from '@renderer/utils/style'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface PaintingModelSelectorProps {
   /** V2 标志：工具栏里不重复标题。fork 缝有意忽略它——用户要求显式「绘画模型」标签（见下方 fork 缝注释）。 */
   hideTitle?: boolean
+  /** V2 `renderContextControls` 的图标态（v0.3.3-7 接上）：窄窗时只留头像 + 箭头。 */
+  iconOnly?: boolean
   painting: PaintingData
   onSelect: (selection: PaintingModelSelection) => void
   className?: string
 }
 
-const PaintingModelSelector = ({ painting, onSelect, className }: PaintingModelSelectorProps) => {
+const PaintingModelSelector = ({ painting, onSelect, className, iconOnly }: PaintingModelSelectorProps) => {
   const { t } = useTranslation()
   const providers = useAppSelector((state) => state.llm.providers)
   const model = useMemo<Model | undefined>(
@@ -35,9 +38,13 @@ const PaintingModelSelector = ({ painting, onSelect, className }: PaintingModelS
   // 标签放在模型按钮之前且 shrink-0，不吃模型按钮自身的宽度上限（className 包裹层保持原样）。
   return (
     <span className="flex items-center gap-1.5">
-      <span className="shrink-0 text-muted-foreground text-xs">{t('settings.models.painting_model')}</span>
+      {/* fork 缝（v0.3.3-7）：图标态下标签转屏读专用（V2 的 `COMPOSER_ICON_ONLY_LABEL_CLASS`），
+          按钮自身由 view 里的 `aria-label` 保名。 */}
+      <span className={cn('shrink-0 text-muted-foreground text-xs', iconOnly && 'sr-only')}>
+        {t('settings.models.painting_model')}
+      </span>
       <span className={className}>
-        <PaintingModelSelectorView model={model} onSelect={onSelect} />
+        <PaintingModelSelectorView model={model} onSelect={onSelect} iconOnly={iconOnly} />
       </span>
     </span>
   )
