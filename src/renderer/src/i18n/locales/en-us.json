@@ -1652,6 +1652,7 @@
       "auto": "Auto"
     },
     "input_image_limit_exceeded": "Up to 4 reference images",
+    "model": "Model",
     "operation_failed": "Operation failed",
     "param": {
       "batch_size": "Batch Size",
@@ -1871,7 +1872,7 @@
             "name": "Ask (ask_user_question)"
           },
           "generate_image": {
-            "hint": "Requires a model selected on the Paintings page",
+            "hint": "Mounted only after a painting model is selected",
             "name": "Chat image generation (generate_image)"
           },
           "ocr": {

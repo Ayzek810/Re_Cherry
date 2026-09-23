@@ -15,7 +15,7 @@ import HomePage from './pages/home/HomePage'
 import KnowledgePage from './pages/knowledge/KnowledgePage'
 import LaunchpadPage from './pages/launchpad/LaunchpadPage'
 import { OnboardingPage } from './pages/onboarding'
-import PaintingsPage from './pages/paintings/PaintingsPage'
+import PaintingPage from './pages/paintings/PaintingPage'
 import SettingsPage from './pages/settings/SettingsPage'
 import TranslatePage from './pages/translate/TranslatePage'
 
@@ -33,7 +33,7 @@ const Router: FC = () => {
           <Route path="/launchpad" element={<LaunchpadPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/translate" element={<TranslatePage />} />
-          <Route path="/paintings" element={<PaintingsPage />} />
+          <Route path="/paintings" element={<PaintingPage />} />
         </Routes>
       </ErrorBoundary>
     )

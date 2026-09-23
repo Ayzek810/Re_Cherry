@@ -1,15 +1,14 @@
 /**
  * 绘画页会话上下文（v0.3.3 批次4，② 薄适配，V2 paintingGenerationParams 的
  * cache 投影改为 feature 内 React Context）：currentPainting 草稿 + patch/set
- * 动作 + 参考图托盘状态 + 生成状态镜像（generatingById，瞬态不持久化——V2
+ * 动作 + 生成状态镜像（generatingById，瞬态不持久化——V2
  * cacheService.set(`painting.generation.${id}`) 的本地等价）。Provider 由页面挂。
+ * v0.3.3-3：参考图托盘移出上下文——V2 的作曲条自持文件状态（fork 侧由作曲条内
+ * usePaintingComposerInputFiles 实例承担），此处保留的旧托盘已无消费者。
  */
-import { type InputCapability, usePaintingComposerInputFiles } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import type { PaintingGenerationState } from '@renderer/pages/paintings/model/utils/paintingGenerationParams'
-import { supportsPaintingEdit } from '@renderer/services/paintingModelSelection'
-import { useAppSelector } from '@renderer/store'
-import type { Dispatch, SetStateAction} from 'react';
+import type { Dispatch, SetStateAction } from 'react'
 import React, { createContext, use, useCallback, useMemo, useState } from 'react'
 
 export interface PaintingSessionValue {
@@ -19,8 +18,6 @@ export interface PaintingSessionValue {
   /** 生成状态镜像（paintingId → running/failed/canceled + error；null = 清除）。 */
   generationStateById: Map<string, PaintingGenerationState | null>
   setGenerationState: (paintingId: string, state: PaintingGenerationState | null) => void
-  /** 参考图托盘（页面自持 inputFiles 状态；SEED/MATERIALIZE/CLEAR 见 hook）。 */
-  tray: ReturnType<typeof usePaintingComposerInputFiles>
 }
 
 const PaintingSessionContext = createContext<PaintingSessionValue | undefined>(undefined)
@@ -47,29 +44,12 @@ export function PaintingSessionProvider({
     })
   }, [])
 
-  // 托盘 SEED 依赖 currentPainting.id / 存档输入 / provider；capability 按当前
-  // 模型解析（supportsPaintingEdit）：'unknown' = 模型未选（不动托盘），
-  // 'accept' = 图生图可用，'reject' = 纯生图（CLEAR 语义清托盘）。
-  const providers = useAppSelector((state) => state.llm.providers)
-  const inputCapability: InputCapability = useMemo(() => {
-    if (!currentPainting.model) return 'unknown'
-    const model = providers
-      .find((provider) => provider.id === currentPainting.providerId)
-      ?.models.find((candidate) => candidate.id === currentPainting.model)
-    if (!model) return 'unknown'
-    return supportsPaintingEdit(model) ? 'accept' : 'reject'
-  }, [currentPainting.model, currentPainting.providerId, providers])
-
-  const tray = usePaintingComposerInputFiles({
-    paintingId: currentPainting.id,
-    archivedInputFiles: currentPainting.inputFiles ?? [],
-    inputCapability,
-    providerId: currentPainting.providerId
-  })
+  // v0.3.3-3：参考图托盘（含 capability 推导）已移出上下文——V2 的作曲条自持文件状态，
+  // fork 侧由作曲条内的 usePaintingComposerInputFiles 实例承担；上下文只留草稿与生成镜像。
 
   const value = useMemo<PaintingSessionValue>(
-    () => ({ currentPainting, patchPainting, setCurrentPainting, generationStateById, setGenerationState, tray }),
-    [currentPainting, patchPainting, generationStateById, setGenerationState, tray]
+    () => ({ currentPainting, patchPainting, setCurrentPainting, generationStateById, setGenerationState }),
+    [currentPainting, patchPainting, generationStateById, setGenerationState]
   )
   return <PaintingSessionContext value={value}>{children}</PaintingSessionContext>
 }
