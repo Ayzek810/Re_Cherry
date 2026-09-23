@@ -3,7 +3,7 @@ import Scrollbar from '@renderer/components/Scrollbar'
 import { Col } from 'antd'
 import { FileText, Languages, Lightbulb, MessageSquare } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
-import { useImperativeHandle, useMemo, useState } from 'react'
+import { useCallback, useImperativeHandle, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -29,50 +29,46 @@ const FeatureMenus = ({
   const { t } = useTranslation()
   const [selectedIndex, setSelectedIndex] = useState(0)
 
+  // fork 缝（v0.3.3-9）：V1/V2 的四项都写成 `if (text) { setRoute(...) }`——剪贴板为空时
+  // **点了没有任何反应**（用户报告"快捷助手那个翻译点了没效果"）。改为：一律切路由
+  //（各视图自己有空态），没有文本时补一条既有文案的提示；请求侧另有 guard，不会空发。
+  const openFeature = useCallback(
+    (route: 'translate' | 'summary' | 'explanation' | 'chat', prompt?: string) => {
+      setRoute(route)
+      if (!text) {
+        window.toast.info(t('miniwindow.clipboard.empty'))
+        return
+      }
+      if (prompt) onSendMessage(prompt)
+    },
+    [onSendMessage, setRoute, t, text]
+  )
+
   const features = useMemo(
     () => [
       {
         icon: <MessageSquare size={16} color="var(--color-text)" />,
         title: t('miniwindow.feature.chat'),
         active: true,
-        onClick: () => {
-          if (text) {
-            setRoute('chat')
-            onSendMessage()
-          }
-        }
+        onClick: () => openFeature('chat')
       },
       {
         icon: <Languages size={16} color="var(--color-text)" />,
         title: t('miniwindow.feature.translate'),
-        onClick: () => {
-          if (text) {
-            setRoute('translate')
-          }
-        }
+        onClick: () => openFeature('translate')
       },
       {
         icon: <FileText size={16} color="var(--color-text)" />,
         title: t('miniwindow.feature.summary'),
-        onClick: () => {
-          if (text) {
-            setRoute('summary')
-            onSendMessage(t('prompts.summarize'))
-          }
-        }
+        onClick: () => openFeature('summary', t('prompts.summarize'))
       },
       {
         icon: <Lightbulb size={16} color="var(--color-text)" />,
         title: t('miniwindow.feature.explanation'),
-        onClick: () => {
-          if (text) {
-            setRoute('explanation')
-            onSendMessage(t('prompts.explanation'))
-          }
-        }
+        onClick: () => openFeature('explanation', t('prompts.explanation'))
       }
     ],
-    [onSendMessage, setRoute, t, text]
+    [openFeature, t]
   )
 
   useImperativeHandle(ref, () => ({

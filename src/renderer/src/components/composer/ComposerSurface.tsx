@@ -373,6 +373,11 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
             className="box-border block w-full min-w-0 flex-1 resize-none overflow-auto bg-transparent text-foreground outline-none"
             style={{
               ...editorContentStyle,
+              // fork 缝（v0.3.3-9）：V2 由 `richtext.css:174-179` 的 `.composer-tiptap.tiptap`
+              // 消费 `--composer-editor-padding`（'6px 44px 0 15px'），fork 的 textarea 没有
+              // TipTap 类名 ⇒ 该变量无人消费，文字贴着边框。这里就地消费同一变量（值仍由
+              // useComposerEditorFrameSizing 这个单一来源给出），不改 V2 的数值。
+              padding: 'var(--composer-editor-padding)',
               fontSize: props.fontSize,
               lineHeight: 1.4
             }}

@@ -13,7 +13,10 @@ import {
   getImageGenerationCatalogEntry,
   getImageGenerationSupport,
   IMAGE_WIRE_PROFILES,
+  isOffPlaneVendor,
   normalizeAspectRatio,
+  OFF_PLANE_VENDOR_IDS,
+  resolveImageGenerationSupport,
   resolveImageWireProfile,
   wireName
 } from '@shared/lightLlm/imageGenerationCatalog'
@@ -219,5 +222,64 @@ describe('wire 映射表（canonical → vendor wire）', () => {
       expect(resolveImageWireProfile(provider), provider).toBeUndefined()
     }
     expect(IMAGE_WIRE_PROFILES.diffusion).toBeDefined()
+  })
+})
+
+describe('resolveImageGenerationSupport — 目录未收录时的通用兜底（fork 缝 v0.3.3-9）', () => {
+  it('未收录的 (provider, model) 给通用字段面，而不是空（否则参数入口整块消失）', () => {
+    for (const [provider, model] of [
+      ['custom-openai', 'my-image-model'],
+      ['openai', 'gpt-4o'],
+      ['silicon', 'z-image-turbo']
+    ] as Array<[string, string]>) {
+      const { support, source } = resolveImageGenerationSupport(provider, model)
+      expect(source, provider).toBe('generic')
+      const keys = Object.keys(support?.modes.generate?.supports ?? {})
+      expect(keys, provider).toContain('size')
+      expect(keys, provider).toContain('numImages')
+      expect(imageGenerationToFields(support, { mode: 'generate' }).length, provider).toBeGreaterThan(0)
+    }
+  })
+
+  it('兜底字段面严格落在该 provider 的 wire profile 转发面内（看得见 = 真下发）', () => {
+    const diffusionKeys = Object.keys(
+      resolveImageGenerationSupport('custom-openai', 'm').support?.modes.generate?.supports ?? {}
+    )
+    for (const key of diffusionKeys) {
+      // size / numImages 是本平面的原生化字段（NATIVE_BINDINGS），任何 profile 都下发
+      if (key === 'size' || key === 'numImages') continue
+      expect(IMAGE_WIRE_PROFILES.diffusion.forward, key).toContain(key)
+    }
+    // openai 档不转发 seed / negativePrompt → 兜底面也不得出现它们（否则又是静默丢弃）
+    const openaiKeys = Object.keys(
+      resolveImageGenerationSupport('openai', 'gpt-4o').support?.modes.generate?.supports ?? {}
+    )
+    expect(openaiKeys).not.toContain('seed')
+    expect(openaiKeys).not.toContain('negativePrompt')
+    expect(openaiKeys).toContain('quality')
+  })
+
+  it('厂商明确不在本平面 → 无字段面（与主进程明错一致）', () => {
+    for (const provider of OFF_PLANE_VENDOR_IDS) {
+      const resolved = resolveImageGenerationSupport(provider, 'm')
+      expect(resolved.source, provider).toBe('off-plane')
+      expect(resolved.support, provider).toBeUndefined()
+      expect(imageGenerationToFields(resolved.support), provider).toEqual([])
+      expect(isOffPlaneVendor(provider), provider).toBe(true)
+    }
+  })
+
+  it('doubao（火山 Ark）与自建 provider 走兜底而不是被误杀（v0.3.3-9 修正）', () => {
+    // Ark 的图像接口就是 {base}/images/generations（base 带 /api/v3），此前被当"范围外"拒绝
+    for (const provider of ['doubao', 'my-custom-endpoint', 'silicon']) {
+      expect(isOffPlaneVendor(provider), provider).toBe(false)
+      expect(resolveImageGenerationSupport(provider, 'seedream-4-0').source, provider).toBe('generic')
+    }
+  })
+
+  it('目录命中时 source = catalog（不改已有行为）', () => {
+    const resolved = resolveImageGenerationSupport('openai', 'dall-e-3')
+    expect(resolved.source).toBe('catalog')
+    expect(Object.keys(resolved.support?.modes.generate?.supports ?? {}).sort()).toEqual(['quality', 'size', 'style'])
   })
 })

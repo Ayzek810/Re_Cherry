@@ -1,5 +1,5 @@
 import InfoTooltip from '@renderer/components/TooltipIcons/InfoTooltip'
-import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -41,12 +41,14 @@ const PaintingSettings: FC<PaintingSettingsProps> = ({ painting, onConfigChange,
   // that `canonicalGenerate` partitions into AI SDK args vs provider bag at
   // request time. Top-level PaintingData fields are not visible to the wire.
   const paintingParams = painting.params ?? {}
-  // fork 缝（v0.3.3 批次6）：V2 经 useImageGenerationSupport(providerId, model) 查询；
-  // fork 目录是同步静态数据，按 painting 的 (providerId, model) 解析。
-  const support = useMemo(
-    () => getImageGenerationSupport(painting.providerId, painting.model) ?? undefined,
+  // fork 缝（v0.3.3 批次6 / v0.3.3-9）：V2 经 useImageGenerationSupport(providerId, model) 查询；
+  // fork 目录是同步静态数据，按 painting 的 (providerId, model) 解析。目录未收录时
+  // `resolveImageGenerationSupport` 给**通用兜底字段面**（否则参数 Popover 会整体消失）。
+  const resolved = useMemo(
+    () => resolveImageGenerationSupport(painting.providerId, painting.model),
     [painting.providerId, painting.model]
   )
+  const support = resolved.support
   const configItems = useMemo(
     () => imageGenerationToFields(support, { mode: tabToImageGenerationMode(painting.mode) }),
     [support, painting.mode]
@@ -54,6 +56,9 @@ const PaintingSettings: FC<PaintingSettingsProps> = ({ painting, onConfigChange,
 
   return (
     <>
+      {resolved.source === 'generic' && configItems.length > 0 && (
+        <p className="text-muted-foreground text-xs">{t('paintings.generic_params_hint')}</p>
+      )}
       {configItems
         .filter((item) => shouldRenderConfigItem(item, paintingParams))
         .map((item) => (

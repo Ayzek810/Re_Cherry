@@ -336,6 +336,50 @@ describe('lightGenerateImage — provider wire profiles（v0.3.3 批次6 参数�
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('未登记的 provider id（用户自建 OpenAI 兼容）走 diffusion 兼容档，不再被拒（v0.3.3-9）', async () => {
+    setLightLlmProviderRoutes([{ id: 'my-custom-endpoint', apiHost: 'http://127.0.0.1:8080', apiKey: 'sk-x' }])
+    fetchMock.mockResolvedValueOnce(okResponse({ data: [{ url: 'https://cdn.example.com/c.png' }] }))
+    await lightGenerateImage({
+      provider: 'my-custom-endpoint',
+      model: 'my-image-model',
+      prompt: 'a cat',
+      wireProfileId: 'my-custom-endpoint',
+      paramValues: { size: '1024x1024', numImages: 2, negativePrompt: 'blur', seed: '7' }
+    })
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    // diffusion 兼容档：size/n 原生化 + negative_prompt/seed 走 profile 转发
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: 'my-image-model',
+      prompt: 'a cat',
+      n: 2,
+      size: '1024x1024',
+      negative_prompt: 'blur',
+      seed: '7'
+    })
+    expect(url).toBe('http://127.0.0.1:8080/v1/images/generations')
+  })
+
+  it('doubao（火山 Ark）：版本段是 /api/v3，不补 /v1，走 diffusion 兼容档（v0.3.3-9）', async () => {
+    setLightLlmProviderRoutes([
+      { id: 'doubao', apiHost: 'https://ark.cn-beijing.volces.com/api/v3/', apiKey: 'sk-ark' }
+    ])
+    fetchMock.mockResolvedValueOnce(okResponse({ data: [{ url: 'https://cdn.example.com/db.png' }] }))
+    await lightGenerateImage({
+      provider: 'doubao',
+      model: 'doubao-seedream-4-0',
+      prompt: 'a bird',
+      paramValues: { size: '1024x1024', numImages: 1 }
+    })
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://ark.cn-beijing.volces.com/api/v3/images/generations')
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: 'doubao-seedream-4-0',
+      prompt: 'a bird',
+      n: 1,
+      size: '1024x1024'
+    })
+  })
+
   it('dmxapi：provider override 的键面生效（dall-e-3 不带 numImages），quality 经 profile 下发', async () => {
     setLightLlmProviderRoutes([{ id: 'dmxapi', apiHost: 'https://www.dmxapi.cn', apiKey: 'sk-dmx' }])
     fetchMock.mockResolvedValueOnce(okResponse({ data: [{ url: 'https://cdn.example.com/d.png' }] }))

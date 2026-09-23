@@ -11,7 +11,7 @@ import type { PaintingData } from '@renderer/pages/paintings/model/types/paintin
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { computeImageNaturalSize } from '@renderer/pages/paintings/utils/computeImageNaturalSize'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
-import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 // fork 缝：原 `import { Button, Tooltip } from 'antd'` —— 工具栏按钮换回原生 button 后 Button 不再使用。
 import { Tooltip } from 'antd'
 import { ImageDown, ImageUp, Palette, RefreshCcw, RotateCcwSquare, RotateCwSquare, ZoomIn, ZoomOut } from 'lucide-react'
@@ -19,7 +19,6 @@ import {
   type FC,
   type PointerEvent,
   type ReactNode,
-  type SyntheticEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -255,7 +254,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
   // 目录是同步静态数据（V2 此处是 useImageGenerationSupport 查询），无需 memo。
   const { sizeLabel } = usePaintingSizeInfo(
     painting,
-    getImageGenerationSupport(painting.providerId, painting.model) ?? undefined
+    resolveImageGenerationSupport(painting.providerId, painting.model).support
   )
   const currentImageUrl = currentFile ? getPaintingFileUrl(currentFile) : undefined
 
@@ -336,12 +335,33 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
   // a context-menu wrapper that breaks intrinsic-size propagation, leaving the
   // wrapper (and the prompt bar stretched to it) wider than the rendered photo.
   // Measuring explicitly is what lets the prompt bar match the image's real edges.
-  const onDisplayedImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
-    const { naturalWidth, naturalHeight } = event.currentTarget
-    if (naturalWidth > 0 && naturalHeight > 0) {
-      setDisplayedNaturalSize({ width: naturalWidth, height: naturalHeight })
+  //
+  // fork 缝（v0.3.3-9）：V2 用 `<img onLoad>` 取自然尺寸（V2 的 ImageViewer 是**裸 `<img>`**，
+  // className/style/onLoad 都直接落在 img 上）。fork 的 ImageViewer 建在 antd Image 上，而
+  // rc-image 只把 `COMMON_PROPS`（crossOrigin/decoding/draggable/loading/referrerPolicy/
+  // sizes/srcSet/useMap/alt）交给 `<img>`，其余 props 落在**外层 div** 上——`onLoad` 永远不触发，
+  // 于是 `displayedNaturalSize` 恒为 null、显式 contain 盒失效，图片按 antd 默认
+  // `width:100%` 撑开后被容器 `overflow-hidden` **裁掉**（用户看到的"裁剪填满"）。
+  // 故改用与本页 reveal 路径同一个"按 URL 量尺寸"的助手，不依赖 img 元素的事件。
+  useEffect(() => {
+    if (!currentImageUrl) {
+      setDisplayedNaturalSize(null)
+      return
     }
-  }, [])
+    let active = true
+    void computeImageNaturalSize(currentImageUrl)
+      .then((result) => {
+        if (!active) return
+        setDisplayedNaturalSize(result ? { width: result.naturalWidth, height: result.naturalHeight } : null)
+      })
+      .catch((error) => {
+        logger.warn('Failed to measure displayed painting image', { error })
+        if (active) setDisplayedNaturalSize(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [currentImageUrl])
 
   // A plain ref + mount-only effect would only ever attach once, when Artboard
   // itself first mounts — but this wrapper only exists in the DOM once the idle
@@ -551,7 +571,6 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
                     : 'cursor-grab transition-transform duration-150'
                 }`}
                 draggable={false}
-                onLoad={onDisplayedImageLoad}
                 onPointerCancel={stopImageDrag}
                 onPointerDown={onImagePointerDown}
                 onPointerMove={onImagePointerMove}

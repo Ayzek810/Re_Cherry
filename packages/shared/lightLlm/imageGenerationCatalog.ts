@@ -1083,6 +1083,116 @@ export const IMAGE_WIRE_PROFILES: Record<string, ImageWireProfile> = {
 /** Default profile for an unregistered provider (v2 DEFAULT_DIFFUSION_REGISTRATION). */
 export const DEFAULT_IMAGE_WIRE_PROFILE_ID = 'diffusion'
 
+/**
+ * 明确**不在本平面**的厂商 id：V2 靠 registry 的 `vendorTransport` 换成各自的端点
+ * （dashscope `/api/v1/services/...`、ppio/aihubmix/tokenhub 网关、google `/v1beta/models`、
+ * ollama 本地 `/api/generate`、minimax `/image_generation`），fork 无该层，故**显式拒绝**而
+ * 不是静默丢参数（用户裁决：范围外必须报不支持）。
+ *
+ * `v0.3.3-9` 修正：**doubao（火山 Ark）不在此列** —— Ark 的图像接口就是
+ * `{base}/images/generations`（`base` 带 `/api/v3`，主进程已按版本段去重），把它当"范围外"
+ * 拒绝是把能用的 provider 误杀（用户报告"参数选项消失"时暴露的一类问题）。
+ */
+export const OFF_PLANE_VENDOR_IDS: readonly string[] = [
+  'dashscope',
+  'ppio',
+  'aihubmix',
+  'tokenhub',
+  'ollama',
+  'minimax',
+  'minimax-global',
+  'google',
+  'bytedance'
+]
+
+/** Whether the id belongs to a vendor this plane cannot serve. */
+export function isOffPlaneVendor(providerId: string | undefined): boolean {
+  return providerId !== undefined && OFF_PLANE_VENDOR_IDS.includes(providerId)
+}
+
+/**
+ * fork 缝（v0.3.3-9）：**某 provider 在本平面该用哪个 profile**。
+ *
+ * 与 V2 的差别只有一处、且是本 fork 必须的：V2 只有 registry 里的模型能进绘画页，所以
+ * "未登记 = 不该出现"；fork 的绘画页按**模型能力**列模型（`isGenerateImageModel`），
+ * 任何 provider（含用户自建的 OpenAI 兼容 provider、以及把 `gpt-4o` 这类对话生图模型
+ * 挂到绘画页的情形）都能选。故：**未登记的 provider 落 `diffusion` 兼容档**（与
+ * `generate_image` 工具无目录信息时同一档），只有明确不在本平面的厂商返回 `undefined`。
+ */
+export function imageWireProfileForProvider(providerId: string | undefined): ImageWireProfile | undefined {
+  if (!providerId || isOffPlaneVendor(providerId)) return undefined
+  return IMAGE_WIRE_PROFILES[providerId] ?? IMAGE_WIRE_PROFILES[DEFAULT_IMAGE_WIRE_PROFILE_ID]
+}
+
+// ── 通用兜底字段面（fork 缝，v0.3.3-9） ─────────────────────────────────────
+//
+// 目录未收录的 (provider, model) —— 例如用户自建的 OpenAI 兼容 provider、或 gpt-4o 这类
+// "带生图工具的对话模型" —— 以前没有字段面，参数 Popover **整体消失**（V2 里这种情况不会出现：
+// 它的绘画页只列 registry 模型）。兜底字段面 = `size` + `numImages`（本平面的原生化字段，
+// 所有 profile 都下发）∪ **该 provider profile 明确转发的键**，因此"看得见 = 真下发"仍然成立。
+const GENERIC_PARAM_SPECS: Partial<Record<CanonicalParamKey, SupportSpec>> = {
+  size: {
+    type: 'enum',
+    default: '1024x1024',
+    render: 'chips',
+    options: ['1024x1024', '1024x1536', '1536x1024', '512x512', '768x768']
+  },
+  numImages: { type: 'range', min: 1, max: 4, default: 1 },
+  negativePrompt: { type: 'text', multiline: true },
+  seed: { type: 'text' },
+  numInferenceSteps: { type: 'range', min: 1, max: 50, default: 20 },
+  guidanceScale: { type: 'range', min: 1, max: 20, step: 0.5, default: 7.5 },
+  promptEnhancement: { type: 'switch', default: false },
+  quality: { type: 'enum', options: ['standard', 'hd'] },
+  background: { type: 'enum', options: ['auto', 'transparent', 'opaque'] },
+  moderation: { type: 'enum', options: ['auto', 'low'] },
+  style: { type: 'enum', options: ['vivid', 'natural'] },
+  resolution: { type: 'enum', options: ['1K', '2K', '4K'] },
+  outputFormat: { type: 'enum', options: ['png', 'jpeg', 'webp'] },
+  addWatermark: { type: 'switch', default: false }
+}
+
+/** `size` / `numImages` 是本平面的原生化字段（`NATIVE_BINDINGS`），任何 profile 都下发。 */
+const GENERIC_ALWAYS_KEYS: readonly CanonicalParamKey[] = ['size', 'numImages']
+
+/**
+ * 目录未收录时的通用字段面；厂商明确不在本平面则返回 `undefined`（与主进程的明错一致）。
+ */
+export function buildGenericImageGenerationSupport(
+  providerId: string | undefined
+): ImageGenerationSupport | undefined {
+  const profile = imageWireProfileForProvider(providerId)
+  if (!profile) return undefined
+  const supports: Partial<Record<CanonicalParamKey, SupportSpec>> = {}
+  for (const key of [...GENERIC_ALWAYS_KEYS, ...profile.forward]) {
+    const spec = GENERIC_PARAM_SPECS[key]
+    if (spec !== undefined && supports[key] === undefined) supports[key] = spec
+  }
+  return { modes: { generate: { supports } } }
+}
+
+/** 目录命中 / 通用兜底 / 不在本平面，三种来源要能被 UI 区分（弹窗里给出说明）。 */
+export type ImageGenerationSupportSource = 'catalog' | 'generic' | 'off-plane'
+
+export interface ResolvedImageGenerationSupport {
+  support: ImageGenerationSupport | undefined
+  source: ImageGenerationSupportSource
+}
+
+/**
+ * fork 缝：绘画页唯一的 support 解析入口 —— 先查目录（V2 同序），未收录则给**通用兜底**，
+ * 厂商明确不在本平面才返回 `undefined`。V2 没有这一层（它的模型表就是 registry 表）。
+ */
+export function resolveImageGenerationSupport(
+  providerId: string | undefined,
+  modelId: string | undefined
+): ResolvedImageGenerationSupport {
+  const support = getImageGenerationSupport(providerId, modelId)
+  if (support) return { support, source: 'catalog' }
+  const generic = buildGenericImageGenerationSupport(providerId)
+  return generic ? { support: generic, source: 'generic' } : { support: undefined, source: 'off-plane' }
+}
+
 /** The profile for `providerId`, or `undefined` when the provider is off this plane. */
 export function resolveImageWireProfile(providerId: string | undefined): ImageWireProfile | undefined {
   if (!providerId) return undefined
