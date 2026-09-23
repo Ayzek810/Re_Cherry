@@ -17,9 +17,9 @@ import { addTab, removeTab, setActiveTab, setTabs } from '@renderer/store/tabs'
 import type { MinAppType } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { classNames } from '@renderer/utils'
-import { Tooltip } from 'antd'
+import { Dropdown, Tooltip } from 'antd'
 import type { LRUCache } from 'lru-cache'
-import { Folder, Home, LayoutGrid, Monitor, Moon, Settings, Sun, X } from 'lucide-react'
+import { Folder, Home, LayoutGrid, Monitor, Moon, Pin, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -28,6 +28,7 @@ import styled from 'styled-components'
 import MinAppIcon from '../Icons/MinAppIcon'
 import MinAppTabsPool from '../MinApp/MinAppTabsPool'
 import WindowControls from '../WindowControls'
+import { getTabCapabilities } from './tabCapabilities'
 
 interface TabsContainerProps {
   children: React.ReactNode
@@ -174,6 +175,44 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
     tabsService.closeTab(tabId)
   }
 
+  /**
+   * 右键菜单项（V2 `TabRightClickMenu` 的 fork 子集：固定/取消固定、关闭其他、关闭本页）。
+   * 能力判定见 `tabCapabilities.ts`（固定标签页对"关闭其他标签页"豁免）。
+   */
+  const getTabMenuItems = (tab: Tab) => {
+    const pinnedCount = visibleTabs.filter((candidate) => candidate.isPinned === true).length
+    // 「关闭其他」把**首页**排除在计数外：首页常驻且恒在最前，不是可关闭的对象。
+    const normalCount = visibleTabs.filter((candidate) => candidate.isPinned !== true && candidate.id !== 'home').length
+    const capabilities = getTabCapabilities(tab, { pinnedCount, normalCount })
+    return [
+      {
+        key: 'pin',
+        label: tab.isPinned === true ? t('tabs.unpin') : t('tabs.pin'),
+        disabled: !capabilities.togglePin,
+        onClick: () => {
+          hideMinappPopup()
+          tabsService.togglePin(tab.id)
+        }
+      },
+      { type: 'divider' as const },
+      {
+        key: 'close_others',
+        label: t('tabs.close_others'),
+        disabled: !capabilities.closeOthers,
+        onClick: () => {
+          hideMinappPopup()
+          tabsService.closeOtherTabs(tab.id)
+        }
+      },
+      {
+        key: 'close',
+        label: t('tabs.close'),
+        disabled: !capabilities.close,
+        onClick: () => closeTab(tab.id)
+      }
+    ]
+  }
+
   const handleAddTab = () => {
     hideMinappPopup()
     navigate('/launchpad')
@@ -212,34 +251,43 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
             className="tabs-sortable"
             renderItem={(tab) => {
               const isClosable = tab.id !== 'home'
+              const isPinned = tab.isPinned === true
               return (
-                <Tab
-                  key={tab.id}
-                  active={tab.id === activeTabId}
-                  onClick={() => handleTabClick(tab)}
-                  onAuxClick={(e) => {
-                    if (e.button === 1 && isClosable) {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      closeTab(tab.id)
-                    }
-                  }}>
-                  <TabHeader>
-                    {tab.id && <TabIcon>{getTabIcon(tab.id, minapps, minAppsCache)}</TabIcon>}
-                    <TabTitle>{getTabTitle(tab.id)}</TabTitle>
-                  </TabHeader>
-                  {isClosable && (
-                    <CloseButton
-                      className="close-button"
-                      data-no-dnd
-                      onClick={(e) => {
+                <Dropdown key={tab.id} menu={{ items: getTabMenuItems(tab) }} trigger={['contextMenu']}>
+                  <Tab
+                    active={tab.id === activeTabId}
+                    data-pinned={isPinned ? 'true' : undefined}
+                    onClick={() => handleTabClick(tab)}
+                    onAuxClick={(e) => {
+                      if (e.button === 1 && isClosable) {
+                        e.preventDefault()
                         e.stopPropagation()
                         closeTab(tab.id)
-                      }}>
-                      <X size={12} />
-                    </CloseButton>
-                  )}
-                </Tab>
+                      }
+                    }}>
+                    <TabHeader>
+                      {isPinned && (
+                        <PinMarker>
+                          <Pin size={11} />
+                        </PinMarker>
+                      )}
+                      {tab.id && <TabIcon>{getTabIcon(tab.id, minapps, minAppsCache)}</TabIcon>}
+                      <TabTitle>{getTabTitle(tab.id)}</TabTitle>
+                    </TabHeader>
+                    {/* V2 同：固定标签页不渲染行内 ×（关闭走右键菜单；批量关闭也只关普通区）。 */}
+                    {isClosable && !isPinned && (
+                      <CloseButton
+                        className="close-button"
+                        data-no-dnd
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          closeTab(tab.id)
+                        }}>
+                        <X size={12} />
+                      </CloseButton>
+                    )}
+                  </Tab>
+                </Dropdown>
               )
             }}
           />
@@ -344,6 +392,13 @@ const TabHeader = styled.div`
   gap: 6px;
   min-width: 0;
   flex: 1;
+`
+
+const PinMarker = styled.span`
+  display: flex;
+  align-items: center;
+  color: var(--color-text-3);
+  flex-shrink: 0;
 `
 
 const TabIcon = styled.span`

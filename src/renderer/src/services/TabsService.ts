@@ -1,11 +1,22 @@
 import { loggerService } from '@logger'
 import store from '@renderer/store'
-import { removeTab, setActiveTab } from '@renderer/store/tabs'
+import { setPinnedTabs } from '@renderer/store/settings'
+import {
+  closeOtherTabs as closeOtherTabsAction,
+  removeTab,
+  restorePinnedTabs as restorePinnedTabsAction,
+  setActiveTab,
+  toggleTabPin
+} from '@renderer/store/tabs'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
 
 import NavigationService from './NavigationService'
 
 const logger = loggerService.withContext('TabsService')
+
+/** 固定集合的持久化投影（顺序 = 标签条顺序）。 */
+const pinnedProjection = (tabs: { id: string; path: string; isPinned?: boolean }[]): { id: string; path: string }[] =>
+  tabs.filter((tab) => tab.isPinned === true).map(({ id, path }) => ({ id, path }))
 
 class TabsService {
   /**
@@ -55,6 +66,8 @@ class TabsService {
 
     // 使用 Redux action 移除标签页
     store.dispatch(removeTab(tabId))
+    // 关掉的若是固定标签页，持久化集合要跟着收（否则重启会把它复活）
+    this.syncPinnedTabs()
 
     logger.info(`Tab ${tabId} closed successfully`)
     return true
@@ -74,6 +87,74 @@ class TabsService {
       clearWebviewState(appId)
       logger.info(`Mini-app ${appId} webview state cleared due to tab closure`)
     }
+  }
+
+  /**
+   * 固定/取消固定某个标签页（V2 `pinTab`/`unpinTab`：固定区/普通区各自追加到末尾）。
+   * @returns 是否成功切换
+   */
+  public togglePin(tabId: string): boolean {
+    const tab = store.getState().tabs.tabs.find((candidate) => candidate.id === tabId)
+    if (!tab) {
+      logger.warn(`Tab with id ${tabId} not found`)
+      return false
+    }
+
+    store.dispatch(toggleTabPin(tabId))
+    this.syncPinnedTabs()
+    return true
+  }
+
+  /**
+   * 关闭其他标签页：**固定标签页豁免**（V2 同），目标标签页本身保留。
+   * 若当前激活的标签页被关掉，则切到目标标签页并导航过去。
+   */
+  public closeOtherTabs(tabId: string): boolean {
+    const state = store.getState()
+    const target = state.tabs.tabs.find((tab) => tab.id === tabId)
+    if (!target) {
+      logger.warn(`Tab with id ${tabId} not found`)
+      return false
+    }
+
+    store.dispatch(closeOtherTabsAction(tabId))
+    this.syncPinnedTabs()
+
+    const nextActiveId = store.getState().tabs.activeTabId
+    if (nextActiveId !== state.tabs.activeTabId) {
+      const nextActive = store.getState().tabs.tabs.find((tab) => tab.id === nextActiveId)
+      if (nextActive && NavigationService.navigate) {
+        NavigationService.navigate(nextActive.path)
+      }
+    }
+
+    logger.info(`Closed other tabs, kept ${tabId}${target.isPinned ? ' (pinned)' : ''}`)
+    return true
+  }
+
+  /**
+   * 把 tabs 切片里的固定集合镜像进**已持久化**的 settings（v0.3.3-1）：
+   * `tabs` 在 persist `blacklist` 里，固定标签页要跨重启保留只能走这里；值未变则不派发。
+   */
+  private syncPinnedTabs(): void {
+    const pinned = pinnedProjection(store.getState().tabs.tabs)
+    const current = store.getState().settings.pinnedTabs ?? []
+    const unchanged =
+      current.length === pinned.length &&
+      current.every((tab, index) => tab.id === pinned[index].id && tab.path === pinned[index].path)
+    if (unchanged) return
+    store.dispatch(setPinnedTabs(pinned))
+  }
+
+  /**
+   * 启动恢复：把 settings 里的固定集合补回 tabs 切片（已在清单里的只补 `isPinned`）。
+   * 幂等；无记录或无需变化时是空操作。
+   */
+  public restorePinnedTabs(): void {
+    const saved = store.getState().settings.pinnedTabs ?? []
+    if (saved.length === 0) return
+    store.dispatch(restorePinnedTabsAction(saved))
+    logger.info(`Restored ${saved.length} pinned tab(s) from settings`)
   }
 
   /**

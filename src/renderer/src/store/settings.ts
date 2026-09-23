@@ -144,6 +144,8 @@ export interface SettingsState {
   quickAssistantReasoningEffort: ThinkingOption | undefined
   multiModelMessageStyle: MultiModelMessageStyle
   readClipboardAtStartup: boolean
+  /** 固定标签页的持久化集合（tabs 切片不持久化，跨重启靠这里，见 TabsService）。 */
+  pinnedTabs: { id: string; path: string }[]
   notionDatabaseID: string | null
   notionApiKey: string | null
   notionPageNameKey: string | null
@@ -327,6 +329,7 @@ export const initialState: SettingsState = {
   quickAssistantPrompt: '',
   quickAssistantReasoningEffort: 'none',
   readClipboardAtStartup: false,
+  pinnedTabs: [],
   multiModelMessageStyle: 'horizontal',
   notionDatabaseID: '',
   notionApiKey: '',
@@ -664,6 +667,14 @@ const settingsSlice = createSlice({
     setReadClipboardAtStartup: (state, action: PayloadAction<boolean>) => {
       state.readClipboardAtStartup = action.payload
     },
+    /**
+     * 固定标签页的持久化集合（v0.3.3-1）：`tabs` 切片在 persist `blacklist` 里（fork 的标签页本就
+     * 只在会话内），故固定的**跨重启**保留落在已持久化的 settings 上；启动时由
+     * `TabsService.restorePinnedTabs()` 补回 tabs 切片。
+     */
+    setPinnedTabs: (state, action: PayloadAction<{ id: string; path: string }[]>) => {
+      state.pinnedTabs = action.payload
+    },
     setMultiModelMessageStyle: (state, action: PayloadAction<'horizontal' | 'vertical' | 'fold' | 'grid'>) => {
       state.multiModelMessageStyle = action.payload
     },
@@ -879,6 +890,7 @@ export const {
   setQuickAssistantPrompt,
   setQuickAssistantReasoningEffort,
   setReadClipboardAtStartup,
+  setPinnedTabs,
   setMultiModelMessageStyle,
   setNotionDatabaseID,
   setNotionApiKey,

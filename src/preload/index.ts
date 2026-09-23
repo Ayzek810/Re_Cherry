@@ -23,6 +23,12 @@ import type { OpenDialogOptions } from 'electron'
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
 import type { CreateDirectoryOptions } from 'webdav'
 
+/**
+ * 流式补全终态事件的宽限期（毫秒，与内核无关，纯 preload 侧兜底）：终态事件与 invoke 回复分走两条通道，
+ * 回复先到时必须再多等一会儿才能让已排队的 done/error 送达（详见 `dshStreamComplete`）。超时即摘监听。
+ */
+const STREAM_TERMINAL_GRACE_MS = 2000
+
 type DirectoryListOptions = {
   recursive?: boolean
   maxDepth?: number
@@ -100,13 +106,33 @@ const api = {
   dshComplete: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_Complete, payload),
   dshStreamComplete: (payload: unknown, onEvent: (data: unknown) => void) => {
     const requestId = (payload as { requestId: string }).requestId
-    const listener = (_event: Electron.IpcRendererEvent, data: { requestId?: string }) => {
-      if (data?.requestId === requestId) onEvent(data)
+    let terminal = false
+    let graceTimer: ReturnType<typeof setTimeout> | undefined
+    const listener = (_event: Electron.IpcRendererEvent, data: { requestId?: string; type?: string }) => {
+      if (data?.requestId !== requestId) return
+      if (data.type === 'done' || data.type === 'error') {
+        terminal = true
+        if (graceTimer !== undefined) {
+          clearTimeout(graceTimer)
+          graceTimer = undefined
+        }
+      }
+      onEvent(data)
     }
     ipcRenderer.on(IpcChannel.Dsh_CompletionEvent, listener)
-    return ipcRenderer
-      .invoke(IpcChannel.Dsh_StreamComplete, payload)
-      .finally(() => ipcRenderer.off(IpcChannel.Dsh_CompletionEvent, listener))
+    const off = () => ipcRenderer.off(IpcChannel.Dsh_CompletionEvent, listener)
+    // v0.3.3-1 修复（"快速助手完成输出后不自动停止"）：这条轻通路（不建内核会话）的终态事件（done/error）
+    // 与 invoke 回复走的是**两条不同通道**，会赛跑——主进程在 `send(done)` 之后立刻 return，回复常常先被
+    // 渲染层处理，于是 `.finally(off)` 在终态事件排队期间就把监听摘掉了：正文 delta 早已送达、末条 done
+    // 永远到不了 ⇒ 消息停在 processing、块停在 streaming、"按 ESC 暂停"一直挂着（真机与隔离实例探针都能复现）。
+    // 现在回复落地后**先等终态事件**（最多 STREAM_TERMINAL_GRACE_MS），拿到即摘；超时才兜底摘掉。
+    return ipcRenderer.invoke(IpcChannel.Dsh_StreamComplete, payload).finally(() => {
+      if (terminal) {
+        off()
+        return
+      }
+      graceTimer = setTimeout(off, STREAM_TERMINAL_GRACE_MS)
+    })
   },
   dshLightImage: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_LightImage, payload),
   dshLightImageAbort: (requestId: string) => ipcRenderer.invoke(IpcChannel.Dsh_LightImageAbort, requestId),

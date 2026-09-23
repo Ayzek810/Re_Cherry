@@ -450,6 +450,60 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
         const reasoningEffort = kernelReasoningLevelFor(model, quickAssistantReasoningEffort)
 
+        // 收尾（幂等，v0.3.3-1）：本轮的终态**只处理一次**——事件先到就用事件的结论，事件没到就由
+        // Promise 落地兜底。看到的现象是"正文已输出完、消息仍 processing、块仍 streaming、"按 ESC
+        // 暂停"一直挂着"：终态事件与 invoke 回复走两条通道会赛跑，末条 done 有概率输掉（见 preload
+        // `dshStreamComplete` 的宽限期修复）。以"通道结束 = 本轮结束"为准收尾，UI 就一定能停下来。
+        let terminalHandled = false
+        const stopLoading = () => {
+          setIsLoading(false)
+          setIsOutputted(true)
+          currentAskId.current = ''
+        }
+        const finishSuccess = () => {
+          if (terminalHandled) return
+          terminalHandled = true
+          if (rafId !== 0) {
+            cancelAnimationFrame(rafId)
+            rafId = 0
+          }
+          flushText()
+          finalizeThinking()
+          store.dispatch(
+            updateOneBlock({
+              id: replyBlock.id,
+              changes: { content: streamedText, status: MessageBlockStatus.SUCCESS }
+            })
+          )
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId: assistantMessage.id,
+              updates: { status: AssistantMessageStatus.SUCCESS }
+            })
+          )
+          stopLoading()
+        }
+        const finishError = (message?: string) => {
+          if (terminalHandled) return
+          terminalHandled = true
+          if (rafId !== 0) {
+            cancelAnimationFrame(rafId)
+            rafId = 0
+          }
+          cancelThinking()
+          store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { status: MessageBlockStatus.ERROR } }))
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId: assistantMessage.id,
+              updates: { status: AssistantMessageStatus.ERROR }
+            })
+          )
+          stopLoading()
+          if (message) setError(message)
+        }
+
         await lightStream(
           assistantMessage.id,
           {
@@ -492,49 +546,16 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
                 })
               }
             } else if (event.type === 'done') {
-              if (rafId !== 0) {
-                cancelAnimationFrame(rafId)
-                rafId = 0
-              }
-              flushText()
-              finalizeThinking()
-              store.dispatch(
-                updateOneBlock({
-                  id: replyBlock.id,
-                  changes: { content: streamedText, status: MessageBlockStatus.SUCCESS }
-                })
-              )
-              store.dispatch(
-                newMessagesActions.updateMessage({
-                  topicId,
-                  messageId: assistantMessage.id,
-                  updates: { status: AssistantMessageStatus.SUCCESS }
-                })
-              )
-              setIsLoading(false)
-              setIsOutputted(true)
-              currentAskId.current = ''
+              finishSuccess()
             } else if (event.type === 'error') {
-              if (rafId !== 0) {
-                cancelAnimationFrame(rafId)
-                rafId = 0
-              }
-              cancelThinking()
-              store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { status: MessageBlockStatus.ERROR } }))
-              store.dispatch(
-                newMessagesActions.updateMessage({
-                  topicId,
-                  messageId: assistantMessage.id,
-                  updates: { status: AssistantMessageStatus.ERROR }
-                })
-              )
-              setIsLoading(false)
-              setIsOutputted(true)
-              currentAskId.current = ''
-              setError(event.message || 'An error occurred')
+              finishError(event.message || 'An error occurred')
             }
           }
         )
+        // 通道已结束：终态事件没到也要收尾（用户暂停时由 handlePause 收，故这里跳过）。
+        if (!cancelledRef.current) {
+          finishSuccess()
+        }
       } catch (err) {
         if (cancelledRef.current) {
           return
