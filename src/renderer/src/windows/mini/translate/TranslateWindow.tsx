@@ -10,7 +10,7 @@ import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'
 import { loggerService } from '@renderer/services/LoggerService'
 import { useAppSelector } from '@renderer/store'
-import { buildTranslatePrompt, TRANSLATE_PROMPT } from '@renderer/utils/translate'
+import { buildTranslatePrompt, detectLanguage, TRANSLATE_PROMPT } from '@renderer/utils/translate'
 import { Select } from 'antd'
 import { ArrowLeftRight } from 'lucide-react'
 import type { FC } from 'react'
@@ -45,6 +45,8 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
   const [error, setError] = useState<string | null>(null)
   const [targetLanguage, setTargetLanguage] = useState<TranslateLangCode>('zh-cn')
   const [isTranslating, setIsTranslating] = useState(false)
+  /** V1 语义：源语言块显示"自动检测 (检测到的语言)"，检测不出则只显示"自动检测"。 */
+  const [detectedLanguage, setDetectedLanguage] = useState<TranslateLangCode | null>(null)
 
   // 在途请求的 requestId：新请求/卸载使其作废，旧事件与旧终态一律丢弃
   const requestIdRef = useRef<string | null>(null)
@@ -75,6 +77,8 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
     requestIdRef.current = requestId
 
     const source = text.trim()
+    // fork 缝：V1 的源语言块在检测后显示实际语言（`自动检测 (中文)`）；检测是本地 franc，零额外请求。
+    setDetectedLanguage(detectLanguage(source))
     if (source.length === 0 || !translateModel) {
       // 不发请求也不置错：中性空态由 error/未配模型提示分支承担
       setIsTranslating(false)
@@ -147,7 +151,9 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
   return (
     <Container>
       <LanguageRow>
-        <SourceBlock title={t('translate.auto_detect')}>{t('translate.auto_detect')}</SourceBlock>
+        <SourceBlock title={t('translate.auto_detect')}>
+          {`${t('translate.auto_detect')}${detectedLanguage ? ` (${languageLabel(detectedLanguage)})` : ''}`}
+        </SourceBlock>
         <ArrowLeftRight size={16} color="var(--color-text-secondary)" />
         <TargetSelect
           value={targetLanguage}

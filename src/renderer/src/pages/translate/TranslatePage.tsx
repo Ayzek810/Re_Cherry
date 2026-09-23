@@ -14,7 +14,7 @@ import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setTranslateModel } from '@renderer/store/llm'
 import type { TranslateRecord } from '@renderer/types/translate'
 import { cn } from '@renderer/utils/style'
-import { buildTranslatePrompt, determineTargetLanguage, TRANSLATE_PROMPT } from '@renderer/utils/translate'
+import { buildTranslatePrompt, detectLanguage, determineTargetLanguage, TRANSLATE_PROMPT } from '@renderer/utils/translate'
 import { CirclePause, History, Languages, SlidersHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -42,6 +42,8 @@ const TranslatePage = () => {
   const [copied, setCopied] = useState(false)
   const [source, setSource] = useState<TranslateLangCode | 'auto'>('auto')
   const [target, setTarget] = useState<TranslateLangCode>('zh-cn')
+  /** V1 语义（`TranslatePage.tsx:86/241-242`）：源语言为 auto 时检测到的实际语言，用于显示与落库。 */
+  const [detectedLanguage, setDetectedLanguage] = useState<TranslateLangCode | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [history, setHistory] = useState<TranslateRecord[]>([])
@@ -95,6 +97,10 @@ const TranslatePage = () => {
       return
     }
     const targetLabel = languageLabel(decided.target)
+    // V1 `TranslatePage.tsx:239-242`：auto 源语言先检测再翻译，检测结果用于显示与历史落库。
+    // fork 缝：只走离线 franc 档（V1 的 llm 档依赖已下线的老管线），检测不出则保持 null。
+    const detected = source === 'auto' ? detectLanguage(text) : null
+    setDetectedLanguage(detected)
 
     cancelledRef.current = false
     setTranslating(true)
@@ -127,7 +133,9 @@ const TranslatePage = () => {
           id: uuid(),
           sourceText: text,
           targetText: accumulated,
-          sourceLanguage: decided.source,
+          // V1:201 落库写的是 `actualSourceLanguage.langCode`（auto 已解析成实际语言），
+          // fork 同义：检测出来了就写检测结果，否则保持 'auto'。
+          sourceLanguage: detected ?? decided.source,
           targetLanguage: decided.target,
           createdAt: Date.now()
         }
@@ -227,6 +235,7 @@ const TranslatePage = () => {
             onSourceChange={setSource}
             target={target}
             onTargetChange={setTarget}
+            detectedLanguage={detectedLanguage}
             languageLabel={languageLabel}
             exchangeDisabled={translating}
             onExchange={exchange}
