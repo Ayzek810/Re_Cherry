@@ -13,7 +13,7 @@ import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newM
 import type { Assistant, Topic } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { AssistantMessageStatus, MessageBlockStatus } from '@renderer/types/newMessage'
-import { createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
+import { createImageBlock, createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { replacePromptVariables } from '@renderer/utils/prompt'
 import { kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
@@ -27,6 +27,7 @@ import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import ChatWindow from '../chat/ChatWindow'
+import TranslateWindow from '../translate/TranslateWindow'
 import ClipboardPreview from './components/ClipboardPreview'
 import type { FeatureMenusRef } from './components/FeatureMenus'
 import FeatureMenus from './components/FeatureMenus'
@@ -63,7 +64,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   )
   const currentAssistant = miniAssistant
 
-  const [route, setRoute] = useState<'home' | 'chat' | 'summary' | 'explanation'>('home')
+  const [route, setRoute] = useState<'home' | 'chat' | 'translate' | 'summary' | 'explanation'>('home')
   const [isFirstMessage, setIsFirstMessage] = useState(true)
 
   const [userInputText, setUserInputText] = useState('')
@@ -197,7 +198,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           if (userContent) {
             if (route === 'home') {
               featureMenusRef.current?.useFeature()
-            } else {
+            } else if (route !== 'translate') {
               // Currently text input is only available in 'chat' mode
               setRoute('chat')
               void handleSendMessage()
@@ -303,8 +304,22 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           topic: currentTopic.current
         })
 
-        store.dispatch(newMessagesActions.addMessage({ topicId, message: userMessage }))
-        store.dispatch(upsertManyBlocks(blocks))
+        // v0.3.3-2：粘贴的图片同时进消息块（否则只在 images 载荷里给模型看，会话里不显示）。
+        const imageBlocks =
+          clipboardImage !== null
+            ? [
+                createImageBlock(userMessage.id, {
+                  url: `data:${clipboardImage.mediaType};base64,${clipboardImage.data}`
+                })
+              ]
+            : []
+        const userMessageWithImages =
+          imageBlocks.length > 0
+            ? { ...userMessage, blocks: [...userMessage.blocks, ...imageBlocks.map((block) => block.id)] }
+            : userMessage
+
+        store.dispatch(newMessagesActions.addMessage({ topicId, message: userMessageWithImages }))
+        store.dispatch(upsertManyBlocks([...blocks, ...imageBlocks]))
 
         const assistantMessage = getAssistantMessage({
           assistant: currentAssistant,
@@ -622,6 +637,16 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   )
 
   switch (route) {
+    case 'translate':
+      return (
+        <Container style={{ backgroundColor }} $draggable={draggable}>
+          <ClipboardPreview referenceText={referenceText} clearClipboard={clearClipboard} t={t} />
+          <TranslateWindow text={userContent} />
+          <Divider style={{ margin: '10px 0' }} />
+          <Footer key="footer" {...baseFooterProps} onCopy={handleCopy} />
+        </Container>
+      )
+
     case 'chat':
     case 'summary':
     case 'explanation':

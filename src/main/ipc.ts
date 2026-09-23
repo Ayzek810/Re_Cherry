@@ -11,7 +11,7 @@ import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { extractPdfText } from '@shared/utils/pdf'
-import type { Notification, Shortcut, ThemeMode } from '@types'
+import type { MCPServer, Notification, Shortcut, ThemeMode } from '@types'
 import checkDiskSpace from 'check-disk-space'
 import type { ProxyConfig } from 'electron'
 import { BrowserWindow, dialog, ipcMain, session, shell, webContents } from 'electron'
@@ -647,6 +647,33 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Skill_InstallFromUrl, (_, url: string) => skillService.installFromUrl(url))
   ipcMain.handle(IpcChannel.Skill_Uninstall, (_, folderName: string) => skillService.uninstall(folderName))
   ipcMain.handle(IpcChannel.Skill_List, () => skillService.list())
+
+  // MCP 设置页通道（批次3 契约；v0.3.3-1 补注册）：preload 桥、渲染层 mcpApi、MCPService 方法
+  // 三层本已齐备，唯独主进程 handler 与日志事件转发缺失——设置页读版本/工具/日志一律报
+  // "No handler registered for 'mcp:*'"（日志噪音 + 功能不可用）。服务实例按内核同款动态导入，
+  // 避免在 app ready 前就把 MCP 客户端层实例化。
+  {
+    const { mcpService } = await import('./services/mcp/MCPService')
+    const asServer = (value: unknown) => value as MCPServer
+    const asOptionalServer = (value: unknown) => value as MCPServer | undefined
+
+    ipcMain.handle(IpcChannel.Mcp_ListTools, (_, server) => mcpService.listTools(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_ListPrompts, (_, server) => mcpService.listPrompts(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_ListResources, (_, server) => mcpService.listResources(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_GetServerVersion, (_, server) => mcpService.getServerVersion(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_GetServerLogs, (_, server) => mcpService.getServerLogs(asOptionalServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_RestartServer, (_, server) => mcpService.restartServer(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_StopServer, (_, server) => mcpService.stopServer(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_RemoveServer, (_, server) => mcpService.removeServer(asServer(server)))
+    ipcMain.handle(IpcChannel.Mcp_CheckConnectivity, (_, server) => mcpService.checkConnectivity(asServer(server)))
+
+    // 服务器日志事件（主 → 渲染）：MCPService 只维护回调注册表，转发由调用方接线。
+    mcpService.onServerLog((log) => {
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IpcChannel.Mcp_ServerLog, log)
+      }
+    })
+  }
 
   // webview
   ipcMain.handle(IpcChannel.Webview_SetOpenLinkExternal, (_, webviewId: number, isExternal: boolean) =>
