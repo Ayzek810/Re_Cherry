@@ -61,6 +61,16 @@ export async function lightStream(
   return (result ?? { ok: true }) as { ok: boolean }
 }
 
+// fork 缝：Dsh_StreamAbort 的渲染层入口（与 lightImageAbort 同形）。
+/**
+ * 取消进行中的流式补全（requestId 配对）：主进程 abort 该流携带的 AbortSignal，
+ * 底层请求真正断开（此前渲染层只翻 cancelledRef，模型仍生成到结束并计费）。
+ * 流已结束或 requestId 从未存在 = 无害空操作。
+ */
+export async function lightStreamAbort(requestId: string): Promise<void> {
+  await window.api.dshStreamAbort(requestId)
+}
+
 /** 图像生成（绘画页/生图工具的执行缝；OpenAI 兼容平面直连）。失败抛错。 */
 export async function lightGenerateImage(call: LightImageGenerateCall): Promise<LightImageResult> {
   return (await window.api.dshLightImage({ mode: 'generate', ...call })) as LightImageResult

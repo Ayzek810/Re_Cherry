@@ -65,6 +65,12 @@ interface ComposerEditorFrameSizingOptions {
   fontSize: number
   isExpanded: boolean
   onExpandedChange: (expanded: boolean) => void
+  /**
+   * fork 缝：A9 —— V2 该 hook 必填 `focusEditor`（V2 `useComposerEditorFrameSizing.ts:25`），
+   * 展开/收起收尾把光标交回输入框。fork 侧先做成可选：`ComposerSurface.tsx` 不在本批改动范围内，
+   * 之后由它传入 `() => editorRef.current?.focus()`；未传时不调用（行为与改动前一致）。
+   */
+  focusEditor?: () => void
 }
 
 /**
@@ -75,7 +81,8 @@ interface ComposerEditorFrameSizingOptions {
 export function useComposerEditorFrameSizing({
   fontSize,
   isExpanded,
-  onExpandedChange
+  onExpandedChange,
+  focusEditor
 }: ComposerEditorFrameSizingOptions) {
   const minHeight = getComposerEditorMinHeight(fontSize)
   const maxHeight = getExpandedEditorFrameHeightPx(minHeight)
@@ -163,14 +170,19 @@ export function useComposerEditorFrameSizing({
       const target = typeof nextState === 'boolean' ? nextState : !isExpanded
       if (!target) setManualHeight(null)
       onExpandedChange(target)
+      // fork 缝：A9 —— V2:235 在展开/收起收尾把光标交回输入框；fork 漏了这一步，
+      // 点"展开/收起"按钮后光标留在按钮上，用户要再点一次输入框。待接点：ComposerSurface 传 focusEditor。
+      focusEditor?.()
     },
-    [isExpanded, onExpandedChange]
+    [focusEditor, isExpanded, onExpandedChange]
   )
 
   const restoreDefaultHeight = useCallback(() => {
     setManualHeight(null)
     onExpandedChange(false)
-  }, [onExpandedChange])
+    // fork 缝：A9 —— V2:290 同款收尾（含 V2:275 的 frame 为空分支）。
+    focusEditor?.()
+  }, [focusEditor, onExpandedChange])
 
   const frameStyle = useMemo<CSSProperties>(
     () => ({

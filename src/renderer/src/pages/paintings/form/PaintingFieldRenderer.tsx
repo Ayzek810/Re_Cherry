@@ -1,7 +1,7 @@
 // 原语 antd 化：V2 @cherrystudio/ui（Button/Input/RadioGroup/RadioGroupItem/Slider/
 // Switch/Textarea）→ antd（Button/Input/Radio/Slider/Switch）。事件缝：Radix
 // onValueChange → antd onChange（e.target.value / checked / 数值）；Radix Slider
-// 数组值 → antd 数值。RadioGroup 不继承 aria 属性，iconRadio 的 aria-label 移除。
+// 数组值 → antd 数值。iconRadio 的组名（V2 的 `aria-label`）落法见该分支的 fork 缝注释（A5）。
 import { Button, Input, Radio, Slider, Switch } from 'antd'
 import { RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -154,36 +154,43 @@ export function PaintingFieldRenderer({ item, painting, onChange, onGenerateRand
       const columns = item.columns || 3
 
       return (
-        <Radio.Group
-          value={value || undefined}
-          className="grid gap-2"
-          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-          onChange={(e) => onChange({ [fieldKey]: e.target.value })}>
-          {options.map((option) => (
-            <label
-              key={String(option.value)}
-              htmlFor={`${fieldKey}-${option.value}`}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] transition-all ${
-                value === String(option.value)
-                  ? 'bg-secondary-active text-foreground ring-1 ring-[color:color-mix(in_oklch,var(--foreground)_33.3333%,transparent)]'
-                  : 'bg-muted text-foreground-tertiary hover:bg-secondary-hover hover:text-foreground'
-              }`}>
-              <Radio value={String(option.value)} id={`${fieldKey}-${option.value}`} className="sr-only" />
-              {option.icon && (
-                <div className="flex items-center justify-center bg-transparent" aria-hidden>
-                  <span
-                    className={`h-3 w-3 bg-current transition-opacity ${value === String(option.value) ? 'opacity-100' : 'opacity-60'}`}
-                    style={{
-                      mask: `url(${option.icon}) center / contain no-repeat`,
-                      WebkitMask: `url(${option.icon}) center / contain no-repeat`
-                    }}
-                  />
-                </div>
-              )}
-              <span className="font-medium tracking-tight">{option.label}</span>
-            </label>
-          ))}
-        </Radio.Group>
+        // fork 缝：A5 —— V2 `PaintingFieldRenderer.tsx:155` 给该组 `aria-label={item.title ? t(item.title) : fieldKey}`
+        // （Radix 的 RadioGroup 自带 role="radiogroup"，一个节点同时给角色和名字）。antd 的 `Radio.Group` 内部只
+        // `pickAttrs(props,{aria:true,data:true})`：aria-* 能落到它的 div 上、但 `role` 会被丢掉，而裸 div 是
+        // role=generic，ARIA 1.2 下 generic 不接受 aria-label → 组名对辅助技术不可见。故把组名挂到 `role="radiogroup"`
+        // 的外层节点上；视觉不变：grid 类与 gridTemplateColumns 仍留在 Radio.Group 上。
+        <div role="radiogroup" aria-label={item.title ? t(item.title) : fieldKey}>
+          <Radio.Group
+            value={value || undefined}
+            className="grid gap-2"
+            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+            onChange={(e) => onChange({ [fieldKey]: e.target.value })}>
+            {options.map((option) => (
+              <label
+                key={String(option.value)}
+                htmlFor={`${fieldKey}-${option.value}`}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-[10px] px-2 py-1.5 text-[11px] transition-all ${
+                  value === String(option.value)
+                    ? 'bg-secondary-active text-foreground ring-1 ring-[color:color-mix(in_oklch,var(--foreground)_33.3333%,transparent)]'
+                    : 'bg-muted text-foreground-tertiary hover:bg-secondary-hover hover:text-foreground'
+                }`}>
+                <Radio value={String(option.value)} id={`${fieldKey}-${option.value}`} className="sr-only" />
+                {option.icon && (
+                  <div className="flex items-center justify-center bg-transparent" aria-hidden>
+                    <span
+                      className={`h-3 w-3 bg-current transition-opacity ${value === String(option.value) ? 'opacity-100' : 'opacity-60'}`}
+                      style={{
+                        mask: `url(${option.icon}) center / contain no-repeat`,
+                        WebkitMask: `url(${option.icon}) center / contain no-repeat`
+                      }}
+                    />
+                  </div>
+                )}
+                <span className="font-medium tracking-tight">{option.label}</span>
+              </label>
+            ))}
+          </Radio.Group>
+        </div>
       )
     }
 

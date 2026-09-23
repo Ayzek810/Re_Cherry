@@ -42,18 +42,13 @@ export function usePaintingGenerationGuard({ painting }: UsePaintingGenerationGu
       return Promise.resolve({ ok: false, reason: 'model_missing' })
     }
 
-    // fork 缝：模型目录就在 redux providers 里（同步可读），无 DataApi 目录可失败
-    // ——catalog_error 仅在模型选择器抛错时由调用方注入，这里保留分支形状。
-    let ensuredOptions: Model[]
-    try {
-      ensuredOptions = selectImageGenerationModels([provider])
-    } catch (error) {
-      return Promise.resolve({
-        ok: false,
-        reason: 'catalog_error',
-        error: error instanceof Error ? error : new Error('Failed to load painting models')
-      })
-    }
+    // fork 缝：A4 —— V2 此处是 `await ensureCurrentCatalog()`（异步模型目录，DataApi 可失败），故 V2 有
+    // 可达的 `catalog_error` 分支。fork 的目录就是 redux providers 上的同步过滤
+    // （`selectImageGenerationModels` = filter/flatMap，纯函数、不抛），没有任何"目录失败态"，
+    // 原 try/catch 的 `catalog_error` 是死分支（静态门禁与覆盖率都照不出来）。删掉分支形状，
+    // 不再伪造错误态；`PaintingGenerationGuardReason` 仍与 V2 同形保留 `catalog_error`
+    // （presentPaintingGenerationGuardFeedback 的同名分支依旧存在，等未来接上真异步目录即可复发）。
+    const ensuredOptions: Model[] = selectImageGenerationModels([provider])
 
     const ensuredOption = ensuredOptions.find((option) => option.id === modelId)
     if (!ensuredOption) {

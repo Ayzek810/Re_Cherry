@@ -110,6 +110,8 @@ const api = {
   },
   dshLightImage: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_LightImage, payload),
   dshLightImageAbort: (requestId: string) => ipcRenderer.invoke(IpcChannel.Dsh_LightImageAbort, requestId),
+  // fork 缝：流式补全的真取消缝（requestId 配对；主进程 `requestId → AbortController`）。
+  dshStreamAbort: (requestId: string) => ipcRenderer.invoke(IpcChannel.Dsh_StreamAbort, requestId),
 
   dshTopicList: () => ipcRenderer.invoke(IpcChannel.Dsh_TopicList),
   dshTopicCreate: (input: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_TopicCreate, input),

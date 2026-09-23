@@ -8,7 +8,7 @@ import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
 import { langCodeToI18nKey, type TranslateLangCode } from '@renderer/config/translateLanguages'
 import { db } from '@renderer/databases'
-import { lightStream } from '@renderer/services/lightLlm'
+import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'
 import { loggerService } from '@renderer/services/LoggerService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setTranslateModel } from '@renderer/store/llm'
@@ -149,6 +149,11 @@ const TranslatePage = () => {
   }, [sourceText, translating, translateModel, source, target, languageLabel, loadHistory, t])
 
   const abort = useCallback(() => {
+    // fork 缝：「停止」额外发起真取消——作废事件之外，主进程 abort 该 requestId 的在途流
+    //（UI 行为不变：cancelledRef 照旧使在途事件失效、已生成内容保留）。
+    if (requestIdRef.current !== undefined) {
+      void lightStreamAbort(requestIdRef.current)
+    }
     cancelledRef.current = true
     setTranslating(false)
   }, [])

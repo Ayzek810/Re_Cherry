@@ -5,8 +5,9 @@
  */
 import Scrollbar from '@renderer/components/Scrollbar'
 import { BUILTIN_TRANSLATE_LANGUAGES, langCodeToI18nKey, type TranslateLangCode } from '@renderer/config/translateLanguages'
+import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
-import { lightStream } from '@renderer/services/lightLlm'
+import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'
 import { loggerService } from '@renderer/services/LoggerService'
 import { useAppSelector } from '@renderer/store'
 import { buildTranslatePrompt, TRANSLATE_PROMPT } from '@renderer/utils/translate'
@@ -27,7 +28,16 @@ interface TranslateWindowProps {
 
 const TranslateWindow: FC<TranslateWindowProps> = ({ text }) => {
   const { t } = useTranslation()
-  const translateModel = useAppSelector((state) => state.llm.translateModel)
+  // fork 缝（P0-D）：V2 用 `useDefaultModel().translateModel`（未配翻译模型时回落默认对话
+  // 模型）。fork 的 useDefaultModel 只暴露 defaultModel，故按同一语义合成：主翻译页选择器
+  // 写入的 state.llm.translateModel 优先，未配置时回落默认对话模型。此前只读 translateModel，
+  // 而该字段的唯一写入者在主翻译页——小窗里恒为 undefined，翻译必然发出「未配置」提示。
+  const { defaultModel } = useDefaultModel()
+  const configuredTranslateModel = useAppSelector((state) => state.llm.translateModel)
+  const translateModel = useMemo(
+    () => configuredTranslateModel ?? defaultModel,
+    [configuredTranslateModel, defaultModel]
+  )
 
   const [result, setResult] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -111,6 +121,9 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text }) => {
 
     return () => {
       // 卸载即作废在途流：后续事件按 requestId 失配丢弃
+      // fork 缝：作废之外额外发起真取消——重译/换语言/卸载时主进程 abort 旧流，
+      // 否则旧模型继续生成到结束并计费（UI 行为不变：事件照旧失配丢弃、已生成内容保留）。
+      void lightStreamAbort(requestId)
       requestIdRef.current = null
     }
     // languageLabel 只依赖 i18n 与目标语言，随 targetLanguage 一并重算
@@ -207,8 +220,10 @@ const ResultText = styled.div`
   line-height: 1.6;
 `
 
+// fork 缝：--color-text-tertiary 全仓未定义（无 fallback 的 var() 使该声明失效、颜色回落
+// inherit）→ 空态文案失去弱化层次；改用既有定义的 --color-text-3（assets/styles/color.css）。
 const EmptyText = styled.div`
-  color: var(--color-text-tertiary);
+  color: var(--color-text-3);
   font-style: italic;
   font-size: 13px;
 `

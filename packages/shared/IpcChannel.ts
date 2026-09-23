@@ -259,6 +259,8 @@ export enum IpcChannel {
   Dsh_StreamSmoke = 'dsh:stream-smoke',
   Dsh_Complete = 'dsh:complete',
   Dsh_StreamComplete = 'dsh:stream-complete',
+  // fork 缝：轻量流式补全的真取消通道（无载荷校验：requestId 配对，未命中即无害空操作）。
+  Dsh_StreamAbort = 'dsh:stream-abort',
   Dsh_CompletionEvent = 'dsh:completion-event',
   Dsh_TopicList = 'dsh:topic-list',
   Dsh_TopicCreate = 'dsh:topic-create',

@@ -22,7 +22,8 @@ import type { PaintingData } from './types/paintingData'
 const logger = loggerService.withContext('paintings/canonicalGenerate')
 
 /** fork 上限常量（V2 registry maxInputImages 的本地等价）。 */
-const MAX_INPUT_IMAGES = 4
+// fork 缝（P0-A）：导出给作曲条物化闸复用，避免"4"出现第二个事实源。
+export const MAX_INPUT_IMAGES = 4
 
 /** Encode raw image bytes as a `data:` URL for the edit endpoint. */
 function bytesToDataUrl(bytes: Uint8Array, mime: string): string {

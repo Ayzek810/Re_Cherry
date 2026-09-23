@@ -236,7 +236,11 @@ const PaintingComposerInner: FC<PaintingComposerInnerProps> = ({
     paintingId: painting.id,
     archivedInputFiles: painting.inputFiles ?? [],
     inputCapability,
-    providerId: painting.providerId
+    providerId: painting.providerId,
+    // fork 缝（P0-A）：把作曲条读取的实时列表交给物化与 CLEAR——否则物化用的是本 hook
+    // 自持、除挂载播种外无人写入的存档态（陈旧列表），chips 上的增删与它无关。
+    files,
+    setFiles
   })
 
   // Edit-image models: images live in the top reference-image tray (reads `files` from

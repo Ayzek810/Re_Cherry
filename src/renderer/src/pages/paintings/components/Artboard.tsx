@@ -112,19 +112,64 @@ const ArtboardPromptBar: FC<{ prompt: string; sizeLabel?: string }> = ({ prompt,
 
   useEffect(() => cancelPromptPopoverClose, [cancelPromptPopoverClose])
 
+  // fork 缝：A3 —— V2 把"按打开原因转移焦点"整段交给 Radix（`onOpenAutoFocus`/`onCloseAutoFocus`，
+  // V2 `Artboard.tsx:160-166`）：只有键盘打开才把焦点送进面板，指针打开不抢焦点。fork 的面板是就地渲染的
+  // div（非 portal），没有这套机制，`promptPopoverOpenReasonRef` 此前只写不读 → 键盘打开后焦点仍留在触发点上。
+  useEffect(() => {
+    if (!isPromptPopoverOpen || promptPopoverOpenReasonRef.current !== 'keyboard') return
+    const content = promptPopoverContentRef.current
+    if (!content) return
+    // 焦点落在面板内第一个可聚焦元素（复制按钮）；没有可聚焦子节点时退到面板本身（tabIndex=-1）。
+    const firstFocusable = content.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    const target = firstFocusable ?? content
+    target.focus()
+  }, [isPromptPopoverOpen])
+
+  // fork 缝：A3 —— 关闭后焦点回触发点（V2 `onCloseAutoFocus` 的默认行为）：键盘 Escape 关闭时
+  // 焦点正在面板内，浏览器会把它丢给 body；触发点始终挂载，这里同步交还焦点。焦点已离开面板的关闭路径
+  // （Tab 走后由 150ms 计时器关闭）不调用本函数，故不会把焦点从用户新落点抢回来。
+  const closePromptPopoverAndRestoreFocus = useCallback(() => {
+    cancelPromptPopoverClose()
+    setPromptPopoverOpen(false)
+    promptPopoverTriggerRef.current?.focus()
+  }, [cancelPromptPopoverClose])
+
   return (
     <div className="mb-2 flex w-full min-w-0 items-center justify-between gap-2 text-muted-foreground text-xs">
       <div className="min-w-0 max-w-xs flex-1 overflow-hidden">
+        {/* fork 缝：A3 —— V2 `PopoverContent` 上的这一整组处理器（V2 `Artboard.tsx:152-169`）在 fork 里全部丢失。
+            指针进面板必须撤销"离开触发点即关闭"的计时器，否则鼠标移向面板时面板先关掉、面板里的复制按钮根本
+            点不到；焦点进出面板同理（`onFocusCapture`/`onBlurCapture`，V2 逐字）。`onOpenAutoFocus`/
+            `onCloseAutoFocus` 的焦点移交见本组件上方的 effect 与 `closePromptPopoverAndRestoreFocus`。 */}
         {isPromptPopoverOpen && (
           <div
             ref={promptPopoverContentRef}
             role="dialog"
             aria-label={t('common.prompt')}
+            tabIndex={-1}
+            onPointerEnter={(event) => {
+              if (event.pointerType !== 'touch') openPromptPopoverFromPointer()
+            }}
+            onPointerLeave={(event) => {
+              if (event.pointerType !== 'touch') schedulePromptPopoverClose()
+            }}
+            onFocusCapture={cancelPromptPopoverClose}
+            onBlurCapture={schedulePromptPopoverClose}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              event.stopPropagation()
+              closePromptPopoverAndRestoreFocus()
+            }}
             className="max-h-80 w-fit max-w-md overflow-y-auto rounded-md border-0 bg-neutral-900 p-2 text-neutral-50 text-xs leading-relaxed shadow-md">
             <button
               type="button"
               aria-label={t('common.copy')}
-              className="float-right ml-0.5 flex size-5 items-center justify-center rounded-md text-neutral-50 hover:bg-neutral-50/10 focus-visible:bg-neutral-50/10 focus-visible:outline-none"
+              // fork 缝：A3 —— 面板内唯一的可聚焦控件，也是键盘打开面板后的焦点落点；原来只有
+              // `focus-visible:outline-none` + 极淡底色，焦点环缺失。补 ring 让"焦点已进面板"可见。
+              className="float-right ml-0.5 flex size-5 items-center justify-center rounded-md text-neutral-50 hover:bg-neutral-50/10 focus-visible:bg-neutral-50/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => {
                 void navigator.clipboard.writeText(prompt)
                 window.toast.success(t('message.copied'))

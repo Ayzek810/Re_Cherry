@@ -137,22 +137,37 @@ export async function lightOneShot(
   return { text, usage, finishKind: finish.kind }
 }
 
+/** 在途流式补全的取消注册表：requestId → AbortController（Dsh_StreamAbort 命中）。 */
+const streamAborts = new Map<string, AbortController>()
+
 /**
  * 流式补全：chunk → 规范化事件（delta/reasoning-delta/error/done），错误经事件面
  * 传递、不抛。finish chunk 即收尾并跳出循环（不依赖适配器在 finish 后是否正常
  * 返回迭代结束——连接挂起时 for-await 永不结束，done 永远到不了 UI）；正常终点
  * 发 done，error/aborted 终点发 error；迭代耗尽而无 finish 时补 done。
  * 思考档位缺省 = 模型默认（快捷助手的显式档位照常透传）。
+ *
+ * `requestId` 非空时本轮流进入取消注册表，`abortLightStream(requestId)` 会 abort 它
+ * 携带的 AbortSignal（`GenerateOptions.signal`，dsh-llm 的原生取消通道）：适配器随即
+ * 以 `finish{reason:{kind:'aborted'}}` 收口，底层 HTTP 请求真正断开，不再继续计费。
  */
 export async function lightStream(
   ctx: Context,
   call: LightLlmCall,
-  onEvent: (event: LightLlmStreamEvent) => void
+  onEvent: (event: LightLlmStreamEvent) => void,
+  requestId?: string
 ): Promise<void> {
+  // fork 缝：requestId → AbortController（渲染层 Dsh_StreamAbort 命中）；
+  // 无 requestId 的调用方（如测试/内部直调）行为与从前一致。
+  const controller = requestId === undefined || requestId.length === 0 ? undefined : new AbortController()
+  if (controller !== undefined && requestId !== undefined) {
+    streamAborts.set(requestId, controller)
+  }
   try {
     const { options } = await assembleCall(ctx, call, undefined)
+    const streamOptions = controller === undefined ? options : { ...options, signal: controller.signal }
     let finished = false
-    for await (const chunk of ctx.llm.stream(options)) {
+    for await (const chunk of ctx.llm.stream(streamOptions)) {
       if (chunk.type === 'text-delta') {
         onEvent({ type: 'delta', text: chunk.text })
       } else if (chunk.type === 'reasoning-delta') {
@@ -175,5 +190,14 @@ export async function lightStream(
     }
   } catch (error) {
     onEvent({ type: 'error', message: error instanceof Error ? error.message : String(error) })
+  } finally {
+    // fork 缝：成功/失败/取消三条路径都摘登记，避免取消表随会话长度泄漏。
+    if (requestId !== undefined) streamAborts.delete(requestId)
   }
+}
+
+/** 渲染层取消入口（Dsh_StreamAbort handler 薄转发）：只 abort 配对的那一路流，
+ * 未命中即无害空操作（流已结束/从未存在）。 */
+export function abortLightStream(requestId: string): void {
+  streamAborts.get(requestId)?.abort()
 }

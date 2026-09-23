@@ -7,8 +7,9 @@ import PaintingSkeletonSurface from '@renderer/pages/paintings/components/Painti
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
-// fork 缝：原 `import { Button, Modal } from 'antd'` —— historyAddButton 换回原生 button 后 Button 不再使用。
-import { Modal } from 'antd'
+// fork 缝：原 `import { Button, Modal } from 'antd'` —— historyAddButton 换回原生 button 后 Button 不再使用；
+// Tooltip 补回 A1（V2 把新建按钮包在 Tooltip 里，见下方注释）。
+import { Modal, Tooltip } from 'antd'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import type { FC, UIEventHandler } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -74,7 +75,11 @@ const PaintingStripItem: FC<{
       <button
         type="button"
         aria-label={deleteLabel}
-        className={paintingClasses.historyDelete}
+        // fork 缝：A2 —— V2 `historyDelete` 只有 `group-hover:opacity-100`（PaintingStrip 自身也漏了键盘态），
+        // 于是 Tab 到删除按钮时它是 opacity-0：聚焦了却看不见，也没有焦点环（WCAG 2.4.7）。
+        // 就地追加 V2 在别处（V2 `PaintingImageGallery.tsx:120`）用的同一写法：`group-focus-within:opacity-100`
+        // 与 hover 并列为显形条件；再补 `focus-visible:ring-*` 让键盘焦点可见。paintingClasses 常量表不动。
+        className={`${paintingClasses.historyDelete} group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring`}
         onClick={(event) => {
           event.stopPropagation()
           onDelete(painting)
@@ -119,13 +124,20 @@ const PaintingStrip: FC<PaintingStripProps> = ({
             .ant-btn 自带 height/padding，会顶掉 paintingClasses.historyAddButton 的 h-11 w-11（44px）。
             换回原生 button：className/aria-label/onClick 逐字保留；antd 专有的 `icon` prop 无原生对应物，
             等价展开为子节点（antd 内部同样渲染 <span class="ant-btn-icon">{icon}</span>）。 */}
-        <button
-          type="button"
-          className={paintingClasses.historyAddButton}
-          aria-label={t('paintings.button.new.image')}
-          onClick={onAddPainting}>
-          <Plus className="size-4" />
-        </button>
+        {/* fork 缝：A1 —— V2 `PaintingStrip.tsx:115-125` 把新建按钮包在
+            `<Tooltip content={t('paintings.button.new.image')} placement="right" delay={500}>` 里；fork 只剩裸
+            `<button aria-label=…>`，鼠标操作者永远看不到"新建"提示。antd Tooltip 对应 content→title、
+            delay(ms)→mouseEnterDelay(s)，键沿用 V2 同键 `paintings.button.new.image`。Tooltip 只 clone 子节点、
+           不产生包裹元素，故 historyAddButton 的 `sticky top-0` 布局不变。 */}
+        <Tooltip title={t('paintings.button.new.image')} placement="right" mouseEnterDelay={0.5}>
+          <button
+            type="button"
+            className={paintingClasses.historyAddButton}
+            aria-label={t('paintings.button.new.image')}
+            onClick={onAddPainting}>
+            <Plus className="size-4" />
+          </button>
+        </Tooltip>
         {items.map((painting) => (
           <PaintingStripItem
             key={painting.id}

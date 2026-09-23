@@ -1,13 +1,20 @@
 /**
  * 生成执行 hook（v0.3.3 批次4，② 薄适配）：V2 DataApi 建/改行 → db.paintings.put
  * (PaintingRecord)；cache 镜像 → PaintingSessionContext 瞬态 generatingById；
- * AbortController 进 hook state（requestId 取消走 lightLlm.lightImageAbort）。
+ * AbortController 按 paintingId 登记（取消走 lightLlm.lightImageAbort(paintingId)）。
  * 生成主链路 = paintingPipeline.paintingGenerate → runPainting 落盘。
  */
 import { db } from '@renderer/databases'
 import { usePaintingSession } from '@renderer/pages/paintings/context/PaintingSessionContext'
 import { presentPaintingGenerateError } from '@renderer/pages/paintings/errors/paintingGenerateError'
 import { paintingDataToRecord } from '@renderer/pages/paintings/model/mappers/paintingRecordMappers'
+// fork 缝：按 paintingId 登记的取消注册表（V2 paintingAbortControllerStore）。
+import {
+  abortPaintingGeneration,
+  clearPaintingAbortController,
+  getPaintingAbortController,
+  registerPaintingAbortController
+} from '@renderer/pages/paintings/model/paintingAbortControllerStore'
 import { paintingGenerate } from '@renderer/pages/paintings/model/paintingPipeline'
 import { runPainting } from '@renderer/pages/paintings/model/runPainting'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
@@ -32,8 +39,6 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
   const providers = useAppSelector((state) => state.llm.providers)
   const { setGenerationState } = usePaintingSession()
   const visibleIdRef = useRef(painting.id)
-  // AbortController 进 hook state：requestId 配对取消（lightImageAbort）。
-  const abortStateRef = useRef<{ controller: AbortController; requestId: string } | null>(null)
 
   useEffect(() => {
     visibleIdRef.current = painting.id
@@ -75,7 +80,6 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
 
       const generationState = { generationStatus: 'running' as const, generationError: null }
       const controller = new AbortController()
-      const requestId = `painting-${targetPainting.id}`
 
       // Generation state (running/failed/canceled) is the page's in-memory state
       // plus a PaintingSessionContext mirror keyed by paintingId. The mirror
@@ -99,7 +103,8 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
 
       visibleIdRef.current = targetPainting.id
       onPaintingChange({ ...targetPainting, ...generationState } as PaintingData)
-      abortStateRef.current = { controller, requestId }
+      // fork 缝：按 paintingId 登记本轮 controller（取消只命中该 id，不再错杀其他画作）。
+      registerPaintingAbortController(targetPainting.id, controller)
       pushGenerationState(generationState)
 
       try {
@@ -141,18 +146,21 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
           presentPaintingGenerateError(error)
         }
       } finally {
-        abortStateRef.current = null
+        // fork 缝：成功/失败/取消三条路径都要摘登记，避免 registry 泄漏。
+        clearPaintingAbortController(targetPainting.id, controller)
       }
     },
     [applyIfVisible, onPaintingChange, painting, providers, reloadHistory, setGenerationState]
   )
 
-  const cancel = useCallback((_paintingId: string) => {
-    const state = abortStateRef.current
-    if (!state) return
-    // requestId 取消走 lightLlm.lightImageAbort（主进程 AbortSignal 配对）。
-    void lightImageAbort(state.requestId)
-    state.controller.abort()
+  const cancel = useCallback((paintingId: string) => {
+    // fork 缝：只掐该 paintingId 登记的生成；未登记的 id（如删除一幅并未在生成的旧画）
+    // 是无害空操作——这正是此前错杀正在生成画作的根因。
+    if (getPaintingAbortController(paintingId) === null) return
+    // 主进程侧 requestId 配对取消：canonicalGenerate 的 requestId 就是 paintingId
+    //（旧代码传 `painting-${id}`，与主进程登记键不符 → 恒为空操作，付费请求跑到结束）。
+    void lightImageAbort(paintingId)
+    abortPaintingGeneration(paintingId)
   }, [])
 
   return {

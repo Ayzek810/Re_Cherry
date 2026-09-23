@@ -841,7 +841,7 @@ const MemoryItem = styled.div`
   .memory-meta {
     display: flex;
     align-items: center;
-    color: var(--color-text-tertiary);
+    color: var(--color-text-3);
     font-size: 12px;
   }
 
