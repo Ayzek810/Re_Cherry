@@ -23,9 +23,12 @@ function hasOutput(painting: PaintingData) {
 interface UsePaintingGenerationInput {
   painting: PaintingData
   onPaintingChange: (painting: PaintingData) => void
+  // fork 缝：V2 靠 DataApi mutation `refresh: ['/paintings']` 自动刷新历史栏；fork 无该机制，
+  // 由页面把 usePaintingHistory 的 reload 传进来，本轮成功落盘后调一次（失败/取消不调）。
+  reloadHistory?: () => void
 }
 
-export function usePaintingGeneration({ painting, onPaintingChange }: UsePaintingGenerationInput) {
+export function usePaintingGeneration({ painting, onPaintingChange, reloadHistory }: UsePaintingGenerationInput) {
   const providers = useAppSelector((state) => state.llm.providers)
   const { setGenerationState } = usePaintingSession()
   const visibleIdRef = useRef(painting.id)
@@ -121,6 +124,10 @@ export function usePaintingGeneration({ painting, onPaintingChange }: UsePaintin
         // Merge the freshly-generated output into the in-memory draft; do not
         // re-read from the DB record (which would drop params / mode again).
         applyIfVisible({ ...targetPainting, files: generatedFiles } as PaintingData)
+        // fork 缝：output 已回填 Dexie，此处刷新历史栏——PaintingsStrip 才能立即出现新条，
+        // 不必退出页面重进（V2 DataApi mutation refresh:['/paintings'] 的等价物）。
+        // 只在成功落盘路径调用；失败/取消走下方 catch，不刷新。
+        reloadHistory?.()
       } catch (error) {
         const isCanceled = controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')
         const failedState = {
@@ -137,7 +144,7 @@ export function usePaintingGeneration({ painting, onPaintingChange }: UsePaintin
         abortStateRef.current = null
       }
     },
-    [applyIfVisible, onPaintingChange, painting, providers, setGenerationState]
+    [applyIfVisible, onPaintingChange, painting, providers, reloadHistory, setGenerationState]
   )
 
   const cancel = useCallback((_paintingId: string) => {

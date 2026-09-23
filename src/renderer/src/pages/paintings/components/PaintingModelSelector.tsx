@@ -7,9 +7,11 @@
  */
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
-import { selectImageGenerationModels } from '@renderer/services/paintingModelSelection'
+// fork 缝：本地同名谓词并入 paintingModelSelection.isPaintingCandidateModel（单一来源，
+// 与「设置 › 默认模型 › 绘画模型」同一判定）。
+import { isPaintingCandidateModel } from '@renderer/services/paintingModelSelection'
 import { useAppSelector } from '@renderer/store'
-import type { Model, Provider } from '@renderer/types'
+import type { Model } from '@renderer/types'
 import { Button } from 'antd'
 import { ChevronDown } from 'lucide-react'
 import type { FC } from 'react'
@@ -29,11 +31,6 @@ interface PaintingModelSelectorProps {
   disabled?: boolean
 }
 
-/** 生图模型弹窗过滤谓词：经 paintingModelSelection 消化（对话式 + 专用生图）。 */
-const isPaintingCandidate = (model: Model): boolean => {
-  return selectImageGenerationModels([{ id: model.provider, models: [model], enabled: true } as Provider]).length > 0
-}
-
 const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect, disabled }) => {
   const { t } = useTranslation()
   const providers = useAppSelector((state) => state.llm.providers)
@@ -41,7 +38,8 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect
   const openSelector = useCallback(async () => {
     const selected = await SelectChatModelPopup.show({
       model,
-      filter: isPaintingCandidate
+      // fork 缝：谓词改用 paintingModelSelection 的单一来源导出。
+      filter: isPaintingCandidateModel
     })
     if (selected) {
       onSelect({ providerId: selected.provider, modelId: selected.id })

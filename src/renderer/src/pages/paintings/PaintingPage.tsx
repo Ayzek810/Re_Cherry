@@ -106,7 +106,10 @@ const PaintingPageView: FC = () => {
   } = usePaintingGenerationSubmit({
     // fork 缝：V2 另传 `ensureCurrentCatalog`；fork hook 无异步目录参数（模型表同步可读）。
     painting: composerPainting,
-    onPaintingChange: setCurrentPainting
+    onPaintingChange: setCurrentPainting,
+    // fork 缝：V2 靠 DataApi mutation `refresh: ['/paintings']` 自动刷新历史栏；fork 传页面
+    // 自己的 history.reload，生成成功落盘后由 hook 调一次（失败/取消不调）。
+    reloadHistory: history.reload
   })
 
   // After a page switch the local `liveGenerating` boots false because

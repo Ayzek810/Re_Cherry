@@ -33,7 +33,7 @@ const SelectModelPage: FC<SelectModelPageProps> = ({ setStep, onComplete }) => {
           <p className="m-0 text-(--color-text-2) text-sm">{t('onboarding.select_model.subtitle')}</p>
         </div>
 
-        <ModelSettings showSettingsButton={false} showDescription={false} compact />
+        <ModelSettings showSettingsButton={false} showDescription={false} showPaintingModel={false} compact />
 
         <Button type="primary" size="large" block className="h-12 rounded-lg" onClick={onComplete}>
           {t('onboarding.select_model.start')}

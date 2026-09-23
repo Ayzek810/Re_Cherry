@@ -4,7 +4,6 @@
 // V2 自带的受控 textarea（V2 ComposerSurface.tsx:252-327）——fork 无 TipTap。
 import { QuickPanelReservedSymbol, QuickPanelView, useQuickPanel } from '@renderer/components/QuickPanel'
 import { useFileDragDrop } from '@renderer/pages/home/Inputbar/hooks/useFileDragDrop'
-import NarrowLayout from '@renderer/pages/home/Messages/NarrowLayout'
 import QuickPhraseService from '@renderer/services/QuickPhraseService'
 import type { QuickPhrase } from '@renderer/types'
 import { isSendMessageKeyPressed } from '@renderer/utils/input'
@@ -23,8 +22,8 @@ import type { ComposerDraftToken, ComposerSerializedDraft, ComposerSerializedTok
 import { useComposerEditorFrameSizing } from './useComposerEditorFrameSizing'
 import type { ComposerAttachment } from './variants/shared/composerTokens'
 
-/** V2 ComposerSurfaceRuntime.tsx:91 —— NarrowLayout `px-6` 的等价像素。 */
-const COMPOSER_SIDE_PADDING_PX = 24
+/** V2 ComposerSurfaceRuntime.tsx:91 的 `COMPOSER_SIDE_PADDING_PX` 由 `withSidePadding` 的 `px-6`
+ *  class 承载（见下方 narrowLayoutClassName），故此处不再保留该常量。 */
 
 export interface ComposerSurfaceActions {
   focus: (position?: 'start' | 'end' | 'all' | number | boolean | null) => void
@@ -382,10 +381,21 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
   )
 
   // V2:2278-2320 NarrowLayout 外层（非 compact 分支；V2 的 `belowControls` 分支不适用）。
+  // fork 缝：不用 fork 的 NarrowLayout 组件——它读**全局** narrowMode 设置、且不支持 V2 的
+  // `withSidePadding`；这里按 V2 `NarrowLayout.tsx:13-19` 逐字拼 class，保持 V2 的
+  // "居中 800px 上限 + 两侧 24px 内边距"（`railGutterPx` 分支在绘画不传，故走 withSidePadding）。
+  const narrowLayoutClassName = [
+    'narrow-mode relative mx-auto w-full transition-[max-width] duration-300 ease-in-out',
+    props.narrowMode ? 'active' : 'max-w-full',
+    props.narrowMode ? 'max-w-[calc(800px+3rem)]' : undefined,
+    'box-border px-6',
+    'pointer-events-auto'
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <NarrowLayout
-      className="pointer-events-auto"
-      style={{ width: '100%', paddingLeft: COMPOSER_SIDE_PADDING_PX, paddingRight: COMPOSER_SIDE_PADDING_PX }}>
+    <div className={narrowLayoutClassName} style={{ width: '100%' }}>
       <div className="w-full">
         <div
           className="inputbar relative z-2 flex flex-col pt-0"
@@ -397,7 +407,7 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
           {inputbarStack}
         </div>
       </div>
-    </NarrowLayout>
+    </div>
   )
 }
 
