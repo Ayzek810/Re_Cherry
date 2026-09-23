@@ -4,7 +4,8 @@
  * NormalTooltip → antd Tooltip。
  */
 import type { PaintingTemplatePreset } from '@renderer/pages/paintings/hooks/usePaintingTemplateCatalog'
-import { Button, Tooltip } from 'antd'
+// fork 缝：原 `import { Button, Tooltip } from 'antd'` —— 轮播卡换回原生 button 后 Button 不再使用。
+import { Tooltip } from 'antd'
 import { type FC, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -78,6 +79,11 @@ const PaintingTemplateShowcase: FC<PaintingTemplateShowcaseProps> = ({ paintingI
         const visiblePosition = Math.max(-2, Math.min(2, relativePosition))
         const carouselPosition = carouselPositions[visiblePosition + 2] ?? carouselPositions[2]
 
+        // fork 缝：V2 的 Button（@cherrystudio/ui，shadcn）渲染原生 button、只吃 className；fork 移植
+        // 时换成 antd Button，而 .ant-btn 自带 height/padding/line-height（CSS-in-JS 注入晚于 Tailwind
+        // 层）→ 覆盖下面的 clamp 尺寸类，卡片缩成 antd 默认约 40px 小图、横散在页面上。
+        // 换回原生 button，只承载 V2 的尺寸/形状类；aria/tabIndex/style/onClick 逐字保留。
+        // Tooltip 仍用 antd（V2 的 NormalTooltip → antd Tooltip，原样）。
         return (
           <Tooltip
             key={preset.id}
@@ -85,8 +91,8 @@ const PaintingTemplateShowcase: FC<PaintingTemplateShowcaseProps> = ({ paintingI
             placement="top"
             styles={{ body: { maxWidth: 'none', whiteSpace: 'nowrap', padding: '4px 8px', fontWeight: 500 } }}
             {...(isSelected ? { open: true } : {})}>
-            <Button
-              type="text"
+            <button
+              type="button"
               aria-pressed={isSelected}
               aria-hidden={isHidden || undefined}
               aria-label={preset.label}
@@ -111,7 +117,7 @@ const PaintingTemplateShowcase: FC<PaintingTemplateShowcaseProps> = ({ paintingI
                   />
                 )}
               </span>
-            </Button>
+            </button>
           </Tooltip>
         )
       })}

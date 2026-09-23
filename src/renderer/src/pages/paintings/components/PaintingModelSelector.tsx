@@ -12,7 +12,7 @@ import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPop
 import { isPaintingCandidateModel } from '@renderer/services/paintingModelSelection'
 import { useAppSelector } from '@renderer/store'
 import type { Model } from '@renderer/types'
-import { Button } from 'antd'
+// fork 缝：原 `import { Button } from 'antd'` —— SelectorButton 换成 styled.button 后不再使用。
 import { ChevronDown } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback } from 'react'
@@ -49,7 +49,9 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect
   const providerName = model ? providers.find((provider) => provider.id === model.provider)?.name : undefined
 
   return (
-    <SelectorButton onClick={() => void openSelector()} disabled={disabled}>
+    // fork 缝：styled(Button) → styled.button（见下方定义）。antd Button 默认渲染
+    // <button type="button">，原生 button 在 form 内默认 type="submit"，故显式补 type="button"。
+    <SelectorButton type="button" onClick={() => void openSelector()} disabled={disabled}>
       {model ? (
         <>
           <ModelAvatar model={model} size={20} />
@@ -64,7 +66,11 @@ const PaintingModelSelector: FC<PaintingModelSelectorProps> = ({ model, onSelect
   )
 }
 
-const SelectorButton = styled(Button)`
+// fork 缝：V2 对应件是原生 button（@cherrystudio/ui Button，只吃 className），fork 曾用 antd Button，
+// 其 .ant-btn 自带 display:inline-block/height/padding（CSS-in-JS 注入晚于 Tailwind 层）→ 顶掉 V2 的
+// COMPOSER_SELECTOR_BUTTON_CLASS 尺寸类。改 styled.button；样式对象逐字不变（display:flex 本就覆盖
+// 了 antd 的 inline-block，故无需补 display）。
+const SelectorButton = styled.button`
   display: flex;
   align-items: center;
   gap: 6px;

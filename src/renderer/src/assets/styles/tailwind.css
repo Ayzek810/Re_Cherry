@@ -19,6 +19,12 @@
 /* 以下语义令牌随 V2 组件移植补齐（v0.3.3-2），取值逐字来自 V2 的
    packages/ui/src/styles/product.css 与 tokens/colors/providers.css。 */
 :root {
+  /* v0.3.3-4：V2 字号令牌（tokens/typography.css:24-26 的 --cs-font-size-heading-*；
+     移植件用 clamp(var(--font-size-heading-sm),4cqw,var(--font-size-heading-md))，
+     此前 fork 未定义 → 整条 clamp 失效、标题退回默认字号）。 */
+  --font-size-heading-sm: 1.5rem;
+  --font-size-heading-md: 2rem;
+  --font-size-heading-lg: 2.5rem;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);

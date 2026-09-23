@@ -2,34 +2,74 @@
 // 用法与 V2 一致（组合式 `Popover` + `PopoverTrigger` + `PopoverContent`），内部把整棵
 // 子树拆成"首个直接子节点 = 触发器、其余 = 内容"再挂到 antd Popover 上——这是为了
 // 不改 V2 调用形态；antd 本身是 content-prop 式。
-import type { ButtonProps } from 'antd'
-import { Button as AntButton, Popover as AntPopover } from 'antd'
+import { cn } from '@renderer/utils/style'
+import { Popover as AntPopover } from 'antd'
 import type { ButtonHTMLAttributes, FC, HTMLAttributes, PropsWithChildren, ReactElement, ReactNode } from 'react'
 import { Children, cloneElement, isValidElement } from 'react'
 
 type CherryButtonVariant = 'ghost' | 'default' | 'outline' | 'secondary' | 'destructive' | 'link'
 type CherryButtonSize = 'sm' | 'default' | 'lg' | 'icon' | 'icon-sm'
 
-/** antd 的 ButtonHTMLAttributes 允许 button/submit/reset；V2 调用方传字符串字面量。 */
-interface CherryButtonProps extends Omit<ButtonProps, 'size' | 'variant' | 'type'> {
+interface CherryButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   variant?: CherryButtonVariant
   size?: CherryButtonSize
   type?: ButtonHTMLAttributes<HTMLButtonElement>['type'] | string
+  /** V2 调用方可能传 antd 风格 icon/loading：icon 落成子节点，loading 仅禁用。 */
+  icon?: ReactNode
+  loading?: boolean
 }
 
-const ANTD_BUTTON_SIZE: Record<CherryButtonSize, ButtonProps['size']> = {
-  sm: 'small',
-  default: 'middle',
-  lg: 'large',
-  icon: 'small',
-  'icon-sm': 'small'
+/** shadcn 变体语义（取值照 V2 packages/ui 的 button 变体）。 */
+const VARIANT_CLASSES: Record<CherryButtonVariant, string> = {
+  ghost: 'bg-transparent hover:bg-accent hover:text-accent-foreground',
+  default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+  outline: 'border border-border bg-transparent hover:bg-accent hover:text-accent-foreground',
+  secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+  destructive: 'bg-destructive text-white hover:bg-destructive/90',
+  link: 'text-primary underline-offset-4 hover:underline'
 }
 
-/** `@cherrystudio/ui` Button → antd Button（variant 的视觉差异由调用方 className 承载）。 */
-export const Button: FC<CherryButtonProps> = ({ variant, size = 'default', type = 'button', ...props }) => {
-  void variant
-  return <AntButton type={type as ButtonProps['type']} size={ANTD_BUTTON_SIZE[size]} {...props} />
+/** shadcn 尺寸语义。 */
+const SIZE_CLASSES: Record<CherryButtonSize, string> = {
+  sm: 'h-7 gap-1.5 px-2 text-xs',
+  default: 'h-9 gap-1.5 px-4 py-2 text-sm',
+  lg: 'h-10 gap-1.5 px-6 text-sm',
+  icon: 'size-9',
+  'icon-sm': 'size-7'
 }
+
+/**
+ * `@cherrystudio/ui` Button → **原生 button** + 变体/尺寸类。
+ * fork 缝：早期这里映射到 antd `Button`，但 antd 的 `.ant-btn`（CSS-in-JS 运行时注入，
+ * 晚于 Tailwind 层）会**覆盖 V2 写在按钮上的尺寸/形状类**（h-7 / size-7.5 / h-11…），
+ * 表现为控件缩水、卡片塌成默认尺寸（v0.3.3-4 模板轮播卡事故）。V2 的 shadcn Button
+ * 本就是"原生 button + 类名"，故这里对齐原生，antd 只留 Popover。
+ */
+export const Button: FC<CherryButtonProps> = ({
+  variant = 'default',
+  size = 'default',
+  type = 'button',
+  icon,
+  loading,
+  className,
+  children,
+  disabled,
+  ...props
+}) => (
+  <button
+    type={type as ButtonHTMLAttributes<HTMLButtonElement>['type']}
+    disabled={disabled || loading === true}
+    className={cn(
+      'inline-flex cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
+      VARIANT_CLASSES[variant],
+      SIZE_CLASSES[size],
+      className
+    )}
+    {...props}>
+    {icon}
+    {children}
+  </button>
+)
 
 /**
  * V2 的 `asChild` 触发器：把 antd 注入的触发 props（onClick/onMouseEnter…）**透传给唯一子节点**。

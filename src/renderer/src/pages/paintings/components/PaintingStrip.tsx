@@ -7,7 +7,8 @@ import PaintingSkeletonSurface from '@renderer/pages/paintings/components/Painti
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
-import { Button, Modal } from 'antd'
+// fork 缝：原 `import { Button, Modal } from 'antd'` —— historyAddButton 换回原生 button 后 Button 不再使用。
+import { Modal } from 'antd'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import type { FC, UIEventHandler } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -114,13 +115,17 @@ const PaintingStrip: FC<PaintingStripProps> = ({
   return (
     <>
       <div ref={stripRef} className={paintingClasses.historyStrip} onScroll={handleScroll}>
-        <Button
-          type="text"
+        {/* fork 缝：V2 的 Button（@cherrystudio/ui）渲染原生 button、只吃 className；antd Button 的
+            .ant-btn 自带 height/padding，会顶掉 paintingClasses.historyAddButton 的 h-11 w-11（44px）。
+            换回原生 button：className/aria-label/onClick 逐字保留；antd 专有的 `icon` prop 无原生对应物，
+            等价展开为子节点（antd 内部同样渲染 <span class="ant-btn-icon">{icon}</span>）。 */}
+        <button
+          type="button"
           className={paintingClasses.historyAddButton}
           aria-label={t('paintings.button.new.image')}
-          icon={<Plus className="size-4" />}
-          onClick={onAddPainting}
-        />
+          onClick={onAddPainting}>
+          <Plus className="size-4" />
+        </button>
         {items.map((painting) => (
           <PaintingStripItem
             key={painting.id}
