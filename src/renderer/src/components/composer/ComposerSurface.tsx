@@ -325,7 +325,7 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
         aria-valuemin={minHeight}
         aria-valuemax={maxHeight}
         aria-valuenow={resizeHandleValue}
-        aria-label={t('chat.input.expand')}
+        aria-label={t('chat.input.resize_height')}
         tabIndex={0}
         onMouseDown={startResize}
         onKeyDown={handleResizeKeyDown}
@@ -383,6 +383,14 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
             onFocus={() => props.onFocus?.()}
             onPaste={handlePaste}
             onKeyDown={(event) => {
+              // fork 缝：V2 ComposerSurfaceRuntime.tsx:1503-1512 —— 提示框为空（trim 后）且挂了附件时，
+              // Backspace 摘掉最后一个附件并吞掉删除（否则会冒泡成"返回上一页"之类的宿主行为）。
+              // V2 另有"光标前无 token"这一条：fork 的 textarea 没有 token 内联件，text 空即等价成立。
+              if (event.key === 'Backspace' && props.text.trim().length === 0 && props.filesCount > 0) {
+                props.setFiles((prev) => prev.slice(0, -1))
+                event.preventDefault()
+                return
+              }
               const isEnterPressed =
                 (event.key === 'Enter' || event.key === 'NumpadEnter') && !event.nativeEvent.isComposing
               if (!isEnterPressed) return

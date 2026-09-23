@@ -1,19 +1,26 @@
 /**
- * 通用绘画生成路径（v0.3.3 批次4，② 薄适配）：V2 canonicalGenerate 主体保留——
- * 输入图过滤/mode 推断/maxInputImages(本地常量 4)/prompt 必填/checkProviderEnabled/
- * customSize 合成/bytesToDataUrl。删：buildParamsSchema.safeParse →
- * 表驱动过滤（PAINTING_PARAM_TABLE + customSize 伴随键白名单）；出口从 generatePainting(主进程 IPC) 改为
- * paintingImageService.generatePaintingImages/editPaintingImages（PaintingGenerateRequest/
- * PaintingEditRequest 收敛）。
+ * 通用绘画生成路径（v0.3.3 批次6，V2 移植）：V2
+ * `src/renderer/pages/paintings/model/canonicalGenerate.ts` 主体照抄——
+ * 输入图过滤 / mode 推断 / maxInputImages / prompt 必填 / checkProviderEnabled /
+ * customSize 合成 / bytesToDataUrl 全部保留。
+ *
+ * fork 缝（相对 V2 的差异，逐条标注在正文）：
+ *   1. `options.support` 不再经 DataApi prefetch，而是由 `paintingPipeline` 从
+ *      `@shared/lightLlm/imageGenerationCatalog` 的目录解析（同序：provider override
+ *      → creator 默认）；
+ *   2. 出口从 `generatePainting`(IPC) 改为 `paintingImageService`（LightLLM 单缝）；
+ *   3. canonical 键名采用 V2 的 `size`/`numImages`（旧 `imageSize`/`batchSize` 在
+ *      读取时一次性兼容映射，见 `LEGACY_PARAM_ALIASES`）。
  */
 import { loggerService } from '@logger'
 import { createPaintingGenerateError } from '@renderer/pages/paintings/errors/paintingGenerateError'
-import { PAINTING_PARAM_TABLE } from '@renderer/pages/paintings/form/paintingParamTable'
 import { checkProviderEnabled } from '@renderer/pages/paintings/utils/checkProviderEnabled'
 import FileManager from '@renderer/services/FileManager'
 import { editPaintingImages, generatePaintingImages } from '@renderer/services/paintingImageService'
 import type { FileMetadata } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
+import type { ImageGenerationMode, ImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { buildParamsSchema } from '@shared/lightLlm/imageGenerationCatalog'
 import type { LightImageResult } from '@shared/lightLlm/types'
 
 import type { GenerateInput } from './types/generateInput'
@@ -24,6 +31,32 @@ const logger = loggerService.withContext('paintings/canonicalGenerate')
 /** fork 上限常量（V2 registry maxInputImages 的本地等价）。 */
 // fork 缝（P0-A）：导出给作曲条物化闸复用，避免"4"出现第二个事实源。
 export const MAX_INPUT_IMAGES = 4
+
+/**
+ * fork 缝：旧参数键 → V2 canonical 键的一次性兼容映射。fork 的历史草稿/持久化行
+ * 里存的是 `imageSize`/`batchSize`（v0.3.3 批次4 的自写参数表），V2 的 canonical
+ * 键是 `size`/`numImages`。只在 canonical 键缺席时兜底，绝不覆盖新值；其余未知键
+ * 由 `buildParamsSchema` 的 loose 语义保留后被本函数丢弃，不报错。
+ */
+const LEGACY_PARAM_ALIASES: Record<string, string> = {
+  imageSize: 'size',
+  batchSize: 'numImages'
+}
+
+/** 折叠旧键拼写到 canonical 键（导出仅为测试旧数据兼容路径）。 */
+export function withLegacyAliases(params: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...params }
+  for (const [legacyKey, canonicalKey] of Object.entries(LEGACY_PARAM_ALIASES)) {
+    const legacyValue = out[legacyKey]
+    // 空串/undefined 的旧值等同"用户没填"：不写入 canonical 键（下游按缺席处理）。
+    const present = legacyValue !== undefined && legacyValue !== null && legacyValue !== ''
+    if (out[canonicalKey] === undefined && present) {
+      out[canonicalKey] = legacyValue
+    }
+    delete out[legacyKey]
+  }
+  return out
+}
 
 /** Encode raw image bytes as a `data:` URL for the edit endpoint. */
 function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
@@ -48,18 +81,25 @@ export interface CanonicalGenerateOptions<T extends PaintingData> {
    * when the standard check is skipped.
    */
   requirePrompt?: boolean | ((painting: T) => boolean)
-  /** Resolved mode. Default `'generate'`. */
-  mode?: PaintingData['mode']
+  /**
+   * Registry image-generation support for this model — composes with the
+   * central param catalog to validate/coerce `painting.params` (seed
+   * string→number, blank→undefined, enum/range bounds) at submit. Threaded in
+   * by `paintingPipeline`, which resolves it from the fork catalog.
+   */
+  support?: ImageGenerationSupport
+  /** Resolved mode for the `support` lookup. Default `'generate'`. */
+  mode?: ImageGenerationMode
 }
 
 /**
- * Generic painting generate path. Filters `painting.params` through the local
- * `PAINTING_PARAM_TABLE` (the fork's catalog equivalent), then ships a
- * `PaintingGenerateRequest`/`PaintingEditRequest` through
- * `paintingImageService` — the feature's single AI seam.
+ * Generic painting generate path. Validates/coerces `painting.params` (keyed by
+ * canonical names from the model's `imageGeneration.modes[mode].supports`) via the
+ * shared catalog, then ships the whole canonical bag to
+ * `paintingImageService` — the feature's single AI seam (LightLLM).
  *
- * Empty / undefined / empty-string entries are dropped so the server applies
- * its own default; no client-side defaults.
+ * Empty / undefined / empty-string entries are dropped here (and again in main)
+ * so the server applies its own default; no client-side defaults.
  */
 export async function canonicalGenerate<T extends PaintingData>(
   input: GenerateInput<T>,
@@ -77,6 +117,8 @@ export async function canonicalGenerate<T extends PaintingData>(
     (entry) => (entry.type ?? FILE_TYPE.OTHER) === FILE_TYPE.IMAGE
   )
   const mode = options.mode ?? (inputImageFiles.length > 0 ? 'edit' : 'generate')
+  // fork 缝：V2 从 support 的 `maxInputImages` 取上限；fork 目录未移植该字段，
+  // 保留本地常量（与 V2 声明值一致）。
   if (inputImageFiles.length > MAX_INPUT_IMAGES) {
     throw createPaintingGenerateError('INPUT_IMAGE_LIMIT_EXCEEDED')
   }
@@ -96,20 +138,17 @@ export async function canonicalGenerate<T extends PaintingData>(
     typeof options.requirePrompt === 'function' ? options.requirePrompt(painting) : (options.requirePrompt ?? true)
   if (promptRequired && !prompt) throw createPaintingGenerateError('PROMPT_REQUIRED')
 
-  // 1. Filter raw form params through the local param table (the fork's
-  //    buildParamsSchema.safeParse equivalent): keep table keys plus the
-  //    UI-only customSize companions (not table keys, but the custom-size
-  //    composition below reads them from `source`).
-  const companionKeys = new Set(['customSize_width', 'customSize_height'])
-  const tableKeys = new Set(PAINTING_PARAM_TABLE.map((spec) => spec.key))
-  const source = Object.fromEntries(
-    Object.entries(painting.params ?? {}).filter(
-      ([key]) => companionKeys.has(key) || tableKeys.has(key)
-    )
-  )
+  // 1. Validate / coerce raw form params through the shared catalog, after folding
+  //    the fork's legacy key spellings into the canonical ones. The catalog is
+  //    loose (v2 `buildParamsSchema` + `.loose()`): a bad / legacy / uncatalogued
+  //    value is dropped, never a submit-blocking error.
+  const rawParams = withLegacyAliases(painting.params ?? {})
+  const source = buildParamsSchema(options.support, options.mode)(rawParams)
 
-  // 2. Build the canonical `paramValues` bag: drop blanks (the byte-identical-wire
-  //    invariant) and the UI-only `customSize_width`/`customSize_height` companions.
+  // 2. Build the canonical `paramValues` bag: drop blanks (mirrors main's
+  //    `splitParamValues` guard — the byte-identical-wire invariant) and the
+  //    UI-only `customSize_width`/`customSize_height` companions, and drop any
+  //    non-canonical key the loose schema preserved.
   const paramValues: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(source)) {
     if (key === 'customSize_width' || key === 'customSize_height') continue
@@ -117,17 +156,17 @@ export async function canonicalGenerate<T extends PaintingData>(
     paramValues[key] = value
   }
 
-  // 3. Custom size: the customSize widget pairs `imageSize: 'custom'` with
-  //    `customSize_width`/`customSize_height`. Compose them into `imageSize`;
-  //    drop the sentinel when the pair is incomplete so the server applies
-  //    its default.
-  if (paramValues.imageSize === 'custom') {
+  // 3. Custom size: the customSize widget pairs `size: 'custom'` with
+  //    `customSize_width`/`customSize_height` (zhipu CogView's free WxH range).
+  //    Compose them into `size`; drop the sentinel when the pair is incomplete
+  //    so the server applies its default.
+  if (paramValues.size === 'custom') {
     const width = source.customSize_width
     const height = source.customSize_height
     if (typeof width === 'number' && typeof height === 'number') {
-      paramValues.imageSize = `${width}x${height}`
+      paramValues.size = `${width}x${height}`
     } else {
-      delete paramValues.imageSize
+      delete paramValues.size
     }
   }
 
@@ -145,8 +184,9 @@ export async function canonicalGenerate<T extends PaintingData>(
       : undefined
 
   const requestId = painting.id
-  const imageSize = (paramValues.imageSize as string | undefined) ?? '1024x1024'
-  const batchSize = typeof paramValues.batchSize === 'number' ? paramValues.batchSize : 1
+  // fork 缝：调用方声明的参数面（= 目录里的键）随请求上行，主进程据此过滤下发；
+  // 见 lightLlmModalities.imageParamValues。
+  const supportedParams = Object.keys(options.support?.modes?.[mode]?.supports ?? {})
 
   // 出口收敛为 PaintingGenerateRequest/PaintingEditRequest（LightImageResult）；
   // FileMetadata[] 落盘由 runPainting.resolvePaintingFiles 承接。
@@ -157,7 +197,8 @@ export async function canonicalGenerate<T extends PaintingData>(
         modelId,
         prompt,
         inputImages,
-        imageSize,
+        paramValues,
+        supportedParams,
         requestId
       })
     }
@@ -165,15 +206,8 @@ export async function canonicalGenerate<T extends PaintingData>(
       providerId: provider.id,
       modelId,
       prompt,
-      imageSize,
-      batchSize,
-      ...(paramValues.negativePrompt !== undefined && { negativePrompt: paramValues.negativePrompt as string }),
-      ...(paramValues.seed !== undefined && { seed: paramValues.seed as string }),
-      ...(paramValues.numInferenceSteps !== undefined && {
-        numInferenceSteps: paramValues.numInferenceSteps as number
-      }),
-      ...(paramValues.guidanceScale !== undefined && { guidanceScale: paramValues.guidanceScale as number }),
-      ...(paramValues.quality !== undefined && { quality: paramValues.quality as string }),
+      paramValues,
+      supportedParams,
       requestId
     })
   } catch (error) {

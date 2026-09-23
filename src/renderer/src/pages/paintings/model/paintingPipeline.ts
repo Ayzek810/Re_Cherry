@@ -1,12 +1,15 @@
 /**
- * 绘画生成管线（v0.3.3 批次4，② 薄适配）：createDefaultPainting 原样；V2 的
- * DataApi prefetch support/requirePrompt 段改为读本地 PAINTING_PARAM_TABLE
- * （表内有该键 = 支持；required 即 requirePrompt）；mode 推断原样（tabToImageGenerationMode）。
+ * 绘画生成管线（v0.3.3 批次6，V2 移植）：createDefaultPainting 原样；V2 的
+ * DataApi prefetch `image-generation-support` 段改为读
+ * `@shared/lightLlm/imageGenerationCatalog` 的静态目录（同序：provider override
+ * → creator 默认），`requirePrompt` / `effectiveMode` / `support` 三者的推导与
+ * V2 逐行同构。
  */
 import { loggerService } from '@logger'
-import { PAINTING_PARAM_TABLE } from '@renderer/pages/paintings/form/paintingParamTable'
 import { tabToImageGenerationMode } from '@renderer/pages/paintings/utils/paintingProviderMode'
 import { uuid } from '@renderer/utils'
+import type { ImageGenerationMode, ImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
+import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 import type { LightImageResult } from '@shared/lightLlm/types'
 
 import { canonicalGenerate } from './canonicalGenerate'
@@ -41,22 +44,50 @@ export function createDefaultPainting({ providerId, modelId }: PaintingDraftDefa
 /**
  * Generic painting generate dispatch — the same flow for every provider:
  *
- *   1. Resolve requirePrompt from the local `PAINTING_PARAM_TABLE` (the table
- *      carries the key = the model supports it; `required` = prompt required).
- *   2. Hand off to `canonicalGenerate`, which filters/coerces `painting.params`
- *      against the table and ships a `PaintingGenerateRequest` through
- *      `paintingImageService` (lightGenerateImage/lightEditImage).
+ *   1. Resolve the model's `imageGeneration` block (support + effective mode +
+ *      `requirePrompt`) from the fork catalog.
+ *   2. Hand off to `canonicalGenerate`, which validates/coerces `painting.params`
+ *      against that support + the shared catalog.
+ *
+ * Only the text→image `generate` tab is exposed by the fork page, so `mode` is the
+ * tab-derived canonical mode; `effectiveMode` falls back to the model's first
+ * declared mode exactly as V2 does.
  */
 export async function paintingGenerate(input: GenerateInput): Promise<LightImageResult> {
   const modelId = input.painting.model
   const canonicalMode = tabToImageGenerationMode(input.painting.mode)
-  // fork 参数表全模型通用：prompt 必填即 requirePrompt；mode 原样透传。
-  const requirePrompt = PAINTING_PARAM_TABLE.some((spec) => spec.key === 'prompt' && spec.required)
-  const effectiveMode = canonicalMode ?? 'generate'
+  let requirePrompt: boolean | undefined
+  // Threaded into canonicalGenerate so it can validate/coerce params against
+  // the model's support + shared catalog.
+  let support: ImageGenerationSupport | undefined
+  let effectiveMode: ImageGenerationMode | undefined
 
   if (modelId) {
-    logger.debug('painting generate dispatch', { providerId: input.provider.id, modelId, effectiveMode })
+    // fork 缝：V2 在此 try/catch 包 DataApi prefetch；fork 的目录是同步静态数据，
+    // 无失败面（取不到 = 该模型不在这条平面上，support 为 undefined）。
+    support = getImageGenerationSupport(input.provider.id, modelId) ?? undefined
+    const modes = support?.modes
+    effectiveMode =
+      canonicalMode && modes?.[canonicalMode]
+        ? canonicalMode
+        : modes
+          ? (Object.keys(modes)[0] as ImageGenerationMode)
+          : undefined
+    requirePrompt = effectiveMode && modes ? modes[effectiveMode]?.requirePrompt : undefined
   }
 
-  return canonicalGenerate(input, { requirePrompt, mode: effectiveMode })
+  const options = {
+    ...(requirePrompt !== undefined && { requirePrompt }),
+    ...(support !== undefined && { support }),
+    ...(effectiveMode !== undefined && { mode: effectiveMode })
+  }
+  if (modelId) {
+    logger.debug('painting generate dispatch', {
+      providerId: input.provider.id,
+      modelId,
+      mode: effectiveMode,
+      supported: support !== undefined
+    })
+  }
+  return canonicalGenerate(input, options)
 }

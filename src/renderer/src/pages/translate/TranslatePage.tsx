@@ -188,10 +188,17 @@ const TranslatePage = () => {
     }
   }, [outputText, t])
 
-  /** 历史回填（fork 语义：只回填两个文本窗，不改语言选择）。 */
+  /** 历史回填（V2 TranslatePage.tsx:573-602 `onHistoryItemClick`：文本 + 语言对一起恢复）。 */
   const handleHistoryItemClick = useCallback((record: TranslateRecord) => {
     setSourceText(record.sourceText)
     setOutputText(record.targetText)
+    // fork 缝：V2:599-601 恢复记录的 source/target 语言（V2 落库时把 auto 解析成了实际源语言，
+    // 故回填后语言栏显示的是当时真实用到的语言对）。V2 另有 `nextTargetLanguage` 兜底
+    // （targetLanguage 为 unknown 时的回退），fork 的 target 类型不含 unknown，无对应态。
+    setSource(record.sourceLanguage)
+    setTarget(record.targetLanguage)
+    // V2:601 选中历史即收起抽屉。
+    setHistoryOpen(false)
   }, [])
 
   const toggleHistory = useCallback(() => {

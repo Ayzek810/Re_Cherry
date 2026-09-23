@@ -14,7 +14,7 @@ export default function SizeField({ item, painting, onChange }: PaintingFieldCom
   // (see `condition` on the customSize item in imageGenerationToFields). The
   // typed width/height persist under `widthKey`/`heightKey` (e.g.
   // `customSize_width`/`customSize_height`); `canonicalGenerate` composes them
-  // into the wire `imageSize` when `size === 'custom'`. They are NOT flattened
+  // into the canonical `size` when `size === 'custom'`. They are NOT flattened
   // back into `sizeKey` here — doing so would break the `condition` that keeps
   // this widget rendered.
   return (

@@ -282,6 +282,7 @@
       "pause": "Pause",
       "placeholder": "Type your message here, press {{key}} to send - @ to Select Model, / to Include Tools",
       "placeholder_without_triggers": "Type your message here, press {{key}} to send",
+      "resize_height": "Resize input height",
       "send": "Send",
       "slash_commands": {
         "description": "Agent session slash commands",
@@ -1494,7 +1495,8 @@
     "feature": {
       "chat": "Answer this question",
       "explanation": "Explanation",
-      "summary": "Content summary"
+      "summary": "Content summary",
+      "translate": "Translate"
     },
     "footer": {
       "backspace_clear": "Backspace to clear",
@@ -1619,6 +1621,13 @@
   },
   "paintings": {
     "add_image": "Add Reference Image",
+    "aspect_ratio": "Aspect Ratio",
+    "background": "Background",
+    "background_options": {
+      "auto": "Auto",
+      "opaque": "Opaque",
+      "transparent": "Transparent"
+    },
     "button": {
       "delete": {
         "image": {
@@ -1636,13 +1645,58 @@
     "custom_height": "Height",
     "custom_size": "Custom size",
     "custom_width": "Width",
+    "dashscope": {
+      "bottom_scale": "Expand Bottom",
+      "enable_interleave": "Text+Image Mixed Mode",
+      "enable_interleave_tip": "When on, generates text-and-image mixed output without requiring an input image. Turn off to use edit mode (requires 1–4 input images).",
+      "function": "Edit Function",
+      "function_options": {
+        "colorization": "Colorization",
+        "control_cartoon_feature": "Cartoon Reference",
+        "description_edit": "Instruction Edit",
+        "description_edit_with_mask": "Masked Edit",
+        "doodle": "Doodle to Image",
+        "expand": "Expand",
+        "remove_watermark": "Remove Watermark",
+        "stylization_all": "Global Stylization",
+        "stylization_local": "Local Stylization",
+        "super_resolution": "Super Resolution"
+      },
+      "is_sketch": "Sketch Input",
+      "left_scale": "Expand Left",
+      "ref_mode": "Reference Mode",
+      "ref_mode_options": {
+        "refonly": "Reference only",
+        "repaint": "Repaint"
+      },
+      "ref_strength": "Reference Strength",
+      "right_scale": "Expand Right",
+      "source_lang": "Source Language",
+      "strength": "Strength",
+      "target_lang": "Target Language",
+      "top_scale": "Expand Top",
+      "upscale_factor": "Upscale Factor"
+    },
+    "dmxapi": {
+      "max_images": "Max Images",
+      "sequential_image_generation": "Sequential Image Generation",
+      "sequential_image_generation_options": {
+        "auto": "Auto",
+        "disabled": "Disabled"
+      }
+    },
     "edit": {
       "image_required": "Image-to-image mode requires at least one reference image"
     },
     "generate": "Generate",
     "generate_failed": "Generation failed",
     "generating": "Drawing in progress. Please do not leave this page.",
+    "guidance_scale": "Guidance Scale",
+    "guidance_scale_tip": "Classifier Free Guidance ({{min}}-{{max}}). How close you want the model to stick to your prompt when looking for a related image to show you",
     "history": "History",
+    "image": {
+      "size": "Image Size"
+    },
     "image_file_required": "Please upload an image first",
     "image_file_retry": "Some reference images failed to load, please retry",
     "image_handle_required": "Please upload an image first.",
@@ -1651,9 +1705,23 @@
     "image_size_options": {
       "auto": "Auto"
     },
+    "image_weight": "Image Weight",
+    "inference_steps": "Inference Steps",
+    "inference_steps_tip": "The number of inference steps to perform ({{min}}-{{max}}). More steps produce higher quality but take longer",
     "input_image_limit_exceeded": "Up to 4 reference images",
+    "magic_prompt_option": "Magic Prompt",
     "model": "Model",
+    "moderation": "Moderation",
+    "moderation_options": {
+      "auto": "Auto",
+      "low": "Low"
+    },
+    "negative_prompt": "Negative Prompt",
+    "negative_prompt_tip": "Describe what you don't want included in the image",
+    "number_images": "Number Images",
+    "number_images_tip": "Number of images to generate ({{min}}-{{max}})",
     "operation_failed": "Operation failed",
+    "output_compression": "Output Compression",
     "param": {
       "batch_size": "Batch Size",
       "guidance_scale": "Guidance Scale",
@@ -1664,11 +1732,24 @@
       "seed": "Seed",
       "size": "Size"
     },
+    "person_generation": "Generate people",
+    "person_generation_options": {
+      "allow_adult": "Allow adult",
+      "allow_all": "Allow all",
+      "allow_none": "Not allowed"
+    },
+    "person_generation_tip": "Allow the model to generate images of people",
+    "ppio": {
+      "output_format": "Output Format"
+    },
+    "prompt_enhancement": "Prompt Enhancement",
+    "prompt_enhancement_tip": "Rewrite prompts into detailed, model-friendly versions when switched on",
     "prompt_placeholder": "Describe the image you want to generate…",
     "prompt_placeholder_upload": "Add a reference image, then describe the edit…",
     "prompt_placeholder_upload_required": "This model requires a reference image first",
     "prompt_required": "Please enter a prompt",
     "proxy_required": "Configure a proxy before downloading images",
+    "quality": "Quality",
     "quality_options": {
       "auto": "Auto",
       "hd": "HD",
@@ -1677,10 +1758,20 @@
       "medium": "Medium",
       "standard": "Standard"
     },
+    "rendering_speed": "Rendering Speed",
+    "rendering_speeds": {
+      "default": "Default",
+      "quality": "Quality",
+      "turbo": "Turbo"
+    },
     "req_error_model": "Select a painting model in Settings first",
     "req_error_no_balance": "Insufficient account balance",
     "req_error_token": "Invalid API token, check the provider key",
     "revealing": "Revealing generated image",
+    "safety_tolerance": "Safety Tolerance",
+    "safety_tolerance_tip": "Higher = more permissive filter; 0 is strictest, 6 is most permissive",
+    "seed": "Seed",
+    "seed_tip": "The same seed and prompt can produce similar images",
     "select_model": "Select Painting Model",
     "settings": "Painting Settings",
     "showcase": {
@@ -1688,9 +1779,40 @@
       "styles_label": "Template styles",
       "title": "Start Creating"
     },
+    "style_options": {
+      "anime": "Anime",
+      "auto": "Auto",
+      "cartoon_3d": "3D Cartoon",
+      "chinese_painting": "Chinese Painting",
+      "flat_illustration": "Flat Illustration",
+      "natural": "Natural",
+      "oil_painting": "Oil Painting",
+      "photography": "Photography",
+      "portrait": "Portrait",
+      "sketch": "Sketch",
+      "vivid": "Vivid",
+      "watercolor": "Watercolor"
+    },
+    "style_type": "Style",
+    "style_type_options": {
+      "anime": "Anime",
+      "auto": "Auto",
+      "design": "Design",
+      "general": "General",
+      "realistic": "Realistic",
+      "render_3d": "3D Render"
+    },
+    "style_type_tip": "Image generation style",
     "text_desc_required": "Please enter image description first",
+    "thinking_mode": "Thinking Mode",
+    "thinking_mode_tip": "When on, generation quality is higher but adds about 10–30 seconds.",
     "title": "Paintings",
     "unsupported_vendor": "The provider or model is not supported",
+    "upscale": {
+      "detail": "Detail",
+      "resemblance": "Similarity"
+    },
+    "watermark": "Add Watermark",
     "zhipu": {
       "custom_size_divisible": "Custom size must be divisible by 16",
       "custom_size_pixels": "Total pixels of custom size cannot exceed 2,097,152",
@@ -3416,8 +3538,10 @@
     "output_empty": "Translation will appear here",
     "select_model": "Select translation model",
     "settings": "Translation Settings",
+    "source_language": "Source Language",
     "start": "Translate",
     "stop": "Stop",
+    "target_language": "Target Language",
     "title": "Translate"
   },
   "tray": {

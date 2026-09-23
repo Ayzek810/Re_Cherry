@@ -9,7 +9,13 @@
  */
 import { loggerService } from '@logger'
 import { providerKeyStore } from '@main/services/ProviderKeyStore'
+import {
+  buildImageWireBody,
+  IMAGE_WIRE_PROFILES,
+  resolveImageWireProfile
+} from '@shared/lightLlm/imageGenerationCatalog'
 import type { LightImageEditCall, LightImageGenerateCall, LightImageResult } from '@shared/lightLlm/types'
+import { UNSUPPORTED_VENDOR_ERROR_PREFIX } from '@shared/lightLlm/types'
 
 const logger = loggerService.withContext('KernelLightLlmModalities')
 
@@ -53,6 +59,20 @@ function endpoint(apiHost: string, path: string): string {
   return base.endsWith('/v1') ? `${base}${path}` : `${base}/v1${path}`
 }
 
+/**
+ * fork 缝：少数 OpenAI 兼容网关的 API 版本段不是 `/v1`（V2 各家 provider 的
+ * `baseUrl` 各自携带版本，如智谱 `https://open.bigmodel.cn/api/paas/v4`），
+ * `/v1` 去重规则对它们会拼出 `/api/paas/v4/v1/images/generations` 这种无效路径。
+ * 按 host 后缀识别并去掉多余的 `/v1`；其余 host 保持 V2 等价行为。
+ */
+const VERSIONED_API_HOST_SUFFIXES = ['/api/paas/v4']
+
+function imageEndpoint(apiHost: string, path: string): string {
+  const base = apiHost.replace(/\/+$/, '')
+  if (VERSIONED_API_HOST_SUFFIXES.some((suffix) => base.endsWith(suffix))) return `${base}${path}`
+  return endpoint(apiHost, path)
+}
+
 function authHeaders(route: ProviderRoute): Record<string, string> {
   return route.apiKey.length > 0 ? { Authorization: `Bearer ${route.apiKey}` } : {}
 }
@@ -89,9 +109,7 @@ export function normalizeVector(vector: number[]): number[] {
 export async function lightEmbed(ref: LightEmbedRef, inputs: string[], signal?: AbortSignal): Promise<number[][]> {
   const route = resolveRoute(ref.providerId)
   const ollama = ref.providerId.startsWith('ollama')
-  const url = ollama
-    ? `${route.apiHost.replace(/\/+$/, '')}/api/embeddings`
-    : endpoint(route.apiHost, '/embeddings')
+  const url = ollama ? `${route.apiHost.replace(/\/+$/, '')}/api/embeddings` : endpoint(route.apiHost, '/embeddings')
   const headers = { 'Content-Type': 'application/json', ...authHeaders(route) }
 
   const results: number[][] = []
@@ -159,7 +177,9 @@ export async function lightRerank(call: LightRerankCall, signal?: AbortSignal): 
   if (!response.ok) {
     throw new Error(`lightLlm: rerank request failed (${response.status}): ${await readErrorDetail(response)}`)
   }
-  const data = (await response.json()) as { results?: Array<{ index?: unknown; relevance_score?: unknown; score?: unknown }> }
+  const data = (await response.json()) as {
+    results?: Array<{ index?: unknown; relevance_score?: unknown; score?: unknown }>
+  }
   if (!Array.isArray(data.results)) {
     throw new Error('lightLlm: unexpected rerank response shape')
   }
@@ -167,7 +187,7 @@ export async function lightRerank(call: LightRerankCall, signal?: AbortSignal): 
     .filter((item) => typeof item.index === 'number')
     .map((item) => ({
       index: item.index as number,
-      score: typeof item.relevance_score === 'number' ? item.relevance_score : (item.score as number | undefined) ?? 0
+      score: typeof item.relevance_score === 'number' ? item.relevance_score : ((item.score as number | undefined) ?? 0)
     }))
   results.sort((a, b) => b.score - a.score)
   return { results }
@@ -194,18 +214,57 @@ export function abortLightImage(requestId: string): void {
   imageAborts.get(requestId)?.abort()
 }
 
-/** 透传参数族 camel→snake（未设置的字段不下发）。 */
+/**
+ * 解析本请求要用的 v2 wire profile。缺省（`generate_image` 工具等无目录信息的
+ * 调用方）走 `diffusion` 兼容档，只下发 `size`/`n` 两个基础字段；登记在表的
+ * provider（openai / openrouter / dmxapi / zhipu / silicon …）按表改名。
+ */
+function imageWireProfileFor(call: { provider: string; wireProfileId?: string }) {
+  return resolveImageWireProfile(call.wireProfileId ?? call.provider) ?? IMAGE_WIRE_PROFILES.diffusion
+}
+
+/**
+ * 请求参数袋 → 扁平 vendor body。
+ *
+ * fork 缝：V2 在渲染层已按 support 过滤（`buildParamsSchema`），主进程只做
+ * `splitParamValues` + profile 改名；fork 在此再按调用方声明的 `supportedParams`
+ * 过滤一层——目录是「每个模型真正的参数面」的唯一事实源，主进程不猜。未声明
+ * `supportedParams` 的调用方（工具）只放行 profile 自身会映射的键。
+ */
+function imageParamValues(call: {
+  paramValues?: Record<string, unknown>
+  supportedParams?: string[]
+}): Record<string, unknown> {
+  const raw = call.paramValues ?? {}
+  const allowed = call.supportedParams
+  if (allowed === undefined) return raw
+  const allowSet = new Set(allowed)
+  return Object.fromEntries(Object.entries(raw).filter(([key]) => allowSet.has(key)))
+}
+
+/** 渲染层命中「范围外 provider」的明错（V2 无此路径，fork 缝）。 */
+function unsupportedVendor(provider: string, model: string): Error {
+  return new Error(
+    `${UNSUPPORTED_VENDOR_ERROR_PREFIX}: provider "${provider}" (model "${model}") is not supported by the OpenAI-compatible image plane`
+  )
+}
+
+/**
+ * 图像生成的请求体：`model`/`prompt` 固定，其余全部来自 profile 改名后的参数袋。
+ *
+ * fork 缝：V2 的 `splitParamValues` + `buildVendorProviderOptions` 是 AI SDK 的
+ * providerOptions 分包；fork 的同一平面是**一个扁平 JSON body**，故等价实现为
+ * 「catalog `wireName` + profile `forward`/`fields` + native binding（numImages→n、
+ * aspectRatio 归一化）」。原 5 键硬编码白名单（size/n/negative_prompt/seed/
+ * num_inference_steps/guidance_scale/quality）已删除——它正是"看得见却静默丢弃"
+ * 的根源：openrouter 的 aspectRatio/resolution/outputFormat、openai 的
+ * background/moderation、zhipu 的 watermark 全部到不了 wire。
+ */
 function generationBody(call: LightImageGenerateCall): Record<string, unknown> {
   return {
     model: call.model,
     prompt: call.prompt,
-    size: call.imageSize,
-    n: call.batchSize,
-    ...(call.negativePrompt !== undefined ? { negative_prompt: call.negativePrompt } : {}),
-    ...(call.seed !== undefined ? { seed: call.seed } : {}),
-    ...(call.numInferenceSteps !== undefined ? { num_inference_steps: call.numInferenceSteps } : {}),
-    ...(call.guidanceScale !== undefined ? { guidance_scale: call.guidanceScale } : {}),
-    ...(call.quality !== undefined ? { quality: call.quality } : {})
+    ...buildImageWireBody(imageWireProfileFor(call), imageParamValues(call))
   }
 }
 
@@ -223,14 +282,15 @@ export async function lightGenerateImage(
   assertNonEmptyString(call.provider, 'provider')
   assertNonEmptyString(call.model, 'model')
   assertNonEmptyString(call.prompt, 'prompt')
-  assertNonEmptyString(call.imageSize, 'imageSize')
-  if (typeof call.batchSize !== 'number' || call.batchSize < 1 || call.batchSize > 8) {
-    throw new Error('lightLlm: invalid batchSize')
+  // fork 缝：范围外 provider 走明错（V2 由 registry 的 vendorTransport 决定端点，
+  // fork 无该层，故在进入请求前显式拒绝，绝不静默丢参数）。
+  if (resolveImageWireProfile(call.wireProfileId ?? call.provider) === undefined) {
+    throw unsupportedVendor(call.provider, call.model)
   }
   const route = resolveRoute(call.provider)
   const abort = beginImageAbort(call.requestId)
   try {
-    const response = await fetch(endpoint(route.apiHost, '/images/generations'), {
+    const response = await fetch(imageEndpoint(route.apiHost, '/images/generations'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(route) },
       body: JSON.stringify(generationBody(call)),
@@ -264,18 +324,26 @@ export async function lightEditImage(call: LightImageEditCall, signal?: AbortSig
   if (!Array.isArray(call.inputImages) || call.inputImages.length === 0) {
     throw new Error('lightLlm: invalid inputImages')
   }
+  if (resolveImageWireProfile(call.wireProfileId ?? call.provider) === undefined) {
+    throw unsupportedVendor(call.provider, call.model)
+  }
   const route = resolveRoute(call.provider)
   const abort = beginImageAbort(call.requestId)
+  // fork 缝：编辑端点与生成共用同一参数袋 + profile 改名，只多带 image。
+  const editBody = buildImageWireBody(imageWireProfileFor(call), imageParamValues(call))
   try {
     const images: string[] = []
     for (const input of call.inputImages) {
       const form = new FormData()
       form.append('model', call.model)
       form.append('prompt', call.prompt)
-      if (call.imageSize !== undefined) form.append('size', call.imageSize)
+      for (const [key, value] of Object.entries(editBody)) {
+        if (value === undefined || value === null) continue
+        form.append(key, typeof value === 'string' ? value : JSON.stringify(value))
+      }
       const blob = imageToBlob(input)
       form.append('image', blob, `image.${blob.type.split('/')[1] ?? 'png'}`)
-      const response = await fetch(endpoint(route.apiHost, '/images/edits'), {
+      const response = await fetch(imageEndpoint(route.apiHost, '/images/edits'), {
         method: 'POST',
         headers: authHeaders(route),
         body: form,
@@ -284,7 +352,9 @@ export async function lightEditImage(call: LightImageEditCall, signal?: AbortSig
       if (!response.ok) {
         throw new Error(`lightLlm: image edit failed (${response.status}): ${await readErrorDetail(response)}`)
       }
-      const result = parseImageResponse((await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> })
+      const result = parseImageResponse(
+        (await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> }
+      )
       images.push(...result.images)
     }
     logger.info('lightLlm image edited', { provider: call.provider, model: call.model, count: images.length })

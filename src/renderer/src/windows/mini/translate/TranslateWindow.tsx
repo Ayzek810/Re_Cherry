@@ -24,9 +24,11 @@ const logger = loggerService.withContext('MiniTranslateWindow')
 
 interface TranslateWindowProps {
   text: string
+  /** fork 缝：译文上报给宿主（`HomeWindow`），使翻译路由下 Footer 的「按 C 复制」胶囊可点。 */
+  onResultChange?: (result: string) => void
 }
 
-const TranslateWindow: FC<TranslateWindowProps> = ({ text }) => {
+const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => {
   const { t } = useTranslation()
   // fork 缝（P0-D）：V2 用 `useDefaultModel().translateModel`（未配翻译模型时回落默认对话
   // 模型）。fork 的 useDefaultModel 只暴露 defaultModel，故按同一语义合成：主翻译页选择器
@@ -135,6 +137,12 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text }) => {
     void navigator.clipboard.writeText(result)
     window.toast.success(t('message.copy.success'))
   })
+
+  // 译文变化即上报宿主（卸载时上报空串，避免宿主留着上一段译文可复制）。
+  useEffect(() => {
+    onResultChange?.(result)
+  }, [onResultChange, result])
+  useEffect(() => () => onResultChange?.(''), [onResultChange])
 
   return (
     <Container>

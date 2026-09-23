@@ -501,23 +501,10 @@
   height: 50px;
   pointer-events: none;
 }
-
-/* Code block wrapper and header styles */
-.code-block-wrapper {
-  position: relative;
-}
-
-.code-block-wrapper .code-block-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.code-block-wrapper:hover .code-block-header {
-  opacity: 1;
-}
+/* fork 缝：此处原有 `.code-block-wrapper` / `.code-block-wrapper .code-block-header` /
+   `.code-block-wrapper:hover .code-block-header` 三条规则，随 fork 移除富文本编辑器（TipTap）
+   与 `CodeBlockView` 的旧包装层变成死 CSS。删除前复核（2026-09）：全仓仅本文件命中这三个类名，
+   且无 JS 选择器消费者——`components/CodeBlockView/view.tsx` 的包装层用的是 styled-components
+   的 `CodeBlockWrapper` + Tailwind 类 `code-block`，选择器是 `'.code-block'`（带前导点），
+   按 `'.code-block-wrapper'.includes('.code-block')` 也不成立，故不存在"被更短前缀吃掉"的隐患。
+   顺带记录：本文件通篇的 `.tiptap *` 规则同样已无渲染者（fork 无 TipTap），但不在本次改动面内。 */

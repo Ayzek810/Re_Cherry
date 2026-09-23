@@ -11,6 +11,7 @@ import type { PaintingData } from '@renderer/pages/paintings/model/types/paintin
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
 import { computeImageNaturalSize } from '@renderer/pages/paintings/utils/computeImageNaturalSize'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
+import { getImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
 // fork 缝：原 `import { Button, Tooltip } from 'antd'` —— 工具栏按钮换回原生 button 后 Button 不再使用。
 import { Tooltip } from 'antd'
 import { ImageDown, ImageUp, Palette, RefreshCcw, RotateCcwSquare, RotateCwSquare, ZoomIn, ZoomOut } from 'lucide-react'
@@ -251,7 +252,11 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
   const promptBarResizeObserverRef = useRef<ResizeObserver | null>(null)
   const displayedImageIndex = painting.files.length > 0 ? Math.min(currentImageIndex, painting.files.length - 1) : 0
   const currentFile = painting.files[displayedImageIndex]
-  const { sizeLabel } = usePaintingSizeInfo(painting)
+  // 目录是同步静态数据（V2 此处是 useImageGenerationSupport 查询），无需 memo。
+  const { sizeLabel } = usePaintingSizeInfo(
+    painting,
+    getImageGenerationSupport(painting.providerId, painting.model) ?? undefined
+  )
   const currentImageUrl = currentFile ? getPaintingFileUrl(currentFile) : undefined
 
   const onPrevImage = useCallback(() => {

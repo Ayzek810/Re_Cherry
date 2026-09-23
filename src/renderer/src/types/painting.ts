@@ -5,12 +5,22 @@
  */
 import type { FileMetadata } from './index'
 
-/** 绘画生成参数（表单态；提交时映射为 LightImageGenerateCall）。 */
+/**
+ * 绘画生成参数（表单态；提交时映射为 `LightImageGenerateCall`）。
+ *
+ * v0.3.3 批次6：键名统一到 V2 canonical（`size`/`numImages`）。旧行里的
+ * `imageSize`/`batchSize` 由 `canonicalGenerate.withLegacyAliases` 读时兼容，
+ * 故两者在此仍标为可选（不删字段——Dexie 里真有带旧键的历史行）。
+ */
 export interface PaintingParams {
   prompt: string
   negativePrompt?: string
-  imageSize: string
-  batchSize: number
+  size?: string
+  numImages?: number
+  /** @deprecated v0.3.3 批次6 前的旧键；读时经 withLegacyAliases 映射为 `size`。 */
+  imageSize?: string
+  /** @deprecated v0.3.3 批次6 前的旧键；读时经 withLegacyAliases 映射为 `numImages`。 */
+  batchSize?: number
   seed?: string
   numInferenceSteps?: number
   guidanceScale?: number

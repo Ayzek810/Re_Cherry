@@ -64,7 +64,7 @@ export function apply(ctx: Context): void {
         count: {
           type: 'number',
           required: true,
-          description: 'Number of images to generate, 1-4. Use 1 when unsure.'
+          description: 'Number of images to generate, 1-10. Use 1 when unsure.'
         }
       },
       output: {
@@ -104,16 +104,18 @@ export function apply(ctx: Context): void {
             'generate_image: no painting model registered for this turn. Ask the user to configure one in Settings → Paintings and enable image generation for this assistant.'
           )
         }
-        const imageSize = typeof args.imageSize === 'string' && args.imageSize.trim().length > 0 ? args.imageSize.trim() : '1024x1024'
+        const imageSize =
+          typeof args.imageSize === 'string' && args.imageSize.trim().length > 0 ? args.imageSize.trim() : '1024x1024'
         const batchSizeRaw = Number(args.count ?? 1)
-        const batchSize = Number.isFinite(batchSizeRaw) ? Math.min(4, Math.max(1, Math.floor(batchSizeRaw))) : 1
+        const batchSize = Number.isFinite(batchSizeRaw) ? Math.min(10, Math.max(1, Math.floor(batchSizeRaw))) : 1
         const requestId = `generate-image:${turnKey}:${Date.now()}`
         const result = await lightGenerateImage({
           provider: config.providerId,
           model: config.modelId,
           prompt,
-          imageSize,
-          batchSize,
+          // fork 缝（v0.3.3 批次6）：工具无目录信息，只下发两个基础键；主进程按
+          // provider 的 wire profile 改名（diffusion 档），与旧行为等价。
+          paramValues: { size: imageSize, numImages: batchSize },
           requestId
         })
         logger.info(`generate_image: ${result.images.length} image(s) via ${config.modelId}`)
