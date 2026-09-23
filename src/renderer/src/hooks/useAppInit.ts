@@ -13,6 +13,7 @@ import {
   syncWebSearchToKernel
 } from '@renderer/services/kernelChat'
 import MemoryService from '@renderer/services/MemoryService'
+import tabsService from '@renderer/services/TabsService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath } from '@renderer/store/runtime'
@@ -239,6 +240,15 @@ export function useAppInit() {
     // 把 provider 配置同步进内核（provider 变更时自动重同步）
     void syncProvidersToKernel(kernelProviders)
   }, [kernelProviders])
+
+  // 固定标签页的跨重启恢复（v0.3.3-1）：tabs 切片在 persist `blacklist` 里，固定集合存在已持久化的
+  // settings.pinnedTabs；等 rehydrate 到位后补回标签条（幂等，见 TabsService.restorePinnedTabs）。
+  const pinnedTabs = useAppSelector((state) => state.settings.pinnedTabs)
+
+  useEffect(() => {
+    if ((pinnedTabs ?? []).length === 0) return
+    tabsService.restorePinnedTabs()
+  }, [pinnedTabs])
 
   useEffect(() => {
     // 转述模型配置同步（v0.3.1 识图通道补全）：变更即推。undefined → null =

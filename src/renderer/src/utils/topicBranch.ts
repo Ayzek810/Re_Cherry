@@ -62,6 +62,51 @@ export function recallLastViewedBranch(root: Topic, allTopics: Topic[]): Topic {
   return allTopics.find((topic) => topic.id === root.lastViewedBranchId) ?? root
 }
 
+export interface TopicViewMemory {
+  /** 记忆的派发目标：**实际持有根行**的助手（updateTopic 对不在其清单里的行是静默 no-op）。 */
+  assistantId: string
+  /** 承载 `lastViewedBranchId` 的根行（调用方用它拼新行对象）。 */
+  root: Topic
+  /** 要记的分支 id；`undefined` = 当前就停在根上，记忆应清空。 */
+  branchId?: string
+  /** 现状已一致 → 调用方跳过派发（避免无谓的行对象替换刷新）。 */
+  unchanged: boolean
+}
+
+/**
+ * 由"正在看哪个话题行"解析出该写进哪一行、哪个助手的浏览记忆（v0.3.3 修复
+ * "重进话题落回报错分支"）。
+ *
+ * 为什么非要有这个纯函数：血缘与归属必须**从 store 现读**，不能用调用方闭包里的
+ * `activeAssistant.topics`——新 fork 的分支刚 `addTopic` 时闭包还是旧帧，父行不在该帧清单里，
+ * `rootTopicOf` 会退回 `viewed` 自身 ⇒ `branchId = undefined` ⇒ **记忆整条写不进去**
+ * （真机数据：报错后重发成功、分支图可见分支，但根行 `lastViewedBranchId` 始终为空，
+ * 重进话题于是回落到报错的根）。同一个原因下把更新派发给非持有该行的助手时，
+ * `updateTopic` 是静默 no-op，记忆同样丢失。
+ */
+export function resolveTopicViewMemory(
+  viewed: Topic,
+  assistants: { id: string; topics?: Topic[] }[],
+  fallbackAssistantId?: string
+): TopicViewMemory | undefined {
+  const rows = assistants.flatMap((assistant) => assistant.topics ?? [])
+  const rootId = rootTopicIdOf(viewed.id, rows.length > 0 ? rows : [viewed])
+  const root = rows.find((row) => row.id === rootId) ?? viewed
+  const owner = assistants.find((assistant) => (assistant.topics ?? []).some((row) => row.id === root.id))
+  // 行上的 `assistantId` 字段**不作依据**：它可能是隔离对账前的旧归属（v0.3.0-5 教训），
+  // 而 `updateTopic` 对"不在该助手清单里的行"是静默 no-op——宁可回落到调用方给的助手，
+  // 也不按一个可能过期的字段派发。
+  const assistantId = owner?.id ?? fallbackAssistantId
+  if (assistantId === undefined) return undefined
+  const branchId = root.id === viewed.id ? undefined : viewed.id
+  return {
+    assistantId,
+    root,
+    branchId,
+    unchanged: root.lastViewedBranchId === branchId && root.assistantId === assistantId
+  }
+}
+
 /**
  * 家族行签名（页码条/旁答条的家族缓存失效口径）：只含**本话题所在家族**的行
  * （本地血缘迭代下溯，跨多层成立），稳定排序；含 updatedAt（结构/记忆变更）

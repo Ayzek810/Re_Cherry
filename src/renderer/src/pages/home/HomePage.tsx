@@ -12,7 +12,13 @@ import { owningAssistantOfTopic, updateTopic as updateTopicAction } from '@rende
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { setLastActiveLocation } from '@renderer/store/settings'
 import type { Assistant, Topic } from '@renderer/types'
-import { listRootTopics, recallLastViewedBranch, rootTopicOf, TOPIC_SWITCH_REQUEST } from '@renderer/utils/topicBranch'
+import {
+  listRootTopics,
+  recallLastViewedBranch,
+  resolveTopicViewMemory,
+  rootTopicOf,
+  TOPIC_SWITCH_REQUEST
+} from '@renderer/utils/topicBranch'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { AnimatePresence, motion } from 'motion/react'
 import type { FC } from 'react'
@@ -105,23 +111,27 @@ const HomePage: FC = () => {
 
   // 家族浏览记忆：把"正在看哪个分支"记到根话题行上（进分支记分支 id，回主分支清掉，
   // 同值跳过）。恢复点：侧栏点击 / 切助手 / useTopic 兜底（recallLastViewedBranch）。
-  // allTopics / assistantId 由调用方显式传入——切助手场景闭包里的 activeAssistant 还是旧助手。
   // **助手隔离适配（v0.3.0-5）**：派发目标必须是"实际持有该家族行的助手"，不能信行上的
   // assistantId 字段——隔离对账前的历史行该字段可能是旧归属，派发到错误的助手 = 更新落空 = 记忆丢失。
-  // 顺带把行上的 assistantId 字段修正为真实归属。
+  // **v0.3.3 修复（"重进话题落回报错分支"）**：血缘/归属/落点全部由 `resolveTopicViewMemory`
+  // 从 store 现读（不用闭包里的 activeAssistant.topics）——理由与真机证据见该函数的文档。
   const recordTopicView = useCallback(
-    (viewed: Topic, assistantId = activeAssistant?.id, allTopics: Topic[] = activeAssistant?.topics ?? []) => {
-      if (!assistantId) return
-      const root = rootTopicOf(viewed, allTopics)
-      const next = root.id === viewed.id ? undefined : viewed.id
-      if (root.lastViewedBranchId !== next || root.assistantId !== assistantId) {
-        // ③诊断日志（v0.3.1 第三轮"切回落错分支"取证）：记录每次记忆写入的落点，
-        // 与 Topics.onSwitchTopic 的召回日志配套对读（真机日志过滤 topicView）。
-        logger.info(`[topicView] record: assistant=${assistantId} root=${root.id} branch=${next ?? '(root)'}`)
-        dispatch(updateTopicAction({ assistantId, topic: { ...root, assistantId, lastViewedBranchId: next } }))
-      }
+    (viewed: Topic, assistantId?: string) => {
+      const memory = resolveTopicViewMemory(viewed, store.getState().assistants.assistants, assistantId)
+      if (memory === undefined || memory.unchanged) return
+      // ③诊断日志（v0.3.1 第三轮"切回落错分支"取证）：记录每次记忆写入的落点，
+      // 与 Topics.onSwitchTopic 的召回日志配套对读（真机日志过滤 topicView）。
+      logger.info(
+        `[topicView] record: assistant=${memory.assistantId} root=${memory.root.id} branch=${memory.branchId ?? '(root)'}`
+      )
+      dispatch(
+        updateTopicAction({
+          assistantId: memory.assistantId,
+          topic: { ...memory.root, assistantId: memory.assistantId, lastViewedBranchId: memory.branchId }
+        })
+      )
     },
-    [dispatch, activeAssistant]
+    [dispatch]
   )
 
   const setActiveAssistant = useCallback(
@@ -137,7 +147,7 @@ const HomePage: FC = () => {
       // newTopic 为 undefined（新助手暂无话题）时保留旧值，useTopic 的 fallback effect 会
       // 检测 activeTopic 不在新助手并回落到其首个根话题（家族记忆恢复）
       _setActiveTopic((prev) => (newTopic !== undefined && newTopic.id !== prev.id ? newTopic : prev))
-      if (newTopic !== undefined) recordTopicView(newTopic, newAssistant.id, newAssistant.topics ?? [])
+      if (newTopic !== undefined) recordTopicView(newTopic, newAssistant.id)
     },
     [_setActiveTopic, activeAssistant?.id, recordTopicView]
   )

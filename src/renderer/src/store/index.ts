@@ -203,9 +203,14 @@ async function backfillProviderKeysFromVault(): Promise<void> {
       }
       return p
     })
-    // 已删除/迁移过滤的 provider → 清掉 main 侧残留 key
+    // 已删除/迁移过滤的 provider → **不再删除** main 侧残留 key（v0.3.3-1 修复"更新后 key 消失"）：
+    // 这份 redux 清单"是否已知完整"不可判定（localStorage 换 origin/清空、rehydrate 竞态、迁移分支
+    // 丢字段都会让用户的 provider 暂时不在表里），而不变式 6 要求"不可判定的状态不做破坏性动作"。
+    // 残留 key 无副作用；用户显式删 provider/清 key 时走 ProviderKeys_Remove，这里只如实记账。
     for (const [id] of entries) {
-      if (!ids.has(id)) void window.api.providerKeys.remove(id)
+      if (!ids.has(id)) {
+        logger.warn(`backfillProviderKeysFromVault: vault 含当前 provider 清单外的 key（${id}），保留不删`)
+      }
     }
     if (changed) store.dispatch(updateProviders(next as never[]))
   } catch (error) {

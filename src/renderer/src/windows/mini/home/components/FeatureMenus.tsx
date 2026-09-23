@@ -32,6 +32,10 @@ const FeatureMenus = ({
   // fork 缝（v0.3.3-9）：V1/V2 的四项都写成 `if (text) { setRoute(...) }`——剪贴板为空时
   // **点了没有任何反应**（用户报告"快捷助手那个翻译点了没效果"）。改为：一律切路由
   //（各视图自己有空态），没有文本时补一条既有文案的提示；请求侧另有 guard，不会空发。
+  // **v0.3.3-1 修复（"快速助手一直不出字"）**：上一版把发送条件写成 `if (prompt)`，而「回答此问题」
+  // （chat）在 V2 里本来就是**不带 prompt 也要发**（V2 `FeatureMenus.tsx:36-41`：`setRoute('chat')`
+  // + `onSendMessage()`）——于是 fork 的 chat 项只切面板、永不发送，用户按一次回车看不到任何输出
+  // （必须再按一次、且第二次已经在 chat 路由上才走 `handleSendMessage`），表现为"快速助手不能用"。
   const openFeature = useCallback(
     (route: 'translate' | 'summary' | 'explanation' | 'chat', prompt?: string) => {
       setRoute(route)
@@ -39,7 +43,8 @@ const FeatureMenus = ({
         window.toast.info(t('miniwindow.clipboard.empty'))
         return
       }
-      if (prompt) onSendMessage(prompt)
+      // chat：V2 同形，无 prompt 也发（内容取输入框/剪贴板）；其余三项按各自 prompt 发。
+      if (route === 'chat' || prompt) onSendMessage(prompt)
     },
     [onSendMessage, setRoute, t, text]
   )

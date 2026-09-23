@@ -3496,6 +3496,12 @@
       "title": "缩放"
     }
   },
+  "tabs": {
+    "close": "关闭标签页",
+    "close_others": "关闭其他标签页",
+    "pin": "固定标签页",
+    "unpin": "取消固定"
+  },
   "title": {
     "apps": "小程序",
     "files": "文件",

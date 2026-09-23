@@ -3496,6 +3496,12 @@
       "title": "Page Zoom"
     }
   },
+  "tabs": {
+    "close": "Close Tab",
+    "close_others": "Close Other Tabs",
+    "pin": "Pin Tab",
+    "unpin": "Unpin Tab"
+  },
   "title": {
     "apps": "Apps",
     "files": "Files",
