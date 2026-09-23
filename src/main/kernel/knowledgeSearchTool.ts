@@ -15,6 +15,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { loggerService } from '@logger'
+import { lightRerank } from './lightLlmModalities'
 
 import { knowledgeService } from '../services/knowledge/KnowledgeService'
 
@@ -102,9 +103,10 @@ export function apply(ctx: Context): void {
               exec.signal
             )
             const threshold = base.threshold ?? 0
+            const hitsInBase: Array<{ score: number; source: string; pageContent: string; baseId: string }> = []
             for (const hit of hits) {
               if (hit.score >= threshold) {
-                merged.push({
+                hitsInBase.push({
                   score: hit.score,
                   source: String(hit.metadata?.source ?? base.id),
                   pageContent: hit.pageContent,
@@ -112,6 +114,30 @@ export function apply(ctx: Context): void {
                 })
               }
             }
+            // 重排相（批次2 rerank 实装）：库配置了 rerank 模型时，cosine 命中按
+            // lightRerank 精排重序（score 换为重排分；失败降级 cosine 序，如实记 warn）。
+            if (base.rerank !== undefined && hitsInBase.length > 1) {
+              try {
+                const reranked = await lightRerank(
+                  {
+                    providerId: base.rerank.providerId,
+                    modelId: base.rerank.modelId,
+                    query,
+                    documents: hitsInBase.map((hit) => hit.pageContent)
+                  },
+                  exec.signal
+                )
+                const reordered = reranked.results
+                  .map((entry) => ({ hit: hitsInBase[entry.index], score: entry.score }))
+                  .filter((entry): entry is { hit: (typeof hitsInBase)[number]; score: number } => entry.hit !== undefined)
+                hitsInBase.length = 0
+                hitsInBase.push(...reordered.map((entry) => ({ ...entry.hit, score: entry.score })))
+                logger.debug(`knowledge_search: base ${base.id} reranked ${hitsInBase.length} hit(s)`)
+              } catch (error) {
+                logger.warn(`knowledge_search: base ${base.id} rerank failed, keeping cosine order:`, error as Error)
+              }
+            }
+            merged.push(...hitsInBase)
           } catch (error) {
             errors.push(`base ${base.id}: ${error instanceof Error ? error.message : String(error)}`)
           }

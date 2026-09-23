@@ -15,7 +15,9 @@ import HomePage from './pages/home/HomePage'
 import KnowledgePage from './pages/knowledge/KnowledgePage'
 import LaunchpadPage from './pages/launchpad/LaunchpadPage'
 import { OnboardingPage } from './pages/onboarding'
+import PaintingsPage from './pages/paintings/PaintingsPage'
 import SettingsPage from './pages/settings/SettingsPage'
+import TranslatePage from './pages/translate/TranslatePage'
 
 const Router: FC = () => {
   const { onboardingCompleted, completeOnboarding } = useOnboardingState()
@@ -30,6 +32,8 @@ const Router: FC = () => {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
+          <Route path="/translate" element={<TranslatePage />} />
+          <Route path="/paintings" element={<PaintingsPage />} />
         </Routes>
       </ErrorBoundary>
     )

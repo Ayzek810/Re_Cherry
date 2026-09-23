@@ -54,6 +54,11 @@ export type KernelWebSearchCompressionConfig = {
   documentCount?: number
   /** RAG 必需：嵌入模型引用（渲染层 embeddingModel: Model 投影收窄）。 */
   embedding?: { providerId: string; modelId: string; dimensions?: number }
+  /**
+   * RAG 可选：重排模型引用（渲染层 rerankModel: Model 投影收窄）。配置后 cosine
+   * 初筛的候选块再经 lightRerank 精排；失败降级 cosine 序（如实记 warn）。
+   */
+  rerank?: { providerId: string; modelId: string }
 }
 
 /**

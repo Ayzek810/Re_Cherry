@@ -65,6 +65,22 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
       <SettingsItem divider={false}>
         <SettingsTitle>{t('settings.agentSettings.tools.builtinTitle')}</SettingsTitle>
         {renderToolGrid('builtinTools', BUILTIN_TOOL_IDS, BUILTIN_TOOL_I18N)}
+        {/* 批次5 双门用户开关：assistant.enableGenerateImage（工具面）；llm.paintingModel（模型面，
+            绘画页选择器镜像 dispatch）。非 builtinTools map 字段，独立 boolean 开关。 */}
+        <ToolGrid>
+          <ToolCard onClick={() => updateAssistant({ enableGenerateImage: !assistant.enableGenerateImage })}>
+            <span className="truncate text-left text-sm">{t('settings.agentSettings.tools.builtins.generate_image.name')}</span>
+            <Switch
+              size="small"
+              checked={assistant.enableGenerateImage === true}
+              onClick={(_, event) => event.stopPropagation()}
+              onChange={(enabled) => updateAssistant({ enableGenerateImage: enabled })}
+            />
+          </ToolCard>
+        </ToolGrid>
+        <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
+          {t('settings.agentSettings.tools.builtins.generate_image.hint')}
+        </span>
       </SettingsItem>
 
       <SettingsItem divider={false}>

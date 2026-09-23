@@ -280,5 +280,8 @@ export enum IpcChannel {
   Dsh_SearchMessages = 'dsh:search-messages',
   Dsh_SessionEvent = 'dsh:session-event',
   /** 内核图片附件 → 渲染层文件仓的回放同步（v0.3.1 识图通道；读 ref、写字节、返回 FileMetadata）。 */
-  Dsh_AttachmentSync = 'dsh:attachment-sync'
+  Dsh_AttachmentSync = 'dsh:attachment-sync',
+  /** 轻量图像模态（绘画页/生图工具的执行缝；OpenAI 兼容平面直连，实现 kernel/lightLlmModalities）。 */
+  Dsh_LightImage = 'dsh:light-image',
+  Dsh_LightImageAbort = 'dsh:light-image-abort'
 }

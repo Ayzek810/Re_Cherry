@@ -53,6 +53,10 @@ export interface LlmState {
   imageDescriberModel: Model | undefined
   /** 转述提示词：'' = 内置默认（@shared/config/imageDescriber）。 */
   imageDescriberPrompt: string
+  /** 翻译模型（v0.3.3 翻译页）：undefined = 未配置（翻译时明错提示）。 */
+  translateModel: Model | undefined
+  /** 绘画模型（v0.3.3 绘画页）：undefined = 未配置（生成时明错提示）。 */
+  paintingModel: Model | undefined
   settings: LlmSettings
 }
 
@@ -63,6 +67,8 @@ export const initialState: LlmState = {
   quickAssistantModel: undefined,
   imageDescriberModel: undefined,
   imageDescriberPrompt: '',
+  translateModel: undefined,
+  paintingModel: undefined,
   providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)),
   settings: {
     ollama: {
@@ -192,6 +198,14 @@ const llmSlice = createSlice({
     setImageDescriberPrompt: (state, action: PayloadAction<string>) => {
       state.imageDescriberPrompt = action.payload
     },
+    // 翻译模型（v0.3.3 翻译页）：undefined = 未配置。
+    setTranslateModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
+      state.translateModel = action.payload.model
+    },
+    // 绘画模型（v0.3.3 绘画页）：undefined = 未配置。
+    setPaintingModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
+      state.paintingModel = action.payload.model
+    },
     setOllamaKeepAliveTime: (state, action: PayloadAction<number>) => {
       state.settings.ollama.keepAliveTime = action.payload
     },
@@ -231,6 +245,8 @@ export const {
   setQuickAssistantModel,
   setImageDescriberModel,
   setImageDescriberPrompt,
+  setTranslateModel,
+  setPaintingModel,
   setOllamaKeepAliveTime,
   setLMStudioKeepAliveTime,
   setGPUStackKeepAliveTime,

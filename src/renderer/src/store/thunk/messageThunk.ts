@@ -336,6 +336,9 @@ const fetchAndProcessAssistantResponseImpl = async (
       // ocr_document 进了助手工具页注册表（稀疏缺省 = 开）：附件门 + 开关双门控。
       const ocrEnabled = assistant.builtinTools?.ocr_document !== false
       const documentToolIds = documentsActive ? ['read_document', ...(ocrEnabled ? ['ocr_document'] : [])] : []
+      // 批次5 聊天生图（V2 PaintingTool.applies 双门语义）：助手开关开 + 绘画模型已配置。
+      const paintingModel = getState().llm.paintingModel
+      const generateImageActive = assistant.enableGenerateImage === true && paintingModel !== undefined
       const builtinTools = [
         // 附件门（§7.17）：read_document/ocr_document 只在触发消息带文件附件的轮挂载
         //（无附件时 schema 是纯噪音）；ocr_document 之外的基础注册表项受助手工具页开关。
@@ -345,6 +348,7 @@ const fetchAndProcessAssistantResponseImpl = async (
         // 批次4 知识检索：助手挂知识库即追加（每轮登记见 options.knowledgeBases）。
         ...((assistant.knowledge_bases?.length ?? 0) > 0 ? ['knowledge_search'] : []),
         ...(skillsActive ? ['skill'] : []),
+        ...(generateImageActive ? ['generate_image'] : []),
         ...documentToolIds
       ]
       // 批次3 MCP：助手 mcpMode 派生挂载单元清单（`mcp:<serverId>`）。manual = 勾选集
@@ -386,7 +390,11 @@ const fetchAndProcessAssistantResponseImpl = async (
                   providerId: base.model.provider,
                   modelId: base.model.id,
                   dimensions: base.dimensions
-                }
+                },
+                // 批次2 rerank 实装：库配置了重排模型则随登记上行（主进程 lightRerank 精排）。
+                ...(base.rerankModel
+                  ? { rerank: { providerId: base.rerankModel.provider, modelId: base.rerankModel.id } }
+                  : {})
               }))
             }
           : {}),
@@ -420,6 +428,10 @@ const fetchAndProcessAssistantResponseImpl = async (
               // 的默认服务商（配置本体经 Dsh_SyncPreprocess 整体投影，这里只上行 id）。
               preprocess: { providerId: getState().preprocess.defaultProvider }
             }
+          : {}),
+        // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
+        ...(generateImageActive && paintingModel
+          ? { generateImage: { providerId: paintingModel.provider, modelId: paintingModel.id } }
           : {})
       })
     } else {

@@ -29,10 +29,15 @@ import CitationSup from './CitationSup'
 import CodeBlock from './CodeBlock'
 import Link from './Link'
 import MarkdownSvgRenderer from './MarkdownSvgRenderer'
+import { remarkHtmlArtifact, transformMarkdownOutsideHtmlArtifacts } from './plugins/remarkHtmlArtifact'
 import rehypeHeadingIds from './plugins/rehypeHeadingIds'
 import rehypeScalableSvg from './plugins/rehypeScalableSvg'
 import remarkDisableConstructs from './plugins/remarkDisableConstructs'
+import { scanStandaloneHtmlArtifact } from './standaloneHtmlArtifact'
 import Table from './Table'
+
+/** V2 移植：内联 HTML 工件预览模式——流式期间 generating，落定后 ready。 */
+export type InlineHtmlPreviewMode = 'generating' | 'ready'
 
 const ALLOWED_ELEMENTS =
   /<(style|p|div|span|b|i|strong|em|ul|ol|li|table|tr|td|th|thead|tbody|h[1-6]|blockquote|pre|code|br|hr|svg|path|circle|rect|line|polyline|polygon|text|g|defs|title|desc|tspan|sub|sup|details|summary)/i
@@ -93,6 +98,31 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     setIsStreamDone(!isStreaming)
   }, [block.content, block.id, block.status, addChunk, reset])
 
+  // V2 移植：内联 HTML 预览模式推导（仅 assistant 内容块）。thinking/compact 块同为
+  // assistant 内容，按 status 推导是可接受的近似（V2 由 MessagePartsRenderer 按角色门控）。
+  const inlineHtmlPreviewMode = useMemo<InlineHtmlPreviewMode | undefined>(() => {
+    if (!('status' in block)) return undefined
+    if (block.status === 'success') return 'ready'
+    if (block.status === 'streaming' || block.status === 'processing' || block.status === 'pending') {
+      return 'generating'
+    }
+    return undefined
+  }, [block])
+
+  // V2 defense：显示层内容落后于 block.content（平滑流）时，ready 必须退回 generating，
+  // 防止半流文本被当作完整工件送进安全门。
+  const effectiveHtmlPreviewMode =
+    inlineHtmlPreviewMode === 'ready' && displayedContent !== block.content ? 'generating' : inlineHtmlPreviewMode
+
+  // 整条消息就是一个 HTML 工件时，跳过 Markdown 管线直接走 CodeBlock 渲染面。
+  const standaloneArtifact = useMemo(
+    () =>
+      effectiveHtmlPreviewMode
+        ? scanStandaloneHtmlArtifact(block.content, effectiveHtmlPreviewMode === 'generating')
+        : undefined,
+    [block.content, effectiveHtmlPreviewMode]
+  )
+
   const remarkPlugins = useMemo(() => {
     const plugins = [
       [remarkGfm, { singleTilde: false }] as Pluggable,
@@ -100,18 +130,29 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
       remarkCjkFriendly,
       remarkDisableConstructs(['codeIndented'])
     ]
+    if (effectiveHtmlPreviewMode) {
+      plugins.push(remarkHtmlArtifact)
+    }
     if (mathEngine !== 'none') {
       plugins.push([remarkMath, { singleDollarTextMath: mathEnableSingleDollar }])
     }
     return plugins
-  }, [mathEngine, mathEnableSingleDollar])
+  }, [mathEngine, mathEnableSingleDollar, effectiveHtmlPreviewMode])
 
   const messageContent = useMemo(() => {
     if ('status' in block && block.status === 'paused' && isEmpty(block.content)) {
       return t('message.chat.completion.paused')
     }
-    return removeSvgEmptyLines(processLatexBrackets(displayedContent))
-  }, [block, displayedContent, t])
+    const transform = (source: string) => removeSvgEmptyLines(processLatexBrackets(source))
+    if (!effectiveHtmlPreviewMode) {
+      return transform(displayedContent)
+    }
+    // V2：>256KB 的流式内容跳过工件解析（解析成本），直接原样渲染。
+    if (effectiveHtmlPreviewMode === 'generating' && block.content.length > 256 * 1024) {
+      return transform(displayedContent)
+    }
+    return transformMarkdownOutsideHtmlArtifacts(displayedContent, transform)
+  }, [block, displayedContent, t, effectiveHtmlPreviewMode])
 
   const rehypePlugins = useMemo(() => {
     const plugins: Pluggable[] = []
@@ -131,7 +172,7 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     return {
       a: (props: any) => <Link {...props} />,
       sup: (props: any) => <CitationSup {...props} />,
-      code: (props: any) => <CodeBlock {...props} blockId={block.id} />,
+      code: (props: any) => <CodeBlock {...props} blockId={block.id} inlineHtmlPreviewMode={effectiveHtmlPreviewMode} />,
       table: (props: any) => <Table {...props} blockId={block.id} />,
       img: (props: any) => <ImageViewer style={{ maxWidth: 500, maxHeight: 500 }} {...props} />,
       pre: (props: any) => <pre style={{ overflow: 'visible' }} {...props} />,
@@ -142,7 +183,30 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
       },
       svg: MarkdownSvgRenderer
     } as Partial<Components>
-  }, [block.id])
+  }, [block.id, effectiveHtmlPreviewMode])
+
+  // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
+  // position 的 end 外推一个围栏长度，让 isOpenFenceBlock 恒判"已闭合"（V2 语境等价）。
+  if (standaloneArtifact) {
+    const startOffset = standaloneArtifact.start.offset ?? 0
+    const fenceEnd = {
+      line: standaloneArtifact.start.line,
+      column: standaloneArtifact.start.column + standaloneArtifact.html.length + 7,
+      offset: startOffset + standaloneArtifact.html.length + 7
+    }
+    return (
+      <div className="markdown">
+        <CodeBlock
+          className="language-html"
+          inlineHtmlPreviewMode={effectiveHtmlPreviewMode}
+          node={{ position: { start: standaloneArtifact.start, end: fenceEnd } } as any}
+          blockId={block.id}
+          isStreaming={effectiveHtmlPreviewMode === 'generating'}>
+          {standaloneArtifact.html}
+        </CodeBlock>
+      </div>
+    )
+  }
 
   if (/<style\b[^>]*>/i.test(messageContent)) {
     components.style = MarkdownShadowDOMRenderer as any

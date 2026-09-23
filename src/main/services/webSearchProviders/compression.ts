@@ -11,6 +11,7 @@
  * - 同源片段按文档序拼接（上游按选中序=分数序，拼出的正文乱序难读）。
  */
 import { loggerService } from '@logger'
+import { lightRerank } from '@main/kernel/lightLlmModalities'
 
 import { chunkText } from '../knowledge/chunker'
 import type { EmbeddingModelRef } from '../knowledge/embeddings'
@@ -38,13 +39,42 @@ function dot(a: number[], b: number[]): number {
 }
 
 /**
+ * 重排相（批次2 rerank 实装）：cosine 初筛序 → lightRerank 精排。候选规模 =
+ * 全部去重块（重排端点按文档计费，块数即搜索结果量级，无需预截）。
+ * 失败降级 cosine 序（如实记 warn，不静默吞）。
+ */
+async function rerankChunks(
+  questions: string[],
+  chunks: ScoredChunk[],
+  rerank: { providerId: string; modelId: string } | undefined,
+  signal?: AbortSignal
+): Promise<ScoredChunk[]> {
+  if (!rerank || chunks.length <= 1) return chunks
+  try {
+    // 多问题拼接为单一重排 query（与 cosine 的"任一问题最大分"同向：合并语义）。
+    const result = await lightRerank(
+      { providerId: rerank.providerId, modelId: rerank.modelId, query: questions.join('\n'), documents: chunks.map((c) => c.content) },
+      signal
+    )
+    const reranked = result.results
+      .map((entry) => ({ ...chunks[entry.index], score: entry.score }))
+      .filter((entry) => entry.content !== undefined || entry.url !== undefined)
+    logger.info(`RAG rerank: ${chunks.length} chunk(s) reranked`)
+    return reranked
+  } catch (error) {
+    logger.warn('RAG rerank failed, falling back to cosine order:', error as Error)
+    return chunks
+  }
+}
+
+/**
  * RAG 压缩：结果正文分块 → 嵌入 → 按问题相关性打分排序去重 → 轮转选片
  *（每源均衡）→ 按 URL 合并回结果。嵌入模型缺失或任一步失败均降级直供原始结果。
  */
 export async function compressWithRag(
   questions: string[],
   rawResults: WebSearchProviderResult[],
-  config: { documentCount?: number; embedding?: EmbeddingModelRef },
+  config: { documentCount?: number; embedding?: EmbeddingModelRef; rerank?: { providerId: string; modelId: string } },
   signal?: AbortSignal
 ): Promise<WebSearchProviderResult[]> {
   const embedding = config.embedding
@@ -83,10 +113,13 @@ export async function compressWithRag(
       return true
     })
 
+    // 4.5 重排相（批次2）：配置了 rerank 模型时 cosine 序 → 精排序（失败降级 cosine 序）
+    const ranked = await rerankChunks(questions, unique, config.rerank, signal)
+
     // 5. 轮转选片（上游 selectReferences 同语义：按原始结果顺序轮询，每源均衡，
     //    总预算 = 结果条数 × documentCount）
     const maxRefs = rawResults.length * documentCount
-    const selected = roundRobinSelect(rawResults, unique, maxRefs)
+    const selected = roundRobinSelect(rawResults, ranked, maxRefs)
     logger.info(`RAG compression: ${rawResults.length} result(s) -> ${selected.length} chunk(s) selected`)
 
     // 6. 按 URL 合并回结果（上游 consolidateReferencesByUrl 同语义；同源按文档序拼接）

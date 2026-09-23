@@ -198,6 +198,13 @@ export function useAppInit() {
                   modelId: webSearchState.compressionConfig.embeddingModel.id,
                   dimensions: webSearchState.compressionConfig.embeddingDimensions
                 }
+              : undefined,
+            // 批次2 rerank 实装：重排模型引用同形收窄（undefined = 不重排）。
+            rerank: webSearchState.compressionConfig.rerankModel
+              ? {
+                  providerId: webSearchState.compressionConfig.rerankModel.provider,
+                  modelId: webSearchState.compressionConfig.rerankModel.id
+                }
               : undefined
           }
         : undefined

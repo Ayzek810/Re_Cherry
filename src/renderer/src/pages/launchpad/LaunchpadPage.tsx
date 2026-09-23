@@ -1,13 +1,13 @@
 /**
  * v0.3.2 自 CS_V1 移植（启动台：顶栏"+"按钮的落地页，路由 /launchpad）。
  *
- * fork 裁剪：上游 9 张入口卡片（apps/paintings/store/translate/code/openclaw/
- * notes 等）只保留本 fork 存活路由的两张——知识库（/knowledge，本次移植的入口
- * 本体）与文件（/files）；其余路由均已裁剪，死卡片不搬。上游的 Minapps 区同样
- * 不搬：依赖的 MinApp 组件本 fork 不存在（小程序仍从侧栏固定区进入）。
+ * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的四张——知识库（/knowledge）、
+ * 文件（/files）、翻译（/translate，v0.3.3 批次3 回归）与绘画（/paintings，
+ * v0.3.3 批次4 回归）。上游的 Minapps 区同样不搬：依赖的 MinApp 组件本 fork
+ * 不存在（小程序仍从侧栏固定区进入）。
  * 样式与交互照抄上游（6 列网格 + 悬停缩放；bgColor 用 v6 瞬态 prop $bgColor）。
  */
-import { FileSearch, Folder } from 'lucide-react'
+import { FileSearch, Folder, Languages, Palette } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -36,6 +36,18 @@ const LaunchpadPage: FC = () => {
       text: t('title.files'),
       path: '/files',
       bgColor: 'linear-gradient(135deg, #F59E0B, #FBBF24)'
+    },
+    {
+      icon: <Languages size={32} className="icon" />,
+      text: t('title.translate'),
+      path: '/translate',
+      bgColor: 'linear-gradient(135deg, #3B82F6, #60A5FA)'
+    },
+    {
+      icon: <Palette size={32} className="icon" />,
+      text: t('title.paintings'),
+      path: '/paintings',
+      bgColor: 'linear-gradient(135deg, #8B5CF6, #A78BFA)'
     }
   ]
 

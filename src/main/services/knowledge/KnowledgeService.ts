@@ -47,6 +47,8 @@ export interface KnowledgeTurnBase {
   documentCount?: number
   threshold?: number
   embedding: KnowledgeEmbeddingRef
+  /** 可选重排模型引用（批次2 rerank 实装；配置后检索命中再经 lightRerank 精排）。 */
+  rerank?: { providerId: string; modelId: string }
 }
 
 /** read_document 工具的每轮登记单元（topics.sendMessage 随发送参数上行）。 */

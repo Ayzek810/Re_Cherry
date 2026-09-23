@@ -14,7 +14,7 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
-import type { FileMetadata, KnowledgeNoteItem, QuickPhrase } from '@renderer/types'
+import type { FileMetadata, KnowledgeNoteItem, PaintingRecord, QuickPhrase, TranslateRecord } from '@renderer/types'
 import { Dexie, type EntityTable } from 'dexie'
 
 import { upgradeToV5, upgradeToV7, upgradeToV8 } from './upgrades'
@@ -27,6 +27,8 @@ export const db = new Dexie('CherryStudio', {
   settings: EntityTable<{ id: string; value: any }, 'id'>
   knowledge_notes: EntityTable<KnowledgeNoteItem, 'id'>
   quick_phrases: EntityTable<QuickPhrase, 'id'>
+  translate_records: EntityTable<TranslateRecord, 'id'>
+  paintings: EntityTable<PaintingRecord, 'id'>
 }
 
 db.version(1).stores({
@@ -143,6 +145,18 @@ db.version(13).stores({
 })
 db.version(14).stores({
   message_files: null
+})
+
+// v0.3.3 批次3：翻译页回归——历史表用新名 translate_records（translate_history
+// 在 v4-v10 存在过、v11 已 drop，复用旧名会撞已删表语义）。
+db.version(15).stores({
+  translate_records: '&id, createdAt'
+})
+
+// v0.3.3 批次4：绘画页——生成历史（V2 PaintingSchema 形状收窄；文件字节落
+// FileStorage，本表只存引用与元数据）。
+db.version(16).stores({
+  paintings: '&id, createdAt'
 })
 
 export default db

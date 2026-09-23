@@ -34,6 +34,7 @@ import { skillService } from '../services/skills/SkillService'
 import * as askUserTool from './askUserTool'
 import * as describeImagesTool from './describeImageTool'
 import * as documentTool from './documentTool'
+import * as generateImageTool from './generateImageTool'
 import * as knowledgeSearchTool from './knowledgeSearchTool'
 import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
 import { createMcpBridgeModule } from './mcpBridge'
@@ -155,7 +156,12 @@ const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => 
   // 文档附件（渲染层与 read_document 同轮并入）。执行按本轮登记的文档处理服务商
   // 路由（用户第三轮裁决：挂进文档处理通道，LocalPaddle 只是通道里的本地条目）；
   // 未登记/未配置时执行侧如实报可行动错误，不做静默降级。
-  { id: 'ocr_document', mount: (agentCtx) => agentCtx.plugin(ocrDocumentTool) }
+  { id: 'ocr_document', mount: (agentCtx) => agentCtx.plugin(ocrDocumentTool) },
+  // v0.3.3 批次5 聊天生图（V2 PaintingTool 同构）：助手 enableGenerateImage 开且
+  // 绘画模型已配置的轮把 'generate_image' 并入 builtinTools；每轮绘画模型经
+  // sendMessage options.generateImage 登记（webSearch 同构）。执行 = 轻量 AI 服务面
+  // lightGenerateImage（主进程直调，无 IPC 旁路）。
+  { id: 'generate_image', mount: (agentCtx) => agentCtx.plugin(generateImageTool) }
 ]
 
 const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
@@ -1122,6 +1128,12 @@ export interface TopicSendOptions {
    * 不静默降级）。配置本体经 Dsh_SyncPreprocess 投影进主进程内存（apiKey 不走此通道）。
    */
   preprocess?: { providerId: string }
+  /**
+   * 聊天生图（批次5）：本轮 generate_image 工具使用的绘画模型（渲染层在助手
+   * enableGenerateImage 开且 llm.paintingModel 已配置时随 builtinTools='generate_image'
+   * 一并上行；缺省/undefined = 本轮未启用，工具执行侧如实报可行动错误）。
+   */
+  generateImage?: { providerId: string; modelId: string }
 }
 
 export async function sendMessage(ctx: Context, id: string, text: string, options?: TopicSendOptions): Promise<void> {
@@ -1177,6 +1189,8 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   // 反查，未登记 = 如实报错不静默降级）。配置本体（apiKey 等）走 Dsh_SyncPreprocess，
   // 不经发送参数——webSearch 同构（id 登记 + 配置整体投影分离）。
   preprocessChannel.setTurnProvider(id, options?.preprocess?.providerId)
+  // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
+  generateImageTool.setTurnGenerateImageConfig(id, options?.generateImage)
   // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
   //（会话已持久化）并按新状态重挂——开关随时可切，生效点永远在下一轮开始之前。
   // systemPrompt 同判：assistant section 是 setup 时的静态文本，行被 createTopic 覆盖后

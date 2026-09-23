@@ -108,6 +108,8 @@ const api = {
       .invoke(IpcChannel.Dsh_StreamComplete, payload)
       .finally(() => ipcRenderer.off(IpcChannel.Dsh_CompletionEvent, listener))
   },
+  dshLightImage: (payload: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_LightImage, payload),
+  dshLightImageAbort: (requestId: string) => ipcRenderer.invoke(IpcChannel.Dsh_LightImageAbort, requestId),
 
   dshTopicList: () => ipcRenderer.invoke(IpcChannel.Dsh_TopicList),
   dshTopicCreate: (input: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_TopicCreate, input),
@@ -131,6 +133,8 @@ const api = {
       images?: Array<{ mediaType: string; data: string; name?: string }>
       /** 网络搜索（批次2）：本轮 web_search 的提供商（与 topics.TopicSendOptions 逐字段对齐）。 */
       webSearch?: { providerId: string }
+      /** 聊天生图（批次5）：本轮 generate_image 工具的绘画模型（与 topics.TopicSendOptions 逐字段对齐）。 */
+      generateImage?: { providerId: string; modelId: string }
       /** 知识库检索（批次4）：本轮可检索库清单。 */
       knowledgeBases?: Array<{
         id: string
