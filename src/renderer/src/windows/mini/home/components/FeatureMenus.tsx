@@ -1,7 +1,7 @@
 import { EnterOutlined } from '@ant-design/icons'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { Col } from 'antd'
-import { FileText, Lightbulb, MessageSquare } from 'lucide-react'
+import { FileText, Languages, Lightbulb, MessageSquare } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
 import { useImperativeHandle, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,7 +9,7 @@ import styled from 'styled-components'
 
 interface FeatureMenusProps {
   text: string
-  setRoute: Dispatch<SetStateAction<'summary' | 'chat' | 'explanation' | 'home'>>
+  setRoute: Dispatch<SetStateAction<'translate' | 'summary' | 'chat' | 'explanation' | 'home'>>
   onSendMessage: (prompt?: string) => void
 }
 
@@ -39,6 +39,15 @@ const FeatureMenus = ({
           if (text) {
             setRoute('chat')
             onSendMessage()
+          }
+        }
+      },
+      {
+        icon: <Languages size={16} color="var(--color-text)" />,
+        title: t('translate.title'),
+        onClick: () => {
+          if (text) {
+            setRoute('translate')
           }
         }
       },

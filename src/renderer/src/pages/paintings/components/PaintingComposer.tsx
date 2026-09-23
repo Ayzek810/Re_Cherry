@@ -1,17 +1,19 @@
 /**
- * 绘画提示词栏（v0.3.3 批次4，V2 PaintingComposer antd 重写）：
+ * 绘画提示词栏（v0.3.3 批次4 重写 / v0.3.3-2 参数入口改回 V2 形态）：
  * Input.TextArea + 参考图托盘（usePaintingComposerInputFiles）+ 模型按钮
- * （PaintingModelSelector → SelectChatModelPopup）+ 参数按钮（开 PaintingSettings
- * 抽屉）。V2 L218-222 placeholder 三态与 L266-269 send 阻断语义照抄。
+ * （PaintingModelSelector → SelectChatModelPopup）+ **参数 Popover**（V2 PaintingParamsButton
+ * 语义：点开即是 PaintingSettings 表单，不再是页面级抽屉）。
+ * V2 L218-222 placeholder 三态与 L266-269 send 阻断语义照抄。
  */
 import { LoadingOutlined, SettingOutlined } from '@ant-design/icons'
 import { PaintingImageAddButton, PaintingInputTray } from '@renderer/pages/paintings/components/PaintingImageGallery'
 import PaintingModelSelector, { type PaintingModelSelection } from '@renderer/pages/paintings/components/PaintingModelSelector'
+import PaintingSettings from '@renderer/pages/paintings/components/PaintingSettings'
 import type { usePaintingComposerInputFiles } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
 import type { MaterializeInputs } from '@renderer/pages/paintings/hooks/usePaintingGenerationSubmit'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import type { Model } from '@renderer/types'
-import { Button, Input, Tooltip } from 'antd'
+import { Button, Input, Popover, Tooltip } from 'antd'
 import type { FC } from 'react'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -23,13 +25,15 @@ export interface PaintingComposerProps {
   generating: boolean
   /** 动作域：本次 send 在途。 */
   submitting: boolean
-  /** 当前模型（s.llm.paintingModel）。 */
+  /** 当前绘画模型（页面注入；提示条只读回显）。 */
   model: Model | undefined
   onPromptChange: (value: string) => void
   onGenerate: (materialize: MaterializeInputs) => void
   onCancel: () => void
   onModelSelect: (selection: PaintingModelSelection) => void
-  onOpenSettings: () => void
+  /** 参数 Popover 的写侧（V2：PaintingSettings 直接挂提示条内）。 */
+  onConfigChange: (updates: Partial<PaintingData>) => void
+  onGenerateRandomSeed: (key: string) => void
   /** 参考图托盘状态由页面持有（跨 painting 存档/回灌），经 props 注入。 */
   tray: ReturnType<typeof usePaintingComposerInputFiles>
 }
@@ -49,7 +53,8 @@ const PaintingComposer: FC<PaintingComposerProps> = ({
   onGenerate,
   onCancel,
   onModelSelect,
-  onOpenSettings,
+  onConfigChange,
+  onGenerateRandomSeed,
   tray
 }) => {
   const { t } = useTranslation()
@@ -95,9 +100,24 @@ const PaintingComposer: FC<PaintingComposerProps> = ({
         />
         <Controls>
           <PaintingModelSelector model={model} onSelect={onModelSelect} />
-          <Tooltip title={t('common.settings')}>
-            <Button type="text" icon={<SettingOutlined />} onClick={onOpenSettings} aria-label={t('common.settings')} />
-          </Tooltip>
+          {/* V2 PaintingParamsButton：参数表单挂 Popover（align=start/side=top，宽度 min(300px, 100vw-2rem)）。 */}
+          <Popover
+            trigger="click"
+            placement="topLeft"
+            arrow={false}
+            content={
+              <div className="flex max-h-[60vh] w-[min(300px,calc(100vw-2rem))] flex-col gap-4 overflow-y-auto p-1">
+                <PaintingSettings
+                  painting={painting}
+                  onConfigChange={onConfigChange}
+                  onGenerateRandomSeed={onGenerateRandomSeed}
+                />
+              </div>
+            }>
+            <Tooltip title={t('common.settings')}>
+              <Button type="text" icon={<SettingOutlined />} aria-label={t('common.settings')} />
+            </Tooltip>
+          </Popover>
           {generating ? (
             <Tooltip title={t('common.stop')}>
               <Button danger icon={<LoadingOutlined />} onClick={onCancel} aria-label={t('common.stop')} />
