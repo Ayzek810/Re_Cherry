@@ -9,6 +9,7 @@ import PaintingImageSkeleton from '@renderer/pages/paintings/components/Painting
 import { usePaintingSizeInfo } from '@renderer/pages/paintings/hooks/usePaintingSizeInfo'
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
 import { paintingClasses } from '@renderer/pages/paintings/paintingPrimitives'
+import { computeContainedImageBox } from '@renderer/pages/paintings/utils/computeContainedImageBox'
 import { computeImageNaturalSize } from '@renderer/pages/paintings/utils/computeImageNaturalSize'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
 import { resolveImageGenerationSupport } from '@shared/lightLlm/imageGenerationCatalog'
@@ -402,21 +403,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
     setDisplayedNaturalSize(null)
   }, [currentFile?.id])
 
-  const displayedImageBoxSize = (() => {
-    if (!displayedNaturalSize || !viewerContainer || viewerContainer.width <= 0) {
-      return null
-    }
-    const availableHeight = Math.max(0, viewerContainer.height - promptBarHeight)
-    if (availableHeight <= 0) {
-      return null
-    }
-    const scale = Math.min(
-      1,
-      viewerContainer.width / displayedNaturalSize.width,
-      availableHeight / displayedNaturalSize.height
-    )
-    return { width: displayedNaturalSize.width * scale, height: displayedNaturalSize.height * scale }
-  })()
+  const displayedImageBoxSize = computeContainedImageBox(displayedNaturalSize, viewerContainer, promptBarHeight)
 
   useEffect(() => {
     setCurrentImageIndex(0)
@@ -553,7 +540,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
                 letterboxing the bar past its real edges. */}
             <div
               data-testid="artboard-image-layout"
-              className="flex max-h-full max-w-full flex-col items-stretch"
+              className="flex h-full max-h-full max-w-full flex-col items-stretch"
               style={{
                 ...(displayedImageBoxSize ? { width: displayedImageBoxSize.width } : undefined)
               }}>
@@ -562,27 +549,34 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
                   {promptBar}
                 </div>
               )}
-              <ImageViewer
-                alt=""
-                data-testid="artboard-image-transform"
-                className={`max-h-full min-h-0 max-w-full select-none rounded-md object-contain ${
-                  isDraggingImage
-                    ? 'cursor-grabbing transition-none will-change-transform'
-                    : 'cursor-grab transition-transform duration-150'
-                }`}
-                draggable={false}
-                onPointerCancel={stopImageDrag}
-                onPointerDown={onImagePointerDown}
-                onPointerMove={onImagePointerMove}
-                onPointerUp={stopImageDrag}
-                preview={false}
-                src={currentImageUrl}
-                style={{
-                  touchAction: 'none',
-                  transform: `translate(${imageOffset.x}px, ${imageOffset.y}px) scale(${imageScale}) rotate(${imageRotation}deg)`,
-                  ...(displayedImageBoxSize ? { height: displayedImageBoxSize.height } : undefined)
-                }}
-              />
+              {/* fork 缝（v0.3.3-9）：V2 只靠 `displayedImageBoxSize` 这个显式盒子，算不出来
+                  （尺寸未量到、提示条比容器还高）时就退化成"上对齐填满 + 被 `overflow-hidden` 裁掉"。
+                  这里再套一层**高度确定**的图片区（父级 `h-full` + 自身 `min-h-0 flex-1`），
+                  让 `max-h-full`/`object-contain` 真正生效——"完整展示"于是成为 CSS 层的硬保证，
+                  显式盒子只负责把尺寸对齐到像素级（提示条宽度跟着它走）。 */}
+              <div className="flex min-h-0 flex-1 items-center justify-center">
+                <ImageViewer
+                  alt=""
+                  data-testid="artboard-image-transform"
+                  className={`max-h-full min-h-0 max-w-full select-none rounded-md object-contain ${
+                    isDraggingImage
+                      ? 'cursor-grabbing transition-none will-change-transform'
+                      : 'cursor-grab transition-transform duration-150'
+                  }`}
+                  draggable={false}
+                  onPointerCancel={stopImageDrag}
+                  onPointerDown={onImagePointerDown}
+                  onPointerMove={onImagePointerMove}
+                  onPointerUp={stopImageDrag}
+                  preview={false}
+                  src={currentImageUrl}
+                  style={{
+                    touchAction: 'none',
+                    transform: `translate(${imageOffset.x}px, ${imageOffset.y}px) scale(${imageScale}) rotate(${imageRotation}deg)`,
+                    ...(displayedImageBoxSize ? { height: displayedImageBoxSize.height } : undefined)
+                  }}
+                />
+              </div>
             </div>
             <div
               className={`${paintingClasses.toolbarWrap} ${paintingClasses.toolbarRail}`}
