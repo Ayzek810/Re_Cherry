@@ -19,6 +19,14 @@ export function selectPureImageGenerationModels(providers: Provider[]): Model[] 
   return selectImageGenerationModels(providers).filter((model) => isPureGenerateImageModel(model))
 }
 
+/**
+ * 可生图谓词（单一来源）：`selectImageGenerationModels` 的逐模型二值形式，
+ * 供选择器 filter / ModelSelector predicate 复用，避免各处自造同义判定。
+ */
+export function isPaintingCandidateModel(model: Model): boolean {
+  return isGenerateImageModel(model)
+}
+
 /** 模型是否为编辑模式输入（图生图）：对话式生图模型支持参考图输入。 */
 export function supportsPaintingEdit(model: Model | undefined): boolean {
   return model !== undefined && isGenerateImageModel(model) && !isPureGenerateImageModel(model)

@@ -16,6 +16,9 @@ export type MaterializeInputs = () => Promise<{ files: PaintingData['inputFiles'
 interface UsePaintingGenerationSubmitInput {
   painting: PaintingData
   onPaintingChange: (painting: PaintingData) => void
+  // fork 缝：页面注入的历史栏刷新（usePaintingHistory.reload），透传给 usePaintingGeneration，
+  // 由它在成功落盘后调一次；失败/取消不调。
+  reloadHistory?: () => void
 }
 
 /**
@@ -38,11 +41,17 @@ interface UsePaintingGenerationSubmitInput {
  * `cancel(paintingId)` keeps the original signature so list-side flows
  * (e.g. cancel-before-delete) can target a specific painting.
  */
-export function usePaintingGenerationSubmit({ painting, onPaintingChange }: UsePaintingGenerationSubmitInput) {
+export function usePaintingGenerationSubmit({
+  painting,
+  onPaintingChange,
+  reloadHistory
+}: UsePaintingGenerationSubmitInput) {
   const { validateBeforeGenerate } = usePaintingGenerationGuard({ painting })
   const { generate, cancel, generating } = usePaintingGeneration({
     painting,
-    onPaintingChange
+    onPaintingChange,
+    // fork 缝：可选透传；页面未传时行为与 V2 移植版一致（无刷新）。
+    reloadHistory
   })
 
   // Ref is the re-entrancy source of truth (it blocks a second call in the same

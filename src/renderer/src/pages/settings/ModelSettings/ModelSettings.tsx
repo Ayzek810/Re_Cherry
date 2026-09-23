@@ -6,10 +6,13 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId, hasModel } from '@renderer/services/ModelService'
+import { isPaintingCandidateModel } from '@renderer/services/paintingModelSelection'
+import { useAppDispatch, useAppSelector } from '@renderer/store'
+import { setPaintingModel } from '@renderer/store/llm'
 import type { Model } from '@renderer/types'
 import { Button } from 'antd'
 import { find } from 'lodash'
-import { MessageSquareMore, Rocket, ScanText, Settings2 } from 'lucide-react'
+import { MessageSquareMore, Palette, Rocket, ScanText, Settings2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -23,12 +26,15 @@ interface ModelSettingsProps {
   showSettingsButton?: boolean
   showDescription?: boolean
   compact?: boolean
+  /** V2 同名 prop：onboarding 复用点传 false 隐藏绘画模型行（V2 OnboardingPage 同形）。 */
+  showPaintingModel?: boolean
 }
 
 const ModelSettings: FC<ModelSettingsProps> = ({
   showSettingsButton = true,
   showDescription = true,
-  compact = false
+  compact = false,
+  showPaintingModel = true
 }) => {
   const { defaultModel, quickModel, imageDescriberModel, setDefaultModel, setQuickModel, setImageDescriberModel } =
     useDefaultModel()
@@ -36,6 +42,10 @@ const ModelSettings: FC<ModelSettingsProps> = ({
   const allModels = providers.map((p) => p.models).flat()
   const { theme } = useTheme()
   const { t } = useTranslation()
+  // fork 缝：绘画模型（llm.paintingModel）读写——V2 走 Preference feature.paintings.default_model_id，
+  // fork 用 redux llm 切片；绘画页只读它播种新草稿，此处是唯一编辑点。
+  const dispatch = useAppDispatch()
+  const paintingModel = useAppSelector((state) => state.llm.paintingModel)
 
   const modelPredicate = useCallback(
     (m: Model) => !isEmbeddingModel(m) && !isRerankModel(m) && !isTextToImageModel(m),
@@ -53,6 +63,12 @@ const ModelSettings: FC<ModelSettingsProps> = ({
   const describerModelValue = useMemo(
     () => (imageDescriberModel && hasModel(imageDescriberModel) ? getModelUniqId(imageDescriberModel) : undefined),
     [imageDescriberModel]
+  )
+
+  // fork 缝：绘画模型回显值（redux llm.paintingModel，缺省/已移除 → undefined）。
+  const paintingModelValue = useMemo(
+    () => (paintingModel && hasModel(paintingModel) ? getModelUniqId(paintingModel) : undefined),
+    [paintingModel]
   )
 
   const containerStyle = compact ? { padding: 0, background: 'transparent' } : undefined
@@ -140,6 +156,36 @@ const ModelSettings: FC<ModelSettingsProps> = ({
         </HStack>
         {showDescription && <SettingDescription>{t('settings.models.image_describer.description')}</SettingDescription>}
       </SettingGroup>
+      {/* fork 缝：V2「设置 › 默认模型」的绘画模型行（V2 走 Preference + DataApi selector）；
+          fork 用 redux llm.paintingModel，谓词取 paintingModelSelection 的单一来源
+          isPaintingCandidateModel。键名/文案照抄 V2：settings.models.painting_model[_description]。
+          onboarding 复用点由 V2 同名 prop `showPaintingModel={false}` 隐藏（V2 OnboardingPage 同形）。 */}
+      {showPaintingModel && (
+        <SettingGroup theme={theme} style={groupStyle}>
+          <SettingTitle style={{ marginBottom: 12 }}>
+            <HStack alignItems="center" gap={10}>
+              <Palette size={18} color="var(--color-text)" />
+              {t('settings.models.painting_model')}
+            </HStack>
+          </SettingTitle>
+          <HStack alignItems="center">
+            {/* 允许清空（清空 = 未配置绘画模型，绘画页回落到 provider 首个可用模型）。 */}
+            <ModelSelector
+              providers={providers}
+              predicate={isPaintingCandidateModel}
+              value={paintingModelValue}
+              style={{ width: 360 }}
+              size="middle"
+              allowClear
+              onChange={(value) =>
+                dispatch(setPaintingModel({ model: value ? (find(allModels, JSON.parse(value)) as Model) : undefined }))
+              }
+              placeholder={t('settings.models.empty')}
+            />
+          </HStack>
+          {showDescription && <SettingDescription>{t('settings.models.painting_model_description')}</SettingDescription>}
+        </SettingGroup>
+      )}
     </SettingContainer>
   )
 }

@@ -1,14 +1,7 @@
-import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
-import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup/chat-model-popup'
-import { selectImageGenerationModels } from '@renderer/services/paintingModelSelection'
-import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { setPaintingModel } from '@renderer/store/llm'
-import type { Assistant, Model, Provider } from '@renderer/types'
+import type { Assistant } from '@renderer/types'
 import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
-import { Button, Switch } from 'antd'
-import { ChevronDown } from 'lucide-react'
+import { Switch } from 'antd'
 import type { FC } from 'react'
-import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -40,20 +33,6 @@ const EXTERNAL_TOOL_I18N: Record<string, string> = {
  */
 const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
   const { t } = useTranslation()
-  const dispatch = useAppDispatch()
-  const paintingModel = useAppSelector((state) => state.llm.paintingModel)
-
-  /** 生图候选谓词与绘画页选择器同源（paintingModelSelection 消化后的二值判定）。 */
-  const isPaintingCandidate = (model: Model): boolean =>
-    selectImageGenerationModels([{ id: model.provider, models: [model], enabled: true } as Provider]).length > 0
-
-  const openPaintingModelPicker = useCallback(async () => {
-    const selected = await SelectChatModelPopup.show({ model: paintingModel, filter: isPaintingCandidate })
-    if (selected) {
-      dispatch(setPaintingModel({ model: selected }))
-    }
-    // paintingModel 变化会重渲染，无需本地态
-  }, [dispatch, paintingModel])
 
   const isEnabled = (map: Record<string, boolean> | undefined, toolId: string): boolean => map?.[toolId] !== false
 
@@ -100,20 +79,8 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
             />
           </ToolCard>
         </ToolGrid>
-        <PickerRow>
-          <span className="text-sm">{t('paintings.model')}</span>
-          <Button onClick={() => void openPaintingModelPicker()}>
-            {paintingModel ? (
-              <>
-                <ModelAvatar model={paintingModel} size={20} />
-                <PickerName>{paintingModel.name}</PickerName>
-              </>
-            ) : (
-              <PickerName>{t('paintings.select_model')}</PickerName>
-            )}
-            <ChevronDown size={14} />
-          </Button>
-        </PickerRow>
+        {/* fork 缝：绘画模型选择器不在此处——已移到「设置 › 默认模型 › 绘画模型」
+            （ModelSettings.tsx，llm.paintingModel 单一编辑点），本页只留工具面开关。 */}
         <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
           {t('settings.agentSettings.tools.builtins.generate_image.hint')}
         </span>
@@ -139,30 +106,6 @@ const ToolGrid = styled.div`
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 8px;
   width: 100%;
-`
-
-const PickerRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  margin-top: 8px;
-
-  .ant-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 260px;
-  }
-`
-
-const PickerName = styled.span`
-  min-width: 0;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `
 
 const ToolCard = styled.div`
