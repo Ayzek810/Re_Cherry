@@ -5,7 +5,7 @@ import { useSettings } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { encodeImageBlobForKernel, type KernelImageInput } from '@renderer/services/kernelImages'
-import { lightStream } from '@renderer/services/lightLlm'
+import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'
 import { getAssistantMessage, getUserMessage } from '@renderer/services/MessagesService'
 import store, { useAppSelector } from '@renderer/store'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
@@ -523,6 +523,10 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         .map((id) => state.messages.entities[id])
         .find((m) => m !== undefined && m.role === 'assistant' && (m.askId === requestUser || m.id === requestUser))
       if (pending) {
+        // fork 缝：「暂停」额外发起真取消——在途流的 requestId 就是该助手消息 id
+        //（见下方 lightStream(assistantMessage.id, …)），主进程随即 abort 底层请求；
+        // UI 行为不变：块/消息照旧置 PAUSED，已生成内容保留。
+        void lightStreamAbort(pending.id)
         // 保留内容，仅把流式中的块与消息置为 PAUSED，停掉“该条消息下”的生成中动画
         for (const blockId of pending.blocks ?? []) {
           const block = state.messageBlocks.entities[blockId]

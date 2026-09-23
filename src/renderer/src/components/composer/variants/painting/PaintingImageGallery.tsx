@@ -26,6 +26,7 @@ export const PaintingImageGallery = () => {
  */
 export const PaintingImageAddButton = () => {
   const { currentPainting } = usePaintingSession()
+  const { files } = useComposerToolState()
   const { setFiles } = useComposerToolDispatch()
   const tray = usePaintingComposerInputFiles({
     paintingId: currentPainting.id,
@@ -33,7 +34,14 @@ export const PaintingImageAddButton = () => {
     // fork 缝：V2 由 `couldAddImageFile` 派生能力；fork 侧托盘 hook 的 CLEAR 只关心
     // "能力是否从 accept 掉到 reject"，模型存在即为 accept。
     inputCapability: currentPainting.model ? 'accept' : 'unknown',
-    providerId: currentPainting.providerId
+    providerId: currentPainting.providerId,
+    // fork 缝（P0-B）：把作曲条真正读取的实时列表与写入器交给托盘。V2 的 "+" 是
+    // `setFiles((c) => [...c, ...toComposerAttachments(picked)])`；fork 曾把它写进本组件
+    // 私有的 hook 实例（无人读取）→ 选中的图静默消失。现在选图经同一条 addFiles→
+    // mergeComposerAttachments 路径写进 tool runtime 的 files：chips 立即出现、发送闸随之
+    // 打开，并成为 P0-A 物化链路的输入源。
+    files,
+    setFiles
   })
 
   const seededRef = useRef<string | null>(null)

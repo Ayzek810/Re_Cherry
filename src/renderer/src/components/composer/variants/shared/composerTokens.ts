@@ -19,6 +19,20 @@ export const composerFileTokenId = (file: Pick<ComposerAttachment, 'id'>) => {
   return composerFileTokenIdFromSourceId(sourceId)
 }
 
+/**
+ * fork 缝（P0-B/P0-C）：把一批新附件并入草稿——按 id 去重、保持先后顺序。"+"选图与提示框
+ * 粘贴共用这一条规范化路径（V2 两处各自 `[...c, ...incoming]`，无去重）。数量上限不在此处
+ * 判定：上限闸统一在物化时走既有 `INPUT_IMAGE_LIMIT_EXCEEDED`（usePaintingComposerInputFiles）。
+ */
+export function mergeComposerAttachments(
+  prev: ComposerAttachment[],
+  incoming: ComposerAttachment[]
+): ComposerAttachment[] {
+  if (incoming.length === 0) return prev
+  const seen = new Set(prev.map((file) => file.id))
+  return [...prev, ...incoming.filter((file) => !seen.has(file.id))]
+}
+
 /** V2 `composerTokens.ts:21-28` `fileToComposerToken`，逐字搬运（仅 id 源换成 fork 附件 id）。 */
 export function fileToComposerToken(file: ComposerAttachment): ComposerDraftToken {
   return {

@@ -44,6 +44,9 @@ const SIZE_CLASSES: Record<CherryButtonSize, string> = {
  * 晚于 Tailwind 层）会**覆盖 V2 写在按钮上的尺寸/形状类**（h-7 / size-7.5 / h-11…），
  * 表现为控件缩水、卡片塌成默认尺寸（v0.3.3-4 模板轮播卡事故）。V2 的 shadcn Button
  * 本就是"原生 button + 类名"，故这里对齐原生，antd 只留 Popover。
+ * fork 缝：A8 —— V2 的 shadcn Button 带 `focus-visible:ring-2 focus-visible:ring-ring`；fork 只剩
+ * `focus-visible:outline-none`，键盘聚焦时没有任何可见反馈（WCAG 2.4.7）。补回 ring（`--color-ring` 已在
+ * `assets/styles/tailwind.css` 的 @theme 里，`ring-*` 颜色工具类可生成）。
  */
 export const Button: FC<CherryButtonProps> = ({
   variant = 'default',
@@ -60,7 +63,7 @@ export const Button: FC<CherryButtonProps> = ({
     type={type as ButtonHTMLAttributes<HTMLButtonElement>['type']}
     disabled={disabled || loading === true}
     className={cn(
-      'inline-flex cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50',
+      'inline-flex cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
       VARIANT_CLASSES[variant],
       SIZE_CLASSES[size],
       className
@@ -99,6 +102,40 @@ interface CherryPopoverProps extends PropsWithChildren {
   onOpenChange?: (open: boolean) => void
 }
 
+/** antd Popover 的 placement 取值。 */
+type AntPopoverPlacement =
+  | 'top'
+  | 'topLeft'
+  | 'topRight'
+  | 'bottom'
+  | 'bottomLeft'
+  | 'bottomRight'
+  | 'left'
+  | 'leftTop'
+  | 'leftBottom'
+  | 'right'
+  | 'rightTop'
+  | 'rightBottom'
+
+/**
+ * fork 缝：A7 —— V2 的 Popover 是 Radix（`side` + `align` 两个轴 3×4 组合），antd Popover 只有一个
+ * `placement`，此前替身把 `align`/`side` 解构丢弃、也没给 `placement` → 参数面板一律落在 antd 默认的
+ * `top` 居中位，而 V2 的调用点写的是 `align="start" side="top"`（左边缘对齐）。这里按 Radix 语义换算：
+ * align 描述内容与触发点在哪条边上对齐 —— start=左/上边、end=右/下边、center=居中。
+ * 只传 `align`/`side` 时才给 `placement`：两轴都缺省时保持 antd 默认，避免改动其它既有调用点。
+ */
+function getAntdPopoverPlacement(align?: 'start' | 'center' | 'end', side?: 'top' | 'bottom' | 'left' | 'right') {
+  if (align === undefined && side === undefined) return undefined
+  const resolvedSide = side ?? 'top'
+  const resolvedAlign = align ?? 'center'
+  if (resolvedSide === 'top' || resolvedSide === 'bottom') {
+    const suffix = resolvedAlign === 'start' ? 'Left' : resolvedAlign === 'end' ? 'Right' : ''
+    return `${resolvedSide}${suffix}` as AntPopoverPlacement
+  }
+  const suffix = resolvedAlign === 'start' ? 'Top' : resolvedAlign === 'end' ? 'Bottom' : ''
+  return `${resolvedSide}${suffix}` as AntPopoverPlacement
+}
+
 /** 内容面板：antd 会把它放进 `ant-popover-content`，这里只提供 V2 的 className 容器。 */
 export const PopoverContent: FC<CherryPopoverContentProps> = ({ children, className }) => (
   <div className={className}>{children}</div>
@@ -112,11 +149,16 @@ export const Popover: FC<CherryPopoverProps> = ({ children, open, defaultOpen, o
   const parts = Children.toArray(children)
   const [trigger, ...rest] = parts
   const content: ReactNode = rest.length === 1 ? rest[0] : rest
+  // fork 缝：A7 —— 内容面板声明的 `align`/`side` 只写在这个元素上（`PopoverContent` 不渲染它们），
+  // 必须在拆分后读出、换算成 antd 的 `placement`，否则 V2 的对齐信息到此为止。
+  const contentProps = isValidElement(content) ? (content.props as CherryPopoverContentProps) : undefined
+  const placement = getAntdPopoverPlacement(contentProps?.align, contentProps?.side)
 
   return (
     <AntPopover
       trigger="click"
       arrow={false}
+      placement={placement}
       open={open}
       defaultOpen={defaultOpen}
       onOpenChange={onOpenChange}

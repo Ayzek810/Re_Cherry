@@ -49,7 +49,7 @@ const CodePanel = memo<CodePanelProps>(({ codeEditorRef, html, onSave, saved, on
               saved ? (
                 <Check size={16} color="var(--color-status-success)" />
               ) : (
-                <SaveIcon size={16} className="custom-lucide" />
+                <SaveIcon size={16} className="lucide-custom" />
               )
             }
             onClick={onClickSave}

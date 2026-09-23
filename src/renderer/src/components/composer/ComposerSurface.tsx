@@ -4,6 +4,7 @@
 // V2 自带的受控 textarea（V2 ComposerSurface.tsx:252-327）——fork 无 TipTap。
 import { QuickPanelReservedSymbol, QuickPanelView, useQuickPanel } from '@renderer/components/QuickPanel'
 import { useFileDragDrop } from '@renderer/pages/home/Inputbar/hooks/useFileDragDrop'
+import PasteService from '@renderer/services/PasteService'
 import QuickPhraseService from '@renderer/services/QuickPhraseService'
 import type { QuickPhrase } from '@renderer/types'
 import { isSendMessageKeyPressed } from '@renderer/utils/input'
@@ -20,7 +21,7 @@ import type {
 } from './quickPanel'
 import type { ComposerDraftToken, ComposerSerializedDraft, ComposerSerializedToken } from './tokens'
 import { useComposerEditorFrameSizing } from './useComposerEditorFrameSizing'
-import type { ComposerAttachment } from './variants/shared/composerTokens'
+import { type ComposerAttachment, mergeComposerAttachments } from './variants/shared/composerTokens'
 
 /** V2 ComposerSurfaceRuntime.tsx:91 的 `COMPOSER_SIDE_PADDING_PX` 由 `withSidePadding` 的 `px-6`
  *  class 承载（见下方 narrowLayoutClassName），故此处不再保留该常量。 */
@@ -105,7 +106,10 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
   } = useComposerEditorFrameSizing({
     fontSize: props.fontSize,
     isExpanded: props.isExpanded,
-    onExpandedChange: props.onExpandedChange
+    onExpandedChange: props.onExpandedChange,
+    // fork 缝：V2 在 toggleExpanded/restoreDefaultHeight 收尾调 focusEditor()（V2:235/290），
+    // 展开/收起后光标回输入框；fork 的编辑元素是本文件的受控 textarea，故接它。
+    focusEditor: () => textareaRef.current?.focus()
   })
 
   const sendBlockedReasonRef = useRef(props.sendBlockedReason)
@@ -140,6 +144,36 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
     t
   })
   const isDragging = dragDrop.isDragging
+
+  // fork 缝（P0-C）：V2 连纯 textarea 回退都捕获 paste 并把整包交给运行时
+  // （V2 ComposerSurface.tsx:282-287），fork 的 textarea 此前没有 onPaste——剪贴板里的
+  // 图片因此静默消失。fork 无 TipTap 运行时，改交 fork 既有 PasteService（Inputbar 同源）：
+  // 剪贴板含文件时它 event.preventDefault() 并落成 FileMetadata，再经 appendFiles 走与 "+"
+  // 同一条规范化路径并入作曲条实时列表；纯文本粘贴它直接返回 false，不拦截（原生插入不变）。
+  const appendFiles = useCallback(
+    (updater: (prevFiles: ComposerAttachment[]) => ComposerAttachment[]) => {
+      props.setFiles((prev) => mergeComposerAttachments(prev, updater(prev)))
+    },
+    [props]
+  )
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      // 沿用 PasteService.handlePaste 的既有签名；第 5 位起（长文本转文件等）fork 绘画不启用。
+      void PasteService.handlePaste(
+        event.nativeEvent,
+        props.supportedExts,
+        appendFiles,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        t
+      )
+    },
+    [appendFiles, props.supportedExts, t]
+  )
 
   // fork 缝：V2 的 `/` 面板由 ComposerToolMenu 的 launcher 注册（工具注册表），fork 无
   // 该层——这里直接用 fork 的 QuickPanel + QuickPhraseService（已存提示词）接上同一入口。
@@ -232,7 +266,9 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
         className="flex size-7.5 items-center justify-center rounded-full text-error hover:bg-accent"
         aria-label={t('chat.input.pause')}
         onClick={() => void props.onPause()}>
-        <CirclePause size={20} />
+        {/* fork 缝：index.css 的 `.lucide:not(.lucide-custom){color:var(--color-icon)}` 会盖掉
+            按钮上的 text-error，暂停图标恒为灰色；lucide-custom 是 fork 既有的退出全局灰化约定。 */}
+        <CirclePause size={20} className="lucide-custom" />
       </button>
     </Tooltip>
   ) : (
@@ -345,6 +381,7 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
               maybeOpenPhrasePanel(event.currentTarget.value, event.currentTarget.selectionStart ?? 0)
             }}
             onFocus={() => props.onFocus?.()}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               const isEnterPressed =
                 (event.key === 'Enter' || event.key === 'NumpadEnter') && !event.nativeEvent.isComposing

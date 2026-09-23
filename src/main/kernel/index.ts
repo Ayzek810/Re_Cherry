@@ -52,7 +52,8 @@ import { installRequestImageHandleAnchor } from './imageHandleText'
 import type { KernelInteractionHub } from './interaction'
 import { registerInteractionHost } from './interaction'
 import { KnowledgeKernelService } from './knowledgeKernelService'
-import { lightOneShot, lightStream } from './lightLlm'
+// fork 缝：流式补全真取消（Dsh_StreamAbort → abortLightStream）。
+import { abortLightStream, lightOneShot, lightStream } from './lightLlm'
 import { abortLightImage, lightEditImage, lightGenerateImage, setLightLlmProviderRoutes } from './lightLlmModalities'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
@@ -422,14 +423,28 @@ function registerKernelIpc(): void {
       }
     }
     let lastEventWasTerminal = false
-    await lightStream(ctx, payload, (streamEvent) => {
-      if (streamEvent.type === 'error' || streamEvent.type === 'done') {
-        // 终态只发一次：lightStream 的异常路径已在事件面收口，这里不重复补发
-        if (lastEventWasTerminal) return
-        lastEventWasTerminal = true
-      }
-      send(streamEvent)
-    })
+    // fork 缝：requestId 一并交给 lightStream，登记为该流的取消键（Dsh_StreamAbort）。
+    await lightStream(
+      ctx,
+      payload,
+      (streamEvent) => {
+        if (streamEvent.type === 'error' || streamEvent.type === 'done') {
+          // 终态只发一次：lightStream 的异常路径已在事件面收口，这里不重复补发
+          if (lastEventWasTerminal) return
+          lastEventWasTerminal = true
+        }
+        send(streamEvent)
+      },
+      requestId
+    )
+    return { ok: true }
+  })
+
+  // fork 缝：流式补全取消（渲染层「停止/暂停」的真取消缝；未命中 requestId 为无害空操作）。
+  ipcMain.handle(IpcChannel.Dsh_StreamAbort, (_event, requestId: unknown) => {
+    if (typeof requestId === 'string' && requestId.length > 0) {
+      abortLightStream(requestId)
+    }
     return { ok: true }
   })
 

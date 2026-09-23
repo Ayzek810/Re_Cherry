@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
 import { describe, expect, it, vi } from 'vitest'
 
-import { lightOneShot, lightStream } from '../lightLlm'
+import { abortLightStream, lightOneShot, lightStream } from '../lightLlm'
 
 // admitEncodedImages mock：记录调用并返回固定 ref 形状（真实准入由 dsh-attachment 自测）。
 const admitCalls: Array<unknown[]> = []
@@ -269,5 +269,66 @@ describe('lightStream', () => {
     } finally {
       admitError = undefined
     }
+  })
+
+  // P0-F 回归：requestId 配对的取消必须真的把 AbortSignal 交给底层流并掐断它
+  //（此前渲染层只能翻 cancelledRef，模型继续生成到结束并计费）。
+  it('取消缝：signal 随 requestId 下发，abortLightStream 即掐断该流', async () => {
+    let seenSignal: AbortSignal | undefined
+    const ctx = {
+      llm: {
+        stream: async function* (options: { signal?: AbortSignal }) {
+          seenSignal = options.signal
+          yield textChunk(0, '前')
+          // 真实适配器的行为等价物：挂起直到 signal abort，再以 aborted 终态收口。
+          await new Promise<void>((resolve) => {
+            if (options.signal?.aborted === true) return resolve()
+            options.signal?.addEventListener('abort', () => resolve(), { once: true })
+          })
+          yield { type: 'finish', reason: { kind: 'aborted', failure: { message: 'aborted by caller' } as never } }
+        }
+      }
+    } as unknown as Context
+
+    const events: string[] = []
+    const run = lightStream(
+      ctx,
+      { provider: 'p', model: 'm', messages: [{ role: 'user', text: 'x' }] },
+      (event) => {
+        events.push(event.type)
+      },
+      'req-1'
+    )
+
+    // 让流跑到挂起点，再取消。
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(seenSignal).toBeInstanceOf(AbortSignal)
+    expect(seenSignal?.aborted).toBe(false)
+
+    abortLightStream('req-1')
+    await run
+
+    // abort 之后的 delta 一律不再转发，终态是 error（不是 done）。
+    expect(events).toEqual(['delta', 'error'])
+    expect(seenSignal?.aborted).toBe(true)
+  })
+
+  it('取消缝：未配对的 requestId 是无害空操作；结束的流被摘出注册表', async () => {
+    const { ctx } = makeCtx([textChunk(0, '答'), finishStop])
+    expect(() => abortLightStream('never-started')).not.toThrow()
+
+    const events: string[] = []
+    await lightStream(
+      ctx,
+      { provider: 'p', model: 'm', messages: [{ role: 'user', text: 'x' }] },
+      (event) => {
+        events.push(event.type)
+      },
+      'req-2'
+    )
+    expect(events).toEqual(['delta', 'done'])
+
+    // 流已结束 → 注册表已清空，迟到的取消不再有任何副作用。
+    expect(() => abortLightStream('req-2')).not.toThrow()
   })
 })

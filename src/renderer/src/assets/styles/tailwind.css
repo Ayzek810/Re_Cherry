@@ -25,6 +25,11 @@
   --font-size-heading-sm: 1.5rem;
   --font-size-heading-md: 2rem;
   --font-size-heading-lg: 2.5rem;
+  /* v0.3.3-5：状态色别名（供 @theme inline 暴露为 --color-success/-warning/-error 工具类；
+     指向 color.css 的既有语义色，故随主题切换）。 */
+  --brand-success: var(--color-status-success);
+  --brand-warning: var(--color-status-warning);
+  --brand-error: var(--color-error);
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
@@ -127,6 +132,12 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  /* v0.3.3-5：状态色工具类（border-success / text-error / before:bg-success/[0.03] 等）——
+     V2 移植件在用，此前 fork 的 @theme 未暴露 → 类名不生成、拖拽落点绿框与暂停按钮色静默丢失。
+     经别名变量中转，避免与 color.css 里的同名普通变量（--color-error）自引用。 */
+  --color-success: var(--brand-success);
+  --color-warning: var(--brand-warning);
+  --color-error: var(--brand-error);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

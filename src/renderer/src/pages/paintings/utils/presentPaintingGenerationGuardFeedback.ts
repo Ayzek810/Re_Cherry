@@ -43,5 +43,9 @@ export async function presentPaintingGenerationGuardFeedback(
     window.toast.error(i18n.t('paintings.req_error_model'))
     return
   }
-  window.toast.error(i18n.t('paintings.select_model'))
+  // fork 缝：A4 —— 这里落到 `model_missing`（既无 provider 启停问题、模型目录也同步可读）。V2 原文
+  // （V2:43）用的是**按钮标签键** `paintings.select_model`（zh"选择绘画模型"），当错误说明读出来是
+  // 一句按钮名、不是原因；改用既有的说明键 `paintings.req_error_model`（zh"请先在设置中选择绘画模型"，
+  // 与 model_unavailable 分支同键）。不新增 locale 键，故无需 i18n:sync。
+  window.toast.error(i18n.t('paintings.req_error_model'))
 }
