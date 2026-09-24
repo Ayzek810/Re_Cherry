@@ -3281,6 +3281,72 @@ const migrateConfig = {
       logger.error('migrate 220 error', error as Error)
       return state
     }
+  },
+  '221': (state: RootState) => {
+    try {
+      // v0.3.4：内置小程序按用户裁决裁剪（59 → 12）+ 新增 3 个（scnet/ark/openrouter）。
+      // ① 清掉被移除的 47 个内置应用的持久化残留（enabled/disabled/pinned 三列表），
+      //    否则 getAllApps 的 mapApps 找不到模板数据、旧对象原样透出成幽灵磁贴。
+      //    （用户自建 Custom 应用不在内置 id 表里，不受影响。）
+      // ② 补入 3 个新增应用，保证老用户无需手动启用即可见。
+      const REMOVED_BUILTIN_MINAPPS = [
+        'gemini',
+        'yi',
+        'zhipu',
+        'baichuan',
+        'stepfun',
+        'cici',
+        'hailuo',
+        'minimax-agent',
+        'minimax-agent-global',
+        'ima',
+        'groq',
+        'anthropic',
+        'google',
+        'baidu-ai-chat',
+        'baidu-ai-search',
+        'tencent-yuanbao',
+        'sensetime-chat',
+        'spark-desk',
+        'metaso',
+        'poe',
+        'devv',
+        'tiangong-ai',
+        'Felo',
+        'bolt',
+        'nm',
+        'thinkany',
+        'genspark',
+        'grok',
+        'grok-x',
+        'qwenlm',
+        'flowith',
+        '3mintop',
+        'aistudio',
+        'xiaoyi',
+        'coze',
+        'dify',
+        'wpslingxi',
+        'lechat',
+        'abacus',
+        'lambdachat',
+        'monica',
+        'you',
+        'zhihu',
+        'dangbei',
+        'n8n',
+        'longcat',
+        'ling'
+      ]
+      REMOVED_BUILTIN_MINAPPS.forEach((id) => removeMiniAppFromState(state, id))
+      addMiniApp(state, 'scnet')
+      addMiniApp(state, 'ark')
+      addMiniApp(state, 'openrouter')
+      return state
+    } catch (error) {
+      logger.error('migrate 221 error', error as Error)
+      return state
+    }
   }
 }
 
