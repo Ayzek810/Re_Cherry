@@ -750,6 +750,15 @@ const settingsSlice = createSlice({
     setMinappsOpenLinkExternal: (state, action: PayloadAction<boolean>) => {
       state.minappsOpenLinkExternal = action.payload
     },
+    setMaxKeepAliveMinapps: (state, action: PayloadAction<number>) => {
+      state.maxKeepAliveMinapps = action.payload
+    },
+    setShowOpenedMinappsInSidebar: (state, action: PayloadAction<boolean>) => {
+      state.showOpenedMinappsInSidebar = action.payload
+    },
+    setMinAppRegion: (state, action: PayloadAction<MinAppRegionFilter>) => {
+      state.minAppRegion = action.payload
+    },
     setEnableDataCollection: (state, action: PayloadAction<boolean>) => {
       state.enableDataCollection = action.payload
     },
@@ -914,6 +923,9 @@ export const {
   setSiyuanBoxId,
   setSiyuanRootPath,
   setMinappsOpenLinkExternal,
+  setMaxKeepAliveMinapps,
+  setShowOpenedMinappsInSidebar,
+  setMinAppRegion,
   setEnableDataCollection,
   setPrivacyPolicyVersion,
   setEnableSpellCheck,

@@ -8,7 +8,9 @@ import {
   setActiveTab,
   toggleTabPin
 } from '@renderer/store/tabs'
+import type { MinAppType } from '@renderer/types'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
+import type { LRUCache } from 'lru-cache'
 
 import NavigationService from './NavigationService'
 
@@ -19,6 +21,21 @@ const pinnedProjection = (tabs: { id: string; path: string; isPinned?: boolean }
   tabs.filter((tab) => tab.isPinned === true).map(({ id, path }) => ({ id, path }))
 
 class TabsService {
+  private minAppsCache: LRUCache<string, MinAppType> | null = null
+
+  /**
+   * Sets the reference to the mini-apps LRU cache used for managing mini-app lifecycle and cleanup.
+   * This method is required to integrate TabsService with the mini-apps cache system, allowing TabsService
+   * to perform cache cleanup when tabs associated with mini-apps are closed. The cache instance is typically
+   * provided by the mini-app popup system and enables TabsService to maintain cache consistency and prevent
+   * stale data.
+   * @param cache The LRUCache instance containing mini-app data, provided by useMinappPopup.
+   */
+  public setMinAppsCache(cache: LRUCache<string, MinAppType>) {
+    this.minAppsCache = cache
+    logger.debug('Mini-apps cache reference set in TabsService')
+  }
+
   /**
    * 关闭指定的标签页
    * @param tabId 要关闭的标签页ID
@@ -74,7 +91,7 @@ class TabsService {
   }
 
   /**
-   * Clean up WebView state when a mini-app tab is closed
+   * Clean up mini-app cache and WebView state when tab is closed
    * @param tabId The tab ID to clean up
    */
   private cleanupMinAppCache(tabId: string) {
@@ -84,8 +101,18 @@ class TabsService {
 
     if (tab && tab.path.startsWith('/apps/')) {
       const appId = tab.path.replace('/apps/', '')
-      clearWebviewState(appId)
-      logger.info(`Mini-app ${appId} webview state cleared due to tab closure`)
+
+      if (this.minAppsCache && this.minAppsCache.has(appId)) {
+        logger.debug(`Cleaning up mini-app cache for app: ${appId}`)
+
+        // Remove from LRU cache - this will trigger disposeAfter callback
+        this.minAppsCache.delete(appId)
+
+        // Clear WebView state
+        clearWebviewState(appId)
+
+        logger.info(`Mini-app ${appId} removed from cache due to tab closure`)
+      }
     }
   }
 

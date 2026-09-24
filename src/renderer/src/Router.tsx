@@ -10,6 +10,8 @@ import TabsContainer from './components/Tab/TabContainer'
 import NavigationHandler from './handler/NavigationHandler'
 import { useOnboardingState } from './hooks/useOnboardingState'
 import { useNavbarPosition } from './hooks/useSettings'
+import MinAppPage from './pages/apps/MinAppPage'
+import MinAppsPage from './pages/apps/MinAppsPage'
 import FilesPage from './pages/files/FilesPage'
 import HomePage from './pages/home/HomePage'
 import KnowledgePage from './pages/knowledge/KnowledgePage'
@@ -37,6 +39,9 @@ const Router: FC = () => {
           <Route path="/paintings" element={<PaintingPage />} />
           {/* v0.3.3-2 笔记复活（V1 原样） */}
           <Route path="/notes" element={<NotesPage />} />
+          {/* v0.3.4 小程序页面（V1 原样：列表页 + 详情壳） */}
+          <Route path="/apps/:appId" element={<MinAppPage />} />
+          <Route path="/apps" element={<MinAppsPage />} />
         </Routes>
       </ErrorBoundary>
     )

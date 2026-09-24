@@ -1,30 +1,35 @@
 /**
  * v0.3.2 自 CS_V1 移植（启动台：顶栏"+"按钮的落地页，路由 /launchpad）。
  *
- * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的四张——知识库（/knowledge）、
- * 文件（/files）、翻译（/translate，v0.3.3 批次3 回归）与绘画（/paintings，
- * v0.3.3 批次4 回归）。上游的 Minapps 区同样不搬：依赖的 MinApp 组件本 fork
- * 不存在（小程序仍从侧栏固定区进入）。
+ * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的六张——小程序（/apps，v0.3.4 实装）、
+ * 知识库（/knowledge）、文件（/files）、翻译（/translate，v0.3.3 批次3 回归）、
+ * 绘画（/paintings，v0.3.3 批次4 回归）与笔记（/notes，v0.3.3-2 复活）。
+ * v0.3.4 补齐 V1 的 Minapps 区（固定 + 已打开的小程序磁贴，MinApp 组件 v0.3.4 已移植）。
  * 样式与交互照抄上游（6 列网格 + 悬停缩放；bgColor 用 v6 瞬态 prop $bgColor）。
  */
-import { FileSearch, Folder, Languages, NotepadText, Palette } from 'lucide-react'
+import App from '@renderer/components/MinApp/MinApp'
+import { useMinapps } from '@renderer/hooks/useMinapps'
+import { useRuntime } from '@renderer/hooks/useRuntime'
+import { FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette } from 'lucide-react'
 import type { FC } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
-interface AppMenuItem {
-  icon: React.ReactNode
-  text: string
-  path: string
-  bgColor: string
-}
-
 const LaunchpadPage: FC = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
+  const { pinned } = useMinapps()
+  const { openedKeepAliveMinapps } = useRuntime()
 
-  const appMenuItems: AppMenuItem[] = [
+  const appMenuItems = [
+    {
+      icon: <LayoutGrid size={32} className="icon" />,
+      text: t('title.apps'),
+      path: '/apps',
+      bgColor: 'linear-gradient(135deg, #8B5CF6, #A855F7)' // 小程序：紫色（V1 同色），代表多功能和灵活性
+    },
     {
       icon: <FileSearch size={32} className="icon" />,
       text: t('title.knowledge'),
@@ -58,6 +63,19 @@ const LaunchpadPage: FC = () => {
     }
   ]
 
+  // 合并并排序小程序列表（V1 原样：固定优先，其余已打开的追加）
+  const sortedMinapps = useMemo(() => {
+    const result = [...pinned]
+
+    openedKeepAliveMinapps.forEach((app) => {
+      if (!result.some((pinnedApp) => pinnedApp.id === app.id)) {
+        result.push(app)
+      }
+    })
+
+    return result
+  }, [openedKeepAliveMinapps, pinned])
+
   return (
     <Container>
       <Content>
@@ -74,6 +92,19 @@ const LaunchpadPage: FC = () => {
             ))}
           </Grid>
         </Section>
+
+        {sortedMinapps.length > 0 && (
+          <Section>
+            <SectionTitle>{t('launchpad.minapps')}</SectionTitle>
+            <Grid>
+              {sortedMinapps.map((app) => (
+                <AppWrapper key={app.id}>
+                  <App app={app} size={56} />
+                </AppWrapper>
+              ))}
+            </Grid>
+          </Section>
+        )}
       </Content>
     </Container>
   )
@@ -162,6 +193,19 @@ const AppName = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+`
+const AppWrapper = styled.div`
+  padding: 8px 4px;
+  border-radius: 8px;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 `
 
 export default LaunchpadPage

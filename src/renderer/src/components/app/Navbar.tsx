@@ -1,4 +1,4 @@
-import { isMac } from '@renderer/config/constant'
+import { isLinux, isMac, isWin } from '@renderer/config/constant'
 import { useFullscreen } from '@renderer/hooks/useFullscreen'
 import useNavBackgroundColor from '@renderer/hooks/useNavBackgroundColor'
 import { useRuntime } from '@renderer/hooks/useRuntime'
@@ -46,6 +46,15 @@ export const NavbarRight: FC<Props> = ({ children, ...props }) => {
   )
 }
 
+export const NavbarMain: FC<Props> = ({ children, ...props }) => {
+  const isFullscreen = useFullscreen()
+  return (
+    <NavbarMainContainer {...props} $isFullscreen={isFullscreen}>
+      {children}
+    </NavbarMainContainer>
+  )
+}
+
 export const NavbarHeader: FC<Props> = ({ children, ...props }) => {
   return <NavbarHeaderContent {...props}>{children}</NavbarHeaderContent>
 }
@@ -90,6 +99,19 @@ const NavbarRightContainer = styled.div<{ $isFullscreen: boolean }>`
   padding: 0 12px;
   justify-content: flex-end;
   flex: 1;
+`
+
+const NavbarMainContainer = styled.div<{ $isFullscreen: boolean }>`
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: ${isMac ? '20px' : 0};
+  padding-left: 10px;
+  font-weight: bold;
+  color: var(--color-text-1);
+  padding-right: ${({ $isFullscreen }) => ($isFullscreen ? '12px' : isWin ? '140px' : isLinux ? '120px' : '12px')};
 `
 
 const NavbarHeaderContent = styled.div`
