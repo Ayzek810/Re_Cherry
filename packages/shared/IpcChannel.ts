@@ -100,6 +100,9 @@ export enum IpcChannel {
   File_Mkdir = 'file:mkdir',
   File_Write = 'file:write',
   File_WriteWithId = 'file:writeWithId',
+  // v0.3.3-2：聊天页 generate_image 出图的内容寻址落盘（id 由渲染层按源串 sha256 给出，
+  // 同一张图重复投影只落一份——原先这批图只进 IMAGE 块元数据，文件页看不到）
+  File_SaveGeneratedImage = 'file:saveGeneratedImage',
   File_SaveImage = 'file:saveImage',
   File_Base64Image = 'file:base64Image',
   File_SaveBase64Image = 'file:saveBase64Image',
@@ -116,6 +119,8 @@ export enum IpcChannel {
   File_IsDirectory = 'file:isDirectory',
   File_ListDirectory = 'file:listDirectory',
   File_GetDirectoryStructure = 'file:getDirectoryStructure',
+  // v0.3.3-2 笔记（V1 原样）：校验/补全用户自选的笔记目录（主进程侧 handler 一直在，只是通道被删过）
+  File_ValidateNotesDirectory = 'file:validateNotesDirectory',
   File_CheckFileName = 'file:checkFileName',
   File_StartWatcher = 'file:startWatcher',
   File_StopWatcher = 'file:stopWatcher',

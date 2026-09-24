@@ -7,7 +7,7 @@
  * 不存在（小程序仍从侧栏固定区进入）。
  * 样式与交互照抄上游（6 列网格 + 悬停缩放；bgColor 用 v6 瞬态 prop $bgColor）。
  */
-import { FileSearch, Folder, Languages, Palette } from 'lucide-react'
+import { FileSearch, Folder, Languages, NotepadText, Palette } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -48,6 +48,13 @@ const LaunchpadPage: FC = () => {
       text: t('title.paintings'),
       path: '/paintings',
       bgColor: 'linear-gradient(135deg, #8B5CF6, #A78BFA)'
+    },
+    {
+      // v0.3.3-2 笔记复活：V1 的启动台同样带这一项（颜色/图标逐字照 V1）
+      icon: <NotepadText size={32} className="icon" />,
+      text: t('title.notes'),
+      path: '/notes',
+      bgColor: 'linear-gradient(135deg, #F97316, #FB923C)'
     }
   ]
 

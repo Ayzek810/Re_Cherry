@@ -9,7 +9,7 @@ import { getStoreSetting } from '@renderer/hooks/useSettings'
 import i18n from '@renderer/i18n'
 import { getEmbeddingDimensions } from '@renderer/services/embedding'
 import { lightComplete } from '@renderer/services/lightLlm'
-import type { Model, Provider } from '@renderer/types'
+import type { Assistant, Model, Provider } from '@renderer/types'
 import { isSystemProvider } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import { formatApiHost, getDefaultGroupName, removeSpecialCharactersForTopicName } from '@renderer/utils'
@@ -28,6 +28,7 @@ import { isEmpty, takeRight } from 'lodash'
 import {
   // getAssistantProvider,
   // getAssistantSettings,
+  getDefaultAssistant,
   getDefaultModel,
   getProviderByModel,
   getQuickModel
@@ -187,6 +188,50 @@ export async function fetchMessagesSummary({
     return result ? { text: result } : { text: null, error: i18n.t('error.no_response') }
   } catch (error: unknown) {
     return { text: null, error: getErrorMessage(error) }
+  }
+}
+
+/**
+ * 单条笔记的标题/摘要（v0.3.3-2 笔记移植，②薄适配）。
+ *
+ * V1 走 `AiProvider.completions`（老消息管线）；fork 统一走轻量内核一次性 completion
+ * ——与话题命名同一条路：无 session 残留、思考缺省 off。失败/无 key 一律返回 null
+ * （笔记的"AI 摘要"是可选增强，不该把错误抛到笔记页）。
+ */
+export async function fetchNoteSummary({
+  content,
+  assistant
+}: {
+  content: string
+  assistant?: Assistant
+}): Promise<string | null> {
+  let prompt = getStoreSetting('topicNamingPrompt') || i18n.t('prompts.title')
+  const resolvedAssistant = assistant || getDefaultAssistant()
+  const model = getQuickModel() || resolvedAssistant.model || getDefaultModel()
+
+  if (prompt && containsSupportedVariables(prompt)) {
+    prompt = await replacePromptVariables(prompt, model.name)
+  }
+
+  const provider = getProviderByModel(model)
+  if (!hasApiKey(provider)) return null
+
+  // V1 同口径：只取前 2000 字符、剥离图片引用
+  const purifiedContent = purifyMarkdownImages(content.substring(0, 2000))
+
+  try {
+    const { text } = await lightComplete({
+      provider: provider.id,
+      model: model.id,
+      system: prompt,
+      messages: [{ role: 'user', text: purifiedContent }],
+      maxTokens: 128,
+      source: 'cherry-note-summary'
+    })
+    return removeSpecialCharactersForTopicName(text) || null
+  } catch (error) {
+    logger.warn('fetchNoteSummary failed', error as Error)
+    return null
   }
 }
 

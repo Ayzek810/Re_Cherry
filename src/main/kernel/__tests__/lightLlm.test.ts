@@ -331,4 +331,54 @@ describe('lightStream', () => {
     // 流已结束 → 注册表已清空，迟到的取消不再有任何副作用。
     expect(() => abortLightStream('req-2')).not.toThrow()
   })
+
+  // v0.3.3-2「图片不落盘」：快捷助手声明 ephemeralImages 时，整轮必须包在附件仓的临时作用域里
+  //（准入前进入、流真正结束后才退出——读字节发生在流式过程中，提前退出会丢图）。
+  it('ephemeralImages：整轮包在"不落盘"作用域内；未声明时完全不碰附件仓', async () => {
+    const calls: string[] = []
+    let streamSawBegin = false
+    const makeEphemeralCtx = (): Context =>
+      ({
+        attachments: {
+          beginEphemeralImages: () => calls.push('begin'),
+          endEphemeralImages: () => calls.push('end')
+        },
+        reasoning: { resolveRequest: async (_p: string, _m: string, r?: string) => r },
+        llm: {
+          stream: async function* () {
+            streamSawBegin = calls.includes('begin')
+            yield finishStop
+          }
+        }
+      }) as unknown as Context
+
+    const images = [{ mediaType: 'image/png' as const, data: 'aGk=' }]
+    await lightStream(
+      makeEphemeralCtx(),
+      { provider: 'p', model: 'm', messages: [{ role: 'user', text: '看图' }], images, ephemeralImages: true },
+      () => {}
+    )
+    expect(streamSawBegin).toBe(true)
+    expect(calls).toEqual(['begin', 'end'])
+
+    // 流中途抛错也要退出作用域（finally），否则临时字节会一直留在内存里
+    const broken = makeEphemeralCtx()
+    ;(broken as unknown as { llm: { stream: () => AsyncGenerator<StreamChunk> } }).llm.stream = async function* () {
+      throw new Error('wire dead')
+    }
+    await lightStream(
+      broken,
+      { provider: 'p', model: 'm', messages: [{ role: 'user', text: '看图' }], images, ephemeralImages: true },
+      () => {}
+    )
+    expect(calls).toEqual(['begin', 'end', 'begin', 'end'])
+
+    // 未声明 ephemeralImages（主聊天/绘画语义：字节必须可回读）→ 不进作用域
+    await lightStream(
+      makeEphemeralCtx(),
+      { provider: 'p', model: 'm', messages: [{ role: 'user', text: '看图' }], images },
+      () => {}
+    )
+    expect(calls).toEqual(['begin', 'end', 'begin', 'end'])
+  })
 })

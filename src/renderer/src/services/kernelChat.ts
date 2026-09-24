@@ -8,6 +8,7 @@ import { fetchTopicEventsWithRetry, subscribeKernelSessionEvents } from '@render
 import {
   encodeImageFileForKernel,
   type KernelImageInput,
+  registerGeneratedImageFiles,
   syncKernelImageAttachment
 } from '@renderer/services/kernelImages'
 import { autoNameKernelTopic } from '@renderer/services/topicNaming'
@@ -753,6 +754,10 @@ function projectToolCall(topicId: string, event: Extract<SessionEvent, { type: '
  * 会话日志持久化、回放复现）；images 非全字符串或为空 = 非本工具的成功形状，
  * 返回 undefined 不投影。type 取 'url'（ImageBlock 渲染层按字符串直用，
  * data URL 与 http URL 同路）。
+ *
+ * v0.3.3-2（用户点名）：这批图**同时登记进文件仓**——按源串 sha256 内容寻址落一份 +
+ * `db.files` 一行，文件页才看得到聊天页的出图。内容寻址使回放/重开话题重投影时命中同一 id
+ * 直接跳过，既有的"不落盘以免堆积"顾虑（旧注释的说法）由这一条解决；登记失败不影响本块渲染。
  */
 function buildGenerateImageBlock(
   messageId: string,
@@ -765,6 +770,7 @@ function buildGenerateImageBlock(
   if (!Array.isArray(images) || images.length === 0 || !images.every((image) => typeof image === 'string')) {
     return undefined
   }
+  void registerGeneratedImageFiles(images as string[])
   return createImageBlock(messageId, {
     status: MessageBlockStatus.SUCCESS,
     metadata: { generateImageResponse: { type: 'url', images: images } }

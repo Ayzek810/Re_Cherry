@@ -327,6 +327,9 @@ const api = {
     mkdir: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_Mkdir, dirPath),
     write: (filePath: string, data: Uint8Array | string) => ipcRenderer.invoke(IpcChannel.File_Write, filePath, data),
     writeWithId: (id: string, content: string) => ipcRenderer.invoke(IpcChannel.File_WriteWithId, id, content),
+    // v0.3.3-2：生成图内容寻址落盘（id = 源串 sha256；同 id 同文件，回放不堆积）
+    saveGeneratedImage: (payload: { id: string; source: string }): Promise<unknown> =>
+      ipcRenderer.invoke(IpcChannel.File_SaveGeneratedImage, payload),
     open: (options?: OpenDialogOptions) => ipcRenderer.invoke(IpcChannel.File_Open, options),
     openPath: (path: string) => ipcRenderer.invoke(IpcChannel.File_OpenPath, path),
     save: (path: string, content: string | NodeJS.ArrayBufferView, options?: any) =>
@@ -351,6 +354,8 @@ const api = {
     isTextFile: (filePath: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.File_IsTextFile, filePath),
     isDirectory: (filePath: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.File_IsDirectory, filePath),
     getDirectoryStructure: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_GetDirectoryStructure, dirPath),
+    // v0.3.3-2 笔记（V1 原样）：用户自选笔记目录的校验/补全
+    validateNotesDirectory: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_ValidateNotesDirectory, dirPath),
     listDirectory: (dirPath: string, options?: DirectoryListOptions) =>
       ipcRenderer.invoke(IpcChannel.File_ListDirectory, dirPath, options),
     checkFileName: (dirPath: string, fileName: string, isFile: boolean) =>

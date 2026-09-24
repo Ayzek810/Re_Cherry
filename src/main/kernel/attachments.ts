@@ -264,10 +264,30 @@ export function parseImageAttachmentRef(input: unknown): ImageAttachmentRef {
 export class CherryAttachmentStore extends AttachmentStore {
   readonly imageLimits = IMAGE_ATTACHMENT_LIMITS
   private readonly root: string
+  /**
+   * 「图片不落盘」作用域（v0.3.3-2）：深度计数 + 本轮临时字节。
+   * 快捷助手的语义是**不写任何持久化存储**（它不建会话、消息不留存），可它粘贴的图片原先仍会
+   * 经 `saveImage` 落到 `<kernelDir>/attachments/<sha256>.<ext>` —— 结果是一堆查不到、删不掉、
+   * 也永远不会被引用的孤儿字节。现在由调用方（lightLlm 的轻通路）在整轮请求外包一层作用域，
+   * 期间 `saveImage` 只进内存；作用域退出即丢弃（引用仍是同一条 sha256 ref，校验口径不变）。
+   */
+  private ephemeralDepth = 0
+  private readonly ephemeralImages = new Map<string, { ref: ImageAttachmentRef; data: Uint8Array }>()
 
   constructor(ctx: Context, options: { root: string }) {
     super(ctx)
     this.root = options.root
+  }
+
+  /** 进入「图片不落盘」作用域（可重入）。 */
+  beginEphemeralImages(): void {
+    this.ephemeralDepth += 1
+  }
+
+  /** 退出作用域；计数归零时丢弃全部临时字节（本轮请求的有效期到此为止）。 */
+  endEphemeralImages(): void {
+    this.ephemeralDepth = Math.max(0, this.ephemeralDepth - 1)
+    if (this.ephemeralDepth === 0) this.ephemeralImages.clear()
   }
 
   override async validateImage(input: SaveImageAttachment): Promise<void> {
@@ -278,6 +298,21 @@ export class CherryAttachmentStore extends AttachmentStore {
     // saveImage 也执行完整校验（防直调绕过批量入口）；头部探测成本低，重复解析无碍。
     const probed = probeWithLimits(input, this.imageLimits)
     const digest = createHash('sha256').update(input.data).digest('hex')
+    const ref: ImageAttachmentRef = {
+      attachmentId: AttachmentId(digest),
+      mediaType: probed.mediaType,
+      bytes: input.data.byteLength,
+      width: probed.width,
+      height: probed.height,
+      ...(input.name === undefined ? {} : { name: input.name })
+    }
+
+    // 临时作用域：只留内存，不写盘（校验/限额/ref 形状与持久化路径完全一致）。
+    if (this.ephemeralDepth > 0) {
+      this.ephemeralImages.set(digest, { ref, data: input.data })
+      return ref
+    }
+
     const fileName = `${digest}${EXT_BY_MEDIA_TYPE[probed.mediaType]}`
     await mkdir(this.root, { recursive: true })
     // 内容寻址：同名即同字节；临时文件 + rename 保证半写不落终名，并发写同内容安全。
@@ -292,18 +327,29 @@ export class CherryAttachmentStore extends AttachmentStore {
         'ATTACHMENT_WRITE_FAILED'
       )
     }
-    return {
-      attachmentId: AttachmentId(digest),
-      mediaType: probed.mediaType,
-      bytes: input.data.byteLength,
-      width: probed.width,
-      height: probed.height,
-      ...(input.name === undefined ? {} : { name: input.name })
-    }
+    return ref
   }
 
   override async readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment> {
     signal?.throwIfAborted()
+    // 临时附件优先（内存里没有才走盘）：引用核验与盘上路径同口径（字节量 + 摘要）。
+    const ephemeral = this.ephemeralImages.get(ref.attachmentId)
+    if (ephemeral !== undefined) {
+      if (ephemeral.data.byteLength !== ref.bytes) {
+        throw new AttachmentError(
+          `Image attachment ${ref.attachmentId} is ${ephemeral.data.byteLength} bytes, but its reference records ${ref.bytes}.`,
+          'ATTACHMENT_CORRUPT'
+        )
+      }
+      if (createHash('sha256').update(ephemeral.data).digest('hex') !== ref.attachmentId) {
+        throw new AttachmentError(
+          `Image attachment ${ref.attachmentId} failed its digest verification.`,
+          'ATTACHMENT_CORRUPT'
+        )
+      }
+      signal?.throwIfAborted()
+      return { ref, data: ephemeral.data }
+    }
     const filePath = join(this.root, `${ref.attachmentId}${EXT_BY_MEDIA_TYPE[ref.mediaType]}`)
     let data: Uint8Array
     try {

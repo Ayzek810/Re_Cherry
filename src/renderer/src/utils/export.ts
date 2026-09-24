@@ -8,6 +8,7 @@ import { setExportState } from '@renderer/store/runtime'
 import type { Topic } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import { removeSpecialCharactersForFileName } from '@renderer/utils/file'
+import { captureScrollableAsBlob, captureScrollableAsDataURL } from '@renderer/utils/image'
 import { convertMathFormula, markdownToPlainText } from '@renderer/utils/markdown'
 import { getCitationContent, getMainTextContent, getThinkingContent } from '@renderer/utils/messageUtils/find'
 import { markdownToBlocks } from '@tryfabric/martian'
@@ -919,4 +920,104 @@ async function createSiyuanDoc(
   }
 
   return data.data
+}
+
+// ---------------------------------------------------------------------------
+// 笔记导出（v0.3.3-2 笔记移植，V1 原样；仅去掉 obsidian 一路——它依赖 fork 里没有的
+// ObsidianExportDialog/Popup，属另一条未移植链，菜单项已同步删掉）
+// ---------------------------------------------------------------------------
+
+const exportNoteAsMarkdown = async (noteName: string, content: string): Promise<void> => {
+  const markdown = `# ${noteName}\n\n${content}`
+  const fileName = removeSpecialCharactersForFileName(noteName) + '.md'
+  const result = await window.api.file.save(fileName, markdown)
+  if (result) {
+    window.toast.success(i18n.t('message.success.markdown.export.specified'))
+  }
+}
+
+const getScrollableElement = (): HTMLElement | null => {
+  const notesPage = document.querySelector('#notes-page')
+  if (!notesPage) return null
+
+  const allDivs = notesPage.querySelectorAll('div')
+  for (const div of Array.from(allDivs)) {
+    const style = window.getComputedStyle(div)
+    if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+      if (div.querySelector('.ProseMirror')) {
+        return div as HTMLElement
+      }
+    }
+  }
+  return null
+}
+
+const getScrollableRef = (): { current: HTMLElement } | null => {
+  const element = getScrollableElement()
+  if (!element) {
+    window.toast.warning(i18n.t('notes.no_content_to_copy'))
+    return null
+  }
+  return { current: element }
+}
+
+const exportNoteAsImageToClipboard = async (): Promise<void> => {
+  const scrollableRef = getScrollableRef()
+  if (!scrollableRef) return
+
+  await captureScrollableAsBlob(scrollableRef, async (blob) => {
+    if (blob) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      window.toast.success(i18n.t('common.copied'))
+    }
+  })
+}
+
+const exportNoteAsImageFile = async (noteName: string): Promise<void> => {
+  const scrollableRef = getScrollableRef()
+  if (!scrollableRef) return
+
+  const dataUrl = await captureScrollableAsDataURL(scrollableRef)
+  if (dataUrl) {
+    const fileName = removeSpecialCharactersForFileName(noteName)
+    await window.api.file.saveImage(fileName, dataUrl)
+  }
+}
+
+export interface NoteExportOptions {
+  node: { name: string; externalPath: string }
+  platform: 'markdown' | 'docx' | 'notion' | 'yuque' | 'joplin' | 'siyuan' | 'copyImage' | 'exportImage'
+}
+
+export const exportNote = async ({ node, platform }: NoteExportOptions): Promise<void> => {
+  try {
+    const content = await window.api.file.readExternal(node.externalPath)
+
+    switch (platform) {
+      case 'copyImage':
+        return await exportNoteAsImageToClipboard()
+      case 'exportImage':
+        return await exportNoteAsImageFile(node.name)
+      case 'markdown':
+        return await exportNoteAsMarkdown(node.name, content)
+      case 'docx':
+        void window.api.export.toWord(`# ${node.name}\n\n${content}`, removeSpecialCharactersForFileName(node.name))
+        return
+      case 'notion':
+        await exportMessageToNotion(node.name, content)
+        return
+      case 'yuque':
+        await exportMarkdownToYuque(node.name, `# ${node.name}\n\n${content}`)
+        return
+      case 'joplin':
+        await exportMarkdownToJoplin(node.name, content)
+        return
+      case 'siyuan':
+        await exportMarkdownToSiyuan(node.name, `# ${node.name}\n\n${content}`)
+        return
+    }
+  } catch (error) {
+    logger.error(`Failed to export note to ${platform}:`, error as Error)
+    throw error
+  }
 }

@@ -141,7 +141,9 @@ const titleKeyMap = {
   knowledge: 'knowledge.base',
   settings: 'title.settings',
   translate: 'title.translate',
-  paintings: 'title.paintings'
+  paintings: 'title.paintings',
+  // v0.3.3-2 笔记复活：标签页标题（V1 同键）
+  notes: 'title.notes'
 } as const
 
 export const getTitleLabel = (key: string): string => {
@@ -164,7 +166,9 @@ const sidebarIconKeyMap = {
   files: 'files.title',
   knowledge: 'knowledge.base',
   translate: 'translate.title',
-  paintings: 'paintings.title'
+  paintings: 'paintings.title',
+  // v0.3.3-2 笔记复活（V1 同键）
+  notes: 'notes.title'
 } as const
 
 export const getSidebarIconLabel = (key: string): string => {

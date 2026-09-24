@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { Context } from '@deepseek-ai/cordis'
@@ -245,5 +245,54 @@ describe('CherryAttachmentStore', () => {
   it('maps media types to file extensions', () => {
     expect(attachmentFileExtension('image/png')).toBe('.png')
     expect(attachmentFileExtension('image/jpeg')).toBe('.jpg')
+  })
+
+  describe('图片不落盘作用域（v0.3.3-2，快捷助手）', () => {
+    it('作用域内 saveImage 只进内存：盘上没有文件，readImage 仍能读回同字节', async () => {
+      const bytes = pngBytes(32, 24, 40)
+      store.beginEphemeralImages()
+      try {
+        const ref = await store.saveImage({ data: bytes, mediaType: 'image/png' })
+        expect(ref.attachmentId).toMatch(/^[0-9a-f]{64}$/)
+
+        // 盘上没有这个文件（这正是"不落盘"的定义）
+        await expect(readFile(join(root, `${ref.attachmentId}.png`))).rejects.toMatchObject({ code: 'ENOENT' })
+        // 但本轮请求读得到字节，且引用核验口径与盘上路径一致
+        const stored = await store.readImage(ref)
+        expect(Buffer.from(stored.data).equals(Buffer.from(bytes))).toBe(true)
+        await expect(
+          store.readImageRequest(ref, { maxPixels: 2048 * 2048, maxBytes: 1024 * 1024 })
+        ).resolves.toMatchObject({ bytes: bytes.byteLength })
+      } finally {
+        store.endEphemeralImages()
+      }
+    })
+
+    it('作用域退出即丢弃：同一 ref 变成 ATTACHMENT_NOT_FOUND（没有孤儿字节）', async () => {
+      const bytes = pngBytes(16, 16, 10)
+      store.beginEphemeralImages()
+      const ref = await store.saveImage({ data: bytes, mediaType: 'image/png' })
+      store.endEphemeralImages()
+
+      await expect(store.readImage(ref)).rejects.toMatchObject({ code: 'ATTACHMENT_NOT_FOUND' })
+      const entries = await readdir(root).catch(() => [] as string[])
+      expect(entries).toHaveLength(0)
+    })
+
+    it('可重入：内层退出不影响外层，最外层退出才丢弃；作用域外照旧落盘', async () => {
+      const bytes = pngBytes(20, 20, 5)
+      store.beginEphemeralImages()
+      store.beginEphemeralImages()
+      const ref = await store.saveImage({ data: bytes, mediaType: 'image/png' })
+      store.endEphemeralImages()
+      await expect(store.readImage(ref)).resolves.toMatchObject({ ref })
+      store.endEphemeralImages()
+      await expect(store.readImage(ref)).rejects.toMatchObject({ code: 'ATTACHMENT_NOT_FOUND' })
+
+      const durable = await store.saveImage({ data: bytes, mediaType: 'image/png' })
+      expect(durable.attachmentId).toBe(ref.attachmentId)
+      const entries = await readdir(root)
+      expect(entries).toEqual([`${durable.attachmentId}.png`])
+    })
   })
 })

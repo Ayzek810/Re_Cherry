@@ -14,6 +14,7 @@ import FilesPage from './pages/files/FilesPage'
 import HomePage from './pages/home/HomePage'
 import KnowledgePage from './pages/knowledge/KnowledgePage'
 import LaunchpadPage from './pages/launchpad/LaunchpadPage'
+import NotesPage from './pages/notes/NotesPage'
 import { OnboardingPage } from './pages/onboarding'
 import PaintingPage from './pages/paintings/PaintingPage'
 import SettingsPage from './pages/settings/SettingsPage'
@@ -34,6 +35,8 @@ const Router: FC = () => {
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/translate" element={<TranslatePage />} />
           <Route path="/paintings" element={<PaintingPage />} />
+          {/* v0.3.3-2 笔记复活（V1 原样） */}
+          <Route path="/notes" element={<NotesPage />} />
         </Routes>
       </ErrorBoundary>
     )
