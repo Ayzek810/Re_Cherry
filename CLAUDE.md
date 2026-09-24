@@ -1,6 +1,6 @@
 # AI Assistant Guide
 
-> **Re_Cherry** is a personal fork of Cherry Studio v1.9.11, heavily trimmed, with the chat/agent message path unified onto an in-process **DSH (DeepSeek Harness) Cordis kernel**. Most upstream Cherry Studio documentation (agent pages, MCP, knowledge base, apiServer, updater, Copilot, Pyodide, OVMS, selection toolbar, Drizzle agents DB) **no longer applies** — those subsystems have been removed. When in doubt, read the code, not this file's history.
+> **Re_Cherry** is a personal fork of Cherry Studio v1.9.11, heavily trimmed, with the chat/agent message path unified onto an in-process **DSH (DeepSeek Harness) Cordis kernel**. Most upstream Cherry Studio documentation (agent pages, apiServer, updater, Copilot, Pyodide, OVMS, selection toolbar, Drizzle agents DB) **no longer applies as written** — those subsystems were removed, while others (MCP · 知识库 · 搜索 · skills · 翻译/绘画/笔记/文件页) were **re-implemented the fork's way** and are live. When in doubt, read the code, not this file's history.
 >
 > **Layer contract** — this file carries only what every request needs: conduct, environment facts, hard invariants as one-liners, and navigation. Rules (判据, with their triggers) live in `docs/经验教训.md`, cited as `§N.M`; evidence lives in `docs/archive/`; outstanding debts in `docs/未清债.md`. A rule that is not needed on *every* request does not belong here.
 
@@ -122,7 +122,7 @@ Renderer side: `services/kernelChat.ts` subscribes to kernel `session/event` and
 
 - **Redux**: the authoritative slice list is the `combineReducers` call in `src/renderer/src/store/index.ts` — read it there. Two state keys are not named after their files: `messages` ← `newMessage.ts`, `messageBlocks` ← `messageBlock.ts`.
 - **Migrations** (`store/migrate.ts`): every branch is reachable (redux-persist runs all keys `currentVersion >= key > inboundVersion`); a throw inside a branch discards the whole persisted state. Never delete branches; adding one means bumping `version` in `index.ts` and the highest key in `migrate.ts` together — the current `version` lives in `index.ts`, not here. `blacklist` in the persist config means "not written to localStorage", **not** "unused".
-- **IndexedDB (Dexie)**, `src/renderer/src/databases/index.ts`: `files`, `settings`, `knowledge_notes`, `quick_phrases`. Old chat tables are dropped in later schema versions — chat data lives in kernel SQLite (`{userData}/kernel/sessions.db` session event log; `{userData}/kernel/settings.json` pi-ai routes). Provider keys: `{userData}/provider-keys.json` (encrypted).
+- **IndexedDB (Dexie)**, `src/renderer/src/databases/index.ts`（表清单以该文件的 `db.version(n).stores` 为准）: `files` · `settings` · `knowledge_notes` · `quick_phrases` · `translate_records`（翻译页历史，v15） · `paintings`（绘画历史，v16）。旧聊天表在后续 schema 版本里 drop —— 聊天数据在内核 SQLite（`{userData}/kernel/sessions.db` 会话事件日志；`{userData}/kernel/settings.json` pi-ai 路由）。Provider keys：`{userData}/provider-keys.json`（加密）。笔记**不用 Dexie**（纯 `{userData}/Data/Notes/*.md`，目录由 `initAppDataDir`/`FileStorage` 建）。
 
 ### IPC
 
@@ -146,7 +146,7 @@ Winston with daily rotation, files in `userData/logs/`. Never `console.log`.
 | Frontend | React 19, TypeScript ~5.8 |
 | UI | Ant Design 5.27, styled-components 6, TailwindCSS v4 |
 | State | Redux Toolkit 2, redux-persist 6, Dexie 4 (IndexedDB) |
-| Rich Text | none (TipTap / RichEditor / `extension-table-plus` removed with the editor) |
+| Rich Text | TipTap 3.2 `components/RichEditor/**`（v0.3.3-2 随笔记复活整链回归；表格扩展 `@cherrystudio/extension-table-plus` 以源码**内联**在 `RichEditor/table-plus/`，另有 V1 的 drag-handle 补丁）|
 | AI Kernel | dsh `@deepseek-ai/dsh-*` 0.1.1-rc.2 + `@deepseek-ai/cordis` 4 |
 | Build / Test | electron-vite 5 + rolldown-vite 7 · Vitest 3 · Playwright · ESLint 9 + oxlint + Biome 2 |
 | Logging / Tracing | Winston + daily-rotate / OpenTelemetry |
@@ -159,7 +159,7 @@ Winston with daily rotation, files in `userData/logs/`. Never `console.log`.
 - **Naming**: components `PascalCase.tsx`; services/hooks/utils `camelCase.ts`; tests `*.test.ts(x)` beside source or in `__tests__/`.
 - **i18n**: all user-visible strings through `i18next`, never hardcoded. Adding a language means re-adding the locale file, the `i18n/index.ts` import, the `LanguageVarious` union, the antd locale case, the general-settings option, and the emoji-picker maps.
 - **pnpm config lives in `pnpm-workspace.yaml`, not a `pnpm` field of `package.json`** — pnpm 10.6+ ignores that field, pnpm 11 stops reading it. `overrides` (security pins), `patchedDependencies` and `onlyBuiltDependencies` live there; moving them back silently disables them at the next lockfile regen.
-- **Patches** (`patches/` ↔ `patchedDependencies` 1:1, currently 6): `antd` (icon import) · `atomically` · `file-stream-rotator` (log rotation) · `libsql` (win32-arm64 native resolution) · `node-pty` (drops the `SpectreMitigation` block that demands MSB8040 libs; transitive dep — `§5.5`) · `@deepseek-ai/dsh-llm-pi-ai` (**one-line neutral gate only**, zero fork semantics — invariant 9). **On any kernel-package upgrade, re-run these and nothing else:** `__tests__/dsmlRepair.test.ts` + one real DSML session; `__tests__/thinkingReplay.test.ts` + `tools/branch-jump-artifacts/probe-e2e-thinking-trim.js` (`§4.14`).
+- **Patches** (`patches/` ↔ `patchedDependencies` 1:1，当前 9 条，静态检查 `check-configs` 会强制对齐)：`antd`（icon import）· `atomically` · `file-stream-rotator`（日志轮转）· `libsql`（win32-arm64 原生解析）· `node-pty`（去掉要求 MSB8040 库的 `SpectreMitigation` 块；传递依赖 — `§5.5`）· `ppu-paddle-ocr` · `@deepseek-ai/dsh-llm-pi-ai`（**只许一行中性门**，零 fork 语义 — 不变量 9）· `@deepseek-ai/dsh-subprocess-local` · `@tiptap/extension-drag-handle`（v0.3.3-2 随笔记/富文本复活；drag handle 在编辑区滚动时隐藏）。**内核包升级时只需重跑这两组：** `__tests__/dsmlRepair.test.ts` + 一次真实 DSML 会话；`__tests__/thinkingReplay.test.ts` + `tools/branch-jump-artifacts/probe-e2e-thinking-trim.js`（`§4.14`）。
 
 ## Testing
 
