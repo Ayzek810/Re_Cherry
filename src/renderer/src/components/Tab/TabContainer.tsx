@@ -19,7 +19,7 @@ import { ThemeMode } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { Dropdown, Tooltip } from 'antd'
 import type { LRUCache } from 'lru-cache'
-import { Folder, Home, LayoutGrid, Monitor, Moon, Pin, Settings, Sun, X } from 'lucide-react'
+import { Folder, Home, LayoutGrid, Monitor, Moon, NotepadText, Pin, Settings, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -80,6 +80,9 @@ const getTabIcon = (
       return <Folder size={14} />
     case 'settings':
       return <Settings size={14} />
+    case 'notes':
+      // v0.3.3-2 笔记复活：标签页图标（V1 同图标）
+      return <NotepadText size={14} />
     default:
       return null
   }

@@ -6,6 +6,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { audioExts, documentExts, HOME_CHERRY_DIR, imageExts, MB, textExts, videoExts } from '@shared/config/constant'
+import { parseDataUrl } from '@shared/utils'
 import type { FileMetadata, FileType, NotesTreeNode } from '@types'
 import { FILE_TYPE } from '@types'
 import chardet from 'chardet'
@@ -106,6 +107,89 @@ export function isPathInside(childPath: string, parentPath: string): boolean {
 export function getFileType(ext: string): FileType {
   ext = ext.toLowerCase()
   return fileTypeMap.get(ext) || FILE_TYPE.OTHER
+}
+
+/**
+ * 下载落盘的文件名与后缀解析（纯函数，便于单测）。
+ *
+ * 背景（v0.3.3-2 修"AI 生成的图片没被文件页纳入"）：`downloadFile` 原先在 `preferContentType`
+ * 为真时**无条件把 Content-Type 推出的后缀追加**到文件名尾部。URL 已带 `.png`、响应头却是
+ * `application/octet-stream`（→ `.bin`）时，文件名成了 `xxx.png.bin`、`path.extname` 取到 `.bin`、
+ * `getFileType('.bin')` = `FILE_TYPE.OTHER` —— 真机上就是"出图了，但文件页「图片」里看不到"。
+ *
+ * 现行口径：
+ * - 文件名没有后缀 → 用 Content-Type 的后缀（未知则 `.bin`，与旧行为一致）；
+ * - 文件名已有后缀、Content-Type 给出**确定**后缀（非 `.bin`）→ 换成它（保留"以响应头为准"的原意）；
+ * - 文件名已有后缀、Content-Type 未知 → **保留文件名自己的后缀**（不再叠加）。
+ */
+export function resolveDownloadedFileName(
+  filename: string,
+  contentTypeExt: string,
+  preferContentType: boolean
+): { fileName: string; ext: string } {
+  const currentExt = extnameOf(filename)
+  const declaredExt = contentTypeExt.startsWith('.') ? contentTypeExt.toLowerCase() : ''
+  const declaredIsMeaningful = declaredExt !== '' && declaredExt !== '.bin'
+
+  if (currentExt === '') {
+    const ext = declaredExt === '' ? '.bin' : declaredExt
+    return { fileName: filename + ext, ext }
+  }
+
+  if (preferContentType && declaredIsMeaningful && currentExt.toLowerCase() !== declaredExt) {
+    return { fileName: filename.slice(0, -currentExt.length) + declaredExt, ext: declaredExt }
+  }
+
+  return { fileName: filename, ext: currentExt }
+}
+
+/** `path.extname` 的等价物（自持实现：本函数是纯字符串逻辑，不依赖 node:path 的 mock 环境）。 */
+function extnameOf(filename: string): string {
+  const lastSeparator = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'))
+  const lastDot = filename.lastIndexOf('.')
+  if (lastDot <= lastSeparator + 1) return ''
+  return filename.slice(lastDot)
+}
+
+/** 轻量图像平面（`images/generations`）返回的图片字符串形态。 */
+export interface ParsedGeneratedImageSource {
+  kind: 'dataUrl' | 'url' | 'base64'
+  /** data URL 里的媒体类型（仅 dataUrl 形态有）。 */
+  mediaType?: string
+  /** dataUrl / base64 形态的裸 base64。 */
+  base64?: string
+  /** url 形态的 http(s) 地址。 */
+  url?: string
+}
+
+/**
+ * 生成图字符串 → 落盘所需形状（纯函数，便于单测）。
+ *
+ * v0.3.3-2：聊天页 `generate_image` 的 `images[]` 是三种形态之一——data URL、裸 base64
+ * （OpenAI 兼容面的 `b64_json`）、或 http(s) URL；这三种都要能落成 `<id><ext>` 进文件仓。
+ * 认不出来就返回 undefined（调用方跳过，不猜）。
+ */
+export function parseGeneratedImageSource(source: string): ParsedGeneratedImageSource | undefined {
+  const value = typeof source === 'string' ? source.trim() : ''
+  if (value.length === 0) return undefined
+
+  if (value.startsWith('data:')) {
+    const parsed = parseDataUrl(value)
+    if (parsed === null || parsed === undefined || parsed.data.length === 0) return undefined
+    return {
+      kind: 'dataUrl',
+      ...(parsed.mediaType === undefined ? {} : { mediaType: parsed.mediaType }),
+      base64: parsed.data
+    }
+  }
+
+  if (/^https?:\/\//i.test(value)) return { kind: 'url', url: value }
+
+  // 裸 base64（b64_json）：只收"看着像 base64 且够长"的串，避免把错误文案当图存下来
+  const compact = value.replace(/\s+/g, '')
+  if (compact.length > 64 && /^[A-Za-z0-9+/]+={0,2}$/.test(compact)) return { kind: 'base64', base64: compact }
+
+  return undefined
 }
 
 export function getAllFiles(dirPath: string, arrayOfFiles: FileMetadata[] = []): FileMetadata[] {

@@ -339,11 +339,15 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         })
 
         // v0.3.3-2：粘贴的图片同时进消息块（否则只在 images 载荷里给模型看，会话里不显示）。
+        // **必须显式给 SUCCESS**：`createBaseMessageBlock` 的默认状态是 PROCESSING，而 ImageBlock
+        // 只渲染 PENDING/STREAMING/SUCCESS —— 不给状态时整块 `return null`，真机上就是"我发出去的图
+        // 在聊天里什么都不显示"（同处的文字块都显式带了 status，所以字能显示、图不能）。
         const imageBlocks =
           clipboardImage !== null
             ? [
                 createImageBlock(userMessage.id, {
-                  url: `data:${clipboardImage.mediaType};base64,${clipboardImage.data}`
+                  url: `data:${clipboardImage.mediaType};base64,${clipboardImage.data}`,
+                  status: MessageBlockStatus.SUCCESS
                 })
               ]
             : []
@@ -513,6 +517,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
             messages: context,
             reasoningEffort,
             // v0.3.3 批次5：随触发消息上行的图片（粘贴收图；主聊天同语义——附最后一条 user）
+            // v0.3.3-2：快捷助手不写持久化 ⇒ 图片声明为"不落盘"（只在本轮请求内存里，见 lightLlm）。
             ...(clipboardImage !== null
               ? {
                   images: [
@@ -524,6 +529,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
                   ]
                 }
               : {}),
+            ephemeralImages: true,
             source: 'cherry-quick-assistant'
           },
           (event) => {

@@ -203,3 +203,45 @@ export async function syncKernelImageAttachment(ref: KernelImageRef): Promise<Fi
     return null
   }
 }
+
+/** 生成图的内容寻址 id（源串 sha256 十六进制）：同一张图重复投影只落一份。 */
+export async function generatedImageFileId(source: string): Promise<string> {
+  const bytes = new TextEncoder().encode(source)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
+ * 把**聊天页** `generate_image` 的出图登记进文件仓（v0.3.3-2，用户点名："聊天页的绘图同样没有被算进去"）。
+ *
+ * 背景：这批图原先只作为 IMAGE 块的元数据存在（会话日志里的 data URL / URL），**不落盘、不进
+ * `db.files`** —— 于是文件页永远看不到它们；当初不落盘的理由是"回放重落盘会堆积重复文件"
+ *（`saveBase64Image` 每次生成新 uuid）。这里用**内容寻址 id**（源串 sha256）解决：同图同 id、
+ * 行已存在即跳过，回放/重开话题都不再产生新文件。
+ *
+ * 失败只记日志：生成图已经能在会话里看到，登记进文件仓是"可发现性"的增强，不该把投影打断。
+ */
+export async function registerGeneratedImageFiles(images: readonly string[]): Promise<FileMetadata[]> {
+  const registered: FileMetadata[] = []
+  for (const source of images) {
+    try {
+      const id = await generatedImageFileId(source)
+      const existing = await db.files.get(id)
+      if (existing !== undefined) {
+        registered.push(existing)
+        continue
+      }
+      const file = (await window.api.file.saveGeneratedImage({ id, source })) as FileMetadata
+      await db.files.put(file)
+      registered.push(file)
+    } catch (error) {
+      logger.warn('kernelImages: failed to register a generated image into the file store', error as Error)
+    }
+  }
+  if (registered.length > 0) {
+    logger.warn(`kernelImages: registered ${registered.length} generated image file(s)`)
+  }
+  return registered
+}

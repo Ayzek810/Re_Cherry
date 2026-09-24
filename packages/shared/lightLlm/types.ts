@@ -44,6 +44,12 @@ export interface LightLlmCall {
    * 非视觉模型由 wire 自动降级为占位文本（内核既有机制）。
    */
   images?: LightLlmImage[]
+  /**
+   * 图片**不落盘**（v0.3.3-2，快捷助手专用）：为真时本轮的图片只留在内存里供这一次请求读取，
+   * 请求结束即丢弃——不写 `<kernelDir>/attachments`，也不产生任何可被回放引用的持久字节。
+   * 缺省（false/undefined）= 照旧落盘：会话日志里的 ref 需要字节可回读，主聊天/绘画不得开启。
+   */
+  ephemeralImages?: boolean
   maxTokens?: number
   /**
    * 显式思考档位（内核档位拼写：off/low/medium/high/max）。

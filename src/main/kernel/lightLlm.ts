@@ -42,6 +42,29 @@ function sanitizeSource(source: string | undefined, fallback: string): string {
   return tag.length > 0 ? tag.slice(0, 64) : fallback
 }
 
+/** 「图片不落盘」作用域的最小缝（见 CherryAttachmentStore.beginEphemeralImages）。 */
+interface EphemeralImageScope {
+  beginEphemeralImages: () => void
+  endEphemeralImages: () => void
+}
+
+/**
+ * 调用方声明 `ephemeralImages: true` 且真的带图时，取出附件仓的临时作用域（v0.3.3-2）。
+ * 快捷助手是**不写持久化**的通路：它的图片原先会落成 `<kernelDir>/attachments/<sha256>.<ext>`
+ * 的孤儿字节（没会话、没引用、也删不掉）。作用域必须**包住整轮请求**——准入时入内存，
+ * 真正读字节发生在流式请求过程中，所以不能在 assembleCall 返回时就退出。
+ * 附件仓不支持该缝（例如测试替身）时返回 undefined，行为与从前一致。
+ */
+function ephemeralImageScope(ctx: Context, call: LightLlmCall): EphemeralImageScope | undefined {
+  if (call.ephemeralImages !== true) return undefined
+  if (call.images === undefined || call.images.length === 0) return undefined
+  const candidate = ctx.attachments as unknown as Partial<EphemeralImageScope>
+  if (typeof candidate?.beginEphemeralImages !== 'function' || typeof candidate?.endEphemeralImages !== 'function') {
+    return undefined
+  }
+  return candidate as EphemeralImageScope
+}
+
 async function assembleCall(
   ctx: Context,
   call: LightLlmCall,
@@ -110,31 +133,37 @@ export async function lightOneShot(
   ctx: Context,
   call: LightLlmCall
 ): Promise<{ text: string; usage?: LightLlmUsage; finishKind: string }> {
-  const { options } = await assembleCall(ctx, call, 'off')
-  const assembler = new BlockAssembler()
-  for await (const chunk of ctx.llm.stream(options)) {
-    assembler.push(chunk)
+  const ephemeral = ephemeralImageScope(ctx, call)
+  ephemeral?.beginEphemeralImages()
+  try {
+    const { options } = await assembleCall(ctx, call, 'off')
+    const assembler = new BlockAssembler()
+    for await (const chunk of ctx.llm.stream(options)) {
+      assembler.push(chunk)
+    }
+    const finish = assembler.finish
+    if (finish.kind === 'error' || finish.kind === 'aborted') {
+      throw new Error(finish.failure.message)
+    }
+    const text = assembler
+      .blocks()
+      .filter((block) => block.type === 'text')
+      .map((block) => (block.type === 'text' ? block.text : ''))
+      .join('')
+    const usage = assembler.usage
+      ? { inputTokens: assembler.usage.inputTokens, outputTokens: assembler.usage.outputTokens }
+      : undefined
+    logger.debug('lightLlm one-shot done', {
+      source: sanitizeSource(call.source, 'cherry-light'),
+      provider: call.provider,
+      model: call.model,
+      chars: text.length,
+      finishKind: finish.kind
+    })
+    return { text, usage, finishKind: finish.kind }
+  } finally {
+    ephemeral?.endEphemeralImages()
   }
-  const finish = assembler.finish
-  if (finish.kind === 'error' || finish.kind === 'aborted') {
-    throw new Error(finish.failure.message)
-  }
-  const text = assembler
-    .blocks()
-    .filter((block) => block.type === 'text')
-    .map((block) => (block.type === 'text' ? block.text : ''))
-    .join('')
-  const usage = assembler.usage
-    ? { inputTokens: assembler.usage.inputTokens, outputTokens: assembler.usage.outputTokens }
-    : undefined
-  logger.debug('lightLlm one-shot done', {
-    source: sanitizeSource(call.source, 'cherry-light'),
-    provider: call.provider,
-    model: call.model,
-    chars: text.length,
-    finishKind: finish.kind
-  })
-  return { text, usage, finishKind: finish.kind }
 }
 
 /** 在途流式补全的取消注册表：requestId → AbortController（Dsh_StreamAbort 命中）。 */
@@ -163,6 +192,9 @@ export async function lightStream(
   if (controller !== undefined && requestId !== undefined) {
     streamAborts.set(requestId, controller)
   }
+  // 图片不落盘作用域（v0.3.3-2）：必须包住整轮——准入时入内存，读字节发生在流式请求过程中。
+  const ephemeral = ephemeralImageScope(ctx, call)
+  ephemeral?.beginEphemeralImages()
   try {
     const { options } = await assembleCall(ctx, call, undefined)
     const streamOptions = controller === undefined ? options : { ...options, signal: controller.signal }
@@ -191,8 +223,9 @@ export async function lightStream(
   } catch (error) {
     onEvent({ type: 'error', message: error instanceof Error ? error.message : String(error) })
   } finally {
-    // fork 缝：成功/失败/取消三条路径都摘登记，避免取消表随会话长度泄漏。
+    // fork 缝：成功/失败/取消三条路径都摘登记，避免取消表随会话长度泄漏；临时图片一并丢弃。
     if (requestId !== undefined) streamAborts.delete(requestId)
+    ephemeral?.endEphemeralImages()
   }
 }
 

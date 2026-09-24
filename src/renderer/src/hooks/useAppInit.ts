@@ -5,6 +5,7 @@ import { isLocalAi } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import db from '@renderer/databases'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
+import FileManager from '@renderer/services/FileManager'
 import {
   initKernelBridge,
   syncImageDescriberToKernel,
@@ -259,5 +260,12 @@ export function useAppInit() {
 
   useEffect(() => {
     void checkDataLimit()
+  }, [])
+
+  // 历史文件行修复（v0.3.3-2）：修"下载落盘后缀被 Content-Type 叠加"造成的分类错误
+  // （`xxx.png` + octet-stream → `xxx.png.bin` / type `other`，文件页「图片」里看不到 AI 生成的图）。
+  // 幂等、只修分类与显示名，失败只记日志（见 FileManager.repairLegacyDownloadedFiles）。
+  useEffect(() => {
+    void FileManager.repairLegacyDownloadedFiles()
   }, [])
 }

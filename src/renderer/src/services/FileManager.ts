@@ -3,10 +3,45 @@ import db from '@renderer/databases'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import type { FileMetadata } from '@renderer/types'
-import { getFileDirectory } from '@renderer/utils'
+import { FILE_TYPE } from '@renderer/types'
+import { getFileDirectory, getFileExtension } from '@renderer/utils'
+import { documentExts, imageExts, textExts } from '@shared/config/constant'
 import dayjs from 'dayjs'
 
 const logger = loggerService.withContext('FileManager')
+
+/** 后缀 → 分类（与主进程 `getFileType` 同源：同一批 `@shared/config/constant` 名单）。 */
+const EXT_TYPE_MAP = new Map<string, FileMetadata['type']>([
+  ...imageExts.map((ext) => [ext, FILE_TYPE.IMAGE] as const),
+  ...documentExts.map((ext) => [ext, FILE_TYPE.DOCUMENT] as const),
+  ...textExts.map((ext) => [ext, FILE_TYPE.TEXT] as const)
+])
+
+/** 下载落盘后缀被叠加的历史痕迹（见 `repairLegacyDownloadedFile`）。 */
+const LEGACY_DOWNLOAD_SUFFIX = /\.bin$/i
+
+/**
+ * 修复"下载落盘后缀被 Content-Type 叠加"造成的历史行（v0.3.3-2）。
+ *
+ * 现场：`xxx_00001_.png` + `application/octet-stream`（→ `.bin`）曾落成 `xxx_00001_.png.bin`、
+ * `ext = '.bin'`、`type = other` ⇒ 文件页「图片」分类里看不到这张 **AI 生成的图**（真机取证）。
+ * 字节没坏：盘上文件名就是 `<id>.bin`，`FileManager.getFilePath` 按 `id + ext` 找文件，故 `ext`
+ * **必须保留 `.bin`**，这里只修**分类**（按 origin_name 去掉那个多余后缀后的真实后缀重算 `type`）
+ * 与**显示名**（`formatFileName` 读 `origin_name`）。
+ *
+ * @returns 需要写回的新行；无需修改返回 `null`。
+ */
+export function repairLegacyDownloadedFile(file: FileMetadata): FileMetadata | null {
+  if (!file || typeof file.ext !== 'string' || typeof file.origin_name !== 'string') return null
+  if (file.ext.toLowerCase() !== '.bin') return null
+  if (!LEGACY_DOWNLOAD_SUFFIX.test(file.origin_name)) return null
+
+  const cleanedName = file.origin_name.replace(LEGACY_DOWNLOAD_SUFFIX, '')
+  const realType = EXT_TYPE_MAP.get(getFileExtension(cleanedName))
+  if (realType === undefined) return null
+
+  return { ...file, origin_name: cleanedName, type: realType }
+}
 
 class FileManager {
   static async selectFiles(options?: Electron.OpenDialogOptions): Promise<FileMetadata[] | null> {
@@ -131,6 +166,31 @@ class FileManager {
 
   static async allFiles(): Promise<FileMetadata[]> {
     return db.files.toArray()
+  }
+
+  /**
+   * 一次性（幂等）修复 `repairLegacyDownloadedFile` 命中的历史行。启动时调一次；
+   * 只改分类与显示名，不动文件名/字节；任何异常按"没答案不放权"处理——只记日志、不删不改。
+   */
+  static async repairLegacyDownloadedFiles(): Promise<number> {
+    try {
+      const candidates = await db.files.where('ext').equals('.bin').toArray()
+      let repaired = 0
+      for (const file of candidates) {
+        const next = repairLegacyDownloadedFile(file)
+        if (next === null) continue
+        await db.files.put(next)
+        repaired += 1
+      }
+      if (repaired > 0) {
+        // warn 级：真机取证要看这条（renderer 的 info 不落盘，见 经验教训 §4.43）
+        logger.warn(`FileManager: repaired ${repaired} legacy downloaded file row(s) misclassified as "other"`)
+      }
+      return repaired
+    } catch (error) {
+      logger.warn('FileManager: legacy downloaded file repair skipped', error as Error)
+      return 0
+    }
   }
 
   static isDangerFile(file: FileMetadata) {

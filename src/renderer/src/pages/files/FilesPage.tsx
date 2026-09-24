@@ -35,7 +35,10 @@ const logger = loggerService.withContext('FilesPage')
 
 const FilesPage: FC = () => {
   const { t } = useTranslation()
-  const [fileType, setFileType] = useState<FileType | 'all'>('document')
+  // v0.3.3-2：默认分类由 V1 的「文档」改为「全部」。真机反馈"文件页没把我上传的图片/文档/AI 出图纳入"
+  // 有两层原因，这是第二层：出图与上传的图片都归在 image 分类，而打开页面停在 document（多数人没有文档）
+  // ⇒ 第一眼是空页。分类本身没坏，默认值改掉即可（想回到 V1 口径只需把这里改回 'document'）。
+  const [fileType, setFileType] = useState<FileType | 'all'>('all')
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])

@@ -7,7 +7,9 @@ import {
   getName,
   getNotesDir,
   getTempDir,
+  parseGeneratedImageSource,
   readTextFileWithAutoEncoding,
+  resolveDownloadedFileName,
   scanDir
 } from '@main/utils/file'
 import { t } from '@main/utils/locales'
@@ -704,6 +706,67 @@ class FileStorage {
     } catch (error) {
       logger.error('Failed to save base64 image:', error as Error)
       throw error
+    }
+  }
+
+  /**
+   * v0.3.3-2：聊天页 `generate_image` 出图的**内容寻址落盘**。
+   *
+   * 这批图原先只作为 IMAGE 块的元数据存在（不落盘、不进 `db.files`），文件页因此永远看不到它们；
+   * 现在由渲染层按源串 sha256 给 id，主进程落到 `<id><ext>`。同一张图重复投影（回放/重开话题）
+   * 命中同一文件名，渲染层见行已存在就跳过 —— 不会像"每次 saveBase64Image 都生成新 uuid"那样堆积。
+   * 未知 MIME 一律退 `.png`（生成图一定是图片，绝不让它落成 `.bin` 被归进"其他"）。
+   */
+  public saveGeneratedImage = async (
+    _: Electron.IpcMainInvokeEvent,
+    payload: { id: string; source: string }
+  ): Promise<FileMetadata> => {
+    const id = typeof payload?.id === 'string' ? payload.id.trim() : ''
+    if (!/^[0-9a-f]{64}$/.test(id)) {
+      throw new Error('saveGeneratedImage: id must be a sha256 hex string')
+    }
+    const parsed = parseGeneratedImageSource(String(payload?.source ?? ''))
+    if (parsed === undefined) {
+      throw new Error('saveGeneratedImage: unsupported image source')
+    }
+
+    let data: Buffer
+    let ext: string
+    if (parsed.kind === 'url' && parsed.url !== undefined) {
+      const response = await net.fetch(parsed.url)
+      if (!response.ok) {
+        throw new Error(`saveGeneratedImage: HTTP ${response.status}`)
+      }
+      const urlName = parsed.url.split('/').pop()?.split('?')[0] ?? ''
+      const resolved = resolveDownloadedFileName(
+        urlName,
+        this.getExtensionFromMimeType(response.headers.get('Content-Type')),
+        true
+      )
+      ext = resolved.ext
+      data = Buffer.from(await response.arrayBuffer())
+    } else {
+      ext = this.getExtensionFromMimeType(parsed.mediaType ?? 'image/png')
+      data = Buffer.from(parsed.base64 ?? '', 'base64')
+    }
+    if (ext === '.bin' || ext.length === 0) ext = '.png'
+
+    await fs.promises.mkdir(this.storageDir, { recursive: true })
+    const fileName = `${id}${ext}`
+    const destPath = path.join(this.storageDir, fileName)
+    await fs.promises.writeFile(destPath, data)
+    const stats = await fs.promises.stat(destPath)
+
+    return {
+      id,
+      name: fileName,
+      origin_name: `${t('files.generated_image')}-${id.slice(0, 8)}${ext}`,
+      path: destPath,
+      created_at: stats.birthtime.toISOString(),
+      size: stats.size,
+      ext,
+      type: await this.getFileType(destPath),
+      count: 1
     }
   }
 
@@ -1520,14 +1583,17 @@ class FileStorage {
       }
 
       // 如果文件名没有后缀，根据Content-Type添加后缀
-      if (isUseContentType || !filename.includes('.')) {
-        const contentType = response.headers.get('Content-Type')
-        const ext = this.getExtensionFromMimeType(contentType)
-        filename += ext
-      }
+      // v0.3.3-2：后缀解析收敛到 resolveDownloadedFileName——此前 `isUseContentType` 为真时无条件把
+      // Content-Type 推出的后缀**追加**在文件名尾部，"xxx.png" + octet-stream 落成 "xxx.png.bin"、
+      // ext=.bin ⇒ FILE_TYPE.OTHER，文件页「图片」里看不到 AI 生成的图（真机取证）。
+      const contentType = isUseContentType || !filename.includes('.') ? response.headers.get('Content-Type') : null
+      const { fileName, ext } = resolveDownloadedFileName(
+        filename,
+        this.getExtensionFromMimeType(contentType),
+        Boolean(isUseContentType)
+      )
 
       const uuid = uuidv4()
-      const ext = path.extname(filename)
       const destPath = path.join(this.storageDir, uuid + ext)
 
       // 将响应内容写入文件
@@ -1539,7 +1605,7 @@ class FileStorage {
 
       return {
         id: uuid,
-        origin_name: filename,
+        origin_name: fileName,
         name: uuid + ext,
         path: destPath,
         created_at: stats.birthtime.toISOString(),

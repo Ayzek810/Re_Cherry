@@ -44,6 +44,7 @@ import messageBlocksReducer from './messageBlock'
 import migrate from './migrate'
 import minapps from './minapps'
 import newMessagesReducer from './newMessage'
+import note, { setNotesPath } from './note'
 import nutstore from './nutstore'
 import preprocess from './preprocess'
 import runtime from './runtime'
@@ -80,7 +81,9 @@ const rootReducer = combineReducers({
   knowledge,
   skills,
   // v0.3.2 验收轮：文档预处理服务商配置（设置页 /settings/preprocess 编辑）
-  preprocess
+  preprocess,
+  // v0.3.3-2 笔记（V1 原样移植）：笔记目录 + 排序/展开等 UI 态（notesPath 由启动时 App_Info 补）
+  note
 })
 
 // v0.2.4 K3：写盘前剥离非空 provider apiKey（明文不落 localStorage）。
@@ -134,7 +137,7 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
  * Call storeSyncService.subscribe() in the window's entryPoint.tsx
  */
 storeSyncService.setOptions({
-  syncList: ['assistants/', 'settings/', 'llm/']
+  syncList: ['assistants/', 'settings/', 'llm/', 'note/']
 })
 
 const store = configureStore({
@@ -158,8 +161,27 @@ export const persistor = persistStore(store, undefined, () => {
   // v0.2.4 K4：rehydrate 完成后从 main 加密存储回填 provider key（本地持久层已不再落明文）
   void recordRestoredTopicIds()
   void backfillProviderKeysFromVault()
+  // v0.3.3-2 笔记：rehydrate 后若笔记目录为空，用主进程 App_Info 的 notesPath 补上（V1 同形）。
+  // 失败只记日志：笔记页自己有"未配置目录"的兜底提示，不因这一条挡住启动。
+  void initializeNotesPath()
   logger.info('Redux store ready')
 })
+
+/** v0.3.3-2：笔记根目录来自主进程（`{userData}/Data/Notes` 或用户自选目录），只在缺省时注入。
+ *  延后一个宏任务（V1 同形）：不在 persist 回调里同步 dispatch，确保 store 已完全就绪。 */
+async function initializeNotesPath(): Promise<void> {
+  if (store.getState().note.notesPath) return
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  try {
+    const info = await window.api.getAppInfo()
+    if (info?.notesPath) {
+      store.dispatch(setNotesPath(info.notesPath))
+      logger.info('Initialized notes path on startup:', info.notesPath)
+    }
+  } catch (error) {
+    logger.warn('Failed to initialize notes path on startup', error as Error)
+  }
+}
 
 /** v0.3.0-2 目标 B：登记"上次会话留下的行"。
  *

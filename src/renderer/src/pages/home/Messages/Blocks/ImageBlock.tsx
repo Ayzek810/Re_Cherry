@@ -3,6 +3,7 @@ import FileManager from '@renderer/services/FileManager'
 import { type ImageMessageBlock, MessageBlockStatus } from '@renderer/types/newMessage'
 import { Skeleton } from 'antd'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 interface Props {
@@ -11,7 +12,10 @@ interface Props {
 }
 
 const ImageBlock: React.FC<Props> = ({ block, isSingle = false }) => {
-  if (block.status === MessageBlockStatus.PENDING) {
+  const { t } = useTranslation()
+
+  // 待生成/生成中：骨架（原行为；PROCESSING 一并纳入——它是 createBaseMessageBlock 的默认状态）
+  if (block.status === MessageBlockStatus.PENDING || block.status === MessageBlockStatus.PROCESSING) {
     return <Skeleton.Image active style={{ width: 200, height: 200 }} />
   }
 
@@ -23,6 +27,12 @@ const ImageBlock: React.FC<Props> = ({ block, isSingle = false }) => {
         : block?.url
           ? [block.url]
           : []
+
+    // v0.3.3-2：块建出来了却没有可取地址 —— 此前渲染成空 Container，表现就是"图凭空消失"。
+    // 用户原话"就算不渲染也给我挂个啥占位符表示一下我发了个图"，统一给占位，绝不留白。
+    if (images.length === 0) {
+      return <Placeholder className="image-block-placeholder">{t('message.image.unavailable')}</Placeholder>
+    }
 
     return (
       <Container>
@@ -41,10 +51,26 @@ const ImageBlock: React.FC<Props> = ({ block, isSingle = false }) => {
     )
   }
 
-  return null
+  // 其余状态（ERROR / PAUSED / …）：占位符而不是 null —— 宁可显示"图片无法显示"，也不要静默消失
+  return <Placeholder className="image-block-placeholder">{t('message.image.unavailable')}</Placeholder>
 }
 
 const Container = styled.div`
   display: block;
 `
+
+const Placeholder = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 160px;
+  min-height: 72px;
+  padding: 12px 16px;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  user-select: none;
+`
+
 export default React.memo(ImageBlock)

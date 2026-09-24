@@ -490,7 +490,7 @@ export type GenerateImageResponse = {
   images: string[]
 }
 
-export type SidebarIcon = 'assistants' | 'minapp' | 'files' | 'knowledge' | 'translate' | 'paintings'
+export type SidebarIcon = 'assistants' | 'minapp' | 'files' | 'knowledge' | 'translate' | 'paintings' | 'notes'
 
 export type { PaintingParams, PaintingRecord } from './painting'
 export type { TranslateLanguageSelection, TranslateRecord } from './translate'
