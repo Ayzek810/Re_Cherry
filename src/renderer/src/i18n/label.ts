@@ -175,6 +175,15 @@ export const getSidebarIconLabel = (key: string): string => {
   return getLabel(sidebarIconKeyMap, key)
 }
 
+const miniappsStatusKeyMap = {
+  visible: 'settings.miniapps.visible',
+  disabled: 'settings.miniapps.disabled'
+} as const
+
+export const getMiniappsStatusLabel = (key: string): string => {
+  return getLabel(miniappsStatusKeyMap, key)
+}
+
 const shortcutKeyMap = {
   action: 'settings.shortcuts.action',
   actions: 'settings.shortcuts.actions',

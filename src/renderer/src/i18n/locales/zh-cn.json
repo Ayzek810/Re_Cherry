@@ -1162,7 +1162,8 @@
     "vietnamese": "越南文"
   },
   "launchpad": {
-    "apps": "应用"
+    "apps": "应用",
+    "minapps": "小程序"
   },
   "lmstudio": {
     "keep_alive_time": {
@@ -1545,9 +1546,32 @@
       },
       "closeall": {
         "title": "关闭所有"
+      },
+      "hide": {
+        "title": "隐藏"
+      },
+      "remove_custom": {
+        "title": "删除自定义应用"
       }
     },
-    "title": "小程序"
+    "title": "小程序",
+    "add": {
+      "button": "添加小程序",
+      "title": "添加自定义小程序",
+      "name": "名称",
+      "name_placeholder": "例如：我的小程序",
+      "url": "网址",
+      "logo": "图标 URL（可选）",
+      "logo_placeholder": "https://example.com/logo.png",
+      "required_fields": "名称和网址为必填项",
+      "invalid_url": "请输入有效的网址",
+      "success": "小程序添加成功",
+      "failed": "添加小程序失败"
+    },
+    "empty": {
+      "all": "暂无小程序",
+      "search": "未找到匹配的小程序"
+    }
   },
   "minapps": {
     "ant-ling": "蚂蚁百灵",

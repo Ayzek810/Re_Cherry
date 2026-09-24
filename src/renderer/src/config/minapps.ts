@@ -588,6 +588,10 @@ const ORIGIN_DEFAULT_MIN_APPS: MinAppType[] = [
 ]
 
 // All mini apps: built-in defaults + custom apps loaded from user config
-const allMinApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
+let allMinApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
 
-export { allMinApps, loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS }
+function updateAllMinApps(apps: MinAppType[]) {
+  allMinApps = apps
+}
+
+export { allMinApps, loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps }

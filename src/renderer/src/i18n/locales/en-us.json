@@ -1162,7 +1162,8 @@
     "vietnamese": "Vietnamese"
   },
   "launchpad": {
-    "apps": "Apps"
+    "apps": "Apps",
+    "minapps": "Minapps"
   },
   "lmstudio": {
     "keep_alive_time": {
@@ -1545,9 +1546,32 @@
       },
       "closeall": {
         "title": "Close All"
+      },
+      "hide": {
+        "title": "Hide"
+      },
+      "remove_custom": {
+        "title": "Delete Custom App"
       }
     },
-    "title": "MinApp"
+    "title": "Mini Apps",
+    "add": {
+      "button": "Add Mini App",
+      "title": "Add Custom Mini App",
+      "name": "Name",
+      "name_placeholder": "e.g., My Mini App",
+      "url": "URL",
+      "logo": "Logo URL (optional)",
+      "logo_placeholder": "https://example.com/logo.png",
+      "required_fields": "Name and URL are required",
+      "invalid_url": "Please enter a valid URL",
+      "success": "Mini app added successfully",
+      "failed": "Failed to add mini app"
+    },
+    "empty": {
+      "all": "No mini apps available",
+      "search": "No matching mini apps found"
+    }
   },
   "minapps": {
     "ant-ling": "Ant Ling",
