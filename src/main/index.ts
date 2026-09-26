@@ -19,6 +19,8 @@ import { registerIpc } from './ipc'
 import { analyticsService } from './services/AnalyticsService'
 import { appMenuService } from './services/AppMenuService'
 import { configManager } from './services/ConfigManager'
+import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
+import { hermesDashboardService } from './services/hermes/HermesDashboardService'
 import { nodeTraceService } from './services/NodeTraceService'
 import {
   CHERRY_STUDIO_PROTOCOL,
@@ -254,6 +256,16 @@ if (!app.requestSingleInstanceLock()) {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IpcChannel.App_SaveData)
     }
+    // v0.3.4-2：Windows 上子进程不随父退出（async will-quit 跑不完 Electron 就退了）。
+    // before-quit 是同步事件——在这里同步杀，保证 dsh/hermes 进程不残留。
+    // 静态导入的单例直调（ipc.ts 已把两服务纳入静态图；require() 在 rolldown 产物里
+    // 解析不到相对路径，会被 try/catch 吞成静默失效——真机踩过）。
+    try {
+      deepSeekHarnessService.killSync()
+    } catch { /* 未启动 */ }
+    try {
+      hermesDashboardService.killSync()
+    } catch { /* 未启动 */ }
   })
 
   app.on('will-quit', async () => {
@@ -267,13 +279,11 @@ if (!app.requestSingleInstanceLock()) {
     // 编码助手（v0.3.4-1）：退出前停受管 Web UI 进程与统一网关
     // （V2 生命周期 onStop 语义；POSIX detached 下不主动停会残留进程组）
     try {
-      const { deepSeekHarnessService } = await import('./services/deepSeekHarness/DeepSeekHarnessService')
       await deepSeekHarnessService.stop()
     } catch (error) {
       logger.warn('Error stopping DeepSeek Harness:', error as Error)
     }
     try {
-      const { hermesDashboardService } = await import('./services/hermes/HermesDashboardService')
       await hermesDashboardService.stop()
     } catch (error) {
       logger.warn('Error stopping Hermes Dashboard:', error as Error)
