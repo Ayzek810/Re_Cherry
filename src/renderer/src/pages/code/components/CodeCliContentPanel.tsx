@@ -35,6 +35,10 @@ interface CodeCliContentPanelProps {
   upgradingTools: Set<string>
   /** Failure message of the last install attempt for the selected tool (from the main-process install-state map). */
   installError?: string
+  /** v0.3.4-2：首探窗口（快照未返回）——版本卡显示「检查中」而非可点击的「安装」。 */
+  snapshotsLoading?: boolean
+  /** v0.3.4-2：安装步骤进度（i18n 键尾，来自主进程广播；仅当前工具安装中时有值）。 */
+  installProgressStep?: string
   providerState: {
     providerless: boolean
     showSelectionHint: boolean
@@ -72,6 +76,8 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   installingTools,
   upgradingTools,
   installError,
+  snapshotsLoading,
+  installProgressStep,
   providerState,
   supportedProviders,
   providerConfigs,
@@ -119,6 +125,8 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
             stopping={versionCard.stopping}
             isInstalling={installingTools.has(selectedCliTool)}
             isUpgrading={upgradingTools.has(selectedCliTool)}
+            installProgressStep={installProgressStep}
+            snapshotsLoading={snapshotsLoading}
             upgradeDisabled={versionCard.upgradeDisabled}
             installError={installError}
             onShowError={() => setShowInstallError(true)}

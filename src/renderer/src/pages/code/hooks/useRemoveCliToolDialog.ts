@@ -41,6 +41,9 @@ export function useRemoveCliToolDialog({
         setIsRemoving(true)
         try {
           await remove(removeTarget)
+          // v0.3.4-2（用户裁决）：卸载完成后关闭确认窗——原实现只复位 isRemoving，
+          // 窗口停在已完成的确认态。失败时保留窗口便于就地重试（错误行常驻渲染）。
+          setRemoveTarget(null)
         } finally {
           setIsRemoving(false)
         }

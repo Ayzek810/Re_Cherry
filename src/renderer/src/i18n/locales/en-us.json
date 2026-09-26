@@ -661,6 +661,16 @@
     "install": "Install",
     "install_success": "Installation successful",
     "installing": "Installing…",
+    "checking": "Checking…",
+    "install_progress": {
+      "runtime": "Downloading runtime…",
+      "install": "Installing the CLI…",
+      "toolchain": "Preparing plugin toolchain…",
+      "market": "Installing plugin market…",
+      "ppt": "Installing presentation plugin…",
+      "venv": "Creating Python environment…",
+      "pip": "Installing packages…"
+    },
     "latest": "Latest",
     "launch": {
       "error": "Launch failed, please try again",

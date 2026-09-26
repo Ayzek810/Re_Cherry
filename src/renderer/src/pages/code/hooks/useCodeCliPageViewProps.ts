@@ -76,7 +76,7 @@ export function useCodeCliPageViewProps(
     selectFolder
   } = useCodeCli(initialTool, onToolChange)
 
-  const { install, upgrade, remove, installingTools, upgradingTools } = useBinaryActions()
+  const { install, upgrade, remove, installingTools, upgradingTools, installProgress } = useBinaryActions()
   const { providers: forkProviders } = useProviders()
   // fork 缝④（续）：fork 原生 Provider → V2 CLI 消费面（一次性投影，下游全部按 V2 形状消费）。
   const providers = useMemo(() => forkProviders.map(toCliProvider), [forkProviders])
@@ -178,9 +178,12 @@ export function useCodeCliPageViewProps(
     apiGatewayProvider: apiGatewayBundle
   })
 
-  const { statuses } = useCliVersionStatuses(CLI_TOOL_IDS)
+  const { statuses, resolved } = useCliVersionStatuses(CLI_TOOL_IDS)
   // fork 缝②（续）：无 GEMINI_CLI 可见性过滤与选种重定向（fork 工具集恒显 2 项）；statuses 的
   // resolved 标志随重定向 effect 一并裁掉。
+  // v0.3.4-2（用户裁决）：resolved 不再裁掉——首探窗口（3-5s）期间版本卡要显示"检查中"
+  // 而非可点击的「安装」（用户担心误点重装）。
+  const snapshotsLoading = !resolved
   const visibleTools = CLI_TOOLS
   const activeTool = useMemo<CliToolOption | undefined>(
     () => visibleTools.find((tool) => tool.value === selectedCliTool),
@@ -316,6 +319,8 @@ export function useCodeCliPageViewProps(
           installingTools: mergedInstallingTools,
           upgradingTools,
           installError,
+          snapshotsLoading,
+          installProgressStep: installProgress?.tool === selectedCliTool ? installProgress.step : undefined,
           providerState: {
             providerless: isProviderlessTool,
             showSelectionHint: showProviderSelectionHint

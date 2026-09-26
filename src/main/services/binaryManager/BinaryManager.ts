@@ -361,6 +361,7 @@ export class BinaryManager {
 
   /** dsh（npm 型）：受管 node → npm install --prefix → 版本标记 → bundle 装配（dshmarket + PPT）。 */
   private async installNpmTool(plan: ToolPlan): Promise<void> {
+    this.broadcastInstallProgress(plan.name, 'runtime')
     const runtime = await ensureNodeRuntime()
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
@@ -375,6 +376,7 @@ export class BinaryManager {
     // 批次5：pnpm store 也钉进 CodeMate 子树（dshmarket 在 harness 内装插件时
     // 继承此 env → pnpm 子进程的 store 落点受控，卸载=删子树仍成立）。
     env.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
+    this.broadcastInstallProgress(plan.name, 'install')
     await this.runCommand(
       runtime.npmBin,
       ['install', '--prefix', dir, `${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`],
@@ -404,6 +406,7 @@ export class BinaryManager {
     //    网络不佳时静默挂死。改用 npm 装进 dsh 安装树（npmmirror 钉死、shim 落
     //    node_modules/.bin——已在 PATH）。
     const binJs = path.join(dir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    this.broadcastInstallProgress(plan.name, 'toolchain')
     await this.runCommand(runtime.npmBin, ['install', '--prefix', dir, 'pnpm'], {
       env,
       label: 'npm install pnpm (bundle toolchain)'
@@ -417,11 +420,16 @@ export class BinaryManager {
     // ②每条 plugin add 显式带 --registry（社区 #337 的修复形态）。
     const webProfileDir = path.join(deepSeekHarnessHome(), 'profiles', 'web')
     const pnpmRegistryArgs = [`--registry=${NPM_REGISTRY_MIRROR}`]
+    // v0.3.4-2 真机事故（首装无市场）：首次安装时 profile 尚不存在（harness 首次启动才
+    // 创建）——不 mkdir 则 .npmrc 写入 ENOENT → bundle 装配链整体中断，dsh 能启动但
+    // 没有市场；卸载不删 home 树 → 首次启动建好 profile 后重装才有。真机现象完全吻合。
+    await fsp.mkdir(webProfileDir, { recursive: true })
     await fsp.writeFile(
       path.join(webProfileDir, '.npmrc'),
       `registry=${NPM_REGISTRY_MIRROR}\nstore-dir=${path.join(cacheRoot(), 'pnpm-store')}\n`,
       'utf-8'
     )
+    this.broadcastInstallProgress(plan.name, 'market')
     await this.runCommand(
       runtime.nodeBin,
       [binJs, 'plugin', '--profile', 'web', 'add', 'dshmarket', ...pnpmRegistryArgs],
@@ -435,6 +443,7 @@ export class BinaryManager {
     // dsh-ppt@0.1.1-rc.2 在 registry 已被 0.4.5 取代 → ERR_PNPM_NO_MATCHING_VERSION，
     // 真机复现实证）。显式 @latest spec：file:/旧 spec 已存在时 `add <name>` 会被
     // "lockfile up to date" 短路（真机复现），带版本 spec 强制重解析。
+    this.broadcastInstallProgress(plan.name, 'ppt')
     await this.runCommand(
       runtime.nodeBin,
       [binJs, 'plugin', '--profile', 'web', 'add', 'dsh-ppt@latest', ...pnpmRegistryArgs],
@@ -450,9 +459,11 @@ export class BinaryManager {
 
   /** hermes（pipx 型 → venv 等价）：受管 CPython → python -m venv → venv pip install。 */
   private async installVenvTool(plan: ToolPlan): Promise<void> {
+    this.broadcastInstallProgress(plan.name, 'runtime')
     const { pythonBin } = await ensurePythonRuntime()
     const dir = toolDir(plan.name)
     await fsp.rm(dir, { recursive: true, force: true })
+    this.broadcastInstallProgress(plan.name, 'venv')
     await this.runCommand(pythonBin, ['-m', 'venv', dir], {
       env: { ...process.env },
       label: `python -m venv ${plan.name}`
@@ -464,6 +475,7 @@ export class BinaryManager {
     // fork 缝：extras 数据（pipxExtras:['web']）留在 shared 预设，venv 规格按用户裁决写死
     // 为 <packageName>[web]；official 源在前、清华镜像在后（pip 按序尝试）。
     const pipSpec = `${plan.preset.packageName}[web]`
+    this.broadcastInstallProgress(plan.name, 'pip')
     await this.runCommand(
       venvPython,
       [
@@ -585,6 +597,20 @@ export class BinaryManager {
     } catch (error) {
       // 下一份快照是权威事实；通知失败可恢复（V2 同款注释语义）。
       logger.warn('Failed to broadcast binary availability change', { error: this.errorMessage(error) })
+    }
+  }
+
+  /** v0.3.4-2（用户裁决）：安装步骤进度广播——渲染层进度条的数据源。step 为 i18n 键尾
+   * （code.install_progress.<step>），由渲染层翻译。 */
+  private broadcastInstallProgress(tool: BinaryToolName, step: string): void {
+    try {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send(IpcChannel.CodeCli_Binary_InstallProgress, { tool, step })
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to broadcast install progress', { error: this.errorMessage(error) })
     }
   }
 

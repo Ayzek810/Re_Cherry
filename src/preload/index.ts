@@ -102,6 +102,15 @@ const api = {
         return () => {
           ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_Changed, listener)
         }
+      },
+      // v0.3.4-2：安装步骤进度订阅（载荷 {tool, step}，step 为 i18n 键尾）。
+      onInstallProgress: (callback: (payload: { tool: string; step: string }) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, payload: { tool: string; step: string }) =>
+          callback(payload)
+        ipcRenderer.on(IpcChannel.CodeCli_Binary_InstallProgress, listener)
+        return () => {
+          ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_InstallProgress, listener)
+        }
       }
     },
     // 统一网关（批次3）：生命周期 + LAN 开关 + 配置部分更新 + 状态广播订阅

@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useCallback, useState } from 'react'
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { loggerService } from '@logger'
@@ -27,6 +27,12 @@ export function useBinaryActions() {
   const { t } = useTranslation()
   const [installingTools, setInstallingTools] = useState<Set<string>>(() => new Set())
   const [upgradingTools, setUpgradingTools] = useState<Set<string>>(() => new Set())
+  // v0.3.4-2（用户裁决）：安装步骤进度——主进程每完成一个阶段广播一次，进度条渲染步名。
+  const [installProgress, setInstallProgress] = useState<{ tool: string; step: string } | null>(null)
+  useEffect(() => {
+    const unsubscribe = window.api.codeCli.binary.onInstallProgress((payload) => setInstallProgress(payload))
+    return unsubscribe
+  }, [])
 
   // install and upgrade share one body — both run the same name-only
   // `binary.install_tool` request; main resolves the Code CLI's fixed recipe
@@ -130,6 +136,7 @@ export function useBinaryActions() {
     upgrade,
     remove,
     installingTools,
-    upgradingTools
+    upgradingTools,
+    installProgress
   }
 }
