@@ -13,7 +13,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { Mutex } from 'async-mutex'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
@@ -380,7 +380,30 @@ class DeepSeekHarnessService {
     childEnv.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
     childEnv.npm_config_registry = NPM_REGISTRY_MIRROR
 
-    const child = crossPlatformSpawn(runtime.path, ['web', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
+    // v0.3.4-2 真机事故（25 个必需插件 failed to import）：0.1.7 的插件以裸名导入
+    // @deepseek-ai/* 宿主包——Node 从插件物理位置解析，安装树不在其回退链上。社区
+    // 桌面壳的解法（harness-node-entry.mjs + host-module-fallback.mjs，MIT，原样搬运）：
+    // node 先加载引导入口注册解析回退钩子（宿主包失败 → 以 dsh 安装树为父重试），再
+    // import 真正的 dsh 入口并调用 runCli()。附带获得子进程 windowsHide 修复（#233）。
+    // 入口文件缺失时退回直启（兼容 0.1.5 树）。
+    const appRoot = app.getAppPath().replace('app.asar', 'app.asar.unpacked')
+    const hostEntry = path.join(appRoot, 'resources', 'codemate', 'host', 'harness-node-entry.mjs')
+    const dshEntry = path.join(codeMateToolsRoot(), 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    const hostEntryReady =
+      (await fs.access(hostEntry).then(
+        () => true,
+        () => false
+      )) && (await fs.access(dshEntry).then(
+        () => true,
+        () => false
+      ))
+    const nodeBin = path.join(nodeBinDir, isWin ? 'node.exe' : 'node')
+    const spawnFile = hostEntryReady ? nodeBin : runtime.path
+    const spawnArgs = hostEntryReady
+      ? [hostEntry, dshEntry, 'web', '--host', '127.0.0.1', '--port', '0', '--no-open']
+      : ['web', '--host', '127.0.0.1', '--port', '0', '--no-open']
+
+    const child = crossPlatformSpawn(spawnFile, spawnArgs, {
       cwd: workspace,
       env: childEnv,
       detached: !isWin,
