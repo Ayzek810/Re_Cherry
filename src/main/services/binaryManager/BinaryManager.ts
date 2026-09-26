@@ -47,6 +47,11 @@ const OUTPUT_TAIL_LIMIT = 16 * 1024
 // 安装器为可预期行为写死镜像）。pip 源 official 在前、清华镜像在后（pip 按序尝试）——
 // 与 V2 的清华镜像策略对应（V2 另有腾讯镜像背书，fork 裁为单镜像）。
 const NPM_REGISTRY_MIRROR = 'https://registry.npmmirror.com'
+// v0.3.4-2（用户裁决）：dsh 通道锚 npm 的 `next` dist-tag——社区的当前代际发在 next
+// （0.1.7-rc.2），`latest` 停在 0.1.5-rc.3 不动；锚 latest 就永远收不到新一代（真机
+// 取证：用户对比社区桌面壳发现"已经到 0.17 而这里还是 0.15 且没有推送更新"）。
+// 安装与更新检查共用此 tag，语义恒对齐。
+const DSH_NPM_DIST_TAG = 'next'
 const PYPI_OFFICIAL_INDEX = 'https://pypi.org/simple'
 const PYPI_TSINGHUA_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 
@@ -364,10 +369,14 @@ export class BinaryManager {
     // 批次5：pnpm store 也钉进 CodeMate 子树（dshmarket 在 harness 内装插件时
     // 继承此 env → pnpm 子进程的 store 落点受控，卸载=删子树仍成立）。
     env.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
-    await this.runCommand(runtime.npmBin, ['install', '--prefix', dir, `${plan.preset.packageName}@latest`], {
-      env,
-      label: `npm install ${plan.preset.packageName}`
-    })
+    await this.runCommand(
+      runtime.npmBin,
+      ['install', '--prefix', dir, `${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`],
+      {
+        env,
+        label: `npm install ${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`
+      }
+    )
 
     const managedPath = managedBinaryPath(plan)
     if (!(await pathExists(managedPath))) {
@@ -516,10 +525,14 @@ export class BinaryManager {
     if (!(await isNodeRuntimeInstalled())) return undefined
     try {
       const runtime = await ensureNodeRuntime()
-      const stdout = await this.runCommand(runtime.npmBin, ['view', plan.preset.packageName, 'version'], {
-        env: { ...process.env, npm_config_registry: NPM_REGISTRY_MIRROR },
-        label: `npm view ${plan.preset.packageName}`,
-        timeoutMs: NPM_VIEW_TIMEOUT_MS
+      // 通道与安装同锚（DSH_NPM_DIST_TAG）：查 next tag 的版本，与安装语义恒一致。
+      const stdout = await this.runCommand(
+        runtime.npmBin,
+        ['view', `${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`, 'version'],
+        {
+          env: { ...process.env, npm_config_registry: NPM_REGISTRY_MIRROR },
+          label: `npm view ${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`,
+          timeoutMs: NPM_VIEW_TIMEOUT_MS
       })
       return stdout.trim().split(/\r?\n/, 1)[0]?.trim() || undefined
     } catch (error) {
