@@ -43,6 +43,10 @@ interface VersionStatusCardProps {
   /** Failure message of the last install/upgrade attempt; renders a persistent failure row. */
   installError?: string
   onShowError?: () => void
+  /** v0.3.4-2：首探窗口（快照未返回）——安装按钮显示「检查中」而非可点击态。 */
+  snapshotsLoading?: boolean
+  /** v0.3.4-2：安装步骤进度（i18n 键尾；当前工具安装中时由主进程广播）。 */
+  installProgressStep?: string
 }
 
 export const VersionStatusCard: FC<VersionStatusCardProps> = ({
@@ -64,7 +68,9 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
   stopping,
   launchDisabledHint,
   installError,
-  onShowError
+  onShowError,
+  snapshotsLoading,
+  installProgressStep
 }) => {
   const { t } = useTranslation()
   const launchDisabledHintId = useId()
@@ -262,7 +268,15 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
             </>
           ) : (
             // fork 缝①（续）：failedRemoval 臂恒 false（无 operation 面），比较式随状态面裁剪。
-            !retryInstall && (
+            // v0.3.4-2：快照首探窗口显示「检查中」disabled 态——期间安装键可点会诱导重装
+            //（用户担忧的极限场景）。
+            !retryInstall &&
+            (snapshotsLoading ? (
+              <Button type="button" variant="outline" size="sm" disabled className="shrink-0 text-muted-foreground">
+                <span className="size-3 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-foreground" />
+                {t('code.checking')}
+              </Button>
+            ) : (
               <Button
                 type="button"
                 variant="outline"
@@ -282,7 +296,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
                   </>
                 )}
               </Button>
-            )
+            ))
           )}
 
           {isInstalled && running && onOpenDashboard && (
@@ -300,6 +314,17 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
       </div>
 
       {installing && <BinaryInstallingHint />}
+      {/* v0.3.4-2（用户裁决）：安装进度条——主进程广播的阶段步名，不确定进度 + 步名文本。 */}
+      {installing && installProgressStep && (
+        <div className="mt-2">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-foreground/50" />
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {t(`code.install_progress.${installProgressStep}`)}
+          </p>
+        </div>
+      )}
       {installError && !busy && onShowError && (
         <BinaryInstallFailureRow error={installError} onShowError={onShowError} />
       )}

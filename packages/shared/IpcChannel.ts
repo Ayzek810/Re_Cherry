@@ -315,6 +315,8 @@ export enum IpcChannel {
   CodeCli_Binary_LatestVersions = 'code-cli:binary:latest-versions',
   /** 安装/卸载/快照变化广播（无载荷，消费者重拉快照）。 */
   CodeCli_Binary_Changed = 'code-cli:binary:changed',
+  /** 安装步骤进度广播（载荷 {tool, step}，step 为 i18n 键尾）。 */
+  CodeCli_Binary_InstallProgress = 'code-cli:binary:install-progress',
   /** 统一网关（批次3）：生命周期 + 状态广播 + 渲染层配置同步（enabled/port/host）。 */
   CodeCli_ApiGateway_Start = 'code-cli:api-gateway:start',
   CodeCli_ApiGateway_Stop = 'code-cli:api-gateway:stop',

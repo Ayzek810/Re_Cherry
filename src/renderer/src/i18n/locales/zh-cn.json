@@ -661,6 +661,16 @@
     "install": "安装",
     "install_success": "安装成功",
     "installing": "安装中…",
+    "checking": "检查中…",
+    "install_progress": {
+      "runtime": "正在下载运行时…",
+      "install": "正在安装 CLI…",
+      "toolchain": "正在准备插件工具链…",
+      "market": "正在安装插件市场…",
+      "ppt": "正在安装演示文稿插件…",
+      "venv": "正在创建 Python 环境…",
+      "pip": "正在安装依赖包…"
+    },
     "latest": "最新",
     "launch": {
       "error": "启动失败，请重试",
