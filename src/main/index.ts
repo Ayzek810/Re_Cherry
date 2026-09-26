@@ -264,6 +264,27 @@ if (!app.requestSingleInstanceLock()) {
       logger.warn('Error cleaning up services:', error as Error)
     }
 
+    // 编码助手（v0.3.4-1）：退出前停受管 Web UI 进程与统一网关
+    // （V2 生命周期 onStop 语义；POSIX detached 下不主动停会残留进程组）
+    try {
+      const { deepSeekHarnessService } = await import('./services/deepSeekHarness/DeepSeekHarnessService')
+      await deepSeekHarnessService.stop()
+    } catch (error) {
+      logger.warn('Error stopping DeepSeek Harness:', error as Error)
+    }
+    try {
+      const { hermesDashboardService } = await import('./services/hermes/HermesDashboardService')
+      await hermesDashboardService.stop()
+    } catch (error) {
+      logger.warn('Error stopping Hermes Dashboard:', error as Error)
+    }
+    try {
+      const { apiGatewayService } = await import('./features/apiGateway/ApiGatewayService')
+      await apiGatewayService.stop()
+    } catch (error) {
+      logger.warn('Error stopping ApiGateway:', error as Error)
+    }
+
     // 停止 dsh 内核：dispose 所有插件 fiber（SQLite 连接、事件监听等），
     // 否则这些句柄拖住主进程，应用退不干净
     try {

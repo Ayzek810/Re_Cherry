@@ -12,6 +12,7 @@ import { useOnboardingState } from './hooks/useOnboardingState'
 import { useNavbarPosition } from './hooks/useSettings'
 import MinAppPage from './pages/apps/MinAppPage'
 import MinAppsPage from './pages/apps/MinAppsPage'
+import CodeCliPage from './pages/code/CodeCliPage'
 import FilesPage from './pages/files/FilesPage'
 import HomePage from './pages/home/HomePage'
 import KnowledgePage from './pages/knowledge/KnowledgePage'
@@ -42,6 +43,8 @@ const Router: FC = () => {
           {/* v0.3.4 小程序页面（V1 原样：列表页 + 详情壳） */}
           <Route path="/apps/:appId" element={<MinAppPage />} />
           <Route path="/apps" element={<MinAppsPage />} />
+          {/* v0.3.4-1 编码助手（Code Mate，V2 移植） */}
+          <Route path="/code" element={<CodeCliPage />} />
         </Routes>
       </ErrorBoundary>
     )

@@ -15,6 +15,7 @@ import { isEmoji } from '@renderer/utils'
 import { Avatar, Tooltip } from 'antd'
 import {
   BookOpen,
+  Code,
   Folder,
   Languages,
   LayoutGrid,
@@ -133,7 +134,9 @@ const MainMenus: FC = () => {
     translate: <Languages size={18} className="icon" />,
     paintings: <Palette size={18} className="icon" />,
     // v0.3.3-2 笔记复活（V1 同图标）
-    notes: <NotepadText size={18} className="icon" />
+    notes: <NotepadText size={18} className="icon" />,
+    // v0.3.4-1 编码助手（Code Mate，V2 移植）
+    code: <Code size={18} className="icon" />
   }
 
   const pathMap = {
@@ -143,7 +146,8 @@ const MainMenus: FC = () => {
     knowledge: '/knowledge',
     translate: '/translate',
     paintings: '/paintings',
-    notes: '/notes'
+    notes: '/notes',
+    code: '/code'
   }
 
   return sidebarIcons.visible

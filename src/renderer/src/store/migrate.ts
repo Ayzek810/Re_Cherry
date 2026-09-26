@@ -3347,6 +3347,34 @@ const migrateConfig = {
       logger.error('migrate 221 error', error as Error)
       return state
     }
+  },
+  '222': (state: RootState) => {
+    try {
+      // v0.3.4-1 编码助手：侧栏图标补位（照 '220' translate/paintings 先例——
+      // 存量 sidebarIcons.visible 快照不含新图标，不补位老用户看不到入口）。
+      const visible = state.settings?.sidebarIcons?.visible
+      if (Array.isArray(visible) && !visible.includes('code')) {
+        visible.push('code')
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 222 error', error as Error)
+      return state
+    }
+  },
+  '223': (state: RootState) => {
+    try {
+      // v0.3.4-1 编码助手：codeCliConfigs 字段回填（真机事故修复——redux-persist 的
+      // settings 切片整片来自存量持久化，initialState 的新字段对老用户是 undefined，
+      // useCodeCli 读 configs[toolId] 直接 TypeError。照 '220' 显式落字段先例）。
+      if (state.settings) {
+        state.settings.codeCliConfigs = state.settings.codeCliConfigs ?? {}
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 223 error', error as Error)
+      return state
+    }
   }
 }
 

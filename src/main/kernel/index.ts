@@ -55,6 +55,7 @@ import { KnowledgeKernelService } from './knowledgeKernelService'
 // fork 缝：流式补全真取消（Dsh_StreamAbort → abortLightStream）。
 import { abortLightStream, lightOneShot, lightStream } from './lightLlm'
 import { abortLightImage, lightEditImage, lightGenerateImage, setLightLlmProviderRoutes } from './lightLlmModalities'
+import { setCodeMateProviders } from '@main/services/codeCli/providerSnapshot'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
@@ -306,6 +307,8 @@ function registerKernelIpc(): void {
     knowledgeService.setProviders(providers)
     // 轻量 AI 服务面非 chat 模态（embed/rerank/image）共用同一路由快照。
     setLightLlmProviderRoutes(providers)
+    // 编码助手（v0.3.4-1）：dsh/hermes 配置投影与（批次3）网关五函数共用同一路由快照。
+    setCodeMateProviders(providers)
     return { ok: true }
   })
 
