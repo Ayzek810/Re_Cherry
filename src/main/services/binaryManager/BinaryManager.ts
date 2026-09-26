@@ -18,6 +18,7 @@ import { isWin } from '@main/constant'
 import { probeBinary, probeSystemPath } from '@main/services/codeCli/resolveBinary'
 import { cacheRoot, codeMateToolsRoot, nodeRuntimeDir, pythonRuntimeDir } from '@main/services/deepSeekHarness/paths'
 import { crossPlatformSpawn } from '@main/utils/processRunner'
+import { removeTreeWithRetry } from './removeTree'
 import { IpcChannel } from '@shared/IpcChannel'
 import { redactSecretText } from '@shared/utils/redaction'
 
@@ -364,16 +365,24 @@ export class BinaryManager {
     await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), version, 'utf-8')
   }
 
-  /** 卸载（mutex 串行）：删工具目录 + 1:1 映射的运行时目录（node↔dsh、python↔hermes）。 */
+  /** 卸载（mutex 串行）：删工具目录 + 1:1 映射的运行时目录（node↔dsh、python↔hermes）。
+   * 批次5 真机事故修复：taskkill 后原生 .node 的 DLL 锁异步释放，立即 rm 撞 EPERM
+   * （sharp-win32-x64.node 实证）——改逐项遍历删除 + 重试退避（removeTree.ts）。 */
   async removeTool(name: BinaryToolName): Promise<BinaryRemoveResult> {
     const plan = TOOL_PLANS.get(name)
     if (!plan) return { removed: false, message: `Unknown managed tool: ${name}` }
     return this.operationMutex.runExclusive(async () => {
       try {
-        await fsp.rm(toolDir(plan.name), { recursive: true, force: true })
+        const toolGone = await removeTreeWithRetry(toolDir(plan.name))
         // fork 缝：运行时 1:1 映射写死（node↔dsh、python↔hermes；V2 由 mise 统一 prune）。
         const runtimeDir = plan.runtime === 'node' ? nodeRuntimeDir(NODE_VERSION) : pythonRuntimeDir(PYTHON_VERSION)
-        await fsp.rm(runtimeDir, { recursive: true, force: true })
+        const runtimeGone = await removeTreeWithRetry(runtimeDir)
+        if (!toolGone || !runtimeGone) {
+          const locked = !toolGone ? toolDir(plan.name) : runtimeDir
+          const message = `Some files are still in use (locked by a running process or antivirus). Close the tool and retry in a moment. Locked: ${locked}`
+          logger.warn(`Failed to fully remove managed tool ${name}: ${message}`)
+          return { removed: false, message: redactSecretText(message) }
+        }
         return { removed: true }
       } catch (error) {
         const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
