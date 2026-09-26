@@ -11,13 +11,14 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { Mutex } from 'async-mutex'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { probeBinary, probeSystemPath } from '@main/services/codeCli/resolveBinary'
-import { cacheRoot, codeMateToolsRoot, nodeRuntimeDir, pythonRuntimeDir } from '@main/services/deepSeekHarness/paths'
+import { cacheRoot, codeMateRuntimeRoot, codeMateToolsRoot, deepSeekHarnessHome } from '@main/services/deepSeekHarness/paths'
 import { crossPlatformSpawn } from '@main/utils/processRunner'
+import { withPathPrepend } from '@main/utils/shellEnv'
 import { removeTreeWithRetry } from './removeTree'
 import { IpcChannel } from '@shared/IpcChannel'
 import { redactSecretText } from '@shared/utils/redaction'
@@ -26,9 +27,7 @@ import { type BinaryToolName, type BinaryToolPreset, BINARY_TOOL_PRESETS } from 
 import {
   ensureNodeRuntime,
   ensurePythonRuntime,
-  isNodeRuntimeInstalled,
-  NODE_VERSION,
-  PYTHON_VERSION
+  isNodeRuntimeInstalled
 } from './runtimeDownloader'
 
 const logger = loggerService.withContext('BinaryManager')
@@ -279,20 +278,22 @@ export class BinaryManager {
     })
   }
 
-  /** dsh（npm 型）：受管 node → npm install --prefix → requiredPeer 校验 → 版本标记。 */
+  /** dsh（npm 型）：受管 node → npm install --prefix → 版本标记 → bundle 装配（dshmarket + PPT）。 */
   private async installNpmTool(plan: ToolPlan): Promise<void> {
     const runtime = await ensureNodeRuntime()
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
     // PATH 首位钉受管 node（npm shim 再启 node 时取它）；缓存钉 CodeMate 子树。
+    // PATH 键经 withPathPrepend 规范化（Windows process.env 副本的键名是 'Path'，
+    // 与新写的 'PATH' 并存时 spawn 生效方是未定义行为）。
     const pathSep = isWin ? ';' : ':'
     const nodeBinDir = isWin ? runtime.dir : path.join(runtime.dir, 'bin')
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      PATH: `${nodeBinDir}${pathSep}${process.env.PATH ?? ''}`,
-      npm_config_cache: path.join(cacheRoot(), 'npm'),
-      npm_config_registry: NPM_REGISTRY_MIRROR
-    }
+    const env: NodeJS.ProcessEnv = withPathPrepend(process.env, [nodeBinDir], pathSep)
+    env.npm_config_cache = path.join(cacheRoot(), 'npm')
+    env.npm_config_registry = NPM_REGISTRY_MIRROR
+    // 批次5：pnpm store 也钉进 CodeMate 子树（dshmarket 在 harness 内装插件时
+    // 继承此 env → pnpm 子进程的 store 落点受控，卸载=删子树仍成立）。
+    env.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
     await this.runCommand(runtime.npmBin, ['install', '--prefix', dir, `${plan.preset.packageName}@latest`], {
       env,
       label: `npm install ${plan.preset.packageName}`
@@ -304,16 +305,91 @@ export class BinaryManager {
         `npm install finished but ${managedPath} is missing; ${dir} contains: ${await listDirForDiagnostics(dir)}`
       )
     }
-    // broken 也算"装了"但标 broken（V2 语义）；快照里据此呈现。
-    if (plan.preset.requiredPeer && !this.hasRequiredRuntimeDependencies(plan.name, managedPath)) {
-      logger.warn(`Managed tool ${plan.name} installed but its required peer is missing`, {
-        ...plan.preset.requiredPeer
-      })
+
+    // v0.3.4-2：bundle 装配——dshmarket（插件市场）+ PPT（社区预构建 tgz）。
+    // 全走 dsh 自带的 `plugin add` 命令（官方 bundle 安装通道：pnpm add 到 profile 树
+    // + reconcilePlugins 自动把声明 dsh.bundle 的依赖加进 dsh.profile.bundles）。
+    //
+    // 两次真机事故的命门都在这条链的环境上：
+    // ① DSH_HOME 必须显式传入——runPlugin 内 resolveProfileDir → resolveDshHome() 读
+    //    此环境变量；缺省时 profile 解析到 ~/.dsh（默认 home），而 harness 启动时带
+    //    DSH_HOME={CodeMate}/home/dsh → 装进 A 处、运行读 B 处，市场永远不出现。
+    // ② pnpm 供给弃用 corepack——corepack 只造 shim，pnpm 本体在首次运行时才下载，
+    //    且 corepack 不吃 npm_config_registry（有自己的 COREPACK_NPM_REGISTRY），
+    //    网络不佳时静默挂死。改用 npm 装进 dsh 安装树（npmmirror 钉死、shim 落
+    //    node_modules/.bin——已在 PATH）。
+    const binJs = path.join(dir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    await this.runCommand(runtime.npmBin, ['install', '--prefix', dir, 'pnpm'], {
+      env,
+      label: 'npm install pnpm (bundle toolchain)'
+    })
+    const bundleEnv = withPathPrepend(env, [path.join(dir, 'node_modules', '.bin')], pathSep)
+    bundleEnv.DSH_HOME = deepSeekHarnessHome()
+    await this.runCommand(
+      runtime.nodeBin,
+      [binJs, 'plugin', '--profile', 'web', 'add', 'dshmarket'],
+      { env: bundleEnv, label: 'dsh plugin add dshmarket', timeoutMs: 300_000 }
+    )
+    logger.info('dshmarket bundle installed')
+
+    // PPT tgz 资产路径：dev = 项目根 resources/；packaged = asarUnpack 解压后的路径。
+    // fork 缝（v0.3.4-2）：ppt tgz 不走 `dsh plugin add`——其内部 spawnSync(..., shell:true)
+    // 对参数不加引号，打包版安装目录（"C:\Program Files\..."）的空格路径必炸。改直调
+    // pnpm（cross-spawn 逐参引号）+ 自己合入 bundle 清单（对齐 dsh reconcilePlugins 语义）。
+    const pptDir = path.join(
+      app.getAppPath().replace('app.asar', 'app.asar.unpacked'),
+      'resources',
+      'codemate-bundles'
+    )
+    const pnpmShim = path.join(dir, 'node_modules', '.bin', isWin ? 'pnpm.cmd' : 'pnpm')
+    const webProfileDir = path.join(deepSeekHarnessHome(), 'profiles', 'web')
+    const pptBundleNames: string[] = []
+    for (const tgzName of ['dsh-ppt-0.1.1-rc.2-desktop-20260906.tgz', 'dsh-ppt-composer-0.1.1-rc.2-desktop-20260906.tgz']) {
+      const tgzPath = path.join(pptDir, tgzName)
+      if (await pathExists(tgzPath)) {
+        await this.runCommand(pnpmShim, ['--dir', webProfileDir, 'add', tgzPath], {
+          env: bundleEnv,
+          label: `pnpm add ${tgzName}`,
+          timeoutMs: 300_000
+        })
+        // 包名以 tgz 内 package.json 为准（dsh-ppt / dsh-ppt-composer，已验证）。
+        pptBundleNames.push(tgzName.startsWith('dsh-ppt-composer') ? 'dsh-ppt-composer' : 'dsh-ppt')
+        logger.info(`PPT bundle ${tgzName} installed`)
+      } else {
+        logger.warn(`PPT bundle tgz not found, skipping: ${tgzPath}`)
+      }
     }
+    if (pptBundleNames.length > 0) {
+      await this.reconcileProfileBundles(webProfileDir, pptBundleNames)
+    }
+
     const version = await readNpmPackageVersion(
       path.join(dir, 'node_modules', ...plan.preset.packageName.split('/'), 'package.json')
     )
     await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), version, 'utf-8')
+  }
+
+  /** fork 缝（v0.3.4-2）：把装进 profile 依赖的 bundle 包合入 `dsh.profile.bundles`
+   * （dsh reconcilePlugins 的子集语义：依赖里存在且声明 dsh.bundle 的才入列；
+   * 我们的三个目标包均已实测声明）。幂等：已在列的不重复。 */
+  private async reconcileProfileBundles(profileDir: string, bundleNames: readonly string[]): Promise<void> {
+    const manifestPath = path.join(profileDir, 'package.json')
+    const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf-8')) as {
+      dependencies?: Record<string, string>
+      dsh?: { profile?: { bundles?: string[] } }
+    }
+    const bundles = manifest.dsh?.profile?.bundles ?? []
+    let changed = false
+    for (const name of bundleNames) {
+      if (manifest.dependencies?.[name] && !bundles.includes(name)) {
+        bundles.push(name)
+        changed = true
+      }
+    }
+    if (!changed) return
+    manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
+    await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+    logger.info(`profile bundles reconciled: ${bundles.join(', ')}`)
   }
 
   /** hermes（pipx 型 → venv 等价）：受管 CPython → python -m venv → venv pip install。 */
@@ -365,9 +441,11 @@ export class BinaryManager {
     await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), version, 'utf-8')
   }
 
-  /** 卸载（mutex 串行）：删工具目录 + 1:1 映射的运行时目录（node↔dsh、python↔hermes）。
+  /** 卸载（mutex 串行）：删工具目录 + 整个同类运行时根（node↔dsh、python↔hermes）。
    * 批次5 真机事故修复：taskkill 后原生 .node 的 DLL 锁异步释放，立即 rm 撞 EPERM
-   * （sharp-win32-x64.node 实证）——改逐项遍历删除 + 重试退避（removeTree.ts）。 */
+   * （sharp-win32-x64.node 实证）——改逐项遍历删除 + 重试退避（removeTree.ts）。
+   * v0.3.4-2：运行时改为删 kind 根（runtime/node 整目录）——NODE_VERSION 跨版本升级
+   * 后旧版本目录不再残留，portable"卸载=零残留"在版本演进下仍成立。 */
   async removeTool(name: BinaryToolName): Promise<BinaryRemoveResult> {
     const plan = TOOL_PLANS.get(name)
     if (!plan) return { removed: false, message: `Unknown managed tool: ${name}` }
@@ -375,10 +453,10 @@ export class BinaryManager {
       try {
         const toolGone = await removeTreeWithRetry(toolDir(plan.name))
         // fork 缝：运行时 1:1 映射写死（node↔dsh、python↔hermes；V2 由 mise 统一 prune）。
-        const runtimeDir = plan.runtime === 'node' ? nodeRuntimeDir(NODE_VERSION) : pythonRuntimeDir(PYTHON_VERSION)
-        const runtimeGone = await removeTreeWithRetry(runtimeDir)
+        const runtimeKindRoot = path.join(codeMateRuntimeRoot(), plan.runtime)
+        const runtimeGone = await removeTreeWithRetry(runtimeKindRoot)
         if (!toolGone || !runtimeGone) {
-          const locked = !toolGone ? toolDir(plan.name) : runtimeDir
+          const locked = !toolGone ? toolDir(plan.name) : runtimeKindRoot
           const message = `Some files are still in use (locked by a running process or antivirus). Close the tool and retry in a moment. Locked: ${locked}`
           logger.warn(`Failed to fully remove managed tool ${name}: ${message}`)
           return { removed: false, message: redactSecretText(message) }

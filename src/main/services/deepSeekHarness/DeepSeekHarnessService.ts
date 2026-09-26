@@ -8,8 +8,9 @@
 // ④ application.getPath(...) → paths.ts 的 CodeMate 子树；
 // ⑤ gateway 分支经 gatewayRuntime.ts（批次3 接入 ApiGateway 后填充）。
 
-import { type ChildProcess } from 'node:child_process'
+import { type ChildProcess, execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 
 import { Mutex } from 'async-mutex'
 import { BrowserWindow } from 'electron'
@@ -17,7 +18,7 @@ import { BrowserWindow } from 'electron'
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { crossPlatformSpawn, executeCommand, terminateProcessTree, waitForProcessExit } from '@main/utils/processRunner'
-import { getRawShellEnv, refreshShellEnv } from '@main/utils/shellEnv'
+import { getRawShellEnv, refreshShellEnv, withPathPrepend } from '@main/utils/shellEnv'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { DeepSeekHarnessPermissionMode, DeepSeekHarnessSettings } from '@shared/types/codeCli'
 import type { ManagedToolStatus, ManagedToolStatusState } from '@shared/types/managedTool'
@@ -40,7 +41,8 @@ import {
   writeDeepSeekHarnessConfig
 } from './config'
 import type { KernelModelInput } from '@main/kernel/providers'
-import { deepSeekHarnessHome, deepSeekHarnessWorkspace } from './paths'
+import { cacheRoot, codeMateToolsRoot, deepSeekHarnessHome, deepSeekHarnessWorkspace, nodeRuntimeDir } from './paths'
+import { NODE_VERSION } from '../binaryManager/runtimeDownloader'
 import { startGatewayForCodeMate } from './gatewayRuntime'
 
 const logger = loggerService.withContext('DeepSeekHarnessService')
@@ -55,6 +57,9 @@ const DIAGNOSTIC_LIMIT = 2000
 const GATEWAY_ROUTE = 'cherry-studio-codemate-gateway'
 const GATEWAY_CREDENTIAL_REF = 'CHERRY_STUDIO_CODEMATE_GATEWAY_API_KEY'
 const MANAGED_CREDENTIAL_ENV = /^CHERRY_STUDIO_CODEMATE_(?:[A-F0-9]{12}|GATEWAY)_API_KEY$/i
+// v0.3.4-2：与 BinaryManager 的 NPM_REGISTRY_MIRROR 同值（registry 钉 npmmirror，
+// harness 内 dshmarket 的 pnpm/npm 子进程继承）。
+const NPM_REGISTRY_MIRROR = 'https://registry.npmmirror.com'
 
 /** fork 缝②：KernelModelInput.input 是 string[]（内核已卫生化），此处收窄为投影形状。 */
 function toModelProjection(model: KernelModelInput): DeepSeekHarnessModelProjection {
@@ -93,6 +98,30 @@ class DeepSeekHarnessService {
 
   getStatus(): ManagedToolStatusState {
     return { status: this.status, ...(this.url ? { url: this.url } : {}) }
+  }
+
+  /** 批次5：before-quit 同步杀进程用（Windows 子进程不随父退出；异步 will-quit 跑不完）。 */
+  get runningPid(): number | undefined {
+    return this.child?.pid ?? undefined
+  }
+
+  /** 同步杀进程树（before-quit 用；与 stop() 的异步树杀语义等价但阻塞到完成）。 */
+  killSync(): void {
+    const pid = this.child?.pid
+    if (!pid) return
+    try {
+      if (isWin) {
+        execFileSync('taskkill', ['/F', '/T', '/PID', String(pid)], { timeout: 5000, windowsHide: true })
+      } else {
+        process.kill(-pid, 'SIGKILL')
+      }
+      logger.info(`code-mate: killed dsh process tree (pid ${pid}) on quit`)
+    } catch (error) {
+      logger.warn(`code-mate: failed to kill dsh process tree on quit`, error as Error)
+    }
+    this.child = null
+    this.status = 'stopped'
+    this.url = undefined
   }
 
   /** Single status-transition point（fork 缝①：共享缓存 → 全窗口事件广播）。 */
@@ -193,13 +222,20 @@ class DeepSeekHarnessService {
           // runtime, so only its own startup verdict fails launch; record its version for reports.
           const aborted = startupAbortController.signal.aborted
           const dshVersion = !aborted && runtime ? await readDshVersion(runtime.path) : undefined
-          if (!aborted) logger.warn('DeepSeek Harness failed to start', { ...(dshVersion ? { dshVersion } : {}) })
+          // v0.3.4-2：failure message 已含 waitForReady 捕获的子进程 stderr/stdout 尾巴
+          // ——不进日志的话真机排障只能看到一句 "failed to start"（本轮排障实证）。
+          const failMessage = error instanceof Error ? error.message : 'Failed to start DeepSeek Harness'
+          if (!aborted) {
+            logger.warn('DeepSeek Harness failed to start', {
+              ...(dshVersion ? { dshVersion } : {}),
+              message: sanitizeDiagnostic(failMessage)
+            })
+          }
           await this.stopOwnedProcessLocked().catch((stopError) => {
             logger.warn('Failed to stop DeepSeek Harness after launch failure', stopError as Error)
           })
           if (receipt) await this.rollbackLaunchConfig(receipt)
-          const message = error instanceof Error ? error.message : 'Failed to start DeepSeek Harness'
-          return { success: false, message: sanitizeDiagnostic(message) }
+          return { success: false, message: sanitizeDiagnostic(failMessage) }
         }
       })
     } finally {
@@ -318,10 +354,35 @@ class DeepSeekHarnessService {
       DSH_HOME: deepSeekHarnessHome(),
       DSH_PERMISSION_MODE: permissionMode
     })
+    // v0.3.4-2：harness 内的 dshmarket 会自己装插件（pnpm/npm 子进程）——环境不钉住
+    // 就是"指定位置外乱拉屎"：pnpm store 落全局、npm -g 落系统前缀。PATH 前置我们的
+    // pnpm shim（installNpmTool 装进 tools/dsh/node_modules/.bin）+ 受管 node bin；
+    // store/cache/registry 全钉 CodeMate 子树 → dshmarket 的 provisionPnpm 探测立即
+    // 命中，任何子进程的写面都在子树内。
+    // PATH 键经 withPathPrepend 规范化（Windows shell env 键名是 'Path'，普通对象上
+    // env.PATH 是 undefined——上一版直接拼 env.PATH 把整个系统 PATH 截没了，真机
+    // 症状：'"node" 不是内部或外部命令'）。
+    const pathSep = isWin ? ';' : ':'
+    const toolsBinDir = path.join(codeMateToolsRoot(), 'dsh', 'node_modules', '.bin')
+    const nodeBinDir = isWin ? nodeRuntimeDir(NODE_VERSION) : path.join(nodeRuntimeDir(NODE_VERSION), 'bin')
+    const childEnv = stripManagedCredentialEnv(
+      withPathPrepend(
+        {
+          ...env,
+          DSH_HOME: deepSeekHarnessHome(),
+          DSH_PERMISSION_MODE: permissionMode
+        },
+        [nodeBinDir, toolsBinDir],
+        pathSep
+      )
+    )
+    childEnv.npm_config_cache = path.join(cacheRoot(), 'npm')
+    childEnv.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
+    childEnv.npm_config_registry = NPM_REGISTRY_MIRROR
 
     const child = crossPlatformSpawn(runtime.path, ['web', '--host', '127.0.0.1', '--port', '0', '--no-open'], {
       cwd: workspace,
-      env,
+      env: childEnv,
       detached: !isWin,
       stdio: ['ignore', 'pipe', 'pipe']
     })

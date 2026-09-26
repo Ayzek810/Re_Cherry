@@ -16,7 +16,7 @@
 //    （services/codeCli/hermesHome.ts，钉进 CodeMate 子树）；AbsoluteFilePath 品牌类型
 //    未移植，退化为 string。V2 无 workspace 概念（spawn 无 cwd），fork 不造。
 
-import type { ChildProcess } from 'node:child_process'
+import { ChildProcess, execFileSync } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import path from 'node:path'
@@ -90,6 +90,29 @@ export class HermesDashboardService {
 
   getStatus(): ManagedToolStatusState {
     return { status: this.status, ...(this.url ? { url: this.url } : {}) }
+  }
+
+  /** 批次5：before-quit 同步杀进程用（同 DeepSeekHarnessService.runningPid）。 */
+  get runningPid(): number | undefined {
+    return this.child?.pid ?? undefined
+  }
+
+  killSync(): void {
+    const pid = this.child?.pid
+    if (!pid) return
+    try {
+      if (isWin) {
+        execFileSync('taskkill', ['/F', '/T', '/PID', String(pid)], { timeout: 5000, windowsHide: true })
+      } else {
+        process.kill(-pid, 'SIGKILL')
+      }
+      logger.info(`code-mate: killed hermes process tree (pid ${pid}) on quit`)
+    } catch (error) {
+      logger.warn(`code-mate: failed to kill hermes process tree on quit`, error as Error)
+    }
+    this.child = null
+    this.status = 'stopped'
+    this.url = undefined
   }
 
   /** Serializes native Hermes config mutations with the Dashboard lifecycle. */

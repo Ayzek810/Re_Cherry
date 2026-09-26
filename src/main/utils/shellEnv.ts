@@ -70,6 +70,27 @@ export function getPathFromEnvironment(env: Record<string, string | undefined>):
 }
 
 /**
+ * fork 缝（v0.3.4-2 真机事故）：构造带 PATH 前置的子进程 env。
+ * Windows shell env 的键名是注册表原样的 `Path`——普通对象上 `env.PATH`（大写）是
+ * undefined；spread 副本里原键仍在，与新写的 `PATH` 并存，spawn 时哪个生效是未定义
+ * 行为（真机症状：子进程只看到截断的 PATH，`node` 直接找不到）。这里读原键（大小写
+ * 不敏感）→ 删全部 PATH 变体 → 统一写单一大写 `PATH`。
+ */
+export function withPathPrepend(
+  env: Record<string, string | undefined>,
+  prependDirs: readonly string[],
+  pathSeparator = isWin ? ';' : ':'
+): NodeJS.ProcessEnv {
+  const result: NodeJS.ProcessEnv = { ...env }
+  const existing = getPathFromEnvironment(result) ?? ''
+  for (const key of Object.keys(result)) {
+    if (key.toLowerCase() === 'path') delete result[key]
+  }
+  result.PATH = [...prependDirs, existing].filter((segment) => segment !== '').join(pathSeparator)
+  return result
+}
+
+/**
  * Ensures Cherry-managed tool directories are appended to the user's PATH while
  * preserving the original key casing and avoiding duplicate segments.
  */

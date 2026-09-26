@@ -27,11 +27,16 @@ const EXTRACT_TIMEOUT_MS = 120_000
 // 顶部可调：真实存在的 node 发行版与 python-build-standalone tag/版本。
 // 批次5 真机事故修复：node dist 布局是 /dist/v{版本}/<文件名>（带 v 前缀的版本目录）——
 // 原实现漏掉版本目录段，双源 404（真机日志：nodejs.org 与 npmmirror 均 404）。
-// 三个 URL 已实测 200（2026-09-24）：
-//   https://nodejs.org/dist/v22.12.0/node-v22.12.0-win-x64.zip
-//   https://registry.npmmirror.com/-/binary/node/v22.12.0/node-v22.12.0-win-x64.zip
-//   https://registry.npmmirror.com/-/binary/python-build-standalone/20241016/cpython-3.12.7+20241016-x86_64-pc-windows-msvc-install_only.tar.gz
-export const NODE_VERSION = '22.12.0'
+// v0.3.4-2 升版 24.9.0（社区桌面壳捆绑的同款版本）——三个理由：
+// ① dsh 0.1.5-rc.x 的 bin.js 入口守护 `if (import.meta.main)` 在 Node 22.12.0 下恒为
+//    undefined（实测：22.12 输出 undefined、24.19 输出 true）→ CLI 全体静默空转 exit 0
+//    （harness 372ms 退出、plugin add 无副作用，全由此起）；
+// ② 安装 ABI = 运行 ABI（原生模块 sharp 等不再跨 ABI）；
+// ③ PPT bundle engines ^22.19||>=24。
+// URL 实测 200（2026-09-26）：
+//   https://nodejs.org/dist/v24.9.0/node-v24.9.0-win-x64.zip
+//   https://registry.npmmirror.com/-/binary/node/v24.9.0/node-v24.9.0-win-x64.zip
+export const NODE_VERSION = '24.9.0'
 export const PYTHON_TAG = '20241016'
 export const PYTHON_VERSION = '3.12.7'
 
@@ -164,8 +169,26 @@ async function flattenIntoTarget(tempDir: string, targetDir: string, innerPrefix
   }
   await fsp.rm(targetDir, { recursive: true, force: true })
   await fsp.mkdir(path.dirname(targetDir), { recursive: true })
-  await fsp.rename(source, targetDir)
-  await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+  // v0.3.4-2 真机事故：解压数千文件后 Windows 立即 rename 撞杀软扫描窗口
+  // （EPERM，与 removeTool 的 sharp.node 同类）——重试退避到扫描结束。
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await fsp.rename(source, targetDir)
+      await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+      return
+    } catch (error) {
+      lastError = error
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw error
+      logger.warn(`Runtime rename attempt ${attempt}/5 failed (${code}), retrying`, {
+        source,
+        targetDir
+      })
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
 }
 
 // ---------------------------------------------------------------------------

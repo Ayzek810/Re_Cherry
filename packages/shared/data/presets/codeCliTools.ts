@@ -56,11 +56,11 @@ export const CODE_CLI_TOOL_PRESETS = Object.freeze([
     packageName: '@deepseek-ai/dsh',
     install: 'npm',
     misePrerelease: true,
-    // mise 2026.7.14 aube exceeds its 16-pass fixed-point limit on DSH's recursive peer graph.
-    miseNpmShellOut: true,
-    // dsh-scope is nowhere a real dependency, only a transitive peer, so an install
-    // reports success without it (#19313).
-    requiredPeer: { host: '@deepseek-ai/dsh-agent-loop', peer: '@deepseek-ai/dsh-scope' }
+    miseNpmShellOut: true
+    // fork 缝（v0.3.4-2）：requiredPeer 移除——dsh@0.1.5-rc.2 依赖树重构，
+    // agent-loop 不再是直接依赖，agent-loop@0.1.5 自身也不引 scope（实测 registry）。
+    // 旧映射 {host: dsh-agent-loop, peer: dsh-scope} 对 0.1.5 永不触发（host 不存在
+    // → "recipe restructured" → not broken），保留只会误导。
   }),
   defineCodeCliTool({
     id: CodeCli.HERMES,
