@@ -779,7 +779,19 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Start, (_, input) =>
     deepSeekHarnessService.start(input as Parameters<typeof deepSeekHarnessService.start>[0])
   )
-  ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Stop, () => deepSeekHarnessService.stop())
+  // 批次5 修复：stop 原样透传 void → IPC 回 undefined → 渲染层读 result.success 炸
+  // （hermes 侧同位 handler 是 {success} 包裹形状，此处对齐）。
+  ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Stop, async () => {
+    try {
+      await deepSeekHarnessService.stop()
+      return { success: true as const }
+    } catch (error) {
+      return {
+        success: false as const,
+        message: error instanceof Error ? error.message : 'Failed to stop DeepSeek Harness'
+      }
+    }
+  })
   // 批次4a：渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道（载荷同 Status 广播）。
   ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_GetStatus, () => deepSeekHarnessService.getStatus())
 
