@@ -504,11 +504,15 @@ async function assertWebReady(url: string): Promise<void> {
   const readyUrl = new URL(url)
   const response = await fetch(readyUrl.toString(), { redirect: 'manual', signal: AbortSignal.timeout(5000) })
   await response.body?.cancel()
-  const exchangedToken =
-    readyUrl.searchParams.has('token') && response.status === 303 && response.headers.get('location') === '/'
-  if (response.status !== 200 && !exchangedToken) {
-    throw new Error(`DeepSeek Harness Web UI returned HTTP ${response.status}`)
+  // v0.3.4-2 真机事故：0.1.5 校验 303→location==='/'（token 换取页）；0.1.7 的重定向目标
+  // 变了 → 原精确匹配失败 → 活着的 harness 被我们误杀。就绪的事实是"HTTP 服务在响应"——
+  // 放宽为 2xx/3xx 皆就绪，location 记日志供未来版本差异诊断。
+  const location = response.headers.get('location')
+  const serverResponded = (response.status >= 200 && response.status < 400) || response.status === 304
+  if (!serverResponded) {
+    throw new Error(`DeepSeek Harness Web UI returned HTTP ${response.status}${location ? ` (location: ${location})` : ''}`)
   }
+  logger.debug?.(`Web UI readiness: HTTP ${response.status}${location ? ` -> ${location}` : ''}`)
 }
 
 function waitForReady(child: ChildProcess, secret: string, signal: AbortSignal): Promise<string> {
