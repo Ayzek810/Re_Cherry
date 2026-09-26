@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useCodeCli } from '@renderer/hooks/useCodeCli'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { loggerService } from '@logger'
+import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
 import { toCliProvider } from '../cliConfig/providerView'
 import type { CodeCliId } from '@shared/types/codeCliState'
 import type { CliProviderConfig } from '@shared/types/codeCliState'
@@ -320,7 +321,10 @@ export function useCodeCliPageViewProps(
           upgradingTools,
           installError,
           snapshotsLoading,
-          installProgressStep: installProgress?.tool === selectedCliTool ? installProgress.step : undefined,
+          installProgressStep:
+            installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
+              ? installProgress.step
+              : undefined,
           providerState: {
             providerless: isProviderlessTool,
             showSelectionHint: showProviderSelectionHint
