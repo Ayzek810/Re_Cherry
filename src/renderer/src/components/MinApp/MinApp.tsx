@@ -45,6 +45,14 @@ const MinApp: FC<Props> = ({ app, onClick, size = 60, isLast }) => {
   const displayName = isLast ? t('settings.miniapps.custom.title') : app.nameKey ? t(app.nameKey) : app.name
 
   const handleClick = () => {
+    // fork 缝（v0.3.4-2）：code-mate 受管 Web UI 的磁贴是 /code 管理页的快捷方式——
+    // 点击进管理页做全新启动，而非按 url 开 webview（transient 应用的 url 是上次
+    // 会话的陈旧端口，且未启动时根本没有 url）。启动台/顶栏/侧栏三个消费面统一。
+    if (app.id.startsWith('code-mate-')) {
+      navigate('/code')
+      onClick?.()
+      return
+    }
     if (isTopNavbar) {
       // 顶部导航栏：导航到小程序页面
       navigate(`/apps/${app.id}`)
