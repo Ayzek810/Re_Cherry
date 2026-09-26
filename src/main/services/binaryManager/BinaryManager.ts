@@ -27,7 +27,8 @@ import { type BinaryToolName, type BinaryToolPreset, BINARY_TOOL_PRESETS } from 
 import {
   ensureNodeRuntime,
   ensurePythonRuntime,
-  isNodeRuntimeInstalled
+  isNodeRuntimeInstalled,
+  NODE_VERSION
 } from './runtimeDownloader'
 
 const logger = loggerService.withContext('BinaryManager')
@@ -56,6 +57,11 @@ const PYPI_OFFICIAL_INDEX = 'https://pypi.org/simple'
 const PYPI_TSINGHUA_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 
 const TOOL_VERSION_MARKER = '.codemate-version'
+
+// v0.3.4-2（用户裁决）：通道版本可见化——主进程启动即打一行安装通道，日志里一眼
+// 可辨运行中的代码是否加载了本次改动（真机取证：dev 未重启时 npm 日志显示旧 spec，
+// "改了没生效"与"代码没改"无法区分——这行日志终结歧义）。
+logger.info(`dsh install channel: @${DSH_NPM_DIST_TAG} (node ${NODE_VERSION})`)
 
 // ---------------------------------------------------------------------------
 // 类型：V2 src/shared/types/binary.ts 子集抄形状
