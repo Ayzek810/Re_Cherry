@@ -1,6 +1,8 @@
-import { ArrowUpCircle, Download, ExternalLink, Play, Square, Trash2 } from 'lucide-react'
+import { ArrowUpCircle, Download, ExternalLink, Pin, PinOff, Play, Square, Trash2 } from 'lucide-react'
 import { type FC, useId } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { useMinapps } from '@renderer/hooks/useMinapps'
 
 import { BinaryInstallFailureRow, BinaryInstallingHint } from './BinaryInstallErrorDialog'
 import { CliIcon } from './CliIcon'
@@ -66,6 +68,19 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
 }) => {
   const { t } = useTranslation()
   const launchDisabledHintId = useId()
+  // fork 缝（v0.3.4-2 用户裁决）：启动按钮右边的「固定到启动台」——把当前工具的加号页
+  // 快捷方式一键建好/移除，不必先启动再右键侧栏磁贴。磁贴对象与 openSmartMinapp 的
+  // transient 应用同形（url 留空：启动台点击进 /code 管理页，不消费 url）。
+  const { pinned, updatePinnedMinapps } = useMinapps()
+  const launchpadAppId = `code-mate-${toolId}`
+  const isPinnedToLaunchpad = pinned.some((p) => p.id === launchpadAppId)
+  const toggleLaunchpadPin = () => {
+    updatePinnedMinapps(
+      isPinnedToLaunchpad
+        ? pinned.filter((p) => p.id !== launchpadAppId)
+        : [...pinned, { id: launchpadAppId, name: toolName, url: '' }]
+    )
+  }
   const isInstalled = status.installed
   const canUpgrade = isInstalled && status.canUpgrade
   // fork 缝①（续）：removing/failedRemoval 恒 false（无 operation 面）；retry 的 failed-install 臂
@@ -226,6 +241,24 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
                   {launchDisabledHint}
                 </span>
               ) : null}
+              {/* fork 缝（v0.3.4-2）：启动右边的「固定到启动台」开关 */}
+              <Tooltip
+                content={t(isPinnedToLaunchpad ? 'minapp.remove_from_launchpad' : 'minapp.add_to_launchpad')}
+                placement="top"
+                delay={300}
+                sideOffset={6}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={toggleLaunchpadPin}
+                  disabled={busy}
+                  aria-label={t(isPinnedToLaunchpad ? 'minapp.remove_from_launchpad' : 'minapp.add_to_launchpad')}
+                  title={t(isPinnedToLaunchpad ? 'minapp.remove_from_launchpad' : 'minapp.add_to_launchpad')}
+                  className={isPinnedToLaunchpad ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}>
+                  {isPinnedToLaunchpad ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+                </Button>
+              </Tooltip>
             </>
           ) : (
             // fork 缝①（续）：failedRemoval 臂恒 false（无 operation 面），比较式随状态面裁剪。
