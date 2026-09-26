@@ -10,7 +10,7 @@
 import App from '@renderer/components/MinApp/MinApp'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useRuntime } from '@renderer/hooks/useRuntime'
-import { FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette } from 'lucide-react'
+import { Code, FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette } from 'lucide-react'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -60,6 +60,13 @@ const LaunchpadPage: FC = () => {
       text: t('title.notes'),
       path: '/notes',
       bgColor: 'linear-gradient(135deg, #F97316, #FB923C)'
+    },
+    {
+      // v0.3.4-1 编码助手（Code Mate，V2 移植；颜色逐字照 V2 启动台）
+      icon: <Code size={32} className="icon" />,
+      text: t('title.code'),
+      path: '/code',
+      bgColor: 'linear-gradient(135deg, #1F2937, #374151)'
     }
   ]
 

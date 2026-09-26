@@ -40,7 +40,12 @@ export enum ConfigKeys {
   EnableDeveloperMode = 'enableDeveloperMode',
   ClientId = 'clientId',
   GitBashPath = 'gitBashPath',
-  GitBashPathSource = 'gitBashPathSource' // 'manual' | 'auto' | null
+  GitBashPathSource = 'gitBashPathSource', // 'manual' | 'auto' | null
+  // 统一网关（v0.3.4-1 批次3）：V2 的 feature.api_gateway.* 四键的 fork 对应存储位。
+  ApiGatewayEnabled = 'apiGatewayEnabled',
+  ApiGatewayPort = 'apiGatewayPort',
+  ApiGatewayHost = 'apiGatewayHost',
+  ApiGatewayApiKey = 'apiGatewayApiKey'
 }
 
 export class ConfigManager {
@@ -186,6 +191,42 @@ export class ConfigManager {
 
   setEnableDeveloperMode(value: boolean) {
     this.set(ConfigKeys.EnableDeveloperMode, value)
+  }
+
+  // 统一网关（v0.3.4-1 批次3）：V2 PreferenceService 四键的 fork 读写面。
+  // setter 一律 setAndNotify：'apiGatewayEnabled' 的订阅方（ApiGatewayService
+  // reconciler 触发）靠它驱动收敛；enabled 默认 false、port 23333、host 回环、
+  // apiKey 空（ensureValidApiKey 首次启动时生成）。
+  getApiGatewayEnabled(): boolean {
+    return this.get<boolean>(ConfigKeys.ApiGatewayEnabled, false)
+  }
+
+  setApiGatewayEnabled(value: boolean) {
+    this.setAndNotify(ConfigKeys.ApiGatewayEnabled, value)
+  }
+
+  getApiGatewayPort(): number {
+    return this.get<number>(ConfigKeys.ApiGatewayPort, 23333)
+  }
+
+  setApiGatewayPort(value: number) {
+    this.setAndNotify(ConfigKeys.ApiGatewayPort, value)
+  }
+
+  getApiGatewayHost(): string {
+    return this.get<string>(ConfigKeys.ApiGatewayHost, '127.0.0.1')
+  }
+
+  setApiGatewayHost(value: string) {
+    this.setAndNotify(ConfigKeys.ApiGatewayHost, value)
+  }
+
+  getApiGatewayApiKey(): string {
+    return this.get<string>(ConfigKeys.ApiGatewayApiKey, '')
+  }
+
+  setApiGatewayApiKey(value: string) {
+    this.set(ConfigKeys.ApiGatewayApiKey, value)
   }
 
   getClientId(): string {

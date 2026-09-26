@@ -108,4 +108,35 @@ describe('store migrations', () => {
       expect(badSlice.preprocess.providers).toBe('not-an-array')
     })
   })
+
+  describe('migration 223: codeCliConfigs backfill (v0.3.4-1 真机 TypeError 修复)', () => {
+    it('backfills missing codeCliConfigs on persisted settings (old shape → {})', async () => {
+      const state = {
+        settings: { sidebarIcons: { visible: ['assistants'] } },
+        _persist: { version: 222, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 223)
+
+      expect(migrated.settings.codeCliConfigs).toEqual({})
+    })
+
+    it('preserves existing codeCliConfigs (user data survives upgrade)', async () => {
+      const existing = { 'deepseek-harness': { providers: {}, current: null } }
+      const state = {
+        settings: { codeCliConfigs: existing },
+        _persist: { version: 222, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 223)
+
+      expect(migrated.settings.codeCliConfigs).toBe(existing)
+    })
+
+    it('tolerates a missing settings slice', async () => {
+      const noSettings: any = await migrate({ _persist: { version: 222, rehydrated: false } } as any, 223)
+
+      expect(noSettings.settings).toBeUndefined()
+    })
+  })
 })

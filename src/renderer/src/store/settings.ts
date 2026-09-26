@@ -35,6 +35,7 @@ import type {
   OpenAIReasoningSummary,
   OpenAIVerbosity
 } from '@renderer/types/aiCoreTypes'
+import type { CodeCliConfigs } from '@shared/types/codeCliState'
 import { v4 as uuid } from 'uuid'
 
 export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter' | 'Alt+Enter'
@@ -177,6 +178,8 @@ export interface SettingsState {
   minappsOpenLinkExternal: boolean
   /** Mini app region filter: 'auto' (detect from IP), 'CN', or 'Global' */
   minAppRegion: MinAppRegionFilter
+  /** 编码助手（v0.3.4-1 批次4a）：V2 preference `feature.code_cli.configs` 的 fork redux 对位。 */
+  codeCliConfigs: CodeCliConfigs
   // 隐私设置
   privacyPolicyVersion?: string
   enableDataCollection: boolean
@@ -358,6 +361,8 @@ export const initialState: SettingsState = {
   showOpenedMinappsInSidebar: true,
   minappsOpenLinkExternal: false,
   minAppRegion: 'auto',
+  // 编码助手（v0.3.4-1 批次4a）：持久化缝见 codeCliConfigs 注释。
+  codeCliConfigs: {},
   privacyPolicyVersion: LATEST_PRIVACY_POLICY_VERSION,
   // v0.3.1-2：默认关闭数据收集（上游默认 true，会向 cherry-studio 通道上报）。
   enableDataCollection: false,
@@ -759,6 +764,11 @@ const settingsSlice = createSlice({
     setMinAppRegion: (state, action: PayloadAction<MinAppRegionFilter>) => {
       state.minAppRegion = action.payload
     },
+    // 编码助手（v0.3.4-1 批次4a）：V2 usePreference 写路径的 redux 对位（整值替换，
+    // 写队列串行化在 useCodeCli 内保持）。
+    setCodeCliConfigs: (state, action: PayloadAction<CodeCliConfigs>) => {
+      state.codeCliConfigs = action.payload
+    },
     setEnableDataCollection: (state, action: PayloadAction<boolean>) => {
       state.enableDataCollection = action.payload
     },
@@ -926,6 +936,7 @@ export const {
   setMaxKeepAliveMinapps,
   setShowOpenedMinappsInSidebar,
   setMinAppRegion,
+  setCodeCliConfigs,
   setEnableDataCollection,
   setPrivacyPolicyVersion,
   setEnableSpellCheck,

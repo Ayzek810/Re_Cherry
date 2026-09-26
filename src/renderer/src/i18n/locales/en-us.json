@@ -587,6 +587,114 @@
       }
     }
   },
+  "code": {
+    "add_provider_hint": "Add provider in Settings → Model Service",
+    "api_gateway": {
+      "description": "Any CLI, every model",
+      "requires_running": "Keep Cherry Studio running after enabling — the external CLI connects to the gateway it hosts.",
+      "title": "Unified Gateway"
+    },
+    "apply_failed": "Failed to write CLI config to the system file",
+    "clear_config_failed": "Failed to clear the CLI config. Your credentials may still be in the tool's config files.",
+    "cli_config": {
+      "format_failed": "Format failed. Check the file syntax.",
+      "title": "CLI Config File",
+      "unknown_model": "Unknown model",
+      "unknown_provider": "Unknown Provider"
+    },
+    "cli_tools": {
+      "deepseek_harness": "DeepSeek Harness",
+      "hermes": "Hermes Agent"
+    },
+    "configure": "Configure",
+    "deepseek_harness": {
+      "agent_preset": "Default agent mode",
+      "agent_presets": {
+        "code": {
+          "description": "Combines multi-step tool work through the PTC Code Mode SDK for complex coding tasks.",
+          "label": "PTC Code"
+        },
+        "inherit": {
+          "description": "Keeps the existing default preset in the shared ~/.dsh settings.",
+          "label": "Harness default"
+        },
+        "minimal": {
+          "description": "Uses only a persistent shell and text editor for the smallest tool surface.",
+          "label": "Minimal"
+        },
+        "standard": {
+          "description": "Full coding agent with files, shell, search, skills, planning, and subagents.",
+          "label": "Standard"
+        }
+      },
+      "danger_warning": "Full access lets the agent reach files outside the workspace and skips operation approval. Use it only for tasks you trust.",
+      "permission_mode": "Default permission",
+      "permission_modes": {
+        "danger-full-access": {
+          "description": "Allows unrestricted access without operation approval.",
+          "label": "Full access"
+        },
+        "read-only": {
+          "description": "Restricts file writes and asks before risky operations.",
+          "label": "Read only"
+        },
+        "workspace-write": {
+          "description": "Allows writes in the current DSH workspace and asks before risky operations.",
+          "label": "Workspace write"
+        }
+      }
+    },
+    "disable": "Disable",
+    "enable": "Enable",
+    "folder_placeholder": "Select working directory",
+    "format_json": "Format",
+    "hermes_dashboard": {
+      "error": {
+        "cancelled": "Hermes Agent web UI startup was cancelled",
+        "dependencies_missing": "Hermes Agent web UI dependencies are missing. Reinstall Hermes Agent in Settings → Dependencies.",
+        "not_installed": "Hermes Agent is not installed. Install it in Settings → Dependencies.",
+        "open_failed": "Failed to open the Hermes Agent web UI",
+        "startup_failed": "Failed to start the Hermes Agent web UI",
+        "stop_failed": "Failed to stop the Hermes Agent web UI"
+      }
+    },
+    "install": "Install",
+    "install_success": "Installation successful",
+    "installing": "Installing…",
+    "latest": "Latest",
+    "launch": {
+      "error": "Launch failed, please try again",
+      "label": "Launch",
+      "title": "Launch {{tool}}",
+      "validation_error": "Please complete all required fields: CLI tool, model, and working directory"
+    },
+    "launching": "Launching...",
+    "model_providers": "Model Providers",
+    "model_selection": "Model Selection",
+    "move_provider_to_top": "Move provider to top",
+    "no_matching_providers": "No matching providers",
+    "no_providers_description": "Enable a supported provider in Settings → Model Service",
+    "no_providers_title": "No enabled providers",
+    "no_tools": "No tools available",
+    "not_installed": "Not installed",
+    "open_provider_settings": "Open provider settings",
+    "open_web_ui": "Open Web UI",
+    "own_login": {
+      "title": "{{toolName}} Official"
+    },
+    "providerless_hint": "This tool authenticates through its own login flow — just pick a working directory and launch it. Run the tool once to sign in.",
+    "search_provider_placeholder": "Search providers…",
+    "select_folder": "Select Folder",
+    "select_provider_before_launch": "Select a provider before launching {{toolName}}",
+    "select_provider_model": "Please select a provider and model first",
+    "select_tool_to_start": "Select a CLI tool from the left to start configuring",
+    "stop": "Stop",
+    "tool_parameters": "Parameter Settings",
+    "up_to_date": "Up to date",
+    "upgrade": "Upgrade",
+    "upgrade_success": "Upgrade successful",
+    "working_directory": "Working Directory"
+  },
   "code_block": {
     "collapse": "Collapse",
     "copy": {
@@ -2672,6 +2780,22 @@
         "token_placeholder": "Please enter the Yuque Token"
       }
     },
+    "dependencies": {
+      "installError": "Failed to install tool",
+      "installErrorHint": "The install command failed. Copy the log below to troubleshoot or share it for help.",
+      "installingHint": "The first install may download a runtime and take a few minutes",
+      "removeError": "Failed to remove tool",
+      "removeErrorHint": "The cleanup command failed. Copy the log below to troubleshoot or share it for help.",
+      "source": {
+        "system": "System"
+      },
+      "uninstall": "Uninstall",
+      "uninstallConfirmMessage": "Are you sure you want to uninstall \"{{name}}\"? Cherry Studio's backend copy will be deleted.",
+      "uninstallConfirmTitle": "Uninstall Tool",
+      "uninstallFailed": "Failed to uninstall tool",
+      "uninstallSuccess": "Tool uninstalled",
+      "viewErrorDetails": "View details"
+    },
     "developer": {
       "enable_developer_mode": "Enable Developer Mode",
       "help": "After enabling developer mode, you can use the trace feature to view the data flow during model invocation.",
@@ -3728,6 +3852,7 @@
   },
   "title": {
     "apps": "Apps",
+    "code": "Code Mate",
     "files": "Files",
     "home": "Home",
     "knowledge": "Knowledge Base",

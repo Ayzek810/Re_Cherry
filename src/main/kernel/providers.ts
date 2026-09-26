@@ -63,7 +63,8 @@ export interface KernelModelInput {
  * Cherry provider 类型 → pi-ai 手写路由协议。
  * 覆盖三种线路协议；其余类型（gemini/azure/vertex/bedrock 等）暂不支持，跳过并告警。
  */
-const PROTOCOL_BY_TYPE: Record<string, string> = {
+// v0.3.4-1 导出：CodeMate（dsh 直连投影）复用同一类型→协议映射，避免两处真相源。
+export const PROTOCOL_BY_TYPE: Record<string, string> = {
   openai: 'openai-completions',
   'openai-response': 'openai-responses',
   anthropic: 'anthropic-messages',

@@ -18,6 +18,9 @@ import MinAppIcon from '../Icons/MinAppIcon'
 export const SidebarOpenedMinappTabs: FC = () => {
   const { minappShow, openedKeepAliveMinapps, currentMinappId } = useRuntime()
   const { openMinappKeepAlive, hideMinappPopup, closeMinapp, closeAllMinapps } = useMinappPopup()
+  // 批次5（用户裁决）：打开区右键菜单补「固定到启动台」——打开中的小程序（含 code-mate
+  // 受管 Web UI）可钉进启动台的小程序区，关掉侧栏图标入口后仍可从 + 页直达。
+  const { pinned, updatePinnedMinapps } = useMinapps()
   const { showOpenedMinappsInSidebar } = useSettings() // 获取控制显示的设置
   const { theme } = useTheme()
   const { t } = useTranslation()
@@ -67,7 +70,17 @@ export const SidebarOpenedMinappTabs: FC = () => {
       <TabsWrapper>
         <Menus>
           {openedKeepAliveMinapps.map((app) => {
+            const isPinned = pinned.some((item) => item.id === app.id)
             const menuItems: MenuProps['items'] = [
+              {
+                key: 'togglePin',
+                label: isPinned ? t('minapp.remove_from_launchpad') : t('minapp.add_to_launchpad'),
+                onClick: () => {
+                  updatePinnedMinapps(
+                    isPinned ? pinned.filter((item) => item.id !== app.id) : [...pinned, app]
+                  )
+                }
+              },
               {
                 key: 'closeApp',
                 label: t('minapp.sidebar.close.title'),

@@ -143,7 +143,9 @@ const titleKeyMap = {
   translate: 'title.translate',
   paintings: 'title.paintings',
   // v0.3.3-2 笔记复活：标签页标题（V1 同键）
-  notes: 'title.notes'
+  notes: 'title.notes',
+  // v0.3.4-1 编码助手（V2 Code Mate 同键）
+  code: 'title.code'
 } as const
 
 export const getTitleLabel = (key: string): string => {
@@ -168,7 +170,9 @@ const sidebarIconKeyMap = {
   translate: 'translate.title',
   paintings: 'paintings.title',
   // v0.3.3-2 笔记复活（V1 同键）
-  notes: 'notes.title'
+  notes: 'notes.title',
+  // v0.3.4-1 编码助手（V2 Code Mate 同键）
+  code: 'title.code'
 } as const
 
 export const getSidebarIconLabel = (key: string): string => {

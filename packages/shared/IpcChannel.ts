@@ -290,5 +290,40 @@ export enum IpcChannel {
   Dsh_AttachmentSync = 'dsh:attachment-sync',
   /** 轻量图像模态（绘画页/生图工具的执行缝；OpenAI 兼容平面直连，实现 kernel/lightLlmModalities）。 */
   Dsh_LightImage = 'dsh:light-image',
-  Dsh_LightImageAbort = 'dsh:light-image-abort'
+  Dsh_LightImageAbort = 'dsh:light-image-abort',
+
+  // 编码助手（v0.3.4-1 自 CS_V2 Code Mate 移植）：受管 Web UI 工具的生命周期通道。
+  CodeCli_DeepseekHarness_Start = 'code-cli:deepseek-harness:start',
+  CodeCli_DeepseekHarness_Stop = 'code-cli:deepseek-harness:stop',
+  /** 主 → 渲染状态广播（starting/running/stopped/error + url）。 */
+  CodeCli_DeepseekHarness_Status = 'code-cli:deepseek-harness:status',
+  /** 立即拉当前状态（批次4a：渲染层订阅缝 useCodeCliStatus 的初值通道；载荷同 Status）。 */
+  CodeCli_DeepseekHarness_GetStatus = 'code-cli:deepseek-harness:get-status',
+  CodeCli_HermesDashboard_Start = 'code-cli:hermes-dashboard:start',
+  CodeCli_HermesDashboard_Stop = 'code-cli:hermes-dashboard:stop',
+  /** 主 → 渲染状态广播（同 DeepseekHarness_Status 语义）。 */
+  CodeCli_HermesDashboard_Status = 'code-cli:hermes-dashboard:status',
+  /** 立即拉当前状态（批次4a；载荷同 Status）。 */
+  CodeCli_HermesDashboard_GetStatus = 'code-cli:hermes-dashboard:get-status',
+  /** hermes 配置文件读写（target 枚举 = 写白名单，渲染层永不传路径）。 */
+  CodeCli_ReadConfig = 'code-cli:read-config',
+  CodeCli_WriteConfig = 'code-cli:write-config',
+  /** 受管 CLI 工具安装器（批次2）：装卸/快照/版本（portable，{userData}/Data/CodeMate/）。 */
+  CodeCli_Binary_Install = 'code-cli:binary:install',
+  CodeCli_Binary_Remove = 'code-cli:binary:remove',
+  CodeCli_Binary_Snapshots = 'code-cli:binary:snapshots',
+  CodeCli_Binary_LatestVersions = 'code-cli:binary:latest-versions',
+  /** 安装/卸载/快照变化广播（无载荷，消费者重拉快照）。 */
+  CodeCli_Binary_Changed = 'code-cli:binary:changed',
+  /** 统一网关（批次3）：生命周期 + 状态广播 + 渲染层配置同步（enabled/port/host）。 */
+  CodeCli_ApiGateway_Start = 'code-cli:api-gateway:start',
+  CodeCli_ApiGateway_Stop = 'code-cli:api-gateway:stop',
+  CodeCli_ApiGateway_Restart = 'code-cli:api-gateway:restart',
+  CodeCli_ApiGateway_LanSetEnabled = 'code-cli:api-gateway:lan:set-enabled',
+  CodeCli_ApiGateway_Status = 'code-cli:api-gateway:status',
+  /** 立即拉当前运行态（批次4a；载荷 {running, lanRunning?, port?} 同 Status 广播）。 */
+  CodeCli_ApiGateway_GetStatus = 'code-cli:api-gateway:get-status',
+  /** 网关配置读取（批次5：host/port/apiKey——渲染层合成网关 provider 与 hermes 配置草稿用）。 */
+  CodeCli_ApiGateway_GetConfig = 'code-cli:api-gateway:get-config',
+  CodeCli_SyncGatewayConfig = 'code-cli:sync-gateway-config'
 }

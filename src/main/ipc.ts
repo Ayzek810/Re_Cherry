@@ -10,21 +10,31 @@ import { handleZoomFactor } from '@main/utils/zoom'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
+import { CodeCli } from '@shared/types/codeCli'
+import type { CliConfigTarget, CliConfigWriteFile, FileConfiguredCli } from '@shared/utils/cliConfig'
+import { CLI_CONFIG_TARGET_IDS } from '@shared/utils/cliConfig'
 import { extractPdfText } from '@shared/utils/pdf'
+import { redactSecretText } from '@shared/utils/redaction'
 import type { MCPServer, Notification, Shortcut, ThemeMode } from '@types'
 import checkDiskSpace from 'check-disk-space'
 import type { ProxyConfig } from 'electron'
 import { BrowserWindow, dialog, ipcMain, session, shell, webContents } from 'electron'
 import fontList from 'font-list'
 
+import { apiGatewayService } from './features/apiGateway/ApiGatewayService'
 import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
 import BackupManager from './services/BackupManager'
+import { binaryManager } from './services/binaryManager/BinaryManager'
+import { isBinaryToolName, type BinaryToolName } from './services/binaryManager/presets'
+import { readCliConfigFiles, writeCliConfigFiles } from './services/codeCli/configWriter'
 import { configManager } from './services/ConfigManager'
+import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
 import { ExportService } from './services/ExportService'
 import { externalAppsService } from './services/ExternalAppsService'
 import { fileStorage as fileManager } from './services/FileStorage'
 import FileService from './services/FileSystemService'
+import { hermesDashboardService } from './services/hermes/HermesDashboardService'
 import { knowledgeService } from './services/knowledge/KnowledgeService'
 import { localModelService } from './services/localModel/localModelService'
 import MemoryService from './services/memory/MemoryService'
@@ -764,4 +774,238 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Analytics_TrackTokenUsage, (_, data: TokenUsageData) =>
     analyticsService.trackTokenUsage(data)
   )
+
+  // 编码助手（v0.3.4-1）：受管 DeepSeek Harness Web UI 的生命周期（非内核通道 → 本文件）。
+  ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Start, (_, input) =>
+    deepSeekHarnessService.start(input as Parameters<typeof deepSeekHarnessService.start>[0])
+  )
+  ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Stop, () => deepSeekHarnessService.stop())
+  // 批次4a：渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道（载荷同 Status 广播）。
+  ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_GetStatus, () => deepSeekHarnessService.getStatus())
+
+  // 编码助手（v0.3.4-1 批次1 收尾）：Hermes Dashboard 生命周期 + code_cli 配置读写。
+  // 非内核通道 → 本文件；V2 的 zod 路由层（hermes_dashboard.* / code_cli.*）不搬，
+  // start/stop 的 Result 与错误包装逐字照抄 V2 ipc/handlers/hermesDashboard.ts。
+  ipcMain.handle(IpcChannel.CodeCli_HermesDashboard_Start, async () => {
+    try {
+      return await hermesDashboardService.start()
+    } catch (error) {
+      return {
+        success: false,
+        reason: 'startup_failed',
+        message: redactSecretText(error instanceof Error ? error.message : 'Failed to start Hermes Dashboard')
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_HermesDashboard_Stop, async () => {
+    try {
+      await hermesDashboardService.stop()
+      return { success: true }
+    } catch (error) {
+      return {
+        success: false,
+        message: redactSecretText(error instanceof Error ? error.message : 'Failed to stop Hermes Dashboard')
+      }
+    }
+  })
+  // 批次4a：同 DeepseekHarness_GetStatus。
+  ipcMain.handle(IpcChannel.CodeCli_HermesDashboard_GetStatus, () => hermesDashboardService.getStatus())
+  // Non-ENOENT read errors propagate to the renderer's error model by design.
+  ipcMain.handle(IpcChannel.CodeCli_ReadConfig, async (_, targets: unknown) => {
+    return { files: await readCliConfigFiles(parseCliConfigTargets(targets)) }
+  })
+  // fork 缝：V2 的写入互斥链是 handler → CodeCliService.writeConfigFiles →（cliTool==='hermes'）
+  // HermesDashboardService.writeConfigFiles（operationMutex + 运行态判定）；fork 无 CodeCliService
+  // 壳，该分支原样内联在此。入参断言见文件尾 parseCliConfig*（V2 zod schema 的手写等价）。
+  ipcMain.handle(IpcChannel.CodeCli_WriteConfig, async (_, payload: unknown) => {
+    try {
+      const { cliTool, files } = parseCliConfigWriteInput(payload)
+      if (cliTool === CodeCli.HERMES) {
+        await hermesDashboardService.writeConfigFiles(() => writeCliConfigFiles(cliTool, files))
+      } else {
+        await writeCliConfigFiles(cliTool, files)
+      }
+      return { success: true as const }
+    } catch (error) {
+      return { success: false as const, message: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  })
+
+  // 编码助手（v0.3.4-1 批次2）：portable 受管 CLI 安装器（装卸/快照/最新版本）。
+  // 结果对象语义（{success}|{removed}）在 BinaryManager 内部完成清洗与日志；入参走
+  // 白名单（parseBinaryToolName，见文件尾 parseCliConfig* 同款手写断言风格）。
+  ipcMain.handle(IpcChannel.CodeCli_Binary_Install, (_, name: unknown) => {
+    return binaryManager.installTool(parseBinaryToolName(name))
+  })
+  ipcMain.handle(IpcChannel.CodeCli_Binary_Remove, (_, name: unknown) => {
+    return binaryManager.removeTool(parseBinaryToolName(name))
+  })
+  ipcMain.handle(IpcChannel.CodeCli_Binary_Snapshots, () => binaryManager.getToolSnapshots(['dsh', 'hermes']))
+  ipcMain.handle(IpcChannel.CodeCli_Binary_LatestVersions, () => binaryManager.getLatestVersions())
+
+  // 编码助手（v0.3.4-1 批次3）：统一网关生命周期 + 配置同步（非内核通道 → 本文件）。
+  // 结果对象语义照 V2 @shared/types/apiGateway（ApiGatewayStatusResult /
+  // ApiGatewayStopResult）；SyncGatewayConfig 为 {enabled?, port?, host?} 部分更新，
+  // 先 ConfigManager 持久化再收敛（V2 #18521 语义，缝注见 ApiGatewayService.syncConfig）。
+  ipcMain.handle(IpcChannel.CodeCli_ApiGateway_Start, async () => {
+    try {
+      await apiGatewayService.start()
+      return { success: true as const }
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Failed to start API Gateway'
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_ApiGateway_Stop, async () => {
+    try {
+      const outcome = await apiGatewayService.stop()
+      return { success: true as const, outcome }
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Failed to stop API Gateway'
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_ApiGateway_Restart, async () => {
+    try {
+      await apiGatewayService.restart()
+      return { success: true as const }
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Failed to restart API Gateway'
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_ApiGateway_LanSetEnabled, async (_, enabled: unknown) => {
+    try {
+      await apiGatewayService.setLanEnabled(parseLanEnabled(enabled))
+      return { success: true as const }
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Failed to update API Gateway LAN access'
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_SyncGatewayConfig, async (_, payload: unknown) => {
+    try {
+      await apiGatewayService.syncConfig(parseGatewayConfigPartial(payload))
+      return { success: true as const }
+    } catch (error) {
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : 'Failed to sync API Gateway config'
+      }
+    }
+  })
+  // 批次4a：立即拉当前运行态。fork 缝：publishRunningState 的载荷构造为私有，此处按其
+  // 语义（running && config.enabled && config.host === '0.0.0.0'）以公开查询面
+  // （isRunning/getCurrentConfig）等价重建；port 为配置端口（运行期即绑定端口）。
+  ipcMain.handle(IpcChannel.CodeCli_ApiGateway_GetStatus, () => {
+    const running = apiGatewayService.isRunning()
+    const config = apiGatewayService.getCurrentConfig()
+    const lanRunning = running && config.enabled && config.host === '0.0.0.0'
+    return { running, ...(lanRunning ? { lanRunning, port: config.port } : {}) }
+  })
+
+  // 批次5：网关配置读取——渲染层合成网关 provider（卡片/模型选择）与 hermes 配置草稿
+  // （.env 的 CHERRY_HERMES_API_KEY）的数据源。apiKey 只读不生成（V2 语义：网关从未
+  // 启动过则为 null；生成发生在 start 流程内）。
+  ipcMain.handle(IpcChannel.CodeCli_ApiGateway_GetConfig, () => {
+    const config = apiGatewayService.getCurrentConfig()
+    return {
+      host: config.host,
+      port: config.port,
+      apiKey: configManager.getApiGatewayApiKey() ?? null,
+      running: apiGatewayService.isRunning()
+    }
+  })
+}
+
+// fork 缝：V2 的 code_cli.read_config / write_config 入参由 zod schema 校验
+// （@shared/ipc/schemas/codeCli.ts）；fork 不引入 zod 路由层，以下手写断言为等价裁剪：
+// target 白名单 = CLI_CONFIG_TARGET_IDS（hermes 两项）、read 去重（首现保留，同 V2 的
+// z.transform）、write 内容上限 1MB 同 V2；V2 的 delete 臂（codex-auth）不随裁剪保留。
+const CLI_CONFIG_CONTENT_LIMIT = 1024 * 1024
+
+function parseCliConfigTargets(value: unknown): CliConfigTarget[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Invalid code_cli.read_config input: targets must be an array')
+  }
+  const deduped = new Set<string>()
+  for (const target of value) {
+    if (typeof target !== 'string' || !CLI_CONFIG_TARGET_IDS.includes(target as CliConfigTarget)) {
+      throw new Error(`Invalid config target: ${String(target)}`)
+    }
+    deduped.add(target)
+  }
+  return [...deduped] as CliConfigTarget[]
+}
+
+function parseCliConfigWriteInput(value: unknown): { cliTool: FileConfiguredCli; files: CliConfigWriteFile[] } {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('Invalid code_cli.write_config input')
+  }
+  const { cliTool, files } = value as { cliTool: unknown; files: unknown }
+  if (cliTool !== CodeCli.HERMES) {
+    throw new Error(`Invalid cliTool: ${String(cliTool)}`)
+  }
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error('Invalid code_cli.write_config input: files must be a non-empty array')
+  }
+  const parsed: CliConfigWriteFile[] = files.map((file) => {
+    if (typeof file !== 'object' || file === null) {
+      throw new Error('Invalid config file entry')
+    }
+    const { target, content } = file as { target: unknown; content: unknown }
+    if (typeof target !== 'string' || !CLI_CONFIG_TARGET_IDS.includes(target as CliConfigTarget)) {
+      throw new Error(`Invalid config target: ${String(target)}`)
+    }
+    if (typeof content !== 'string' || content.length > CLI_CONFIG_CONTENT_LIMIT) {
+      throw new Error(`Invalid config content for ${target}`)
+    }
+    return { target: target as CliConfigTarget, content }
+  })
+  return { cliTool: CodeCli.HERMES, files: parsed }
+}
+
+// 批次2：binary install/remove 的工具名白名单（'dsh' | 'hermes'，来自 shared 预设表）。
+function parseBinaryToolName(value: unknown): BinaryToolName {
+  if (!isBinaryToolName(value)) {
+    throw new Error(`Invalid binary tool name: ${String(value)}`)
+  }
+  return value
+}
+
+// 批次3：网关 IPC 入参的手写断言（V2 zod schema 的等价裁剪，风格同 parseCliConfig*）。
+function parseLanEnabled(value: unknown): boolean {
+  if (typeof value !== 'boolean') {
+    throw new Error('Invalid api_gateway.lan_set_enabled input: enabled must be a boolean')
+  }
+  return value
+}
+
+function parseGatewayConfigPartial(value: unknown): { enabled?: boolean; port?: number; host?: string } {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('Invalid sync_gateway_config input')
+  }
+  const { enabled, port, host } = value as Record<string, unknown>
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    throw new Error('Invalid sync_gateway_config input: enabled must be a boolean')
+  }
+  if (port !== undefined && (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)) {
+    throw new Error('Invalid sync_gateway_config input: port must be an integer in [1, 65535]')
+  }
+  if (host !== undefined && host !== '127.0.0.1' && host !== '0.0.0.0') {
+    throw new Error('Invalid sync_gateway_config input: host must be "127.0.0.1" or "0.0.0.0"')
+  }
+  return {
+    ...(enabled !== undefined ? { enabled } : {}),
+    ...(port !== undefined ? { port } : {}),
+    ...(host !== undefined ? { host } : {})
+  }
 }

@@ -67,8 +67,11 @@ describe('parseDataUrl', () => {
     expect(result?.mediaType).toBe('image/png')
     expect(result?.isBase64).toBe(true)
     expect(result?.data).toBe(largeData)
-    // Should complete in under 10ms (string operations are fast)
-    expect(duration).toBeLessThan(10)
+    // Should complete in under 10ms (string operations are fast).
+    // 2026-09-24 放宽 10→100ms（§4.12：墙钟是弱信号，不是把慢当绿——该断言的意图是
+    // "无病理性慢化"，10 倍量级回归会是秒级；10ms 在全量套件并行负载下会假红，
+    // 实测 11.02ms flake 一次，隔离跑恒 6ms）。
+    expect(duration).toBeLessThan(100)
   })
 
   it('parses SVG data URL', () => {

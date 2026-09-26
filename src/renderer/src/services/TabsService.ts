@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import store from '@renderer/store'
 import { setPinnedTabs } from '@renderer/store/settings'
+import { setOpenedKeepAliveMinapps } from '@renderer/store/runtime'
 import {
   closeOtherTabs as closeOtherTabsAction,
   removeTab,
@@ -42,6 +43,11 @@ class TabsService {
    * @returns 是否成功关闭
    */
   public closeTab(tabId: string): boolean {
+    // 批次5（用户裁决「关闭标签页即停」）：code-mate 受管 Web UI 的标签页关闭时，
+    // 对应的受管进程（dsh/hermes dashboard）一并停止。必须在 tab 查找之前做——
+    // LRU disposeAfter 触发时标签页可能已不存在（早退会跳过清理）。
+    this.stopCodeMateToolIfMinappTab(tabId)
+
     const state = store.getState()
     const tabs = state.tabs.tabs
     const activeTabId = state.tabs.activeTabId
@@ -94,8 +100,7 @@ class TabsService {
    * Clean up mini-app cache and WebView state when tab is closed
    * @param tabId The tab ID to clean up
    */
-  private cleanupMinAppCache(tabId: string) {
-    // Check if this is a mini-app tab (format: /apps/{appId})
+  private cleanupMinAppCache(tabId: string) {    // Check if this is a mini-app tab (format: /apps/{appId})
     const tabs = store.getState().tabs.tabs
     const tab = tabs.find((t) => t.id === tabId)
 
@@ -113,6 +118,32 @@ class TabsService {
 
         logger.info(`Mini-app ${appId} removed from cache due to tab closure`)
       }
+    }
+  }
+
+  /**
+   * 批次5（用户裁决「关闭标签页即停」）：code-mate 受管 Web UI 的标签页关闭时，
+   * 对应的受管进程一并停止（dsh web / hermes dashboard 都是随标签生亡的瞬态服务）。
+   * 经 IPC 走主进程服务；stop 对已停服务是幂等空操作。同时把应用从打开集合摘除，
+   * 侧栏磁贴与启动台条目随标签关闭一并消失。
+   */
+  private stopCodeMateToolIfMinappTab(tabId: string): void {
+    if (!tabId.startsWith('apps:code-mate-')) return
+    const appId = tabId.slice('apps:'.length)
+    const codeCli = window.api?.codeCli
+    if (!codeCli) return
+    const stop =
+      appId === 'code-mate-deepseek-harness'
+        ? codeCli.deepseekHarness.stop()
+        : appId === 'code-mate-hermes'
+          ? codeCli.hermesDashboard.stop()
+          : undefined
+    if (!stop) return
+    logger.info(`code-mate: stopping ${appId} because its tab was closed`)
+    void stop.catch((error) => logger.warn(`Failed to stop code-mate tool ${appId} on tab close`, error as Error))
+    const opened = store.getState().runtime.openedKeepAliveMinapps
+    if (opened.some((item) => item.id === appId)) {
+      store.dispatch(setOpenedKeepAliveMinapps(opened.filter((item) => item.id !== appId)))
     }
   }
 

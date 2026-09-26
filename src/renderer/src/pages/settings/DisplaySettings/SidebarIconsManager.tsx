@@ -6,7 +6,7 @@ import { useAppDispatch } from '@renderer/store'
 import { setSidebarIcons } from '@renderer/store/settings'
 import type { SidebarIcon } from '@renderer/types'
 import { message } from 'antd'
-import { BookOpen, Folder, Languages, LayoutGrid, MessageSquareQuote, NotepadText, Palette } from 'lucide-react'
+import { BookOpen, Code, Folder, Languages, LayoutGrid, MessageSquareQuote, NotepadText, Palette } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -112,7 +112,9 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
         translate: <Languages size={16} />,
         paintings: <Palette size={16} />,
         // v0.3.3-2 笔记复活（V1 同图标）
-        notes: <NotepadText size={16} />
+        notes: <NotepadText size={16} />,
+        // v0.3.4-1 编码助手（Code Mate）
+        code: <Code size={16} />
       }) satisfies Record<SidebarIcon, ReactNode>,
     []
   )

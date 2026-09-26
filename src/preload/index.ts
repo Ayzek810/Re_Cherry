@@ -55,6 +55,78 @@ const api = {
   dshSyncWebSearch: (config: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_SyncWebSearch, config),
   dshSyncMcpServers: (servers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncMcpServers, servers),
   dshSyncPreprocess: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncPreprocess, providers),
+  // 编码助手（v0.3.4-1）：受管 Web UI 工具生命周期 + 状态广播订阅（薄转发）。
+  codeCli: {
+    deepseekHarness: {
+      start: (input: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_DeepseekHarness_Start, input),
+      stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_DeepseekHarness_Stop),
+      // 批次4a：渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道。
+      getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_DeepseekHarness_GetStatus),
+      onStatus: (callback: (status: unknown) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
+        ipcRenderer.on(IpcChannel.CodeCli_DeepseekHarness_Status, listener)
+        return () => {
+          ipcRenderer.removeListener(IpcChannel.CodeCli_DeepseekHarness_Status, listener)
+        }
+      }
+    },
+    // Hermes Dashboard（批次1 收尾）：生命周期 + 状态广播订阅（照 deepseekHarness 写法）；
+    // readConfig/writeConfig 为 code_cli 配置读写通道（V2 经 zod 路由 ipcApi.request，
+    // fork 摊平为直连通道，入参校验在主进程 ipc.ts）。
+    hermesDashboard: {
+      // fork 缝（批次4a）：V2 zod schema 的 hermes_dashboard.start 入参为 z.void()，形参保形
+      // 为可选（fork 主进程 handler 不消费入参）。
+      start: (input?: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_HermesDashboard_Start, input),
+      stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_HermesDashboard_Stop),
+      // 批次4a：同 deepseekHarness.getStatus。
+      getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_HermesDashboard_GetStatus),
+      onStatus: (callback: (status: unknown) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
+        ipcRenderer.on(IpcChannel.CodeCli_HermesDashboard_Status, listener)
+        return () => {
+          ipcRenderer.removeListener(IpcChannel.CodeCli_HermesDashboard_Status, listener)
+        }
+      }
+    },
+    readConfig: (targets: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_ReadConfig, targets),
+    writeConfig: (payload: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_WriteConfig, payload),
+    // 受管 CLI 安装器（批次2）：装卸/快照/最新版本 + 变化广播订阅（照 onStatus 写法）。
+    binary: {
+      install: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Install, name),
+      remove: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Remove, name),
+      snapshots: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Snapshots),
+      latestVersions: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_LatestVersions),
+      onChanged: (callback: () => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent) => callback()
+        ipcRenderer.on(IpcChannel.CodeCli_Binary_Changed, listener)
+        return () => {
+          ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_Changed, listener)
+        }
+      }
+    },
+    // 统一网关（批次3）：生命周期 + LAN 开关 + 配置部分更新 + 状态广播订阅
+    //（照 deepseekHarness 写法；syncConfig 为 {enabled?, port?, host?} 部分更新，
+    // 主进程先持久化再收敛）。
+    apiGateway: {
+      start: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_Start),
+      stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_Stop),
+      restart: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_Restart),
+      setLanEnabled: (enabled: boolean) => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_LanSetEnabled, enabled),
+      syncConfig: (partial: { enabled?: boolean; port?: number; host?: string }) =>
+        ipcRenderer.invoke(IpcChannel.CodeCli_SyncGatewayConfig, partial),
+      // 批次4a：立即拉当前运行态（载荷 {running, lanRunning?, port?} 同 Status 广播）。
+      getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_GetStatus),
+      // 批次5：网关配置读取（host/port/apiKey|null/running）——合成网关 provider 数据源。
+      getConfig: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_GetConfig),
+      onStatus: (callback: (status: unknown) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
+        ipcRenderer.on(IpcChannel.CodeCli_ApiGateway_Status, listener)
+        return () => {
+          ipcRenderer.removeListener(IpcChannel.CodeCli_ApiGateway_Status, listener)
+        }
+      }
+    }
+  },
   webSearch: {
     check: (providerId: string) => ipcRenderer.invoke(IpcChannel.WebSearch_Check, providerId)
   },

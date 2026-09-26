@@ -12,5 +12,7 @@ export const DEFAULT_SIDEBAR_ICONS: SidebarIcon[] = [
   'translate',
   'paintings',
   // v0.3.3-2 笔记复活：V1 默认就带这一枚（老用户的持久化由 migrate 的 '141' 分支补）
-  'notes'
+  'notes',
+  // v0.3.4-1 编码助手（Code Mate，V2 移植）：老用户的持久化由 migrate 的 '222' 分支补
+  'code'
 ]

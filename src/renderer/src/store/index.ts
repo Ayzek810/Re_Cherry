@@ -117,7 +117,7 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
   {
     key: 'cherry-studio',
     storage,
-    version: 221,
+    version: 223,
     blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions'],
     transforms: [stripProviderApiKeys],
     migrate

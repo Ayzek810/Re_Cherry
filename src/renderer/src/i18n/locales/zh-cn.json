@@ -587,6 +587,114 @@
       }
     }
   },
+  "code": {
+    "add_provider_hint": "在 设置 → 模型服务 添加服务商",
+    "api_gateway": {
+      "description": "任意 CLI，畅用全部模型",
+      "requires_running": "启用后请保持 Cherry Studio 运行，外部 CLI 才能连接到它托管的网关。",
+      "title": "统一网关"
+    },
+    "apply_failed": "写入 CLI 配置到系统文件失败",
+    "clear_config_failed": "清除 CLI 配置失败，凭证可能仍保留在该工具的配置文件中",
+    "cli_config": {
+      "format_failed": "格式化失败，请检查文件格式",
+      "title": "CLI 配置文件",
+      "unknown_model": "未知模型",
+      "unknown_provider": "未知供应商"
+    },
+    "cli_tools": {
+      "deepseek_harness": "DeepSeek Harness",
+      "hermes": "Hermes Agent"
+    },
+    "configure": "配置",
+    "deepseek_harness": {
+      "agent_preset": "默认 Agent 模式",
+      "agent_presets": {
+        "code": {
+          "description": "通过 PTC Code Mode SDK 组合多步工具操作，适合复杂编码任务。",
+          "label": "PTC 代码"
+        },
+        "inherit": {
+          "description": "保留共享 ~/.dsh 中现有的默认 preset。",
+          "label": "Harness 默认"
+        },
+        "minimal": {
+          "description": "仅使用持久 Shell 和文本编辑器，工具面最精简。",
+          "label": "极简"
+        },
+        "standard": {
+          "description": "完整编码 Agent，包含文件、Shell、检索、Skills、计划和子代理。",
+          "label": "标准"
+        }
+      },
+      "danger_warning": "完全访问模式允许 Agent 访问工作区之外的文件并跳过操作确认。仅在你信任当前任务时使用。",
+      "permission_mode": "默认权限",
+      "permission_modes": {
+        "danger-full-access": {
+          "description": "允许完全访问，并且不请求操作确认。",
+          "label": "完全访问"
+        },
+        "read-only": {
+          "description": "限制文件写入，需确认有风险的操作。",
+          "label": "只读"
+        },
+        "workspace-write": {
+          "description": "允许写入当前 DSH 工作区，需确认有风险的操作。",
+          "label": "工作区写入"
+        }
+      }
+    },
+    "disable": "停用",
+    "enable": "启用",
+    "folder_placeholder": "选择工作目录",
+    "format_json": "格式化",
+    "hermes_dashboard": {
+      "error": {
+        "cancelled": "已取消启动 Hermes Agent 网页界面",
+        "dependencies_missing": "Hermes Agent 网页界面依赖缺失，请在 设置 → 环境依赖 中重新安装 Hermes Agent。",
+        "not_installed": "尚未安装 Hermes Agent，请在 设置 → 环境依赖 中安装。",
+        "open_failed": "打开 Hermes Agent 网页界面失败",
+        "startup_failed": "启动 Hermes Agent 网页界面失败",
+        "stop_failed": "停止 Hermes Agent 网页界面失败"
+      }
+    },
+    "install": "安装",
+    "install_success": "安装成功",
+    "installing": "安装中…",
+    "latest": "最新",
+    "launch": {
+      "error": "启动失败，请重试",
+      "label": "启动",
+      "title": "启动 {{tool}}",
+      "validation_error": "请完成所有必填项：CLI 工具、模型和工作目录"
+    },
+    "launching": "启动中...",
+    "model_providers": "模型服务商",
+    "model_selection": "模型选择",
+    "move_provider_to_top": "将服务商移到顶部",
+    "no_matching_providers": "没有匹配的服务商",
+    "no_providers_description": "在 设置 → 模型服务 中启用支持的服务商",
+    "no_providers_title": "没有已启用的服务商",
+    "no_tools": "暂无工具",
+    "not_installed": "未安装",
+    "open_provider_settings": "打开服务商设置",
+    "open_web_ui": "打开 Web UI",
+    "own_login": {
+      "title": "{{toolName}} 官方"
+    },
+    "providerless_hint": "该工具通过自带的登录流程进行认证 — 只需选择工作目录即可启动。请先运行一次该工具完成登录。",
+    "search_provider_placeholder": "搜索服务商…",
+    "select_folder": "选择文件夹",
+    "select_provider_before_launch": "请选择一个服务商后启动 {{toolName}}",
+    "select_provider_model": "请先选择服务商和模型",
+    "select_tool_to_start": "从左侧选择一个 CLI 工具开始配置",
+    "stop": "停止",
+    "tool_parameters": "参数设置",
+    "up_to_date": "最新版本",
+    "upgrade": "升级",
+    "upgrade_success": "升级成功",
+    "working_directory": "工作目录"
+  },
   "code_block": {
     "collapse": "收起",
     "copy": {
@@ -2672,6 +2780,22 @@
         "token_placeholder": "请输入语雀 Token"
       }
     },
+    "dependencies": {
+      "installError": "工具安装失败",
+      "installErrorHint": "安装命令执行失败。复制下方日志以便排查或寻求帮助。",
+      "installingHint": "首次安装可能需要下载运行时，耗时数分钟",
+      "removeError": "工具移除失败",
+      "removeErrorHint": "清理命令执行失败。复制下方日志以便排查或寻求帮助。",
+      "source": {
+        "system": "系统"
+      },
+      "uninstall": "卸载",
+      "uninstallConfirmMessage": "确定要卸载 \"{{name}}\" 吗？Cherry Studio 管理的后端副本将被删除。",
+      "uninstallConfirmTitle": "卸载工具",
+      "uninstallFailed": "工具卸载失败",
+      "uninstallSuccess": "工具已卸载",
+      "viewErrorDetails": "查看详情"
+    },
     "developer": {
       "enable_developer_mode": "启用开发者模式",
       "help": "启用开发者模式后，将可以使用调用链功能查看模型调用过程的数据流。",
@@ -3728,6 +3852,7 @@
   },
   "title": {
     "apps": "小程序",
+    "code": "编码助手",
     "files": "文件",
     "home": "首页",
     "knowledge": "知识库",
