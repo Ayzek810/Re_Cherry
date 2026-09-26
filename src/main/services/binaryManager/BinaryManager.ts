@@ -11,7 +11,7 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 
 import { Mutex } from 'async-mutex'
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
@@ -31,6 +31,10 @@ import {
 } from './runtimeDownloader'
 
 const logger = loggerService.withContext('BinaryManager')
+
+// v0.3.4-2：快照 stale-while-revalidate 的缓存文件与后台重探冷却。
+const SNAPSHOT_CACHE_FILENAME = 'snapshot-cache.json'
+const SNAPSHOT_REFRESH_COOLDOWN_MS = 15_000
 
 // V2 快照/操作超时预算的等价裁剪：安装是分钟级（V2 MISE_INSTALL_TIMEOUT_MS 同量级），
 // 查询是秒级。
@@ -171,22 +175,83 @@ async function readNpmPackageVersion(packageJsonPath: string): Promise<string> {
 
 export class BinaryManager {
   private readonly operationMutex = new Mutex()
+  private snapshotCache: { data: Record<string, BinaryToolSnapshot>; at: number } | null = null
+  private snapshotProbeInFlight: Promise<void> | null = null
 
   /**
    * 主计算的工具快照（V2 getToolSnapshots 形状：application 与 availability 是两个独立
    * 事实）。刻意不取 mutation mutex——慢安装不得隐藏已发布的事实（V2 同款注释语义）。
    */
   async getToolSnapshots(names: readonly string[]): Promise<Record<string, BinaryToolSnapshot>> {
-    const snapshots: Record<string, BinaryToolSnapshot> = {}
-    for (const name of names) {
-      const plan = TOOL_PLANS.get(name)
-      if (!plan) {
-        snapshots[name] = { name, application: 'absent', availability: { source: 'none' } }
-        continue
-      }
-      snapshots[name] = await this.snapshotTool(plan)
+    names // v0.3.4-2：探针面固定为全部预设（2 项），names 仅供 IPC 合同兼容。
+    // v0.3.4-2（用户裁决）：快照缓存 + 后台重探（stale-while-revalidate）——/code 页
+    // 打开时的"安装"按钮假象来自 3-5s 的探针窗口（hermes 系统 .exe 的 --version 挂到
+    // 超时）。有缓存即秒回旧状态，后台重探完成后 broadcastChanged → 渲染层经
+    // onChanged 回路自动刷新。冷却 15s 防重探风暴；安装/卸载后强制重探。
+    if (this.snapshotProbeInFlight) {
+      await this.snapshotProbeInFlight
+      return this.snapshotCache?.data ?? {}
     }
-    return snapshots
+    if (this.snapshotCache) {
+      if (Date.now() - this.snapshotCache.at > SNAPSHOT_REFRESH_COOLDOWN_MS) {
+        this.startBackgroundSnapshotRefresh()
+      }
+      return this.snapshotCache.data
+    }
+    const seeded = await this.readSnapshotCacheFile()
+    if (seeded) {
+      this.snapshotCache = { data: seeded, at: Date.now() }
+      this.startBackgroundSnapshotRefresh()
+      return seeded
+    }
+    return this.refreshSnapshotCache()
+  }
+
+  private startBackgroundSnapshotRefresh(): void {
+    this.snapshotProbeInFlight = this.refreshSnapshotCache()
+      .then(() => this.broadcastChanged())
+      .catch((error) => logger.warn('Background snapshot refresh failed', error as Error))
+      .finally(() => {
+        this.snapshotProbeInFlight = null
+      })
+  }
+
+  /** 并行探针全部工具 + 更新内存/文件缓存。 */
+  private async refreshSnapshotCache(): Promise<Record<string, BinaryToolSnapshot>> {
+    const names = BINARY_TOOL_PRESETS.map((preset) => preset.executable)
+    const entries = await Promise.all(
+      names.map(async (name) => {
+        const plan = TOOL_PLANS.get(name)
+        const snapshot: BinaryToolSnapshot = plan
+          ? await this.snapshotTool(plan)
+          : { name, application: 'absent', availability: { source: 'none' } }
+        return [name, snapshot] as const
+      })
+    )
+    const data = Object.fromEntries(entries)
+    this.snapshotCache = { data, at: Date.now() }
+    await this.writeSnapshotCacheFile(data).catch((error) => {
+      logger.warn('Failed to persist snapshot cache', error as Error)
+    })
+    return data
+  }
+
+  private async readSnapshotCacheFile(): Promise<Record<string, BinaryToolSnapshot> | null> {
+    try {
+      const raw = await fsp.readFile(path.join(cacheRoot(), SNAPSHOT_CACHE_FILENAME), 'utf-8')
+      const parsed = JSON.parse(raw) as { data?: Record<string, BinaryToolSnapshot> }
+      return parsed.data ?? null
+    } catch {
+      return null
+    }
+  }
+
+  private async writeSnapshotCacheFile(data: Record<string, BinaryToolSnapshot>): Promise<void> {
+    await fsp.writeFile(
+      path.join(cacheRoot(), SNAPSHOT_CACHE_FILENAME),
+      JSON.stringify({ at: Date.now(), data }, null, 2),
+      'utf-8'
+    )
   }
 
   private async snapshotTool(plan: ToolPlan): Promise<BinaryToolSnapshot> {
@@ -267,6 +332,11 @@ export class BinaryManager {
       try {
         if (plan.kind === 'npm') await this.installNpmTool(plan)
         else await this.installVenvTool(plan)
+        // v0.3.4-2：成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
+        // 不再闪回安装前旧态。
+        await this.refreshSnapshotCache().catch((error) =>
+          logger.warn('Post-install snapshot refresh failed', error as Error)
+        )
         return { success: true as const }
       } catch (error) {
         const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
@@ -332,64 +402,22 @@ export class BinaryManager {
     )
     logger.info('dshmarket bundle installed')
 
-    // PPT tgz 资产路径：dev = 项目根 resources/；packaged = asarUnpack 解压后的路径。
-    // fork 缝（v0.3.4-2）：ppt tgz 不走 `dsh plugin add`——其内部 spawnSync(..., shell:true)
-    // 对参数不加引号，打包版安装目录（"C:\Program Files\..."）的空格路径必炸。改直调
-    // pnpm（cross-spawn 逐参引号）+ 自己合入 bundle 清单（对齐 dsh reconcilePlugins 语义）。
-    const pptDir = path.join(
-      app.getAppPath().replace('app.asar', 'app.asar.unpacked'),
-      'resources',
-      'codemate-bundles'
+    // v0.3.4-2 真机修正：PPT 从 registry 装 `dsh-ppt@latest`（0.4.5，官方 DSH 演示文稿
+    // 插件——"Markdown 生成网页放映与可编辑 PPTX"，零依赖自包含，声明 dsh.bundle ✓）。
+    // 弃用社区 tgz（0.1.1-rc.2-desktop 旧构建）与其 composer（npm 私有件，依赖
+    // dsh-ppt@0.1.1-rc.2 在 registry 已被 0.4.5 取代 → ERR_PNPM_NO_MATCHING_VERSION，
+    // 真机复现实证）。registry 通道走官方 reconcilePlugins，无需 fork 侧合入。
+    await this.runCommand(
+      runtime.nodeBin,
+      [binJs, 'plugin', '--profile', 'web', 'add', 'dsh-ppt'],
+      { env: bundleEnv, label: 'dsh plugin add dsh-ppt', timeoutMs: 300_000 }
     )
-    const pnpmShim = path.join(dir, 'node_modules', '.bin', isWin ? 'pnpm.cmd' : 'pnpm')
-    const webProfileDir = path.join(deepSeekHarnessHome(), 'profiles', 'web')
-    const pptBundleNames: string[] = []
-    for (const tgzName of ['dsh-ppt-0.1.1-rc.2-desktop-20260906.tgz', 'dsh-ppt-composer-0.1.1-rc.2-desktop-20260906.tgz']) {
-      const tgzPath = path.join(pptDir, tgzName)
-      if (await pathExists(tgzPath)) {
-        await this.runCommand(pnpmShim, ['--dir', webProfileDir, 'add', tgzPath], {
-          env: bundleEnv,
-          label: `pnpm add ${tgzName}`,
-          timeoutMs: 300_000
-        })
-        // 包名以 tgz 内 package.json 为准（dsh-ppt / dsh-ppt-composer，已验证）。
-        pptBundleNames.push(tgzName.startsWith('dsh-ppt-composer') ? 'dsh-ppt-composer' : 'dsh-ppt')
-        logger.info(`PPT bundle ${tgzName} installed`)
-      } else {
-        logger.warn(`PPT bundle tgz not found, skipping: ${tgzPath}`)
-      }
-    }
-    if (pptBundleNames.length > 0) {
-      await this.reconcileProfileBundles(webProfileDir, pptBundleNames)
-    }
+    logger.info('dsh-ppt bundle installed')
 
     const version = await readNpmPackageVersion(
       path.join(dir, 'node_modules', ...plan.preset.packageName.split('/'), 'package.json')
     )
     await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), version, 'utf-8')
-  }
-
-  /** fork 缝（v0.3.4-2）：把装进 profile 依赖的 bundle 包合入 `dsh.profile.bundles`
-   * （dsh reconcilePlugins 的子集语义：依赖里存在且声明 dsh.bundle 的才入列；
-   * 我们的三个目标包均已实测声明）。幂等：已在列的不重复。 */
-  private async reconcileProfileBundles(profileDir: string, bundleNames: readonly string[]): Promise<void> {
-    const manifestPath = path.join(profileDir, 'package.json')
-    const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf-8')) as {
-      dependencies?: Record<string, string>
-      dsh?: { profile?: { bundles?: string[] } }
-    }
-    const bundles = manifest.dsh?.profile?.bundles ?? []
-    let changed = false
-    for (const name of bundleNames) {
-      if (manifest.dependencies?.[name] && !bundles.includes(name)) {
-        bundles.push(name)
-        changed = true
-      }
-    }
-    if (!changed) return
-    manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } }
-    await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
-    logger.info(`profile bundles reconciled: ${bundles.join(', ')}`)
   }
 
   /** hermes（pipx 型 → venv 等价）：受管 CPython → python -m venv → venv pip install。 */
@@ -461,6 +489,10 @@ export class BinaryManager {
           logger.warn(`Failed to fully remove managed tool ${name}: ${message}`)
           return { removed: false, message: redactSecretText(message) }
         }
+        // v0.3.4-2：同安装——卸载后强制重探，广播命中的是已移除状态。
+        await this.refreshSnapshotCache().catch((error) =>
+          logger.warn('Post-remove snapshot refresh failed', error as Error)
+        )
         return { removed: true }
       } catch (error) {
         const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
