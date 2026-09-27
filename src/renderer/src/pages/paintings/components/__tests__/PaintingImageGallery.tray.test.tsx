@@ -34,9 +34,7 @@ vi.mock('@renderer/components/ImageViewer', () => ({
 // 组灯箱替身：真 antd PreviewGroup 会注册组内每张图；测试只需知道"谁在组里"。
 vi.mock('antd', () => ({
   Image: {
-    PreviewGroup: ({ children }: { children: React.ReactNode }) => (
-      <div data-testid="preview-group">{children}</div>
-    )
+    PreviewGroup: ({ children }: { children: React.ReactNode }) => <div data-testid="preview-group">{children}</div>
   },
   Button: ({ children }: { children?: React.ReactNode }) => <button type="button">{children}</button>,
   Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>
@@ -66,10 +64,7 @@ describe('PaintingInputTray 参考图灯箱', () => {
 
     const viewers = Array.from(container.querySelectorAll<HTMLElement>('[data-testid="viewer"]'))
     expect(viewers).toHaveLength(2)
-    expect(viewers.map((element) => element.dataset.src)).toEqual([
-      'file:///painting/a.png',
-      'file:///painting/b.png'
-    ])
+    expect(viewers.map((element) => element.dataset.src)).toEqual(['file:///painting/a.png', 'file:///painting/b.png'])
     // 每张都必须既"开着预览"又"在组内"——缺任一条都点不开大图。
     for (const viewer of viewers) {
       expect(viewer.dataset.preview).toBe('on')

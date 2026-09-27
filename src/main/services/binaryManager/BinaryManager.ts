@@ -16,7 +16,12 @@ import { BrowserWindow } from 'electron'
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { probeBinary, probeSystemPath } from '@main/services/codeCli/resolveBinary'
-import { cacheRoot, codeMateRuntimeRoot, codeMateToolsRoot, deepSeekHarnessHome } from '@main/services/deepSeekHarness/paths'
+import {
+  cacheRoot,
+  codeMateRuntimeRoot,
+  codeMateToolsRoot,
+  deepSeekHarnessHome
+} from '@main/services/deepSeekHarness/paths'
 import { crossPlatformSpawn } from '@main/utils/processRunner'
 import { withPathPrepend } from '@main/utils/shellEnv'
 import { removeTreeWithRetry } from './removeTree'
@@ -24,12 +29,7 @@ import { IpcChannel } from '@shared/IpcChannel'
 import { redactSecretText } from '@shared/utils/redaction'
 
 import { type BinaryToolName, type BinaryToolPreset, BINARY_TOOL_PRESETS } from './presets'
-import {
-  ensureNodeRuntime,
-  ensurePythonRuntime,
-  isNodeRuntimeInstalled,
-  NODE_VERSION
-} from './runtimeDownloader'
+import { ensureNodeRuntime, ensurePythonRuntime, isNodeRuntimeInstalled, NODE_VERSION } from './runtimeDownloader'
 
 const logger = loggerService.withContext('BinaryManager')
 
@@ -294,7 +294,9 @@ export class BinaryManager {
       // UI 回落到安装面；探针输出的版本照实携带供展示。
       const probe = await probeBinary(systemPath)
       if (!probe.runnable) {
-        logger.warn(`code-mate: system "${plan.preset.executable}" at ${systemPath} failed the --version probe; treating as not available`)
+        logger.warn(
+          `code-mate: system "${plan.preset.executable}" at ${systemPath} failed the --version probe; treating as not available`
+        )
         return { name: plan.name, application: 'absent', availability: { source: 'none' } }
       }
       return {
@@ -564,7 +566,8 @@ export class BinaryManager {
           env: { ...process.env, npm_config_registry: NPM_REGISTRY_MIRROR },
           label: `npm view ${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`,
           timeoutMs: NPM_VIEW_TIMEOUT_MS
-      })
+        }
+      )
       return stdout.trim().split(/\r?\n/, 1)[0]?.trim() || undefined
     } catch (error) {
       logger.warn(`Failed to query latest version of ${plan.preset.packageName}`, { error: this.errorMessage(error) })

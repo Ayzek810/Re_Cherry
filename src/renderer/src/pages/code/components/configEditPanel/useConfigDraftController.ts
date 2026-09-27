@@ -41,10 +41,8 @@ import type { ConfigDraft, ConfigEditPanelProps } from './types'
 
 const logger = loggerService.withContext('useConfigDraftController')
 
-interface ConfigDraftControllerOptions extends Pick<
-  ConfigEditPanelProps,
-  'cliTool' | 'provider' | 'providerConfig' | 'isCurrentProvider' | 'onSubmit'
-> {
+interface ConfigDraftControllerOptions
+  extends Pick<ConfigEditPanelProps, 'cliTool' | 'provider' | 'providerConfig' | 'isCurrentProvider' | 'onSubmit'> {
   apiKeys?: Parameters<typeof cliConfigConnectionMatchesProvider>[3]
   onClose: () => void
   /** Present when editing the Cherry gateway provider — drives gateway-addressed drafts + matching. */
@@ -193,15 +191,8 @@ export function useConfigDraftController({
     if (isModelsLoading) return // likewise for the gateway model map: an in-flight query looks identical to "no routable model"
     initialLoadHasRunRef.current = true
 
-    const {
-      isCurrentProvider,
-      cliTool,
-      providerId,
-      initialModelId,
-      initialConfig,
-      initialDraftSeed,
-      gateway
-    } = initialLoadContextRef.current
+    const { isCurrentProvider, cliTool, providerId, initialModelId, initialConfig, initialDraftSeed, gateway } =
+      initialLoadContextRef.current
     const commitLoadedDraft = (nextDraft: ConfigDraft) => {
       draftRef.current = nextDraft
       initialDraftSnapshotRef.current = createDraftSnapshot(nextDraft)
@@ -279,7 +270,12 @@ export function useConfigDraftController({
         }
       } else {
         commitDraft({ ...current, config: sanitizedConfig, error: '' })
-        loadManagedDraft(current.modelId, sanitizedConfig, current.files, resolveManagedOptions(sanitizedConfig, current.modelId))
+        loadManagedDraft(
+          current.modelId,
+          sanitizedConfig,
+          current.files,
+          resolveManagedOptions(sanitizedConfig, current.modelId)
+        )
       }
     },
     [cliTool, commitDraft, loadManagedDraft, resolveManagedOptions]

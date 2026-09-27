@@ -102,8 +102,12 @@ export const REASONING_PROVIDER_RULES: readonly ReasoningProviderRule[] = [
 
 // ---- C 层：泛用家族推断 ----
 
-/** pi-ai detectCompat 能自己认出的网关 host（小写子串；引擎名单，升级 pi-ai 时同步）。 */
-const PI_AI_DETECTED_HOSTS: readonly string[] = [
+/**
+ * pi-ai detectCompat 能自己认出的网关 host（小写子串；引擎名单，升级 pi-ai 时同步）。
+ * 「同步」由 reasoningCompat.test.ts 的镜像守门测试强制：引擎 detectCompat 新增 host
+ * 而本名单未跟 → 测试红灯。导出仅为该测试消费。
+ */
+export const PI_AI_DETECTED_HOSTS: readonly string[] = [
   'api.openai.com', // 引擎默认（openai 格式）在这里定义即正确
   'deepseek.com',
   'api.z.ai',

@@ -28,9 +28,10 @@ import { candidateVaultPaths, mergeVaults, parseVaultKeys, vaultPathsFromConfig 
 
 describe('parseVaultKeys', () => {
   it('读 { keys: {...} } 形状并过滤空值', () => {
-    expect(parseVaultKeys(JSON.stringify({ keys: { silicon: 'cipher-a', empty: '', deepseek: 'cipher-b' } }))).toEqual(
-      { silicon: 'cipher-a', deepseek: 'cipher-b' }
-    )
+    expect(parseVaultKeys(JSON.stringify({ keys: { silicon: 'cipher-a', empty: '', deepseek: 'cipher-b' } }))).toEqual({
+      silicon: 'cipher-a',
+      deepseek: 'cipher-b'
+    })
   })
 
   it('坏 JSON、坏形状、空文件都退化成空表（不抛）', () => {
@@ -126,9 +127,7 @@ describe('candidateVaultPaths', () => {
     const current = path.join('F:', 'Documents', 'Re_Cherry', 'provider-keys.json')
     const candidates = candidateVaultPaths(current)
 
-    expect(candidates).toContain(
-      path.join(appMock.getPath('appData'), appMock.getName(), 'provider-keys.json')
-    )
+    expect(candidates).toContain(path.join(appMock.getPath('appData'), appMock.getName(), 'provider-keys.json'))
     expect(candidates).not.toContain(current)
   })
 })

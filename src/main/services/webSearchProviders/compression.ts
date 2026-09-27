@@ -53,7 +53,12 @@ async function rerankChunks(
   try {
     // 多问题拼接为单一重排 query（与 cosine 的"任一问题最大分"同向：合并语义）。
     const result = await lightRerank(
-      { providerId: rerank.providerId, modelId: rerank.modelId, query: questions.join('\n'), documents: chunks.map((c) => c.content) },
+      {
+        providerId: rerank.providerId,
+        modelId: rerank.modelId,
+        query: questions.join('\n'),
+        documents: chunks.map((c) => c.content)
+      },
       signal
     )
     const reranked = result.results

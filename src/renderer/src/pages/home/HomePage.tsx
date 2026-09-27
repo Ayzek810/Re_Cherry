@@ -1,4 +1,3 @@
-import { loggerService } from '@logger'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useAssistants } from '@renderer/hooks/useAssistant'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
@@ -32,8 +31,6 @@ import Navbar from './Navbar'
 import HomeTabs from './Tabs'
 
 let _activeAssistant: Assistant
-
-const logger = loggerService.withContext('HomePage')
 
 const HomePage: FC = () => {
   const { assistants } = useAssistants()
@@ -119,11 +116,6 @@ const HomePage: FC = () => {
     (viewed: Topic, assistantId?: string) => {
       const memory = resolveTopicViewMemory(viewed, store.getState().assistants.assistants, assistantId)
       if (memory === undefined || memory.unchanged) return
-      // ③诊断日志（v0.3.1 第三轮"切回落错分支"取证）：记录每次记忆写入的落点，
-      // 与 Topics.onSwitchTopic 的召回日志配套对读（真机日志过滤 topicView）。
-      logger.info(
-        `[topicView] record: assistant=${memory.assistantId} root=${memory.root.id} branch=${memory.branchId ?? '(root)'}`
-      )
       dispatch(
         updateTopicAction({
           assistantId: memory.assistantId,

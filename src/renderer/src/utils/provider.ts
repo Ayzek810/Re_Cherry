@@ -128,11 +128,6 @@ export const isSupportUrlContextProvider = (provider: Provider) => {
   return SUPPORT_URL_CONTEXT_PROVIDER_TYPES.some((type) => type === provider.type)
 }
 
-/** 判断是否是使用 Gemini 原生搜索工具的 provider。官方 Gemini/Vertex 系统提供商已移除，恒为 false。 */
-export const isGeminiWebSearchProvider = (_provider: Provider) => {
-  return false
-}
-
 export const isNewApiProvider = (provider: Provider) => {
   return ['new-api', 'aionly'].includes(provider.id) || provider.type === 'new-api'
 }

@@ -130,8 +130,7 @@ export function useComposerTokenReconcile(_inputs: { scope: ComposerToolScope; m
 export function useComposerToolLauncherActions() {
   const getLaunchers = useCallback((_source?: string): ComposerToolLauncher[] => [], [])
   const dispatchLauncher = useCallback(
-    (_launcher: ComposerToolLauncher, _options: { source: 'popover' | 'root-panel'; searchText?: string }) =>
-      undefined,
+    (_launcher: ComposerToolLauncher, _options: { source: 'popover' | 'root-panel'; searchText?: string }) => undefined,
     []
   )
   return { getLaunchers, dispatchLauncher }

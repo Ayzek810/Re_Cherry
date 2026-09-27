@@ -124,7 +124,8 @@ const ORIGIN_DEFAULT_MIN_APPS: MinAppType[] = [
     url: 'https://chat.z.ai/',
     bodered: true,
     supportedRegions: ['CN', 'Global']
-  },  {
+  },
+  {
     id: 'silicon',
     name: 'SiliconFlow',
     url: 'https://cloud.siliconflow.cn/playground/chat',

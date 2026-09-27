@@ -15,7 +15,11 @@ const logger = loggerService.withContext('GatewayGeminiTokenEstimate')
  * Never throws: the bounded walker caps depth and work — countTokens must not
  * 500 a client. Heuristic by design (magnitude-correct, not token-exact).
  */
-export async function estimateGeminiRequestTokens(body: unknown, _modelString: string, _signal?: AbortSignal): Promise<number> {
+export async function estimateGeminiRequestTokens(
+  body: unknown,
+  _modelString: string,
+  _signal?: AbortSignal
+): Promise<number> {
   logger.warn('conversion-based estimate is not ported in the fork; using bounded raw-body estimate')
   return boundedBodyTokens(body, tokenxTokenizer)
 }

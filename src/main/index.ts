@@ -262,10 +262,14 @@ if (!app.requestSingleInstanceLock()) {
     // 解析不到相对路径，会被 try/catch 吞成静默失效——真机踩过）。
     try {
       deepSeekHarnessService.killSync()
-    } catch { /* 未启动 */ }
+    } catch {
+      /* 未启动 */
+    }
     try {
       hermesDashboardService.killSync()
-    } catch { /* 未启动 */ }
+    } catch {
+      /* 未启动 */
+    }
   })
 
   app.on('will-quit', async () => {

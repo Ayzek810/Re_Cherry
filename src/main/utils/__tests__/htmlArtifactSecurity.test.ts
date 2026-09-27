@@ -101,10 +101,14 @@ describe('hardenHtmlArtifactWebviews', () => {
     hardenHtmlArtifactWebviews(window, {} as Session)
 
     const event = { preventDefault: vi.fn() }
-    listener('will-attach-webview')(event, {}, {
-      partition: HTML_ARTIFACT_PREVIEW_PARTITION,
-      src: 'https://example.com'
-    })
+    listener('will-attach-webview')(
+      event,
+      {},
+      {
+        partition: HTML_ARTIFACT_PREVIEW_PARTITION,
+        src: 'https://example.com'
+      }
+    )
 
     expect(event.preventDefault).toHaveBeenCalledTimes(1)
   })

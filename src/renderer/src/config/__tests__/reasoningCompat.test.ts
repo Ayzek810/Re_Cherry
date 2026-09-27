@@ -1,7 +1,11 @@
 import type { Model } from '@renderer/types'
 import { describe, expect, it } from 'vitest'
 
-import { providerReasoningCompat, type ReasoningCompatProviderInput } from '../reasoningCompat'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import path from 'node:path'
+
+import { PI_AI_DETECTED_HOSTS, providerReasoningCompat, type ReasoningCompatProviderInput } from '../reasoningCompat'
 
 const createModel = (id: string) => ({ id, name: id, provider: 'x' }) as unknown as Model
 const createProvider = (input: ReasoningCompatProviderInput) => input
@@ -173,5 +177,33 @@ describe('providerReasoningCompat（B 登记 / C 泛用推断 / A 用户声明 �
       createModel('gpt-5.2')
     )
     expect(compat).toBeUndefined()
+  })
+})
+
+/**
+ * 镜像守门（未清债 §3「PI_AI_DETECTED_HOSTS 镜像失同步」的收口）：
+ * 本文件顶部的名单与 pi-ai 引擎 detectCompat 的 baseUrl 名单是两套真相源，引擎升级
+ * 新增 host 时镜像不会自动跟——C 层会把引擎已识别的网关误当「无名网关」施加 qwen 协议。
+ * 此测试直接读取引擎 dist 源码抽取 host 字面量做包含断言，把静默漂移变成红灯。
+ */
+describe('PI_AI_DETECTED_HOSTS 镜像 vs pi-ai 引擎 detectCompat', () => {
+  it('引擎 detectCompat 的全部 baseUrl host 均已被镜像名单覆盖', () => {
+    const require = createRequire(import.meta.url)
+    const pkgDir = path.dirname(require.resolve('@deepseek-ai/dsh-llm-pi-ai/package.json'))
+    // pi-ai 的 exports 不暴露 dist 文件，按 pnpm 物理布局直取（pkgDir 的上两级即其 node_modules）
+    const enginePath = path.join(pkgDir, '..', '..', '@earendil-works', 'pi-ai', 'dist', 'api', 'openai-completions.js')
+    const src = readFileSync(enginePath, 'utf8')
+
+    const start = src.indexOf('function detectCompat')
+    expect(start).toBeGreaterThanOrEqual(0)
+    const body = src.slice(start, src.indexOf('\nfunction ', start + 1))
+    const engineHosts = [...body.matchAll(/baseUrl\.includes\("([^"]+)"\)/g)].map((m) => m[1])
+
+    // 抽取非空守护：引擎重构（改名/搬家）会让正则抽到空集而静默通过
+    expect(engineHosts.length).toBeGreaterThan(5)
+
+    const mirror = new Set(PI_AI_DETECTED_HOSTS)
+    const uncovered = [...new Set(engineHosts)].filter((host) => !mirror.has(host))
+    expect(uncovered).toEqual([])
   })
 })

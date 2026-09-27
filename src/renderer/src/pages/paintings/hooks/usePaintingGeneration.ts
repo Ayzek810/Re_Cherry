@@ -93,7 +93,10 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
 
       try {
         // V2 create/update DTO → db.paintings.put(PaintingRecord)。
-        const record = paintingDataToRecord(targetPainting, shouldCreate ? undefined : { id: targetPainting.id, createdAt: targetPainting.persistedAt ?? Date.now() })
+        const record = paintingDataToRecord(
+          targetPainting,
+          shouldCreate ? undefined : { id: targetPainting.id, createdAt: targetPainting.persistedAt ?? Date.now() }
+        )
         await db.paintings.put(record)
         targetPainting.persistedAt = record.createdAt
       } catch (error) {

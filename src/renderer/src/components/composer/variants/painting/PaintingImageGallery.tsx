@@ -2,7 +2,10 @@
 // （`PaintingImageGallery` = 参考图托盘 / `PaintingImageAddButton` = 加图按钮）。
 // V2 这两个组件直接读 composer 上下文（`useComposerToolState`）；fork 同名组件是
 // props 驱动的页部件（页面还在用），故在此缝里接上下文与页面草稿，不改 fork 原件。
-import { PaintingImageAddButton as PaintingImageAddButtonView, PaintingInputTray } from '@renderer/pages/paintings/components/PaintingImageGallery'
+import {
+  PaintingImageAddButton as PaintingImageAddButtonView,
+  PaintingInputTray
+} from '@renderer/pages/paintings/components/PaintingImageGallery'
 import { usePaintingSession } from '@renderer/pages/paintings/context/PaintingSessionContext'
 import { usePaintingComposerInputFiles } from '@renderer/pages/paintings/hooks/usePaintingComposerInputFiles'
 import { useEffect, useRef } from 'react'

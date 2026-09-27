@@ -25,7 +25,14 @@ interface Props {
   [key: string]: any
 }
 
-const CodeBlock: React.FC<Props> = ({ children, className, inlineHtmlPreviewMode, isStreaming = false, node, blockId }) => {
+const CodeBlock: React.FC<Props> = ({
+  children,
+  className,
+  inlineHtmlPreviewMode,
+  isStreaming = false,
+  node,
+  blockId
+}) => {
   const languageMatch = /language-([\w-+]+)/.exec(className || '')
   const isMultiline = children?.includes('\n')
   const detectedLanguage = languageMatch?.[1] ?? (isMultiline ? 'text' : null)

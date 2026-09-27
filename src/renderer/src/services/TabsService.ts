@@ -100,7 +100,8 @@ class TabsService {
    * Clean up mini-app cache and WebView state when tab is closed
    * @param tabId The tab ID to clean up
    */
-  private cleanupMinAppCache(tabId: string) {    // Check if this is a mini-app tab (format: /apps/{appId})
+  private cleanupMinAppCache(tabId: string) {
+    // Check if this is a mini-app tab (format: /apps/{appId})
     const tabs = store.getState().tabs.tabs
     const tab = tabs.find((t) => t.id === tabId)
 

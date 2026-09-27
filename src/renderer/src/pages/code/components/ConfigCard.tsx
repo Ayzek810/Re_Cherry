@@ -85,17 +85,17 @@ export const ProviderCard: FC<ProviderCardProps> = ({
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 truncate text-sm text-foreground">{providerName}</span>
+            <span className="min-w-0 truncate text-foreground text-sm">{providerName}</span>
             {modelName && (
               <>
-                <span aria-hidden className="shrink-0 text-xs text-foreground-tertiary">
+                <span aria-hidden className="shrink-0 text-foreground-tertiary text-xs">
                   ｜
                 </span>
                 <span className="min-w-0 truncate font-mono text-[11px] text-foreground-tertiary">{modelName}</span>
               </>
             )}
           </div>
-          {description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{description}</p>}
+          {description && <p className="mt-0.5 truncate text-muted-foreground text-xs">{description}</p>}
         </div>
 
         <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100">

@@ -280,7 +280,7 @@ const TranslatePage = () => {
               onClick={() => void selectModel()}
               aria-label={translateModel?.name ?? t('translate.select_model')}
               title={translateModel?.name ?? t('translate.select_model')}
-              className="flex h-8 max-w-52 min-w-0 items-center gap-1.5 rounded-md px-2 text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
+              className="flex h-8 min-w-0 max-w-52 items-center gap-1.5 rounded-md px-2 text-sm transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none">
               {translateModel ? (
                 <>
                   <ModelAvatar model={translateModel} size={20} />

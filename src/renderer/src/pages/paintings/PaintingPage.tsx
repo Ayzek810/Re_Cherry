@@ -29,8 +29,7 @@ const PaintingPage: FC = () => {
 
   // fork 缝：Provider 必须挂在 usePaintingSession() 读取方之上，故页面拆 wrapper + 本体。
   return (
-    <PaintingSessionProvider
-      initialPainting={createDefaultPainting({ providerId: providerOptions[0]?.value ?? '' })}>
+    <PaintingSessionProvider initialPainting={createDefaultPainting({ providerId: providerOptions[0]?.value ?? '' })}>
       <PaintingPageView />
     </PaintingSessionProvider>
   )

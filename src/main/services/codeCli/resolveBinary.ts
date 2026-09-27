@@ -69,7 +69,9 @@ function managedBinaryPath(executable: string): string | undefined {
     return path.join(toolsRoot, 'dsh', 'node_modules', '.bin', isWin ? 'dsh.cmd' : 'dsh')
   }
   if (executable === 'hermes') {
-    return isWin ? path.join(toolsRoot, 'hermes', 'Scripts', 'hermes.exe') : path.join(toolsRoot, 'hermes', 'bin', 'hermes')
+    return isWin
+      ? path.join(toolsRoot, 'hermes', 'Scripts', 'hermes.exe')
+      : path.join(toolsRoot, 'hermes', 'bin', 'hermes')
   }
   return undefined
 }
@@ -77,14 +79,25 @@ function managedBinaryPath(executable: string): string | undefined {
 /** 解析受管 CLI 的可执行文件（受管优先，回退系统 PATH）；找不到返回 null（调用方给用户可见错误）。 */
 export async function resolveBinary(executable: string): Promise<ResolvedBinary | null> {
   const managed = managedBinaryPath(executable)
-  if (managed && (await fsp.access(managed).then(() => true, () => false))) {
+  if (
+    managed &&
+    (await fsp.access(managed).then(
+      () => true,
+      () => false
+    ))
+  ) {
     // 受管件也过探针（批次5）：装了但跑不起来（peer 缺失/损坏）不该被当成可启动。
     const probe = await probeBinary(managed)
     if (!probe.runnable) {
       logger.warn(`code-mate: managed "${executable}" at ${managed} failed the --version probe`)
     }
     logger.info(`code-mate: "${executable}" resolved to managed ${managed}`)
-    return { source: 'managed', path: managed, ...(probe.version ? { version: probe.version } : {}), runnable: probe.runnable }
+    return {
+      source: 'managed',
+      path: managed,
+      ...(probe.version ? { version: probe.version } : {}),
+      runnable: probe.runnable
+    }
   }
   const found = await probeSystemPath(executable)
   if (!found) {
@@ -99,5 +112,10 @@ export async function resolveBinary(executable: string): Promise<ResolvedBinary 
     ...(probe.version ? { version: probe.version } : {}),
     runnable: probe.runnable
   })
-  return { source: 'system', path: systemPath, ...(probe.version ? { version: probe.version } : {}), runnable: probe.runnable }
+  return {
+    source: 'system',
+    path: systemPath,
+    ...(probe.version ? { version: probe.version } : {}),
+    runnable: probe.runnable
+  }
 }

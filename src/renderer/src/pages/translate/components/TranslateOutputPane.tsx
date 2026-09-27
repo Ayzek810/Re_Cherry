@@ -42,11 +42,7 @@ const TranslateOutputPane: FC<Props> = ({ translatedContent, translating, copied
         )}
       </Scrollbar>
       <div className="absolute top-4 right-3 flex">
-        <IconButton
-          size="sm"
-          onClick={onCopy}
-          disabled={translatedContent.length === 0}
-          aria-label={t('common.copy')}>
+        <IconButton size="sm" onClick={onCopy} disabled={translatedContent.length === 0} aria-label={t('common.copy')}>
           <Check size={14} className={cn('lucide-custom text-foreground', !copied && 'hidden')} />
           <Copy size={14} className={cn('lucide-custom', copied && 'hidden')} />
         </IconButton>

@@ -27,9 +27,12 @@ export const SettingGroup: FC<HTMLAttributes<HTMLDivElement> & { theme?: unknown
   void theme
   return (
     <div
-      style={{ backgroundColor: variant === 'card' ? 'var(--settings-group-background, var(--card))' : undefined, ...style }}
+      style={{
+        backgroundColor: variant === 'card' ? 'var(--settings-group-background, var(--card))' : undefined,
+        ...style
+      }}
       className={cn(
-        'mb-2.5 rounded-lg border border-2 border-transparent px-1.5 pb-1.5 pt-0.5',
+        'mb-2.5 rounded-lg border border-2 border-transparent px-1.5 pt-0.5 pb-1.5',
         variant === 'card' ? 'border-border-subtle' : '',
         className
       )}
@@ -39,5 +42,8 @@ export const SettingGroup: FC<HTMLAttributes<HTMLDivElement> & { theme?: unknown
 }
 
 export const SettingTitle: FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
-  <div className={cn('flex select-none items-center justify-between text-[15px] font-semibold', className)} {...props} />
+  <div
+    className={cn('flex select-none items-center justify-between font-semibold text-[15px]', className)}
+    {...props}
+  />
 )

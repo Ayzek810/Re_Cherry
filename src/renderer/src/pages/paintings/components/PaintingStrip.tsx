@@ -79,7 +79,7 @@ const PaintingStripItem: FC<{
         // 于是 Tab 到删除按钮时它是 opacity-0：聚焦了却看不见，也没有焦点环（WCAG 2.4.7）。
         // 就地追加 V2 在别处（V2 `PaintingImageGallery.tsx:120`）用的同一写法：`group-focus-within:opacity-100`
         // 与 hover 并列为显形条件；再补 `focus-visible:ring-*` 让键盘焦点可见。paintingClasses 常量表不动。
-        className={`${paintingClasses.historyDelete} group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring`}
+        className={`${paintingClasses.historyDelete} focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-focus-within:opacity-100`}
         onClick={(event) => {
           event.stopPropagation()
           onDelete(painting)

@@ -68,7 +68,9 @@ describe('TranslateLanguageBar · 可访问名', () => {
       />
     )
 
-    const sourceOptions = Number(container.querySelector('[data-testid="select-auto"]')?.getAttribute('data-options-count'))
+    const sourceOptions = Number(
+      container.querySelector('[data-testid="select-auto"]')?.getAttribute('data-options-count')
+    )
     const targetOptions = Number(
       container.querySelector('[data-testid="select-zh-cn"]')?.getAttribute('data-options-count')
     )

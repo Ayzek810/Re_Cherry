@@ -1,4 +1,3 @@
-import { loggerService } from '@logger'
 import AddButton from '@renderer/components/AddButton'
 import AssistantAvatar from '@renderer/components/Avatar/AssistantAvatar'
 import type { DraggableVirtualListRef } from '@renderer/components/DraggableList'
@@ -65,8 +64,6 @@ interface Props {
   setActiveTopic: (topic: Topic) => void
   position: 'left' | 'right'
 }
-
-const logger = loggerService.withContext('Topics')
 
 export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, setActiveTopic, position }) => {
   const { t } = useTranslation()
@@ -220,11 +217,6 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       // await modelGenerating()
       // 家族浏览记忆：进话题时恢复上次浏览的分支（无记忆/分支已删 → 落回点击的根话题）
       const recalled = recallLastViewedBranch(topic, assistant?.topics ?? [])
-      // ③诊断日志（v0.3.1 第三轮"切回落错分支"取证）：点击的根 vs 实际召回的分支，
-      // 与 HomePage.recordTopicView 的写入日志配套对读（真机日志过滤 topicView）。
-      logger.info(
-        `[topicView] sidebar: click=${topic.id} recalled=${recalled.id} memory=${topic.lastViewedBranchId ?? '(none)'}`
-      )
       setActiveTopic(recalled)
     },
     [setActiveTopic, assistant]

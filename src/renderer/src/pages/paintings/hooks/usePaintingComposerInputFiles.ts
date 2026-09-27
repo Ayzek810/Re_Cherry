@@ -30,9 +30,7 @@ const logger = loggerService.withContext('usePaintingComposerInputFiles')
 /** 当前模型是否收图：'unknown' = 模型未解析（不动托盘）。 */
 export type InputCapability = 'unknown' | 'accept' | 'reject'
 
-const IMAGE_SELECT_FILTERS = [
-  { name: 'Images', extensions: imageExts.map((ext) => ext.replace(/^\./, '')) }
-]
+const IMAGE_SELECT_FILTERS = [{ name: 'Images', extensions: imageExts.map((ext) => ext.replace(/^\./, '')) }]
 
 interface Params {
   paintingId: string
@@ -131,7 +129,10 @@ export function usePaintingComposerInputFiles({
     if (selecting) return
     setSelecting(true)
     try {
-      const picked = await window.api.file.select({ properties: ['openFile', 'multiSelections'], filters: IMAGE_SELECT_FILTERS })
+      const picked = await window.api.file.select({
+        properties: ['openFile', 'multiSelections'],
+        filters: IMAGE_SELECT_FILTERS
+      })
       if (picked?.length) {
         addFiles(picked)
       }
@@ -176,7 +177,9 @@ export function usePaintingComposerInputFiles({
       // IMAGE_RETRY_REQUIRED 文案），而不是等生成结果对不上才发现少了一张。
       const failedIds = new Set(failed.map((file) => file.id))
       updateFiles((prev) => prev.filter((file) => !failedIds.has(file.id)))
-      presentPaintingGenerateError(createPaintingGenerateError('IMAGE_RETRY_REQUIRED', { presentation: 'toast', severity: 'warning' }))
+      presentPaintingGenerateError(
+        createPaintingGenerateError('IMAGE_RETRY_REQUIRED', { presentation: 'toast', severity: 'warning' })
+      )
       return { files: target, complete: false }
     }
     return { files: target, complete: true }

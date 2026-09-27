@@ -149,7 +149,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{toolName}</span>
+            <span className="truncate font-medium text-foreground text-sm">{toolName}</span>
             {status.source === 'system' ? (
               <span
                 className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
@@ -166,7 +166,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
             )}
           </div>
 
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <div className="mt-1 flex items-center gap-1.5 text-muted-foreground text-xs">
             {isInstalled
               ? status.current && <span className="font-mono">v{status.current}</span>
               : status.latest && (
@@ -320,9 +320,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
           <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full w-1/3 animate-pulse rounded-full bg-foreground/50" />
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {t(`code.install_progress.${installProgressStep}`)}
-          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{t(`code.install_progress.${installProgressStep}`)}</p>
         </div>
       )}
       {installError && !busy && onShowError && (

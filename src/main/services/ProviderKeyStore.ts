@@ -42,9 +42,7 @@ export function parseVaultKeys(raw: string): Record<string, string> {
     const parsed = JSON.parse(raw) as ProviderKeyStoreShape
     const keys = parsed?.keys
     if (keys === null || typeof keys !== 'object') return {}
-    return Object.fromEntries(
-      Object.entries(keys).filter(([, value]) => typeof value === 'string' && value.length > 0)
-    )
+    return Object.fromEntries(Object.entries(keys).filter(([, value]) => typeof value === 'string' && value.length > 0))
   } catch {
     return {}
   }

@@ -172,7 +172,9 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     return {
       a: (props: any) => <Link {...props} />,
       sup: (props: any) => <CitationSup {...props} />,
-      code: (props: any) => <CodeBlock {...props} blockId={block.id} inlineHtmlPreviewMode={effectiveHtmlPreviewMode} />,
+      code: (props: any) => (
+        <CodeBlock {...props} blockId={block.id} inlineHtmlPreviewMode={effectiveHtmlPreviewMode} />
+      ),
       table: (props: any) => <Table {...props} blockId={block.id} />,
       img: (props: any) => <ImageViewer style={{ maxWidth: 500, maxHeight: 500 }} {...props} />,
       pre: (props: any) => <pre style={{ overflow: 'visible' }} {...props} />,

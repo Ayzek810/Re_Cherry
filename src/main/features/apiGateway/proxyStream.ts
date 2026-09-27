@@ -148,10 +148,11 @@ async function runGatewayStream(options: GatewayStreamRunOptions, callbacks: Gat
       let result: { kind: 'chunk'; chunk: UIMessageChunk } | { kind: 'idle' } | { kind: 'exhausted' }
       try {
         const race = await Promise.race([
-          iterator.next().then(
-            (r): { kind: 'chunk'; chunk: UIMessageChunk } | { kind: 'exhausted' } =>
+          iterator
+            .next()
+            .then((r): { kind: 'chunk'; chunk: UIMessageChunk } | { kind: 'exhausted' } =>
               r.done ? { kind: 'exhausted' } : { kind: 'chunk', chunk: r.value }
-          ),
+            ),
           new Promise<{ kind: 'idle' }>((resolve) => {
             idleTimer = setTimeout(() => resolve({ kind: 'idle' }), idleTimeoutMs)
             idleTimer.unref?.()

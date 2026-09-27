@@ -226,11 +226,7 @@ function getLoginShellEnvironment(signal?: AbortSignal): Promise<Record<string, 
 
   return new Promise((resolve, reject) => {
     const homeDirectory =
-      process.env.HOME ||
-      process.env.Home ||
-      process.env.USERPROFILE ||
-      process.env.UserProfile ||
-      os.homedir() // fork 缝：application.getPath('sys.home')（V2 该键即 os.homedir()）
+      process.env.HOME || process.env.Home || process.env.USERPROFILE || process.env.UserProfile || os.homedir() // fork 缝：application.getPath('sys.home')（V2 该键即 os.homedir()）
     if (!homeDirectory) {
       return reject(new Error("Could not determine user's home directory."))
     }

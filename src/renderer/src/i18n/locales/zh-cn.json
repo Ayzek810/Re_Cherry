@@ -595,6 +595,7 @@
       "title": "统一网关"
     },
     "apply_failed": "写入 CLI 配置到系统文件失败",
+    "checking": "检查中…",
     "clear_config_failed": "清除 CLI 配置失败，凭证可能仍保留在该工具的配置文件中",
     "cli_config": {
       "format_failed": "格式化失败，请检查文件格式",
@@ -659,18 +660,17 @@
       }
     },
     "install": "安装",
+    "install_progress": {
+      "install": "正在安装 CLI…",
+      "market": "正在安装插件市场…",
+      "pip": "正在安装依赖包…",
+      "ppt": "正在安装演示文稿插件…",
+      "runtime": "正在下载运行时…",
+      "toolchain": "正在准备插件工具链…",
+      "venv": "正在创建 Python 环境…"
+    },
     "install_success": "安装成功",
     "installing": "安装中…",
-    "checking": "检查中…",
-    "install_progress": {
-      "runtime": "正在下载运行时…",
-      "install": "正在安装 CLI…",
-      "toolchain": "正在准备插件工具链…",
-      "market": "正在安装插件市场…",
-      "ppt": "正在安装演示文稿插件…",
-      "venv": "正在创建 Python 环境…",
-      "pip": "正在安装依赖包…"
-    },
     "latest": "最新",
     "launch": {
       "error": "启动失败，请重试",
@@ -1642,8 +1642,25 @@
     }
   },
   "minapp": {
+    "add": {
+      "button": "添加小程序",
+      "failed": "添加小程序失败",
+      "invalid_url": "请输入有效的网址",
+      "logo": "图标 URL（可选）",
+      "logo_placeholder": "https://example.com/logo.png",
+      "name": "名称",
+      "name_placeholder": "例如：我的小程序",
+      "required_fields": "名称和网址为必填项",
+      "success": "小程序添加成功",
+      "title": "添加自定义小程序",
+      "url": "网址"
+    },
     "add_to_launchpad": "添加到启动台",
     "add_to_sidebar": "添加到侧边栏",
+    "empty": {
+      "all": "暂无小程序",
+      "search": "未找到匹配的小程序"
+    },
     "popup": {
       "close": "关闭小程序",
       "devtools": "开发者工具",
@@ -1672,24 +1689,7 @@
         "title": "删除自定义应用"
       }
     },
-    "title": "小程序",
-    "add": {
-      "button": "添加小程序",
-      "title": "添加自定义小程序",
-      "name": "名称",
-      "name_placeholder": "例如：我的小程序",
-      "url": "网址",
-      "logo": "图标 URL（可选）",
-      "logo_placeholder": "https://example.com/logo.png",
-      "required_fields": "名称和网址为必填项",
-      "invalid_url": "请输入有效的网址",
-      "success": "小程序添加成功",
-      "failed": "添加小程序失败"
-    },
-    "empty": {
-      "all": "暂无小程序",
-      "search": "未找到匹配的小程序"
-    }
+    "title": "小程序"
   },
   "minapps": {
     "ant-ling": "蚂蚁百灵",

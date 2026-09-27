@@ -4,7 +4,11 @@
  * 文本/目标语言/翻译模型变化即重新翻译并作废旧结果；无目标语言持久化（组件内 state）。
  */
 import Scrollbar from '@renderer/components/Scrollbar'
-import { BUILTIN_TRANSLATE_LANGUAGES, langCodeToI18nKey, type TranslateLangCode } from '@renderer/config/translateLanguages'
+import {
+  BUILTIN_TRANSLATE_LANGUAGES,
+  langCodeToI18nKey,
+  type TranslateLangCode
+} from '@renderer/config/translateLanguages'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'

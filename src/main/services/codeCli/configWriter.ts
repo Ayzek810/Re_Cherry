@@ -114,9 +114,11 @@ export async function writeCliConfigFiles(cliTool: FileConfiguredCli, files: Cli
             logger.error(`Failed to roll back ${snapshot.absPath} after write failure`, rollbackError as Error)
         )
       } else {
-        await fs.unlink(snapshot.absPath).catch((rollbackError) =>
-          logger.error(`Failed to delete ${snapshot.absPath} during rollback`, rollbackError as Error)
-        )
+        await fs
+          .unlink(snapshot.absPath)
+          .catch((rollbackError) =>
+            logger.error(`Failed to delete ${snapshot.absPath} during rollback`, rollbackError as Error)
+          )
       }
     }
     throw error

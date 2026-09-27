@@ -89,9 +89,10 @@ function toolOutputToText(output: unknown): string {
   return typeof output === 'string' ? output : JSON.stringify(output)
 }
 
-function uiPartsToBlocks(
-  message: CherryUIMessage
-): { blocks: Message['content']; toolResults: Array<{ callId: string; text: string; isError: boolean }> } {
+function uiPartsToBlocks(message: CherryUIMessage): {
+  blocks: Message['content']
+  toolResults: Array<{ callId: string; text: string; isError: boolean }>
+} {
   const blocks: Message['content'] = []
   const toolResults: Array<{ callId: string; text: string; isError: boolean }> = []
 
@@ -329,7 +330,9 @@ export function streamPrompt(
     ...(overrides.temperature === undefined ? {} : { temperature: overrides.temperature }),
     ...(overrides.maxTokens === undefined ? {} : { maxTokens: overrides.maxTokens }),
     ...(overrides.stop === undefined || overrides.stop.length === 0 ? {} : { stop: overrides.stop }),
-    ...(overrides.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(overrides.reasoningEffort) })
+    ...(overrides.reasoningEffort === undefined
+      ? {}
+      : { reasoningEffort: ReasoningEffortId(overrides.reasoningEffort) })
   }
 
   // tools 转换是异步的（zod → JSON Schema），放生成器内部 await。

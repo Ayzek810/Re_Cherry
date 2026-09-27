@@ -14,7 +14,6 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
-// @ts-nocheck
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSelector, createSlice } from '@reduxjs/toolkit'
 import { DEFAULT_CONTEXTCOUNT, DEFAULT_TEMPERATURE } from '@renderer/config/constant'
@@ -65,7 +64,6 @@ const assistantsSlice = createSlice({
   initialState,
   reducers: {
     updateDefaultAssistant: (state, action: PayloadAction<{ assistant: Assistant }>) => {
-      // @ts-ignore ts2589
       state.defaultAssistant = action.payload.assistant
     },
     updateAssistants: (state, action: PayloadAction<Assistant[]>) => {
@@ -88,7 +86,6 @@ const assistantsSlice = createSlice({
     },
     updateAssistant: (state, action: PayloadAction<Partial<Assistant> & { id: string }>) => {
       const { id, ...update } = action.payload
-      // @ts-ignore ts2589
       state.assistants = state.assistants.map((c) => (c.id === id ? { ...c, ...update } : c))
     },
     updateAssistantSettings: (
@@ -214,7 +211,8 @@ const assistantsSlice = createSlice({
           const visited = new Set<string>()
           while (parent !== undefined && parent.parentTopicId !== undefined && !visited.has(parent.id)) {
             visited.add(parent.id)
-            parent = existing.find((candidate) => candidate.id === parent.parentTopicId)
+            const current = parent
+            parent = existing.find((candidate) => candidate.id === current.parentTopicId)
           }
           return parent !== undefined && incomingIds.has(parent.id)
         })

@@ -238,6 +238,6 @@ describe('QuickPanelView', () => {
       ]
 
       await runKeySequenceAndCheck(screen.getByTestId('quick-panel'), keySequence)
-    })
+    }, 30_000) // 负载敏感（同版本全量两次实测：20s 超时 vs 6.8s 通过）；放宽不是把慢当绿
   })
 })

@@ -345,13 +345,7 @@ const WebviewSearch: FC<WebviewSearchProps> = ({ webviewRef, isWebviewReady, app
         icon={<ChevronDown size={16} />}
       />
       <Divider />
-      <Button
-        size="small"
-        type="text"
-        onClick={closeSearch}
-        aria-label={t('common.close')}
-        icon={<X size={16} />}
-      />
+      <Button size="small" type="text" onClick={closeSearch} aria-label={t('common.close')} icon={<X size={16} />} />
     </SearchPanel>
   )
 }

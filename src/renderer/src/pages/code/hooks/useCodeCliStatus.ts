@@ -32,7 +32,9 @@ function useManagedToolStatusState(
     const apply = (status: unknown) => {
       if (!cancelled && status) setState(status as ManagedToolStatusState)
     }
-    void getStatus().then(apply).catch(() => {})
+    void getStatus()
+      .then(apply)
+      .catch(() => {})
     const unsubscribe = onStatus(apply)
     return () => {
       cancelled = true
@@ -47,8 +49,7 @@ export function useDeepSeekHarnessStatus(): ManagedToolStatusState {
   const { deepseekHarness } = window.api.codeCli
   return useManagedToolStatusState(
     () => deepseekHarness.getStatus(),
-    (cb) =>
-      deepseekHarness.onStatus((status) => cb(status)),
+    (cb) => deepseekHarness.onStatus((status) => cb(status)),
     STOPPED
   )
 }
@@ -58,8 +59,7 @@ export function useHermesDashboardStatus(): ManagedToolStatusState {
   const { hermesDashboard } = window.api.codeCli
   return useManagedToolStatusState(
     () => hermesDashboard.getStatus(),
-    (cb) =>
-      hermesDashboard.onStatus((status) => cb(status)),
+    (cb) => hermesDashboard.onStatus((status) => cb(status)),
     STOPPED
   )
 }
@@ -72,7 +72,10 @@ export function useApiGatewayStatus(): ApiGatewayStatusState {
     const apply = (status: unknown) => {
       if (!cancelled && status) setState(status as ApiGatewayStatusState)
     }
-    void window.api.codeCli.apiGateway.getStatus().then(apply).catch(() => {})
+    void window.api.codeCli.apiGateway
+      .getStatus()
+      .then(apply)
+      .catch(() => {})
     const unsubscribe = window.api.codeCli.apiGateway.onStatus(apply)
     return () => {
       cancelled = true

@@ -8,7 +8,13 @@ import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
 import { toCliProvider } from '../cliConfig/providerView'
 import type { CodeCliId } from '@shared/types/codeCliState'
 import type { CliProviderConfig } from '@shared/types/codeCliState'
-import { CLI_OWN_LOGIN_PROVIDER_ID, CodeCli, GATEWAY_CAPABLE_CLI_TOOLS, isApiGatewayProviderId, LOGIN_CAPABLE_CLI_TOOLS } from '@shared/types/codeCli'
+import {
+  CLI_OWN_LOGIN_PROVIDER_ID,
+  CodeCli,
+  GATEWAY_CAPABLE_CLI_TOOLS,
+  isApiGatewayProviderId,
+  LOGIN_CAPABLE_CLI_TOOLS
+} from '@shared/types/codeCli'
 
 import { clearCliConfig, resolveCliConfigApplyContext } from '../cliConfig'
 import type { CodeCliPageViewProps } from '../components/CodeCliPageView'
@@ -110,7 +116,9 @@ export function useCodeCliPageViewProps(
       }
       // The gateway is synthetic (absent from the real provider list); resolve its summary
       // from the bundle's provider so the sidebar still shows the selected model.
-      const provider = isApiGatewayProviderId(currentId) ? apiGatewayBundle?.provider : providers.find((p) => p.id === currentId)
+      const provider = isApiGatewayProviderId(currentId)
+        ? apiGatewayBundle?.provider
+        : providers.find((p) => p.id === currentId)
       if (!provider) continue
       if (!isApiGatewayProviderId(currentId) && filterProvidersForTool(tool.value, [provider]).length === 0) continue
       const meta = resolveProviderMetaForTool(tool.value, provider, state.providers[currentId])
@@ -352,14 +360,9 @@ export function useCodeCliPageViewProps(
                 : isDeepSeekHarnessTool
                   ? void deepSeekHarness.onLaunch()
                   : launchDialog.openLaunchDialog(),
-          onStop: () =>
-            isDeepSeekHarnessTool
-              ? void deepSeekHarness.onStop()
-              : void hermesDashboard.onStop(),
+          onStop: () => (isDeepSeekHarnessTool ? void deepSeekHarness.onStop() : void hermesDashboard.onStop()),
           onOpenDashboard: () =>
-            isDeepSeekHarnessTool
-              ? void deepSeekHarness.onOpenWebUi()
-              : void hermesDashboard.onOpenDashboard(),
+            isDeepSeekHarnessTool ? void deepSeekHarness.onOpenWebUi() : void hermesDashboard.onOpenDashboard(),
           onConfigure: configPanel.openConfigurePanel,
           onToggleCurrent: configPanel.onToggleCurrent,
           onReorder: handleReorder

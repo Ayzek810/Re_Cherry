@@ -39,7 +39,7 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
           </button>
         </div>
         {model && (
-          <p className="text-foreground-tertiary text-xs break-all">
+          <p className="break-all text-foreground-tertiary text-xs">
             {t('translate.model_hint_prefix')}
             {getModelUniqId(model)}
           </p>

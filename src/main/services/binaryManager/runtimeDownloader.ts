@@ -163,7 +163,9 @@ async function flattenIntoTarget(tempDir: string, targetDir: string, innerPrefix
     const entries = await fsp.readdir(tempDir)
     const inner = entries.find((entry) => entry.startsWith(innerPrefix))
     if (!inner || entries.length !== 1) {
-      throw new Error(`Unexpected archive layout: expected a single "${innerPrefix}*" directory, got ${entries.join(', ') || '(empty)'}`)
+      throw new Error(
+        `Unexpected archive layout: expected a single "${innerPrefix}*" directory, got ${entries.join(', ') || '(empty)'}`
+      )
     }
     source = path.join(tempDir, inner)
   }
@@ -214,7 +216,11 @@ async function firstMissing(files: readonly string[]): Promise<string | undefine
   return undefined
 }
 
-async function isRuntimeReady(dir: string, expectedVersion: string, requiredFiles: readonly string[]): Promise<boolean> {
+async function isRuntimeReady(
+  dir: string,
+  expectedVersion: string,
+  requiredFiles: readonly string[]
+): Promise<boolean> {
   return (await readRuntimeMarker(dir)) === expectedVersion && (await firstMissing(requiredFiles)) === undefined
 }
 
@@ -248,7 +254,9 @@ export async function ensureNodeRuntime(): Promise<NodeRuntime> {
     await fsp.writeFile(path.join(dir, RUNTIME_VERSION_MARKER), NODE_VERSION, 'utf-8')
     const missing = await firstMissing([nodeBin, npmBin])
     if (missing) {
-      throw new Error(`Node runtime installed but ${missing} is missing; ${dir} contains: ${await listDirForDiagnostics(dir)}`)
+      throw new Error(
+        `Node runtime installed but ${missing} is missing; ${dir} contains: ${await listDirForDiagnostics(dir)}`
+      )
     }
     return { dir, npmBin, nodeBin }
   } finally {
@@ -282,7 +290,9 @@ export async function ensurePythonRuntime(): Promise<{ pythonBin: string }> {
     await fsp.writeFile(path.join(dir, RUNTIME_VERSION_MARKER), PYTHON_VERSION, 'utf-8')
     const missing = await firstMissing([pythonBin])
     if (missing) {
-      throw new Error(`Python runtime installed but ${missing} is missing; ${dir} contains: ${await listDirForDiagnostics(dir)}`)
+      throw new Error(
+        `Python runtime installed but ${missing} is missing; ${dir} contains: ${await listDirForDiagnostics(dir)}`
+      )
     }
     return { pythonBin }
   } finally {

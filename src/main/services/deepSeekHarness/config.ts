@@ -324,11 +324,10 @@ function sameSnapshotContent(snapshot: FileSnapshot, expected: string): boolean 
 // fork 缝②：V2 版按 Provider.endpointConfigs/model.endpointTypes 多端点解析；fork 的
 // provider 是单 apiHost+type，协议映射直接复用内核 providers.ts 的 PROTOCOL_BY_TYPE。
 // baseURL 规则与 V2 相同：anthropic 协议剥掉尾部 /v1（DSH 的 anthropic-messages 自带版本路径）。
-export function resolveDeepSeekHarnessEndpoint(provider: {
-  id: string
-  type: string
-  apiHost?: string
-}): { protocol: DeepSeekHarnessProtocol; baseUrl: string } {
+export function resolveDeepSeekHarnessEndpoint(provider: { id: string; type: string; apiHost?: string }): {
+  protocol: DeepSeekHarnessProtocol
+  baseUrl: string
+} {
   const protocol = PROTOCOL_BY_TYPE[provider.type] as DeepSeekHarnessProtocol | undefined
   if (!protocol) {
     throw new Error(`Provider ${provider.id} (type ${provider.type}) has no DeepSeek Harness compatible endpoint`)

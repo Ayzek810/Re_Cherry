@@ -59,7 +59,7 @@ export const CliConfigEditor: FC<CliConfigEditorProps> = ({ files, error, onChan
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-2">
-          <span className="shrink-0 text-xs font-normal text-foreground">{t('code.cli_config.title')}</span>
+          <span className="shrink-0 font-normal text-foreground text-xs">{t('code.cli_config.title')}</span>
           <span className="min-w-0 truncate text-[10px] text-foreground-tertiary">{activeFile?.path}</span>
         </div>
         <Tooltip content={t('code.format_json')}>
@@ -87,9 +87,10 @@ export const CliConfigEditor: FC<CliConfigEditorProps> = ({ files, error, onChan
           items={files.map((file) => ({
             key: file.target,
             label: <span className="text-xs">{file.label}</span>,
-            children: activeFile?.target === file.target ? (
-              <EditorBody file={activeFile} fontSize={fontSize} onChange={updateFile} />
-            ) : null
+            children:
+              activeFile?.target === file.target ? (
+                <EditorBody file={activeFile} fontSize={fontSize} onChange={updateFile} />
+              ) : null
           }))}
         />
       ) : (
@@ -97,9 +98,7 @@ export const CliConfigEditor: FC<CliConfigEditorProps> = ({ files, error, onChan
       )}
 
       {error && (
-        <div className="rounded-md border border-error/35 bg-error/15 px-2 py-1.5 text-xs text-error">
-          {error}
-        </div>
+        <div className="rounded-md border border-error/35 bg-error/15 px-2 py-1.5 text-error text-xs">{error}</div>
       )}
     </div>
   )

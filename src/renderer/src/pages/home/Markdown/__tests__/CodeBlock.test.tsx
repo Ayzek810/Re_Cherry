@@ -230,10 +230,7 @@ describe('CodeBlock', () => {
 
     it('should call EventEmitter when saving an inline HTML artifact', () => {
       render(
-        <CodeBlock
-          {...defaultProps}
-          className="language-html"
-          inlineHtmlPreviewMode="ready">
+        <CodeBlock {...defaultProps} className="language-html" inlineHtmlPreviewMode="ready">
           {'<h1>Hello</h1>'}
         </CodeBlock>
       )
@@ -251,10 +248,7 @@ describe('CodeBlock', () => {
   describe('inline html preview (V2 port)', () => {
     it('renders completed HTML directly in its original Markdown position', () => {
       render(
-        <CodeBlock
-          {...defaultProps}
-          className="language-html"
-          inlineHtmlPreviewMode="ready">
+        <CodeBlock {...defaultProps} className="language-html" inlineHtmlPreviewMode="ready">
           {'<h1>Hello</h1>'}
         </CodeBlock>
       )

@@ -129,7 +129,9 @@ export function apply(ctx: Context): void {
                 )
                 const reordered = reranked.results
                   .map((entry) => ({ hit: hitsInBase[entry.index], score: entry.score }))
-                  .filter((entry): entry is { hit: (typeof hitsInBase)[number]; score: number } => entry.hit !== undefined)
+                  .filter(
+                    (entry): entry is { hit: (typeof hitsInBase)[number]; score: number } => entry.hit !== undefined
+                  )
                 hitsInBase.length = 0
                 hitsInBase.push(...reordered.map((entry) => ({ ...entry.hit, score: entry.score })))
                 logger.debug(`knowledge_search: base ${base.id} reranked ${hitsInBase.length} hit(s)`)

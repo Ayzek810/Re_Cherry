@@ -23,7 +23,7 @@ describe('ImageViewer · preview 契约', () => {
         src="file:///data/Files/1a2b3c4d5e"
         alt=""
         preview={false}
-        className="max-h-full max-w-full object-contain artboard-probe"
+        className="artboard-probe max-h-full max-w-full object-contain"
         style={{ height: 321 }}
         data-testid="artboard-image-transform"
       />

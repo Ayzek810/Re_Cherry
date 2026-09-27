@@ -52,13 +52,16 @@ export function usePaintingInitialDraft({
 
     const resolvedDefaults: PaintingDraftDefaults = {
       providerId: preferredProviderId || draftDefaults.providerId,
-      ...(preferredModelId ? { modelId: preferredModelId } : draftDefaults.modelId ? { modelId: draftDefaults.modelId } : {})
+      ...(preferredModelId
+        ? { modelId: preferredModelId }
+        : draftDefaults.modelId
+          ? { modelId: draftDefaults.modelId }
+          : {})
     }
 
     if (
       resolvedDefaults.providerId &&
-      (currentPainting.providerId !== resolvedDefaults.providerId ||
-        currentPainting.model !== resolvedDefaults.modelId)
+      (currentPainting.providerId !== resolvedDefaults.providerId || currentPainting.model !== resolvedDefaults.modelId)
     ) {
       const nextPainting = createDefaultPainting(resolvedDefaults)
       bootstrapDraftIdRef.current = nextPainting.id

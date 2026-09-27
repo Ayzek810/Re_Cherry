@@ -34,7 +34,11 @@ interface UsePaintingResultSyncInput {
  * (absent from history) and an in-flight generation (history not yet caught up)
  * are both left untouched and the sync is idempotent.
  */
-export function usePaintingResultSync({ currentPainting, historyItems, setCurrentPainting }: UsePaintingResultSyncInput) {
+export function usePaintingResultSync({
+  currentPainting,
+  historyItems,
+  setCurrentPainting
+}: UsePaintingResultSyncInput) {
   const { generationStateById } = usePaintingSession()
   const currentId = currentPainting.id
   const localFileCount = currentPainting.files.length

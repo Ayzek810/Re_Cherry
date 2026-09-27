@@ -37,7 +37,8 @@ const DOCS_STRINGS: Record<string, string> = {
     'List the models available through this gateway, in the OpenAI models format.',
   'apiGateway.docs.operations.messages':
     'Create a message. Request and response bodies follow the Anthropic Messages format; set `stream: true` for incremental output.',
-  'apiGateway.docs.operations.responses': 'Create a response. Request and response bodies follow the OpenAI Responses format.',
+  'apiGateway.docs.operations.responses':
+    'Create a response. Request and response bodies follow the OpenAI Responses format.',
   'apiGateway.docs.tags.anthropic':
     "Anthropic-compatible endpoints. Point an Anthropic SDK at this gateway's base URL to use them.",
   'apiGateway.docs.tags.cherry': "Cherry Studio's own endpoints: service info and health check.",

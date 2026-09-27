@@ -5,7 +5,10 @@
  * window.api.file.download 后 FileManager.addFile 入库，返回 FileMetadata[]。
  */
 import { loggerService } from '@logger'
-import { createPaintingGenerateError, normalizePaintingGenerateError } from '@renderer/pages/paintings/errors/paintingGenerateError'
+import {
+  createPaintingGenerateError,
+  normalizePaintingGenerateError
+} from '@renderer/pages/paintings/errors/paintingGenerateError'
 import FileManager from '@renderer/services/FileManager'
 import type { FileMetadata } from '@renderer/types'
 import type { LightImageResult } from '@shared/lightLlm/types'
@@ -21,7 +24,11 @@ function classifyError(error: unknown): Error {
     if (message.includes('401') || message.toLowerCase().includes('unauthorized') || message.includes('api key')) {
       return createPaintingGenerateError('REQ_ERROR_TOKEN')
     }
-    if (message.includes('402') || message.toLowerCase().includes('balance') || message.toLowerCase().includes('quota')) {
+    if (
+      message.includes('402') ||
+      message.toLowerCase().includes('balance') ||
+      message.toLowerCase().includes('quota')
+    ) {
       return createPaintingGenerateError('REQ_ERROR_NO_BALANCE')
     }
     if (message.includes('404') || message.toLowerCase().includes('model')) {

@@ -63,6 +63,5 @@ export const googleReasoningCache: IReasoningCache<string> = createReasoningCach
  * Stores reasoning details from OpenRouter responses to preserve thinking tokens
  * and reasoning metadata across the conversation flow.
  */
-export const openRouterReasoningCache: IReasoningCache<ReasoningDetailUnion[]> = createReasoningCache(
-  'openrouter-reasoning'
-)
+export const openRouterReasoningCache: IReasoningCache<ReasoningDetailUnion[]> =
+  createReasoningCache('openrouter-reasoning')

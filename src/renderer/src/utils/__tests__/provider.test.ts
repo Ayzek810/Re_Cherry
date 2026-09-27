@@ -10,7 +10,6 @@ import {
   isAnthropicSupportedProvider,
   isAzureOpenAIProvider,
   isGeminiProvider,
-  isGeminiWebSearchProvider,
   isNewApiProvider,
   isOpenAICompatibleProvider,
   isOpenAIProvider,
@@ -169,11 +168,6 @@ describe('provider utils', () => {
   it('detects URL context capable providers', () => {
     expect(isSupportUrlContextProvider(createProvider({ type: 'gemini' }))).toBe(true)
     expect(isSupportUrlContextProvider(createProvider())).toBe(false)
-  })
-
-  it('identifies Gemini web search providers (official Gemini/Vertex system providers removed)', () => {
-    expect(isGeminiWebSearchProvider(createSystemProvider({ type: 'gemini' }))).toBe(false)
-    expect(isGeminiWebSearchProvider(createSystemProvider())).toBe(false)
   })
 
   it('detects New API providers by id or type', () => {

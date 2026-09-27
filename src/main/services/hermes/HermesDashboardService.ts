@@ -392,12 +392,7 @@ function isMissingDashboardDependencyDiagnostic(value: string): boolean {
   return /web ui requires\b.*\bfastapi\b.*\buvicorn\b/i.test(value)
 }
 
-function waitForReady(
-  child: ChildProcess,
-  url: string,
-  expectedHome: string,
-  signal: AbortSignal
-): Promise<void> {
+function waitForReady(child: ChildProcess, url: string, expectedHome: string, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''

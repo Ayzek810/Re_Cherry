@@ -595,6 +595,7 @@
       "title": "Unified Gateway"
     },
     "apply_failed": "Failed to write CLI config to the system file",
+    "checking": "Checking…",
     "clear_config_failed": "Failed to clear the CLI config. Your credentials may still be in the tool's config files.",
     "cli_config": {
       "format_failed": "Format failed. Check the file syntax.",
@@ -659,18 +660,17 @@
       }
     },
     "install": "Install",
+    "install_progress": {
+      "install": "Installing the CLI…",
+      "market": "Installing plugin market…",
+      "pip": "Installing packages…",
+      "ppt": "Installing presentation plugin…",
+      "runtime": "Downloading runtime…",
+      "toolchain": "Preparing plugin toolchain…",
+      "venv": "Creating Python environment…"
+    },
     "install_success": "Installation successful",
     "installing": "Installing…",
-    "checking": "Checking…",
-    "install_progress": {
-      "runtime": "Downloading runtime…",
-      "install": "Installing the CLI…",
-      "toolchain": "Preparing plugin toolchain…",
-      "market": "Installing plugin market…",
-      "ppt": "Installing presentation plugin…",
-      "venv": "Creating Python environment…",
-      "pip": "Installing packages…"
-    },
     "latest": "Latest",
     "launch": {
       "error": "Launch failed, please try again",
@@ -1642,8 +1642,25 @@
     }
   },
   "minapp": {
+    "add": {
+      "button": "Add Mini App",
+      "failed": "Failed to add mini app",
+      "invalid_url": "Please enter a valid URL",
+      "logo": "Logo URL (optional)",
+      "logo_placeholder": "https://example.com/logo.png",
+      "name": "Name",
+      "name_placeholder": "e.g., My Mini App",
+      "required_fields": "Name and URL are required",
+      "success": "Mini app added successfully",
+      "title": "Add Custom Mini App",
+      "url": "URL"
+    },
     "add_to_launchpad": "Add to Launchpad",
     "add_to_sidebar": "Add to Sidebar",
+    "empty": {
+      "all": "No mini apps available",
+      "search": "No matching mini apps found"
+    },
     "popup": {
       "close": "Close MinApp",
       "devtools": "Developer Tools",
@@ -1672,24 +1689,7 @@
         "title": "Delete Custom App"
       }
     },
-    "title": "Mini Apps",
-    "add": {
-      "button": "Add Mini App",
-      "title": "Add Custom Mini App",
-      "name": "Name",
-      "name_placeholder": "e.g., My Mini App",
-      "url": "URL",
-      "logo": "Logo URL (optional)",
-      "logo_placeholder": "https://example.com/logo.png",
-      "required_fields": "Name and URL are required",
-      "invalid_url": "Please enter a valid URL",
-      "success": "Mini app added successfully",
-      "failed": "Failed to add mini app"
-    },
-    "empty": {
-      "all": "No mini apps available",
-      "search": "No matching mini apps found"
-    }
+    "title": "Mini Apps"
   },
   "minapps": {
     "ant-ling": "Ant Ling",

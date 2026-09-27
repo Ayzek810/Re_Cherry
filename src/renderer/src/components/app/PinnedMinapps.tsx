@@ -84,9 +84,7 @@ export const SidebarOpenedMinappTabs: FC = () => {
                 key: 'togglePin',
                 label: isPinned ? t('minapp.remove_from_launchpad') : t('minapp.add_to_launchpad'),
                 onClick: () => {
-                  updatePinnedMinapps(
-                    isPinned ? pinned.filter((item) => item.id !== app.id) : [...pinned, app]
-                  )
+                  updatePinnedMinapps(isPinned ? pinned.filter((item) => item.id !== app.id) : [...pinned, app])
                 }
               },
               {

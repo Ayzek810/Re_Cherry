@@ -60,7 +60,7 @@ export const OwnLoginCard: FC<OwnLoginCardProps> = ({
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 truncate text-sm text-foreground">{title}</span>
+            <span className="min-w-0 truncate text-foreground text-sm">{title}</span>
           </div>
         </div>
 

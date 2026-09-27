@@ -87,7 +87,7 @@ export const MessageHtmlArtifact = memo(function MessageHtmlArtifact({
       data-testid="message-html-artifact"
       className="message-html-artifact special-preview mt-0 mb-2.5 w-full min-w-0 max-w-full">
       <PreviewToolbar data-testid="html-artifact-controls">
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">{title}</span>
         <Tooltip title={copyLabel}>
           <Button
             type="text"

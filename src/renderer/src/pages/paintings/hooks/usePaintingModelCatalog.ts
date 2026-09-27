@@ -32,7 +32,10 @@ export interface PaintingModelCatalog {
   selectedModel: Model | undefined
 }
 
-export function usePaintingModelCatalog(providerId: string | undefined, selectedModelId: string | undefined): PaintingModelCatalog {
+export function usePaintingModelCatalog(
+  providerId: string | undefined,
+  selectedModelId: string | undefined
+): PaintingModelCatalog {
   const providers = useAppSelector((state) => state.llm.providers)
 
   return useMemo(() => {

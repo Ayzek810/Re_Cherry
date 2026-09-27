@@ -186,7 +186,11 @@ export function useComposerEditorFrameSizing({
 
   const frameStyle = useMemo<CSSProperties>(
     () => ({
-      height: isExpanded ? COMPOSER_EDITOR_EXPANDED_MAX_HEIGHT : manualHeight !== null ? `${manualHeight}px` : undefined,
+      height: isExpanded
+        ? COMPOSER_EDITOR_EXPANDED_MAX_HEIGHT
+        : manualHeight !== null
+          ? `${manualHeight}px`
+          : undefined,
       minHeight,
       overflow: 'hidden',
       transitionDuration: `${COMPOSER_EDITOR_HEIGHT_TRANSITION_MS}ms`

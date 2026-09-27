@@ -63,7 +63,9 @@ const NPM_REGISTRY_MIRROR = 'https://registry.npmmirror.com'
 
 /** fork 缝②：KernelModelInput.input 是 string[]（内核已卫生化），此处收窄为投影形状。 */
 function toModelProjection(model: KernelModelInput): DeepSeekHarnessModelProjection {
-  const input = (model.input ?? ['text']).filter((value): value is 'text' | 'image' => value === 'text' || value === 'image')
+  const input = (model.input ?? ['text']).filter(
+    (value): value is 'text' | 'image' => value === 'text' || value === 'image'
+  )
   return {
     name: model.name ?? model.id,
     input: input.length > 0 ? input : ['text'],
@@ -393,7 +395,8 @@ class DeepSeekHarnessService {
       (await fs.access(hostEntry).then(
         () => true,
         () => false
-      )) && (await fs.access(dshEntry).then(
+      )) &&
+      (await fs.access(dshEntry).then(
         () => true,
         () => false
       ))
@@ -533,7 +536,9 @@ async function assertWebReady(url: string): Promise<void> {
   const location = response.headers.get('location')
   const serverResponded = (response.status >= 200 && response.status < 400) || response.status === 304
   if (!serverResponded) {
-    throw new Error(`DeepSeek Harness Web UI returned HTTP ${response.status}${location ? ` (location: ${location})` : ''}`)
+    throw new Error(
+      `DeepSeek Harness Web UI returned HTTP ${response.status}${location ? ` (location: ${location})` : ''}`
+    )
   }
   logger.debug?.(`Web UI readiness: HTTP ${response.status}${location ? ` -> ${location}` : ''}`)
 }

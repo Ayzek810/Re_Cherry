@@ -67,7 +67,10 @@ function isManagedCherryAiDefaultModel(providerId: string, modelId: string): boo
   return providerId === CHERRYAI_PROVIDER_ID && modelId === CHERRYAI_DEFAULT_MODEL_ID
 }
 
-function toGatewayModel(provider: KernelProviderInput, candidate: NonNullable<KernelProviderInput['models']>[number]): GatewayModel {
+function toGatewayModel(
+  provider: KernelProviderInput,
+  candidate: NonNullable<KernelProviderInput['models']>[number]
+): GatewayModel {
   return {
     id: `${provider.id}::${candidate.id}` as UniqueModelId,
     providerId: provider.id,
@@ -135,10 +138,12 @@ export function resolveGatewayModelAddress(modelAddress: string, allowAgentOnly 
     throw new Error(`Model "${modelAddress}" is not available through the API gateway`)
   }
 
-  const model = (provider.models ?? []).map((candidate) => toGatewayModel(provider, candidate)).find((candidate) => {
-    if (!isGatewayRoutableModel(candidate)) return false
-    return candidate.apiModelId === apiModelId
-  })
+  const model = (provider.models ?? [])
+    .map((candidate) => toGatewayModel(provider, candidate))
+    .find((candidate) => {
+      if (!isGatewayRoutableModel(candidate)) return false
+      return candidate.apiModelId === apiModelId
+    })
   if (!model) {
     throw new Error(`Model "${modelAddress}" is not available through the API gateway`)
   }

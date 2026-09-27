@@ -3,7 +3,10 @@
  * antd Modal（window.modal.confirm）。四类 reason 的文案键保留。
  */
 import i18n from '@renderer/i18n'
-import { createPaintingGenerateError, presentPaintingGenerateError } from '@renderer/pages/paintings/errors/paintingGenerateError'
+import {
+  createPaintingGenerateError,
+  presentPaintingGenerateError
+} from '@renderer/pages/paintings/errors/paintingGenerateError'
 import type { PaintingGenerationGuardReason } from '@renderer/pages/paintings/hooks/usePaintingGenerationGuard'
 
 function openProviderSettings(providerId: string) {

@@ -22,7 +22,7 @@ export const CurrentConfigPanel: FC<CurrentConfigPanelProps> = ({ directory, onS
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <label className="text-xs text-muted-foreground">{t('code.working_directory')}</label>
+        <label className="text-muted-foreground text-xs">{t('code.working_directory')}</label>
         <div className="flex w-full items-center">
           <Input value={directory ?? ''} placeholder={t('code.folder_placeholder')} readOnly tabIndex={-1} />
           <Button variant="default" onClick={onSelectFolder} className="ml-2 shrink-0">

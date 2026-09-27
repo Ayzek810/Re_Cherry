@@ -193,36 +193,11 @@ export const closeAll = () => {
   getMessageApi().destroy()
 }
 
-/**
- * Stub functions for compatibility with previous toast API
- * These are no-ops since antd message doesn't expose a queue
- */
-
-/**
- * @deprecated This function is a no-op stub for backward compatibility only.
- * Antd message doesn't expose a queue. Do not rely on this function.
- * @returns Empty toast queue stub
- */
-export const getToastQueue = (): any => ({ toasts: [] })
-
-/**
- * @deprecated This function is a no-op stub for backward compatibility only.
- * Antd message doesn't track closing state. Do not rely on this function.
- * @param key - Toast key (unused)
- * @returns Always returns false
- */
-export const isToastClosing = (key?: string): boolean => {
-  key // unused
-  return false
-}
-
 export const getToastUtilities = () =>
   ({
-    getToastQueue,
     addToast,
     closeToast,
     closeAll,
-    isToastClosing,
     error,
     success,
     warning,

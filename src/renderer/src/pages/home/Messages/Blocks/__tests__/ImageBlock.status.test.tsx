@@ -29,9 +29,7 @@ const baseBlock = {
 describe('ImageBlock', () => {
   it('SUCCESS + url：真的把图渲染出来（小窗粘贴图修复后的形态）', () => {
     const { container } = render(
-      <ImageBlock
-        block={{ ...baseBlock, status: MessageBlockStatus.SUCCESS, url: 'data:image/png;base64,aGVsbG8=' }}
-      />
+      <ImageBlock block={{ ...baseBlock, status: MessageBlockStatus.SUCCESS, url: 'data:image/png;base64,aGVsbG8=' }} />
     )
     expect(container.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,aGVsbG8=')
     expect(container.querySelector('.image-block-placeholder')).toBeNull()

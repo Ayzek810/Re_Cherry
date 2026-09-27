@@ -14,11 +14,7 @@ import { CirclePause, Maximize2, Minimize2 } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type {
-  ComposerToolLauncher,
-  ComposerUnifiedPanelControl,
-  QuickPanelInputAdapter
-} from './quickPanel'
+import type { ComposerToolLauncher, ComposerUnifiedPanelControl, QuickPanelInputAdapter } from './quickPanel'
 import type { ComposerDraftToken, ComposerSerializedDraft, ComposerSerializedToken } from './tokens'
 import { useComposerEditorFrameSizing } from './useComposerEditorFrameSizing'
 import { type ComposerAttachment, mergeComposerAttachments } from './variants/shared/composerTokens'
@@ -256,7 +252,9 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
   const showPauseButton = props.isLoading && props.sendDisabled
   const leftControls = props.renderLeftControls?.(inputAdapter, unifiedPanelControl)
   const sendAccessoryElement =
-    typeof props.sendAccessory === 'function' ? props.sendAccessory(inputAdapter, unifiedPanelControl) : props.sendAccessory
+    typeof props.sendAccessory === 'function'
+      ? props.sendAccessory(inputAdapter, unifiedPanelControl)
+      : props.sendAccessory
   const ExpandIcon = hasCustomHeight ? Minimize2 : Maximize2
   const sendAction = showPauseButton ? (
     <Tooltip title={t('chat.input.pause')} placement="top">

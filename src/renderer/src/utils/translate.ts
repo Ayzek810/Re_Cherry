@@ -31,7 +31,9 @@ const BIDIRECTIONAL_PAIRS: Array<[TranslateLangCode, TranslateLangCode]> = [
 export function determineTargetLanguage(
   source: TranslateLangCode | 'auto',
   target: TranslateLangCode
-): { ok: true; source: TranslateLangCode | 'auto'; target: TranslateLangCode } | { ok: false; reason: 'same_language' | 'not_pair' } {
+):
+  | { ok: true; source: TranslateLangCode | 'auto'; target: TranslateLangCode }
+  | { ok: false; reason: 'same_language' | 'not_pair' } {
   if (source !== 'auto') {
     if (source === target) return { ok: false, reason: 'same_language' }
     return { ok: true, source, target }

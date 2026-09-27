@@ -24,9 +24,7 @@ export function paintingGenerationStateToSession(state: PaintingGenerationState)
 }
 
 /** Inverse of `paintingGenerationStateToSession` for hydrating the painting view. */
-export function sessionToPaintingGenerationState(
-  session: PaintingGenerationState | null
-): PaintingGenerationState {
+export function sessionToPaintingGenerationState(session: PaintingGenerationState | null): PaintingGenerationState {
   if (!session) return emptyPaintingGenerationState()
   return { generationStatus: session.generationStatus, generationError: session.generationError }
 }

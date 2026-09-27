@@ -63,301 +63,302 @@ interface Props {
  */
 export const CodeBlockView: React.FC<Props> = memo(
   ({ children, language, onSave, editable = true, isStreaming = false, showToolbar = true, maxHeight }) => {
-  const { t } = useTranslation()
-  const { codeEditor, codeExecution, codeImageTools, codeCollapsible, codeWrappable } = useSettings()
+    const { t } = useTranslation()
+    const { codeEditor, codeExecution, codeImageTools, codeCollapsible, codeWrappable } = useSettings()
 
-  const [viewState, setViewState] = useState({
-    mode: 'special' as ViewMode,
-    previousMode: 'special' as ViewMode
-  })
-  const { mode: viewMode } = viewState
+    const [viewState, setViewState] = useState({
+      mode: 'special' as ViewMode,
+      previousMode: 'special' as ViewMode
+    })
+    const { mode: viewMode } = viewState
 
-  const setViewMode = useCallback((newMode: ViewMode) => {
-    setViewState((current) => ({
-      mode: newMode,
-      // 当新模式不是 'split' 时才更新
-      previousMode: newMode !== 'split' ? newMode : current.previousMode
-    }))
-  }, [])
+    const setViewMode = useCallback((newMode: ViewMode) => {
+      setViewState((current) => ({
+        mode: newMode,
+        // 当新模式不是 'split' 时才更新
+        previousMode: newMode !== 'split' ? newMode : current.previousMode
+      }))
+    }, [])
 
-  const toggleSplitView = useCallback(() => {
-    setViewState((current) => {
-      // 如果当前是 split 模式，恢复到上一个模式
-      if (current.mode === 'split') {
-        return { ...current, mode: current.previousMode }
+    const toggleSplitView = useCallback(() => {
+      setViewState((current) => {
+        // 如果当前是 split 模式，恢复到上一个模式
+        if (current.mode === 'split') {
+          return { ...current, mode: current.previousMode }
+        }
+        return { mode: 'split', previousMode: current.mode }
+      })
+    }, [])
+
+    const [isRunning, setIsRunning] = useState(false)
+    const [executionResult, setExecutionResult] = useState<{ text: string; image?: string } | null>(null)
+
+    const [tools, setTools] = useState<ActionTool[]>([])
+
+    const isExecutable = useMemo(() => {
+      return codeExecution.enabled && language === 'python'
+    }, [codeExecution.enabled, language])
+
+    const sourceViewRef = useRef<CodeEditorHandles>(null)
+    const specialViewRef = useRef<BasicPreviewHandles>(null)
+
+    const hasSpecialView = useMemo(() => SPECIAL_VIEWS.includes(language), [language])
+
+    const isInSpecialView = useMemo(() => {
+      return hasSpecialView && viewMode === 'special'
+    }, [hasSpecialView, viewMode])
+
+    const [expandOverride, setExpandOverride] = useState(!codeCollapsible)
+    const [wrapOverride, setWrapOverride] = useState(codeWrappable)
+
+    // 重置用户操作
+    useEffect(() => {
+      setExpandOverride(!codeCollapsible)
+    }, [codeCollapsible])
+
+    // 重置用户操作
+    useEffect(() => {
+      setWrapOverride(codeWrappable)
+    }, [codeWrappable])
+
+    const shouldExpand = useMemo(() => !codeCollapsible || expandOverride, [codeCollapsible, expandOverride])
+    const shouldWrap = useMemo(() => codeWrappable && wrapOverride, [codeWrappable, wrapOverride])
+
+    const [sourceScrollHeight, setSourceScrollHeight] = useState(0)
+    const expandable = useMemo(() => {
+      return codeCollapsible && sourceScrollHeight > MAX_COLLAPSED_CODE_HEIGHT
+    }, [codeCollapsible, sourceScrollHeight])
+
+    const handleHeightChange = useCallback((height: number) => {
+      startTransition(() => {
+        setSourceScrollHeight((prev) => (prev === height ? prev : height))
+      })
+    }, [])
+
+    const handleCopySource = useCallback(async () => {
+      try {
+        // Prioritize getting content from editor, fallback to children
+        const content = sourceViewRef.current?.getContent?.() ?? children
+        await navigator.clipboard.writeText(content.trimEnd())
+        window.toast.success(t('code_block.copy.success'))
+      } catch (error) {
+        logger.error('Failed to copy to clipboard:', { error })
+        window.toast.error(t('code_block.copy.failed'))
       }
-      return { mode: 'split', previousMode: current.mode }
-    })
-  }, [])
+    }, [children, t])
+    // Note: sourceViewRef not in deps because it's a stable ref,
+    // and getContent reads content in real-time from editorViewRef.current.state.doc
 
-  const [isRunning, setIsRunning] = useState(false)
-  const [executionResult, setExecutionResult] = useState<{ text: string; image?: string } | null>(null)
+    const handleDownloadSource = useCallback(() => {
+      let fileName = ''
 
-  const [tools, setTools] = useState<ActionTool[]>([])
+      // 尝试提取 HTML 标题
+      if (language === 'html') {
+        fileName = getFileNameFromHtmlTitle(extractHtmlTitle(children)) || ''
+      }
 
-  const isExecutable = useMemo(() => {
-    return codeExecution.enabled && language === 'python'
-  }, [codeExecution.enabled, language])
+      // 默认使用日期格式命名
+      if (!fileName) {
+        fileName = `${dayjs().format('YYYYMMDDHHmm')}`
+      }
 
-  const sourceViewRef = useRef<CodeEditorHandles>(null)
-  const specialViewRef = useRef<BasicPreviewHandles>(null)
+      const ext = getExtensionByLanguage(language)
+      void window.api.file.save(`${fileName}${ext}`, children)
+    }, [children, language])
 
-  const hasSpecialView = useMemo(() => SPECIAL_VIEWS.includes(language), [language])
+    const handleRunScript = useCallback(() => {
+      setIsRunning(true)
+      setExecutionResult(null)
 
-  const isInSpecialView = useMemo(() => {
-    return hasSpecialView && viewMode === 'special'
-  }, [hasSpecialView, viewMode])
-
-  const [expandOverride, setExpandOverride] = useState(!codeCollapsible)
-  const [wrapOverride, setWrapOverride] = useState(codeWrappable)
-
-  // 重置用户操作
-  useEffect(() => {
-    setExpandOverride(!codeCollapsible)
-  }, [codeCollapsible])
-
-  // 重置用户操作
-  useEffect(() => {
-    setWrapOverride(codeWrappable)
-  }, [codeWrappable])
-
-  const shouldExpand = useMemo(() => !codeCollapsible || expandOverride, [codeCollapsible, expandOverride])
-  const shouldWrap = useMemo(() => codeWrappable && wrapOverride, [codeWrappable, wrapOverride])
-
-  const [sourceScrollHeight, setSourceScrollHeight] = useState(0)
-  const expandable = useMemo(() => {
-    return codeCollapsible && sourceScrollHeight > MAX_COLLAPSED_CODE_HEIGHT
-  }, [codeCollapsible, sourceScrollHeight])
-
-  const handleHeightChange = useCallback((height: number) => {
-    startTransition(() => {
-      setSourceScrollHeight((prev) => (prev === height ? prev : height))
-    })
-  }, [])
-
-  const handleCopySource = useCallback(async () => {
-    try {
-      // Prioritize getting content from editor, fallback to children
-      const content = sourceViewRef.current?.getContent?.() ?? children
-      await navigator.clipboard.writeText(content.trimEnd())
-      window.toast.success(t('code_block.copy.success'))
-    } catch (error) {
-      logger.error('Failed to copy to clipboard:', { error })
-      window.toast.error(t('code_block.copy.failed'))
-    }
-  }, [children, t])
-  // Note: sourceViewRef not in deps because it's a stable ref,
-  // and getContent reads content in real-time from editorViewRef.current.state.doc
-
-  const handleDownloadSource = useCallback(() => {
-    let fileName = ''
-
-    // 尝试提取 HTML 标题
-    if (language === 'html') {
-      fileName = getFileNameFromHtmlTitle(extractHtmlTitle(children)) || ''
-    }
-
-    // 默认使用日期格式命名
-    if (!fileName) {
-      fileName = `${dayjs().format('YYYYMMDDHHmm')}`
-    }
-
-    const ext = getExtensionByLanguage(language)
-    void window.api.file.save(`${fileName}${ext}`, children)
-  }, [children, language])
-
-  const handleRunScript = useCallback(() => {
-    setIsRunning(true)
-    setExecutionResult(null)
-
-    pyodideService
-      .runScript(children, {}, codeExecution.timeoutMinutes * 60000)
-      .then((result) => {
-        setExecutionResult(result)
-      })
-      .catch((error) => {
-        logger.error('Unexpected error:', error)
-        setExecutionResult({
-          text: `Unexpected error: ${error.message || 'Unknown error'}`
+      pyodideService
+        .runScript(children, {}, codeExecution.timeoutMinutes * 60000)
+        .then((result) => {
+          setExecutionResult(result)
         })
-      })
-      .finally(() => {
-        setIsRunning(false)
-      })
-  }, [children, codeExecution.timeoutMinutes])
+        .catch((error) => {
+          logger.error('Unexpected error:', error)
+          setExecutionResult({
+            text: `Unexpected error: ${error.message || 'Unknown error'}`
+          })
+        })
+        .finally(() => {
+          setIsRunning(false)
+        })
+    }, [children, codeExecution.timeoutMinutes])
 
-  const showPreviewTools = useMemo(() => {
-    return viewMode !== 'source' && hasSpecialView
-  }, [hasSpecialView, viewMode])
+    const showPreviewTools = useMemo(() => {
+      return viewMode !== 'source' && hasSpecialView
+    }, [hasSpecialView, viewMode])
 
-  // 复制按钮
-  useCopyTool({
-    showPreviewTools,
-    previewRef: specialViewRef,
-    onCopySource: handleCopySource,
-    setTools
-  })
+    // 复制按钮
+    useCopyTool({
+      showPreviewTools,
+      previewRef: specialViewRef,
+      onCopySource: handleCopySource,
+      setTools
+    })
 
-  // 下载按钮
-  useDownloadTool({
-    showPreviewTools,
-    previewRef: specialViewRef,
-    onDownloadSource: handleDownloadSource,
-    setTools
-  })
+    // 下载按钮
+    useDownloadTool({
+      showPreviewTools,
+      previewRef: specialViewRef,
+      onDownloadSource: handleDownloadSource,
+      setTools
+    })
 
-  // 特殊视图的编辑/查看源码按钮，在分屏模式下不可用
-  useViewSourceTool({
-    enabled: hasSpecialView,
-    editable: codeEditor.enabled,
-    viewMode,
-    onViewModeChange: setViewMode,
-    setTools
-  })
+    // 特殊视图的编辑/查看源码按钮，在分屏模式下不可用
+    useViewSourceTool({
+      enabled: hasSpecialView,
+      editable: codeEditor.enabled,
+      viewMode,
+      onViewModeChange: setViewMode,
+      setTools
+    })
 
-  // 特殊视图存在时的分屏按钮
-  useSplitViewTool({
-    enabled: hasSpecialView,
-    viewMode,
-    onToggleSplitView: toggleSplitView,
-    setTools
-  })
+    // 特殊视图存在时的分屏按钮
+    useSplitViewTool({
+      enabled: hasSpecialView,
+      viewMode,
+      onToggleSplitView: toggleSplitView,
+      setTools
+    })
 
-  // 运行按钮
-  useRunTool({
-    enabled: isExecutable,
-    isRunning,
-    onRun: handleRunScript,
-    setTools
-  })
+    // 运行按钮
+    useRunTool({
+      enabled: isExecutable,
+      isRunning,
+      onRun: handleRunScript,
+      setTools
+    })
 
-  // 源代码视图的展开/折叠按钮
-  useExpandTool({
-    enabled: !isInSpecialView,
-    expanded: shouldExpand,
-    expandable,
-    toggle: useCallback(() => setExpandOverride((prev) => !prev), []),
-    setTools
-  })
+    // 源代码视图的展开/折叠按钮
+    useExpandTool({
+      enabled: !isInSpecialView,
+      expanded: shouldExpand,
+      expandable,
+      toggle: useCallback(() => setExpandOverride((prev) => !prev), []),
+      setTools
+    })
 
-  // 源代码视图的自动换行按钮
-  useWrapTool({
-    enabled: !isInSpecialView,
-    wrapped: shouldWrap,
-    wrappable: codeWrappable,
-    toggle: useCallback(() => setWrapOverride((prev) => !prev), []),
-    setTools
-  })
+    // 源代码视图的自动换行按钮
+    useWrapTool({
+      enabled: !isInSpecialView,
+      wrapped: shouldWrap,
+      wrappable: codeWrappable,
+      toggle: useCallback(() => setWrapOverride((prev) => !prev), []),
+      setTools
+    })
 
-  // 代码编辑器的保存按钮
-  useSaveTool({
-    enabled: codeEditor.enabled && !isStreaming && !isInSpecialView,
-    sourceViewRef,
-    setTools
-  })
+    // 代码编辑器的保存按钮
+    useSaveTool({
+      enabled: codeEditor.enabled && !isStreaming && !isInSpecialView,
+      sourceViewRef,
+      setTools
+    })
 
-  // 源代码视图组件
-  const collapsedHeight = maxHeight ?? MAX_COLLAPSED_CODE_HEIGHT
-  const sourceView = useMemo(
-    () =>
-      codeEditor.enabled && editable ? (
-        <CodeEditor
-          className="source-view"
-          ref={sourceViewRef}
-          value={children}
-          language={language}
-          onSave={onSave}
-          onHeightChange={handleHeightChange}
-          maxHeight={`${collapsedHeight}px`}
-          options={{ stream: true }}
-          expanded={shouldExpand}
-          wrapped={shouldWrap}
-        />
-      ) : (
-        <CodeViewer
-          className="source-view"
-          value={children}
-          language={language}
-          onHeightChange={handleHeightChange}
-          expanded={shouldExpand}
-          wrapped={shouldWrap}
-          maxHeight={`${collapsedHeight}px`}
-          onRequestExpand={codeCollapsible ? () => setExpandOverride(true) : undefined}
-        />
-      ),
-    [
-      children,
-      codeCollapsible,
-      codeEditor.enabled,
-      collapsedHeight,
-      editable,
-      handleHeightChange,
-      language,
-      onSave,
-      shouldExpand,
-      shouldWrap
-    ]
-  )
+    // 源代码视图组件
+    const collapsedHeight = maxHeight ?? MAX_COLLAPSED_CODE_HEIGHT
+    const sourceView = useMemo(
+      () =>
+        codeEditor.enabled && editable ? (
+          <CodeEditor
+            className="source-view"
+            ref={sourceViewRef}
+            value={children}
+            language={language}
+            onSave={onSave}
+            onHeightChange={handleHeightChange}
+            maxHeight={`${collapsedHeight}px`}
+            options={{ stream: true }}
+            expanded={shouldExpand}
+            wrapped={shouldWrap}
+          />
+        ) : (
+          <CodeViewer
+            className="source-view"
+            value={children}
+            language={language}
+            onHeightChange={handleHeightChange}
+            expanded={shouldExpand}
+            wrapped={shouldWrap}
+            maxHeight={`${collapsedHeight}px`}
+            onRequestExpand={codeCollapsible ? () => setExpandOverride(true) : undefined}
+          />
+        ),
+      [
+        children,
+        codeCollapsible,
+        codeEditor.enabled,
+        collapsedHeight,
+        editable,
+        handleHeightChange,
+        language,
+        onSave,
+        shouldExpand,
+        shouldWrap
+      ]
+    )
 
-  // 特殊视图组件映射
-  const specialView = useMemo(() => {
-    const SpecialView = SPECIAL_VIEW_COMPONENTS[language as keyof typeof SPECIAL_VIEW_COMPONENTS]
+    // 特殊视图组件映射
+    const specialView = useMemo(() => {
+      const SpecialView = SPECIAL_VIEW_COMPONENTS[language as keyof typeof SPECIAL_VIEW_COMPONENTS]
 
-    if (!SpecialView) return null
+      if (!SpecialView) return null
+
+      return (
+        <SpecialView ref={specialViewRef} enableToolbar={codeImageTools}>
+          {children}
+        </SpecialView>
+      )
+    }, [children, codeImageTools, language])
+
+    const renderHeader = useMemo(() => {
+      if (isInSpecialView) {
+        return <CodeHeader $isInSpecialView>{''}</CodeHeader>
+      }
+      const ext = getExtensionByLanguage(language)
+      const iconName = getFileIconName(`file${ext}`)
+      return (
+        <CodeHeader $isInSpecialView={false}>
+          <Icon icon={`material-icon-theme:${iconName}`} style={{ fontSize: '1.1em', marginRight: 6 }} />
+          {language.charAt(0).toUpperCase() + language.slice(1)}
+        </CodeHeader>
+      )
+    }, [isInSpecialView, language])
+
+    // 根据视图模式和语言选择组件，优先展示特殊视图，fallback是源代码视图
+    const renderContent = useMemo(() => {
+      const showSpecialView = !!specialView && ['special', 'split'].includes(viewMode)
+      const showSourceView = !specialView || viewMode !== 'special'
+
+      return (
+        <SplitViewWrapper
+          className="split-view-wrapper"
+          $isSpecialView={showSpecialView && !showSourceView}
+          $isSplitView={showSpecialView && showSourceView}>
+          {showSpecialView && specialView}
+          {showSourceView && sourceView}
+        </SplitViewWrapper>
+      )
+    }, [specialView, sourceView, viewMode])
 
     return (
-      <SpecialView ref={specialViewRef} enableToolbar={codeImageTools}>
-        {children}
-      </SpecialView>
+      <CodeBlockWrapper className="code-block" $isInSpecialView={isInSpecialView}>
+        {renderHeader}
+        {showToolbar ? <CodeToolbar tools={tools} /> : null}
+        {renderContent}
+        {isExecutable && executionResult && (
+          <StatusBar>
+            {executionResult.text}
+            {executionResult.image && (
+              <ImageViewer src={executionResult.image} alt="Matplotlib plot" style={{ cursor: 'pointer' }} />
+            )}
+          </StatusBar>
+        )}
+      </CodeBlockWrapper>
     )
-  }, [children, codeImageTools, language])
-
-  const renderHeader = useMemo(() => {
-    if (isInSpecialView) {
-      return <CodeHeader $isInSpecialView>{''}</CodeHeader>
-    }
-    const ext = getExtensionByLanguage(language)
-    const iconName = getFileIconName(`file${ext}`)
-    return (
-      <CodeHeader $isInSpecialView={false}>
-        <Icon icon={`material-icon-theme:${iconName}`} style={{ fontSize: '1.1em', marginRight: 6 }} />
-        {language.charAt(0).toUpperCase() + language.slice(1)}
-      </CodeHeader>
-    )
-  }, [isInSpecialView, language])
-
-  // 根据视图模式和语言选择组件，优先展示特殊视图，fallback是源代码视图
-  const renderContent = useMemo(() => {
-    const showSpecialView = !!specialView && ['special', 'split'].includes(viewMode)
-    const showSourceView = !specialView || viewMode !== 'special'
-
-    return (
-      <SplitViewWrapper
-        className="split-view-wrapper"
-        $isSpecialView={showSpecialView && !showSourceView}
-        $isSplitView={showSpecialView && showSourceView}>
-        {showSpecialView && specialView}
-        {showSourceView && sourceView}
-      </SplitViewWrapper>
-    )
-  }, [specialView, sourceView, viewMode])
-
-  return (
-    <CodeBlockWrapper className="code-block" $isInSpecialView={isInSpecialView}>
-      {renderHeader}
-      {showToolbar ? <CodeToolbar tools={tools} /> : null}
-      {renderContent}
-      {isExecutable && executionResult && (
-        <StatusBar>
-          {executionResult.text}
-          {executionResult.image && (
-            <ImageViewer src={executionResult.image} alt="Matplotlib plot" style={{ cursor: 'pointer' }} />
-          )}
-        </StatusBar>
-      )}
-    </CodeBlockWrapper>
-  )
-})
+  }
+)
 
 const CodeBlockWrapper = styled.div<{ $isInSpecialView: boolean }>`
   position: relative;

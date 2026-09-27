@@ -8,7 +8,10 @@
 export interface BinaryToolSnapshot {
   name: string
   application: 'applied' | 'broken' | 'absent'
-  availability: { source: 'managed'; path: string; version?: string } | { source: 'system'; path: string } | { source: 'none' }
+  availability:
+    | { source: 'managed'; path: string; version?: string }
+    | { source: 'system'; path: string }
+    | { source: 'none' }
 }
 
 /**
@@ -70,7 +73,11 @@ export function interpretBinarySnapshot(
   const applicationStatus = snapshot?.application
   const exactApplied = applicationStatus === 'applied'
   const applicationVersion =
-    applicationStatus === 'applied' || applicationStatus === 'broken' ? availability.source === 'managed' ? availability.version : undefined : undefined
+    applicationStatus === 'applied' || applicationStatus === 'broken'
+      ? availability.source === 'managed'
+        ? availability.version
+        : undefined
+      : undefined
   const installedVersion = availability.source === 'managed' ? availability.version : undefined
   return {
     source: availability.source,

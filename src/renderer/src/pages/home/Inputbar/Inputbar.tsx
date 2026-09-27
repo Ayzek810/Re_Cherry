@@ -1,10 +1,5 @@
 import { loggerService } from '@logger'
-import {
-  isGenerateImageModel,
-  isGenerateImageModels,
-  isVisionModel,
-  isVisionModels
-} from '@renderer/config/models'
+import { isGenerateImageModel, isGenerateImageModels, isVisionModel, isVisionModels } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useInputText } from '@renderer/hooks/useInputText'
 import { useMessageOperations, useTopicGenerating } from '@renderer/hooks/useMessageOperations'

@@ -1,189 +1,138 @@
 # AI Assistant Guide
 
-> **Re_Cherry** is a personal fork of Cherry Studio v1.9.11, heavily trimmed, with the chat/agent message path unified onto an in-process **DSH (DeepSeek Harness) Cordis kernel**. Most upstream Cherry Studio documentation (agent pages, apiServer, updater, Copilot, Pyodide, OVMS, selection toolbar, Drizzle agents DB) **no longer applies as written** — those subsystems were removed, while others (MCP · 知识库 · 搜索 · skills · 翻译/绘画/笔记/文件页) were **re-implemented the fork's way** and are live. When in doubt, read the code, not this file's history.
->
-> **Layer contract** — this file carries only what every request needs: conduct, environment facts, hard invariants as one-liners, and navigation. Rules (判据, with their triggers) live in `docs/经验教训.md`, cited as `§N.M`; evidence lives in `docs/archive/`; outstanding debts in `docs/未清债.md`. A rule that is not needed on *every* request does not belong here.
+**Re_Cherry** — personal fork of Cherry Studio v1.9.11, heavily trimmed, with the chat/agent message path unified onto an in-process **DSH (DeepSeek Harness) Cordis kernel** ("everything is a plugin"). Most upstream Cherry Studio documentation no longer applies as written: upstream subsystems (agent pages, apiServer, updater, Copilot, Pyodide, OVMS, selection toolbar, Drizzle agents DB) were removed; MCP · knowledge base · web search · skills · translate/paint/notes/files pages were **re-implemented the fork's way** and are live. When in doubt, read the code.
 
-## Guiding Principles
+## Roadmap (from the project plan)
 
-- **Keep it clear**: write code that is easy to read, maintain, and explain.
-- **Match the house style**: reuse existing patterns, naming, and conventions.
-- **Search smart**: `grep`/`glob`/`read`, semantic queries over guesswork — scoped per *Loop Discipline*.
-- **Confirm before acting — but only where confirmation means something.** A direct instruction from the user **is** the authorisation: do the thing, then report. Do not re-derive "may I?" from the instruction you were just given, and do not ask twice for the same decision. Reserve the ask for what nobody asked for and cannot be undone: rewriting history, force-pushing, deleting data or files, or a structural change to how this project works.
-- **Never commit**: finish the work and hand it over for acceptance — no `git commit` / `git add` / `git push`.
-- **Write the version report** — decisions and evidence only, not process. Rules: every version/phase ends with `<workspace>/docs/[version]_doc.md`; once published it moves to `docs/archive/` and is never edited again; `docs/` root holds **no** version report between releases; acceptance-repair fixes fold into *that version's* report as a new dated section; sub-releases (`-1`, `.1`) nest inside the parent file, never a separate one. Template, size cap (~40 KB / 500 lines) and nesting mechanics are defined in `docs/README.md`. Distil anything still binding into `docs/经验教训.md`.
-- **No pointer-style instruction files**: a sibling file is loaded *in addition to*, never instead of, its target, and `dsh-agent-instructions` collapses siblings only when byte-identical (`dedupInstructionFilesByDirectory`) — a pointer file doubles the fixed per-request cost. Read `docs/README.md` before adding or moving anything under `docs/`.
-- **No blind deletion**: prove code unreferenced via the static-check suite first, scoped grep only as fallback (both under *Environment & Sandbox*). This fork's single biggest regression risk is deleting something that is still wired up.
+- **Main goal**: unified agent+chatbot page/logic, wired to MCP and skills, with in-chat one-tap switch between pure chat / safe-tools chat / full working mode.
+- **Side goals**: port CS v2 edge features (translate, KB, paint) as modules (done); web pages as mini-apps (done); exe programs as mini-apps (deferred — needs main-process subprocess management).
+- **Versions**: through v0.3.4-1 shipped (minapps, Code Mate coding assistant, community stack channel). **v0.4**: requirements frozen, pay all outstanding debt, performance + footprint slimming. **v1**: full review, deploy, ship.
 
-## Environment & Sandbox (IMPORTANT)
-
-Sandbox permissions depend on what the session was granted. When the gates are available, **run them for real instead of reasoning about them**. Two environment facts:
+## Environment
 
 ```powershell
-$env:PATH = "F:\nodejs;" + $env:PATH   # Node ≥24.11.1; DSH's bundled Node 24.9.0 is too old
+$env:PATH = "F:\nodejs;" + $env:PATH   # Node ≥24.11.1; DSH's bundled Node is too old
 $env:CI = "true"                        # avoids ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY
 ```
 
-**`pnpm` does not run under the sandbox.** The wrapper spawns a child process, so every `pnpm <script>` dies with `Error: spawn EPERM` (`pnpm-runner.mjs`) — deterministically, not intermittently. Do not keep retrying it or working around it by hand. When a step genuinely needs pnpm, ask the user to grant full permissions for **that command**, naming it and the why. Everything reachable without pnpm must be reached that way: `node_modules/.bin/` holds `tsgo`, `vitest`, `oxlint`, `eslint`, `biome`, `playwright` and `electron-vite`, so read the pnpm script in `package.json` and invoke the same binary directly (typecheck = `tsgo --noEmit -p tsconfig.node.json` + `... -p tsconfig.web.json`). When the gates are **not** available, say so explicitly rather than claiming a run; the static-check suite below is the fallback (it needs no `node_modules`), and only then scoped code review — the grep-consumption-forms and cross-validation discipline for that is `§2.7` / `§2.8`.
+- **pnpm does not run in the sandbox** (`spawn EPERM`, deterministic). Read the pnpm script in `package.json` and invoke the same binary from `node_modules/.bin/` directly: `tsgo`, `vitest`, `oxlint`, `eslint`, `biome`, `electron-vite`. Ask the user to grant pnpm only when install/packaging genuinely requires it.
+- **Typecheck verbatim**: `tsgo --noEmit -p tsconfig.node.json --composite false` and `-p tsconfig.web.json --composite false`. Omitting `--composite false` both fakes TS4023/TS2742 errors and **emits ~2000 stray `.js`/`.d.ts` into `src/` that hijack vite module resolution** (delete them and confirm via `git status` before continuing).
+- Copy gate commands verbatim from `package.json` scripts (flags matter). On red: compare against HEAD (stash) → verify the command → only then suspect code.
+- After any `resolveJsonModule`-imported JSON shape change (e.g. locale files), delete `*.tsbuildinfo` before tsgo — stale incremental cache produces fake "property does not exist" error families.
+- **Windows shell traps**: trust only the real exit code captured immediately after a command (pipelines swallow/alter codes); PowerShell 5.1 mis-decodes ANSI and writes UTF-16LE by default — read via file tools / `[System.IO.File]::ReadAllText`, write UTF-8 no BOM. In Git Bash, `${PIPESTATUS[0]}` recovers the pre-pipe exit code.
+- **vitest uses the forks pool** (threads pool crashes natively on this machine). Timing is never a regression signal — exit codes and test counts are. A full-suite red under parallel load must be re-run on an idle machine before it counts.
+- **Local `git commit` is allowed** (user-approved standing permission): commit at acceptance-ready milestones as rollback checkpoints. Never push, never tag, never rewrite history without explicit user instruction.
+- Lint chains with `--fix` do semantic rewrites (e.g. `useContext` → `use`) and may land half-done — always follow with both typechecks.
 
-**The shell is Windows PowerShell 5.1, and its signals are treacherous** (one rewrite died on this): `Get-Content` decodes ANSI; `>` / `Out-File` default to UTF-16LE; pipeline exit codes can differ from the real one. Read files with file tools or `[System.IO.File]::ReadAllText`, write with an explicit UTF-8 no-BOM encoder, and trust only `$LASTEXITCODE`. Full trap list: `§4.9`.
-
-**Static-check suite** — ten checks, lives outside the repo:
+## Static-check suite (10 checks, lives outside the repo)
 
 ```powershell
 node E:\Workspace\project_REC\tools\static-checks\run-all.js
 ```
 
-**Trigger is tiered, not blanket (`§4.17`)**: mandatory after deleting/renaming/moving files, changing an import/export surface, touching i18n keys, or editing config/packaging (`package.json`, lockfile, `electron-builder.yml`, `patches/`, `tsconfig`, `vitest.config`); **not** required for pure style / copy / local-logic edits — those get typecheck plus the touched-area tests instead. When it is in scope, all ten must be green (exit 0). `check-upstream` self-skips without the upstream tree at `E:\Workspace\project_REC\参考资产\cherry-studio v1.9.11`. The ten: imports · symbols · syntax (`.ts` only) · configs (incl. `patches/` ↔ `patchedDependencies` 1:1) · i18n-parity · main-i18n · i18n-keys (baseline-based) · i18n-dynamic · upstream · package-runtime-closure（根 package.json 沿正则边收集的闭包必须覆盖每个包 dep+peer 的运行期边——运行期要用的纯 peer 包必须在根 dependencies 显式声明；0.3.1-1 安装包崩溃事故，判据 `§4.16`）. **Coverage gaps, false positives and usage discipline live in `tools/static-checks/README.md` — read it before acting on a report.** The i18n checks exist because text can be consumed in six forms without ever appearing as a literal (the main process reads locale keys by *object value* — `'tray.show_window'` appears nowhere): never prune i18n keys, barrels or side-effect imports without enumerating them (`§2.7`). The suite catches broken references, syntax and config breakage, **not** type errors — when deleting a field/type, grep every consumer including `store/migrate.ts`, and delete the dead statements rather than adding `@ts-expect-error` (`§4.2`).
+Mandatory after: deleting/renaming/moving files, import/export surface changes, i18n key changes, config/packaging edits (`package.json`, lockfile, `electron-builder.yml`, `patches/`, `tsconfig*`, `vitest.config`). Not required for pure style/copy/local-logic edits — those get typecheck + touched-area tests. The suite covers references/syntax/config/i18n/upstream parity — **not types**; it cannot replace tsgo.
 
-## Hard Invariants (one line each; 判据 in `docs/经验教训.md`)
+**Before any deletion judged "unreferenced"**: enumerate all six consumption forms (string literal / object-value lookup / template literal / variable key table / barrel re-export / side-effect import) and cross-validate with two methods that don't share blind spots (alias vs relative vs barrel; type name vs variable name vs usage). i18n is the classic trap: the main process reads locale keys by object value, so `'tray.show_window'` appears nowhere as a literal.
 
-| # | Invariant | 判据 |
-|---|---|---|
-| 1 | Kernel-plugin compatibility contract is a hard acceptance gate: never bypass the cordis `ctx.plugin` lifecycle or public seams (`ctx.agents`, `ctx.sessionPersistence`, `ctx.llm.resolveModelInfo`, `ToolRuntime`, `session/event`); IPC handlers are thin forwarders; no direct SQLite outside the kernel | `docs/内核插件兼容契约.md`, §3.19 |
-| 2 | The kernel session log is the single source of truth; the renderer is a projection — every conversational state must be recoverable by folding it; no parallel sources of truth | §3.1 |
-| 3 | Topic membership is the kernel's to decide, never the renderer's (`dshTopicList` is authoritative; only rows restored from the previous session may be judged stale; pinned by `services/__tests__/topicAuthorityGate.test.ts`) | §3.2 |
-| 4 | `ensureAgent` may never silently create a session over an existing log — `sessionResumeFallback.ts` is the single decision point (persistence existence query, fail-closed); the error's *type* is diagnostic only | §1.4/§1.5 |
-| 5 | Every kernel query must tolerate the boot window (window creation and kernel boot run in parallel) via `retryKernelQuery`; a definitive answer — including a negative one — returns immediately; `null` means "no answer" and never justifies refusing or hiding | §3.4, §2.1 |
-| 6 | An unknowable state never authorises a destructive action: registry `failed` ≠ `absent`, the sweep is skipped entirely, and the unreadable registry is backed up before anything can overwrite it. Same shape everywhere: never treat "no answer" as "empty" | §1.1–§1.3 |
-| 7 | The renderer holds no event-visibility predicate — `sessionEventView.ts` is the only one, applied at all three UI exits (live broadcast, `uiEvents`, search) | §2.4 |
-| 8 | Startup order is a safety property (`src/main/index.ts`): `registerShortcuts()` and `await registerIpc()` stay ahead of every cosmetic/optional initializer, and those stay wrapped in log-only `try/catch` — a cosmetic failure must never cost basic usability | — |
-| 9 | Kernel-package intrusion only where a public seam cannot reach it, and then only as a one-line `globalThis` **neutral gate** (gate absent = upstream-identical logic, all logic fork-side); response-side changes go through the documented `llm/stream` waterfall | §3.5, §3.6 |
-| 10 | Tracing is alive: `packages/mcp-trace/` + `NodeTraceService` + `SpanCacheService` + the trace window are a live feature (name is historical) | §5.9 |
+## Hard invariants
 
-## Loop Discipline (cost control)
+| # | Invariant |
+|---|---|
+| 1 | Kernel-plugin compatibility contract is a hard acceptance gate: never bypass the cordis `ctx.plugin` lifecycle or public seams (`ctx.agents`, `ctx.sessionPersistence`, `ctx.llm.resolveModelInfo`, `ToolRuntime`, `session/event`). IPC handlers are thin forwarders; structural operations go through `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning`; no direct SQLite outside the kernel; never rename dsh session-event vocabulary. |
+| 2 | The kernel session log is the single source of truth; the renderer is a projection. Every conversational state must be recoverable by folding the log — no parallel sources of truth. Wire-side transforms (e.g. prior-turn thinking trim) must never touch the DB. |
+| 3 | Topic membership is the kernel's to decide (`dshTopicList` is authoritative); only rows restored from a previous session may be judged stale. A topic id deleted in the kernel is never resurrected. |
+| 4 | `ensureAgent` may never silently create a session over an existing log — `sessionResumeFallback.ts` is the single decision point (persistence existence query, fail-closed). Error *types* are diagnostic only. |
+| 5 | Every kernel query tolerates the boot window via `retryKernelQuery`; a definitive answer — including a negative — returns immediately; `null` means "no answer" and never justifies refusing or hiding anything. |
+| 6 | An unknowable state never authorizes a destructive action: registry `failed` ≠ `absent`; sweep skipped + file backed up on parse failure. Same shape everywhere: never treat "no answer" as "empty". |
+| 7 | The renderer holds no event-visibility predicate — `sessionEventView.ts` is the only one, applied at all three UI exits (live broadcast, `uiEvents`, search). Visibility is solved structurally, not by per-path patching. |
+| 8 | Startup order is a safety property (`src/main/index.ts`): `registerShortcuts()` and `await registerIpc()` stay ahead of cosmetic/optional initializers, which stay wrapped in log-only `try/catch`. |
+| 9 | Kernel-package intrusion only where a public seam cannot reach, then only as a one-line `globalThis` **neutral gate** (gate absent = upstream-identical); response-side changes go through the documented `llm/stream` waterfall. Cosmetic issues never justify kernel patches (user veto). |
+| 10 | The trace stack (`packages/mcp-trace/` + `NodeTraceService` + `SpanCacheService` + trace window) is a live feature; the package name is historical. |
 
-- **A logic hunt needs a stop condition.** Words like "彻查" / "深入排查" have no endpoint, and an unbounded one is the single most expensive thing this project does — one past session ran 2,613 steps / 526 minutes / 1.8 亿 input tokens against 19 steps for a normal task. If the last several steps produced no new hypothesis or no new evidence, **stop and report**: what you ruled out, what remains, what you would try next.
-- **Explore in a subagent, decide in the main session.** Bulk reading, multi-file surveys and parallel extraction belong in a subagent; the main session receives conclusions. A subagent redistributes cost, it does not reduce it.
-- **Batch, don't repeat.** About to do the same kind of operation a third time → switch to a script, one batched command, or one scoped query.
-- **Edit an injected instruction file in one pass.** Every `write`/`edit` to `CLAUDE.md` (or any `AGENTS.md`) re-injects the whole file into the next request — think the change through and land it in one edit.
-- **Prefer the gate over the hand audit.** One real type gate (`tsgo` direct, not via a pnpm script in the sandbox) is cheaper and stronger than grepping the tree by hand; grep only for what no gate answers.
-- **Retrieval must be scoped.** `glob`/`grep` pass `--no-ignore` and exclude only VCS metadata, so `node_modules`, `dist`, `out` and vendored trees **are** searched and `.gitignore` is not honoured. Measured: a bare `**/*.ts` from this repo's root returns **33,094** paths and shows the wrong 100 (all `node_modules`); scoped to `src/` it returns **458**. Always pass `path`, pick the narrowest root, never search from the repo or workspace root.
-- **Never search `参考资产/` on your own initiative.** ~170k files / 2.5 GB (upstream trees plus their `node_modules`), 71% of every `.md` in the workspace. Exceptions only: (a) the user explicitly asks for an upstream comparison — then delegate to a subagent, name one subdirectory, require scoped searches, and require **conclusions only**; (b) `check-upstream.js` reading it as a machine gate.
+## Judgment rules (distilled from incidents)
 
-## Development Commands (run on the user's real machine)
+**Data & failure semantics**
+- Failures must never masquerade as empty results; a failed fetch rejects, never renders a partial/fake tree. Silent failure is forbidden: log + user-visible signal, even for fire-and-forget writes.
+- Deletion returns `Promise<boolean>`; optimistic rows go back on failure + `toast.error`; batch deletion surfaces "N succeeded / M failed" as a real signal.
+- Three-value contract for kernel queries: `undefined` = retryable (delay only after failure); any other value including `false`/empty = definitive, return immediately; `null` = unanswerable — only `false` may reject.
+- API keys: encrypted at rest via `ProviderKeyStore`; decrypt failure = "no key" (never add plaintext fallbacks or degraded paths). A redux-persist transform strips non-empty `apiKey` from localStorage.
+- Custom session events must set `ignorable: true` on the envelope, or old rows become unreadable and need an idempotent migration to fix.
+- Empty extraction results (empty file / scanned doc) return a neutral one-line note as a normal tool result — not an error.
 
-- **Install**: `pnpm install` — Node ≥24.11.1, pnpm 10.27.0
-- **Dev**: `pnpm dev` (port 5870 / `DSH_DEV_PORT`; EACCES → `netsh interface ipv4 show excludedportrange protocol=tcp`; React/Redux DevTools only with `RC_DEVTOOLS=1`)
-- **Debug**: `pnpm debug` — `chrome://inspect` on port 9222
-- **Typecheck**: `pnpm typecheck` · **Build**: `pnpm build` · **Build check**: `pnpm build:check` (`lint && test`) · **Test**: `pnpm test` / `test:main` / `test:renderer` / `test:shared` / `test:scripts` / `test:e2e`
-- **Lint**: `pnpm lint` · **Format**: `pnpm format` · **i18n**: `pnpm i18n:check` / `i18n:sync` · **Analyze**: `pnpm analyze:renderer` / `analyze:main`
-- **Packaging**: `pnpm build:win:x64 --publish never` (likewise `build:mac*` / `build:linux*`). **`--publish never` is not optional**: `$env:CI='true'` makes electron-builder treat the run as CI and implicitly attempt a GitHub Release publish, which fails on missing `GH_TOKEN` and turns a *successful* packaging into `exit 1`. Read the tail of a build log before concluding anything: artifacts present and signed ⇒ packaging succeeded, only the publish step failed.
+**Redux / persistence**
+- Adding any field to a persisted slice requires a migrate backfill branch (`initialState` never reaches existing users — redux-persist replaces the whole slice). Never delete migrate branches; bumping `version` means updating it in `store/index.ts` and the highest key in `migrate.ts` together.
+- `blacklist` in persist config means "not written to localStorage", not "unused". Cross-reboot state belongs in a persisted slice with a mirror-out/idempotent-restore pair.
+- Any store reading `app.getPath()` (or any "redirection already happened" global) must lazy-construct — the bundler decides module require order, not source order.
 
-## Project Architecture
+**Rendering / blocks**
+- Every `createXxxBlock` call passes explicit `status`; renderers must show skeleton/placeholder for every state (and for blocks missing an address) — silent invisibility is the worst failure shape.
+- `overflow` + `max-height` containers: declare both axes explicitly (`overflow-x: hidden` + `scrollbar-gutter: stable`) or a self-sustaining width↔reflow↔height oscillation appears.
+- Interaction-contract changes (layout skeleton, collapse/expand, overlays, answer/approval entry) need behavior-level proof — a dev-instance sample the user eyeballs, or a behavior test — never a static blast-radius argument.
 
-### Structure & Aliases
+**i18n**
+- zh-CN + en-US only; all user-visible strings through i18next. Feature namespaces stay top-level (nested keys are invisible to the keys gate). Missing-key fallback uses `defaultValue` — `t('k') || 'fallback'` never fires because i18next returns the key itself.
+- Never prune i18n keys, barrels or side-effect imports without the six-form enumeration (see static-check section).
+
+**Gates & testing**
+- A new gate/guard is not proven until a reverse-control probe turned it red: plant a break, watch the specific check fail by name, remove it, confirm clean `git diff`.
+- State each green's scope: typecheck / lint chain / static suite / build cover different things; lint runs no tests; static suite runs no types.
+- A module whose only reference is its own test file is dead — delete module + test together. A single export in an active module referenced only by its own test is **not** dead (rollup tree-shakes it).
+- Behavior differences that all gates miss: third-party shim prop routing (rc-* passes only `COMMON_PROPS` to the inner element; antd Popover injects via cloneElement onto its direct child), runtime CSS-in-JS overriding Tailwind size classes, undefined Tailwind/design tokens failing silently. After porting UI, scan built CSS for the class/variable names actually consumed.
+
+**Porting from V1/V2 (参考资产/)**
+- First inventory upstream originals (glob same-name dirs/components). "Upstream has an original" vetoes self-made shells — port page skeleton, class-constant tables and semantic design tokens together, or the result is silently wrong.
+- Search 参考资产/ only for a specific named target (it is ~170k files); prefer delegating to a subagent with scoped searches.
+- When judging "this fork can't do X", compare upstream `package.json` too — the capability may have been lost with a pruned dependency, not unimplemented.
+- Upstream `⚠️ V2 REFACTORING` / `@deprecated` headers refer to upstream's refactor — treat as ordinary code; the fork roadmap decides.
+- Every shim prop must be consumed, explicitly ignored with a reason comment, or removed from the signature. Ported early-returns/guards must have their original-host preconditions re-verified in the fork.
+- One business criterion per scenario (e.g. image-generation): derived predicates are negations or refinements of the single source of truth — never a second id-list that drifts.
+
+**Subprocess / native**
+- Electron utility workers: `parentPort` only via `process.parentPort` (the d.ts export is a lie); worker-side messages arrive as `MessageEvent` (unwrap `.data`), main-side `utilityProcess` messages as bare values; main-process forks use `stdio: 'pipe'` wired to the logger so child crashes are forensically available.
+- Windows: `env.PATH` is case-sensitive on plain objects — normalize (`withPathPrepend` pattern); EPERM/EBUSY on delete/rename right after killing processes = antivirus/DLL-lock window, retry with backoff.
+- Killing processes must match CommandLine precisely (list before kill) — Electron app, agent hosts and targets may all be `node.exe`.
+
+## Architecture
 
 ```
 src/
-  main/          # Electron main process — hosts the dsh kernel (src/main/kernel)
-  renderer/      # React SPA (src/renderer/src: components/ databases/ hooks/ pages/ services/ store/ types/ workers/ windows/)
+  main/          # Electron main process — hosts the dsh kernel (src/main/kernel/)
+  renderer/      # React SPA (components/ databases/ hooks/ pages/ services/ store/ types/ workers/ windows/)
   preload/       # contextBridge IPC → window.api
 packages/
-  shared/        # cross-process types, constants, IPC channel definitions, small utils
-  mcp-trace/     # OpenTelemetry trace-core + node/web adapters (name is historical; LIVE)
+  shared/        # cross-process types, constants, IPC channel definitions
+  mcp-trace/     # OpenTelemetry trace-core + node/web adapters (LIVE, name historical)
 ```
 
-Entry: `src/main/index.ts` (app lifecycle) → `bootstrap.ts` → `kernel/index.ts` (kernel boot) + `ipc.ts` (IPC handlers). Windows: `index.html` (main) · `miniWindow.html` (quick assistant, `windows/mini/`) · `traceWindow.html` (trace viewer).
+Entry: `src/main/index.ts` → `bootstrap.ts` → `kernel/index.ts` (kernel boot) + `ipc.ts`. Windows: `index.html` (main) · `miniWindow.html` (quick assistant) · `traceWindow.html`.
 
-| Alias | Resolves To |
-|---|---|
-| `@main` | `src/main/` |
-| `@renderer` | `src/renderer/src/` |
-| `@shared` | `packages/shared/` |
-| `@types` | `src/renderer/src/types/` |
-| `@logger` | `src/main/services/LoggerService` (main) / `src/renderer/src/services/LoggerService` (renderer) |
-| `@mcp-trace/*` | `packages/mcp-trace/{trace-core,trace-node,trace-web}/` |
+Aliases: `@main` → `src/main/`, `@renderer` → `src/renderer/src/`, `@shared` → `packages/shared/`, `@types` → `src/renderer/src/types/`, `@logger` → LoggerService (per side).
 
-**Main services**: the authoritative set is the directory `src/main/services/` itself; all are live fork services. Non-obvious ones: `ProviderKeyStore` (encrypted API keys), `StoreSyncService` (Redux sync), `BackupManager` (local/WebDAV/Nutstore), `FileSystemService` (incl. ripgrep search).
+**Kernel** (`src/main/kernel/`): `index.ts` (programmatic plugin assembly + `dsh:*` IPC) · `topics.ts` (topic registry & chat ops) · `providers.ts` (renderer config → pi-ai routes) · `credentials.ts` (in-memory credential provider, per-request multi-key rotation — pointer not persisted) · `services.ts` (`ctx.topicTree`/`ctx.sessionGC`/`ctx.reasoning` seams) · `sessionEventView.ts` (the injected-event predicate) · `dsmlRepair.ts` (response-side DSML repair as waterfall middleware) · `thinkingReplay.ts` (request-side prior-turn thinking trim behind the neutral gate) · `sessionResumeFallback.ts` (the refuse-vs-create decision point) · `sessionReadFailure.ts` (classification, logging only — never gates creation). Topic auto-naming runs renderer-side (`services/topicNaming.ts`) and writes via `Dsh_TopicRename`. The quick assistant (mini window) is the one deliberate separate path: `window.api.dshStreamComplete` without a kernel session; its preload listeners must not be removed when `invoke` lands (terminal events race the reply — see `STREAM_TERMINAL_GRACE_MS`).
 
-**`electron.vite.config.ts` externalizes *all* `dependencies`** — anything the main process `require`s at runtime must stay in `dependencies`; removing one breaks at runtime, never at build time (grep before touching `package.json`). Its packaging twin: pnpm satisfies peer-only packages inside `.pnpm` so dev stays green, but the shipped closure follows regular edges from the root manifest — a runtime-needed peer-only package must **also** be root-declared (`§4.16`; v0.3.1-1 installed-build `ERR_MODULE_NOT_FOUND` crash).
+**Data**: chat lives in kernel SQLite (`{userData}/kernel/sessions.db` + `settings.json` pi-ai routes); provider keys in `{userData}/provider-keys.json` (encrypted). IndexedDB (Dexie) tables are whatever `db.version(n).stores` in `src/renderer/src/databases/index.ts` declares (files, settings, knowledge_notes, quick_phrases, translate_records, paintings; old chat tables dropped). Notes are plain `{userData}/Data/Notes/*.md`, not Dexie. redux-persist migrations: every branch reachable, a throw discards all persisted state.
 
-### dsh Kernel (`src/main/kernel/`)
+**IPC**: channel constants in `packages/shared/IpcChannel.ts`; handlers in `src/main/ipc.ts` + `kernel/index.ts`; bridge in `src/preload/index.ts`. Adding/removing a channel updates all three layers.
 
-Embedded in-process as a Cordis plugin tree, never via the YAML loader:
+**Build/config facts**: `electron.vite.config.ts` externalizes *all* `dependencies` — anything main `require`s at runtime must stay there (removal breaks at runtime, never at build). pnpm config (`overrides`, `patchedDependencies`, `onlyBuiltDependencies`) lives in `pnpm-workspace.yaml`, not `package.json`. Runtime-needed peer-only packages must be root-declared (dev-green ≠ shipped closure; static check `check-package-runtime-closure` guards this). Dev port 5870 (`DSH_DEV_PORT`); fork runtime constants changed from upstream (ports/paths/origins/env) must be grepped at their old values and audited; functional identifiers (`cherrystudio://` protocol, backup default filename, third-party app ids) are rename-locked.
 
-| File | Responsibility |
-|---|---|
-| `index.ts` | Programmatic plugin assembly (settings-file, credentials, llm, pi-ai adapter, system prompt, tools, session store + SQLite persistence, agent registry/loop) and all `dsh:*` IPC. Topic auto-naming runs renderer-side (`services/topicNaming.ts`) and reaches the registry only via `Dsh_TopicRename` |
-| `topics.ts` | Topic registry & chat ops (topic = dsh session + agent), `destroyTurns` deletion engine, reasoning-level convergence |
-| `providers.ts` | Renderer provider config → pi-ai routes (`KernelProviderInput`); clears stale routes on resync |
-| `credentials.ts` | In-memory credential provider (`CherryCredentialProvider`), multi-key rotation per request |
-| `services.ts` | App service seams: `ctx.topicTree` / `ctx.sessionGC` / `ctx.reasoning`; structural operations go through them; `topicTree.uiEvents` = UI view of a session log |
-| `sessionEventView.ts` | The single injected-event predicate + UI view of session events (invariant 7) |
-| `dsmlRepair.ts` | Response-side DSML tool-call repair as an `llm/stream` waterfall middleware (replaced the old pnpm patch) |
-| `thinkingReplay.ts` | Request-side prior-turn thinking trim behind the one-line neutral gate (invariant 9): intra-turn thinking kept, prior turns stripped on the wire, DB untouched |
-| `sessionResumeFallback.ts` | The single refuse-vs-create decision point (invariant 4) |
-| `sessionReadFailure.ts` | Read-failure classification, **logging only** — its return value must never gate session creation |
+**Logging**: `loggerService.withContext('Module')`; never `console.log`. renderer `info` doesn't reach disk — forensic hooks use `warn` or a diagnostics switch.
 
-Renderer side: `services/kernelChat.ts` subscribes to kernel `session/event` and projects into Redux (not to be confused with the legacy `services/messageStreaming/**` layer). The **quick assistant** (mini window) is the one deliberately separate path: `window.api.dshStreamComplete` without a kernel session.
+## Delivery discipline
 
-### Renderer, Redux, Data
+- Packaging is a delivery action: one build per delivery batch (`pnpm build:win:x64 --publish never` — `--publish never` is not optional, CI mode tries a GitHub publish and fails the run). Verify intermediates on `pnpm dev`, never by shipping intermediate builds (`dist/` same-name artifacts overwrite). Read the build-log tail before verdicts.
+- Never expose Node APIs to the renderer — `contextBridge` in preload; validate IPC inputs in main handlers.
+- After deleting a feature, recover its security relaxations (sandbox defaults, allowlists) in the same batch.
 
-- **Redux**: the authoritative slice list is the `combineReducers` call in `src/renderer/src/store/index.ts` — read it there. Two state keys are not named after their files: `messages` ← `newMessage.ts`, `messageBlocks` ← `messageBlock.ts`.
-- **Migrations** (`store/migrate.ts`): every branch is reachable (redux-persist runs all keys `currentVersion >= key > inboundVersion`); a throw inside a branch discards the whole persisted state. Never delete branches; adding one means bumping `version` in `index.ts` and the highest key in `migrate.ts` together — the current `version` lives in `index.ts`, not here. `blacklist` in the persist config means "not written to localStorage", **not** "unused".
-- **IndexedDB (Dexie)**, `src/renderer/src/databases/index.ts`（表清单以该文件的 `db.version(n).stores` 为准）: `files` · `settings` · `knowledge_notes` · `quick_phrases` · `translate_records`（翻译页历史，v15） · `paintings`（绘画历史，v16）。旧聊天表在后续 schema 版本里 drop —— 聊天数据在内核 SQLite（`{userData}/kernel/sessions.db` 会话事件日志；`{userData}/kernel/settings.json` pi-ai 路由）。Provider keys：`{userData}/provider-keys.json`（加密）。笔记**不用 Dexie**（纯 `{userData}/Data/Notes/*.md`，目录由 `initAppDataDir`/`FileStorage` 建）。
+## Known accepted limitations / deliberate keeps (don't "fix" unasked)
 
-### IPC
-
-Channel constants in `packages/shared/IpcChannel.ts`; handlers in `src/main/ipc.ts` + `kernel/index.ts` (`dsh:*`); bridge in `src/preload/index.ts` (`window.api`). Adding/removing a channel updates **all three** layers; grep both the enum name and the string literal.
-
-### Logging
-
-```typescript
-import { loggerService } from '@logger'
-const logger = loggerService.withContext('moduleName') // renderer: initWindowSource('windowName') once
-logger.info('message', CONTEXT) / logger.warn(...) / logger.error('message', error)
-```
-
-Winston with daily rotation, files in `userData/logs/`. Never `console.log`.
-
-## Tech Stack
-
-| Layer | Technologies |
-|---|---|
-| Runtime | Electron 41, Node ≥24.11.1, pnpm 10.27.0 |
-| Frontend | React 19, TypeScript ~5.8 |
-| UI | Ant Design 5.27, styled-components 6, TailwindCSS v4 |
-| State | Redux Toolkit 2, redux-persist 6, Dexie 4 (IndexedDB) |
-| Rich Text | TipTap 3.2 `components/RichEditor/**`（v0.3.3-2 随笔记复活整链回归；表格扩展 `@cherrystudio/extension-table-plus` 以源码**内联**在 `RichEditor/table-plus/`，另有 V1 的 drag-handle 补丁）|
-| AI Kernel | dsh `@deepseek-ai/dsh-*` 0.1.1-rc.2 + `@deepseek-ai/cordis` 4 |
-| Build / Test | electron-vite 5 + rolldown-vite 7 · Vitest 3 · Playwright · ESLint 9 + oxlint + Biome 2 |
-| Logging / Tracing | Winston + daily-rotate / OpenTelemetry |
-| i18n | i18next + react-i18next (**zh-CN and en-US only**) |
-
-## Conventions
-
-- **TypeScript**: strict; `tsgo` typecheck (`tsconfig.node.json` main, `tsconfig.web.json` renderer). Types live in `src/renderer/src/types/` and `packages/shared/`.
-- **Style**: Biome (2-space, single quotes, trailing commas); oxlint + ESLint (`simple-import-sort`, `react-hooks`, `unused-imports`).
-- **Naming**: components `PascalCase.tsx`; services/hooks/utils `camelCase.ts`; tests `*.test.ts(x)` beside source or in `__tests__/`.
-- **i18n**: all user-visible strings through `i18next`, never hardcoded. Adding a language means re-adding the locale file, the `i18n/index.ts` import, the `LanguageVarious` union, the antd locale case, the general-settings option, and the emoji-picker maps.
-- **pnpm config lives in `pnpm-workspace.yaml`, not a `pnpm` field of `package.json`** — pnpm 10.6+ ignores that field, pnpm 11 stops reading it. `overrides` (security pins), `patchedDependencies` and `onlyBuiltDependencies` live there; moving them back silently disables them at the next lockfile regen.
-- **Patches** (`patches/` ↔ `patchedDependencies` 1:1，当前 9 条，静态检查 `check-configs` 会强制对齐)：`antd`（icon import）· `atomically` · `file-stream-rotator`（日志轮转）· `libsql`（win32-arm64 原生解析）· `node-pty`（去掉要求 MSB8040 库的 `SpectreMitigation` 块；传递依赖 — `§5.5`）· `ppu-paddle-ocr` · `@deepseek-ai/dsh-llm-pi-ai`（**只许一行中性门**，零 fork 语义 — 不变量 9）· `@deepseek-ai/dsh-subprocess-local` · `@tiptap/extension-drag-handle`（v0.3.3-2 随笔记/富文本复活；drag handle 在编辑区滚动时隐藏）。**内核包升级时只需重跑这两组：** `__tests__/dsmlRepair.test.ts` + 一次真实 DSML 会话；`__tests__/thinkingReplay.test.ts` + `tools/branch-jump-artifacts/probe-e2e-thinking-trim.js`（`§4.14`）。
-
-## Testing
-
-- Vitest 3 project configs: main in Node (`tests/main.setup.ts`), renderer in jsdom (`tests/renderer.setup.ts`, `@testing-library/react`); coverage v8; e2e in Playwright (`tests/e2e/`).
-- A module whose **only** reference is its own `__tests__` file is dead code — delete module + test together. A *single export* in an active module referenced only by its own test is **not** dead (`§5.10`).
-- A new gate or guard is not proven until a **reverse-control probe turned it red**: plant a deliberate break, watch the specific check fail by name, remove the probe, confirm green with a clean `git diff` (`§4.3`).
-- **State each green's scope** (`§4.1`/`§4.2`): the four greens are typecheck, lint's full chain, the static-check suite, and the build — `pnpm lint` runs no tests, the static suite covers references/syntax/config/i18n but **not** types, and the first two need pnpm (real machine or explicit grant).
-- **Interaction-contract changes need behaviour-level proof, never a blast-radius argument** (`§4.18`): layout skeletons, collapse/expand, overlays, answer/approval entry points. Verify with a throwaway dev-instance sample the user eyeballs, **or** add a behaviour test (stubbing store/i18n is an acceptable price) — before it enters a build. "It only affects X" does not authorise delivery.
-- **Packaging is a delivery action, one build per delivery batch** (`§4.19`): verify intermediate states on a `pnpm dev` instance and do not rebuild-and-ship per fix — same-name `dist` artifacts overwrite each other, and a broken intermediate build can be installed by mistake. Fixes inside an acceptance cycle fold into the current version, no new version number (`§4.15`).
-
-## Workspace Docs — what to read
-
-| File | Read when |
-|---|---|
-| `docs/经验教训.md` | before/after any judgment call — the rules home this file's `§` pointers cite |
-| `docs/项目介绍及总规划.txt` | scope verdicts, roadmap, how work is versioned |
-| `docs/内核插件兼容契约.md` | before any touch of `src/main/kernel/` |
-| `docs/未清债.md` | before touching a debt area, before citing "known issues" |
-| `docs/README.md` | navigation, report template, writing discipline |
-
-**`docs/archive/` is archaeology, not orientation** — enter only with a specific question ("which incident produced this constraint"), grep it, never read it through. Trap: `archive/v0.3.1_doc.md` is a *merged* file whose `v0.3.2/3/4` labels are batch names inside the v0.3.1 cycle, not versions that happened.
-
-## Security & Upstream Legacy
-
-- Never expose Node.js APIs directly to the renderer — `contextBridge` in preload; validate all IPC inputs in main handlers.
-- Provider API keys: encrypted at rest via `ProviderKeyStore`; a redux-persist transform strips non-empty `apiKey` from localStorage (`§1.6`).
-- Upstream `⚠️ NOTICE: V2 DATA&UI REFACTORING` / `@deprecated` headers refer to **upstream**'s v2 refactor; treat them as ordinary code — the fork roadmap decides (`§5.11`).
+- ~130 i18n orphan keys deliberately kept (pruning = rewrite next version).
+- The image-generation preset implementation (collect/generate/edit trio) is deliberate, not upstream garbage.
+- A zero-referenced SDK chunk is the ripgrep binary source — re-source ripgrep **before** removing that dependency.
+- Restricted-mode pwsh flashes a console window (cosmetic; upstream DSH should default `windowsHide` — reported, not patched).
+- Knowledge-base retrieval is O(n) cosine (fine at personal scale); rerank is a type-only shape.
+- The About page fetches upstream releases (kept).
+- `agents.create({ sessionId })` upstream semantics on existing log ids were never proven — three fork versions routed around it; re-verify only on a kernel major upgrade.
+- `PasteService` prefers text over images when both are pasted (fork-inherited semantics; V2 swallows via TipTap runtime) — changing it means reworking the paste parser.
+- The deprecated top-level `Provider.isNotSupport*` fields are migration-input carriers (read by `store/migrate.ts`); three of four are also live via utils/UI — do not strip them from the type.
+- electron-builder asar collection mechanism (was "dsh-invariants 入包通道未定性", resolved 2026-09-27): the `pnpm list --prod --depth Infinity` **report layer includes the whole peer closure** (~16.5k mentions of dsh-invariants alone), and the collector's filter only checks name membership, never regex edges — so peer-dense packages always ship (over-collection is the design; under-collection happens only when the report layer omits a pure peer, which is what the root-manifest rule + `check-package-runtime-closure` guard against).

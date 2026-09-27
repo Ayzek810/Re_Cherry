@@ -21,7 +21,10 @@ const logger = loggerService.withContext('GatewayTokenEstimate')
  * untyped) can hold arbitrarily deep/malformed payloads, and the bounded walker
  * caps both depth and work — count_tokens must not 500 a client.
  */
-export async function estimateAnthropicRequestTokens(body: MessageCreateParams, _signal?: AbortSignal): Promise<number> {
+export async function estimateAnthropicRequestTokens(
+  body: MessageCreateParams,
+  _signal?: AbortSignal
+): Promise<number> {
   logger.warn('conversion-based estimate is not ported in the fork; using bounded raw-body estimate')
   return boundedBodyTokens(body, tokenxTokenizer)
 }

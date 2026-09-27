@@ -72,7 +72,9 @@ export function useConfigMetadata(selectedCliTool: CodeCli, providers: Provider[
     () =>
       new Map(
         allModels
-          .filter((model) => gatewayProviderIds.has(model.providerId) && isGatewayRoutableModel(asGatewayModelInput(model)))
+          .filter(
+            (model) => gatewayProviderIds.has(model.providerId) && isGatewayRoutableModel(asGatewayModelInput(model))
+          )
           .map((model) => [model.id, model])
       ),
     [allModels, gatewayProviderIds]

@@ -113,11 +113,7 @@ export const NormalTooltip: FC<CherryTooltipProps> = ({
   delayDuration = 0,
   children
 }) => (
-  <AntTooltip
-    title={content}
-    placement={side ?? placement}
-    mouseEnterDelay={delayDuration / 1000}
-    arrow={false}>
+  <AntTooltip title={content} placement={side ?? placement} mouseEnterDelay={delayDuration / 1000} arrow={false}>
     {children}
   </AntTooltip>
 )
@@ -151,12 +147,7 @@ interface CherryDialogContentProps extends HTMLAttributes<HTMLDivElement> {
   onOpenAutoFocus?: (event: Event) => void
 }
 
-export const DialogContent: FC<CherryDialogContentProps> = ({
-  size = 'default',
-  className,
-  children,
-  ...rest
-}) => {
+export const DialogContent: FC<CherryDialogContentProps> = ({ size = 'default', className, children, ...rest }) => {
   void rest
   const { open, onOpenChange } = useContext(DialogContext)
   return (
@@ -177,7 +168,7 @@ export const DialogHeader: FC<HTMLAttributes<HTMLDivElement>> = ({ className, ..
 )
 
 export const DialogTitle: FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
-  <div className={cn('text-lg leading-none font-semibold tracking-tight', className)} {...props} />
+  <div className={cn('font-semibold text-lg leading-none tracking-tight', className)} {...props} />
 )
 
 export const DialogDescription: FC<HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
@@ -237,9 +228,7 @@ type CherryInputProps = Omit<HTMLAttributes<HTMLInputElement>, 'onChange'> & {
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void
 }
 
-export const Input: FC<CherryInputProps> = ({ className, ...props }) => (
-  <AntInput className={className} {...props} />
-)
+export const Input: FC<CherryInputProps> = ({ className, ...props }) => <AntInput className={className} {...props} />
 
 // fork 缝：V2 SearchInput → antd Input allowClear + 前缀搜索图标。V2 的 onClear/clearLabel 消费点
 // （CodeCliContentPanel）由 allowClear 的 onChange('') 通道覆盖，不再单列。

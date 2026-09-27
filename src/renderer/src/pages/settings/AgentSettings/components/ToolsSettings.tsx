@@ -70,7 +70,9 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
             播种新草稿、不再写全局值。 */}
         <ToolGrid>
           <ToolCard onClick={() => updateAssistant({ enableGenerateImage: !assistant.enableGenerateImage })}>
-            <span className="truncate text-left text-sm">{t('settings.agentSettings.tools.builtins.generate_image.name')}</span>
+            <span className="truncate text-left text-sm">
+              {t('settings.agentSettings.tools.builtins.generate_image.name')}
+            </span>
             <Switch
               size="small"
               checked={assistant.enableGenerateImage === true}

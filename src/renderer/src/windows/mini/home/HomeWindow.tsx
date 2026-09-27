@@ -281,26 +281,29 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   }
 
   // v0.3.3 批次5 收图入口：粘贴图片 → 规范化为内核附件载荷（单张，后贴覆盖前贴）。
-  const handlePasteImage = useCallback(async (items: DataTransferItemList) => {
-    const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
-    if (imageItem === undefined) return
-    try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        const file = imageItem.getAsFile()
-        if (file !== null) {
-          resolve(file)
-        } else {
-          reject(new Error('clipboard image unavailable'))
-        }
-      })
-      const payload = await encodeImageBlobForKernel(blob, imageItem.type.replace('/', '.'))
-      setClipboardImage(payload)
-      window.toast.success(t('miniwindow.image.attached'))
-    } catch (error) {
-      logger.warn('Failed to attach pasted image:', error as Error)
-      window.toast.error(t('miniwindow.image.attach_failed'))
-    }
-  }, [t])
+  const handlePasteImage = useCallback(
+    async (items: DataTransferItemList) => {
+      const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
+      if (imageItem === undefined) return
+      try {
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          const file = imageItem.getAsFile()
+          if (file !== null) {
+            resolve(file)
+          } else {
+            reject(new Error('clipboard image unavailable'))
+          }
+        })
+        const payload = await encodeImageBlobForKernel(blob, imageItem.type.replace('/', '.'))
+        setClipboardImage(payload)
+        window.toast.success(t('miniwindow.image.attached'))
+      } catch (error) {
+        logger.warn('Failed to attach pasted image:', error as Error)
+        window.toast.error(t('miniwindow.image.attach_failed'))
+      }
+    },
+    [t]
+  )
 
   // 全局粘贴监听（小窗无输入框聚焦时也能收图；文本粘贴不受影响）。
   useEffect(() => {
@@ -680,8 +683,8 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   }, [referenceText, route, t, currentAssistant])
 
   /** v0.3.3 批次5：粘贴图片预览条（有图才渲染；Backspace/发送后清除）。 */
-  const imagePreview = clipboardImage !== null
-    ? (
+  const imagePreview =
+    clipboardImage !== null ? (
       <ImagePreviewRow>
         <ImageThumb src={`data:${clipboardImage.mediaType};base64,${clipboardImage.data}`} alt="" />
         <ImagePreviewName>{clipboardImage.name ?? t('miniwindow.image.attached')}</ImagePreviewName>
@@ -694,8 +697,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           ×
         </ImagePreviewRemove>
       </ImagePreviewRow>
-    )
-    : null
+    ) : null
 
   // Memoize footer props
   const baseFooterProps = useMemo(

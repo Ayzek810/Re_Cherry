@@ -759,10 +759,7 @@ function projectToolCall(topicId: string, event: Extract<SessionEvent, { type: '
  * `db.files` 一行，文件页才看得到聊天页的出图。内容寻址使回放/重开话题重投影时命中同一 id
  * 直接跳过，既有的"不落盘以免堆积"顾虑（旧注释的说法）由这一条解决；登记失败不影响本块渲染。
  */
-function buildGenerateImageBlock(
-  messageId: string,
-  meta: unknown
-): ReturnType<typeof createImageBlock> | undefined {
+function buildGenerateImageBlock(messageId: string, meta: unknown): ReturnType<typeof createImageBlock> | undefined {
   if (meta === null || typeof meta !== 'object') return undefined
   const kind = (meta as { kind?: unknown }).kind
   const images = (meta as { images?: unknown }).images
