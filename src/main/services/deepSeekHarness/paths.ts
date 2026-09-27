@@ -1,7 +1,7 @@
 // fork 缝：CodeMate 的路径注册（2026-09-24，v0.3.4-1）。
 // V2 用 pathRegistry（application.getPath('external.deepseek_harness.config') 等）；
 // fork 全部钉进数据目录的 CodeMate 子树——随"设置 › 数据目录"迁移、portable 版随
-// 应用目录走、卸载=删子树（无残留，见 docs/v0.3.4_doc.md §安装器）。
+// 应用目录走、卸载=删子树（无残留）。
 
 import path from 'node:path'
 
@@ -36,7 +36,7 @@ export function codeMateToolsRoot(): string {
 // 驱动（运行时与工具都在 mise 管理目录），本组路径为 portable 等价实现——一切钉在
 // CodeMate 子树：runtime/node|python/<ver>、tools/<tool>、cache/{npm,pip,downloads}；
 // 不改系统 PATH、不写用户全局配置，卸载 = 删子树。设计来源：V2 BinaryManager/
-// pythonRuntime + 勘查报告结论（docs/v0.3.4_doc.md）。
+// pythonRuntime + 勘查报告结论。
 // ---------------------------------------------------------------------------
 
 /** 受管运行时根（node / python 版本目录的父级）。 */

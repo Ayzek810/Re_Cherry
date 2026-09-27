@@ -410,6 +410,7 @@ class DeepSeekHarnessService {
       cwd: workspace,
       env: childEnv,
       detached: !isWin,
+      windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']
     })
     this.child = child

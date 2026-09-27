@@ -67,6 +67,7 @@ export async function findCommandInShellEnv(command: string, env: Record<string,
     if (isWin) {
       const child = spawn('where', [command], {
         env,
+        windowsHide: true, // where.exe 是控制台子系统：不加则闪控制台窗口
         stdio: ['ignore', 'pipe', 'pipe']
       })
 

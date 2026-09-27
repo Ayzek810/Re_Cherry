@@ -32,7 +32,7 @@ vi.mock('officeparser', () => ({
 
 // 切断 extractors → webFetch → SearchService（静态 import { BrowserWindow } from
 // 'electron'）的传递图——该边在 vitest 的 electron CJS interop 下收集期即炸
-//（与 4 个存量 kernel 套件同一根因，见未清债）；本测试不触及 url 抽取。
+//（与 4 个存量 kernel 套件同一根因）；本测试不触及 url 抽取。
 vi.mock('@main/services/webSearchProviders/webFetch', () => ({
   fetchWebContent: vi.fn(async () => ({ content: '' }))
 }))
@@ -121,14 +121,12 @@ describe('extractFromFile: office dispatch', () => {
     expect(result.text).not.toMatch(/<table/i)
   })
 
-  it('routes pptx through officeparser plain text', async () => {
-    const mammoth = vi.mocked((await import('mammoth')).convertToHtml)
+  it('pptx structured failure falls back to officeparser (v0.4 真机验收轮：保底不比报废强)', async () => {
     const officeParser = vi.mocked((await import('officeparser')).parseOfficeAsync)
     const filePath = await writeTemp('slides.pptx', Buffer.from('not-a-real-zip'))
+    // 伪 pptx（非 zip）→ 结构化管线失败 → officeparser 纯文本兜底（mock 返回固定文本）。
     const result = await extractFromFile(filePath)
-
     expect(officeParser).toHaveBeenCalledTimes(1)
-    expect(mammoth).not.toHaveBeenCalled()
     expect(result.text).toBe('pptx plain text')
   })
 

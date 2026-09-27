@@ -21,6 +21,17 @@
  * 服务器配置注册表（setServers/getServers/getServerById）由渲染层 Dsh_SyncMcpServers
  * 整体投影——配置只进主进程内存，不落盘不进会话日志；getToolsetSignature 供内核
  * MCP 桥挂载漂移比对（listTools 缓存哈希，不可达返回 'unreachable'）。
+ *
+ * v0.4 逐文件对账后的明示偏离（勘查审计定性，勿当缺陷修）：
+ * - HTTP/SSE 不发上游默认应用头（HTTP-Referer/X-Title，Cherry Studio 品牌）——
+ *   fork 无品牌站，缺省不发比冒用上游标识诚实；
+ * - closeClient 不清日志缓冲（上游 stop/restart 即清）——重启后保留上次日志更可排障，
+ *   removeServer 仍清；
+ * - listToolsImpl 对缺失 inputSchema 宽容兜底 {type:'object'}（上游整次 listTools 抛错）——
+ *   野服务器在发现期可见，调用期才失败是上游形态，fork 不采纳；
+ * - getPrompt/getResource（按 key 取用，30min 缓存）未移植——渲染层零消费面；
+ * - commandResolution 把 server.env 纳入命令查找环境（上游只用 login shell env）——
+ *   服务器私有 PATH 覆盖参与 npx/uvx 解析，行为更优。
  */
 import { createHash, randomUUID } from 'node:crypto'
 
@@ -123,7 +134,8 @@ export class McpService {
       command: server.command ?? null,
       args: server.args ?? null,
       env: server.env ?? null,
-      id: server.id
+      id: server.id,
+      registryUrl: server.registryUrl ?? null
     })
   }
 
@@ -348,21 +360,31 @@ export class McpService {
     const cached = this.cache.get<MCPPrompt[]>(cacheKey)
     if (cached !== undefined) return cached
     const client = await this.initClient(server)
-    const { prompts } = await client.listPrompts()
-    const result: MCPPrompt[] = prompts.map((prompt) => ({
-      id: `prompt-${server.id}-${prompt.name}`,
-      name: prompt.name,
-      description: prompt.description,
-      arguments: prompt.arguments?.map((arg) => ({
-        name: arg.name,
-        description: arg.description,
-        required: arg.required ?? false
-      })),
-      serverId: server.id,
-      serverName: server.name
-    }))
-    this.cache.set(cacheKey, result, LIST_PROMPTS_TTL)
-    return result
+    try {
+      const { prompts } = await client.listPrompts()
+      const result: MCPPrompt[] = prompts.map((prompt) => ({
+        id: `prompt-${server.id}-${prompt.name}`,
+        name: prompt.name,
+        description: prompt.description,
+        arguments: prompt.arguments?.map((arg) => ({
+          name: arg.name,
+          description: arg.description,
+          required: arg.required ?? false
+        })),
+        serverId: server.id,
+        serverName: server.name
+      }))
+      this.cache.set(cacheKey, result, LIST_PROMPTS_TTL)
+      return result
+    } catch (error) {
+      // 上游同语义：大量 stdio 服务器不实现 prompts——method-not-found（-32601）
+      // 静默按空清单；其余失败也返回空（不缓存重复炸），仅落日志。
+      const code = (error as { code?: number }).code
+      if (code !== -32601) {
+        logger.warn(`mcp: listPrompts failed for "${server.name}", returning empty list`, toLoggableError(error))
+      }
+      return []
+    }
   }
 
   async listResources(server: MCPServer): Promise<MCPResource[]> {
@@ -371,17 +393,26 @@ export class McpService {
     const cached = this.cache.get<MCPResource[]>(cacheKey)
     if (cached !== undefined) return cached
     const client = await this.initClient(server)
-    const { resources } = await client.listResources()
-    const result: MCPResource[] = resources.map((resource) => ({
-      serverId: server.id,
-      serverName: server.name,
-      uri: resource.uri,
-      name: resource.name,
-      description: resource.description,
-      mimeType: resource.mimeType
-    }))
-    this.cache.set(cacheKey, result, LIST_RESOURCES_TTL)
-    return result
+    try {
+      const { resources } = await client.listResources()
+      const result: MCPResource[] = resources.map((resource) => ({
+        serverId: server.id,
+        serverName: server.name,
+        uri: resource.uri,
+        name: resource.name,
+        description: resource.description,
+        mimeType: resource.mimeType
+      }))
+      this.cache.set(cacheKey, result, LIST_RESOURCES_TTL)
+      return result
+    } catch (error) {
+      // 上游同语义：不实现 resources 的服务器按空清单处理（见 listPrompts 注）。
+      const code = (error as { code?: number }).code
+      if (code !== -32601) {
+        logger.warn(`mcp: listResources failed for "${server.name}", returning empty list`, toLoggableError(error))
+      }
+      return []
+    }
   }
 
   /**
@@ -455,11 +486,8 @@ export class McpService {
   async restartServer(server: MCPServer): Promise<void> {
     await this.closeClient(server)
     this.emitServerLog(server, { timestamp: Date.now(), level: 'info', message: 'Server restarted', source: 'client' })
-    try {
-      await this.initClient(server)
-    } catch (error) {
-      logger.warn(`mcp: restart warm-up failed for "${server.name}" (will retry on next use)`, toLoggableError(error))
-    }
+    // 上游同语义：预热失败向上抛——重启坏服务器必须给用户失败信号，不静默成功。
+    await this.initClient(server)
   }
 
   async stopServer(server: MCPServer): Promise<void> {
@@ -489,10 +517,9 @@ export class McpService {
     try {
       const client = await this.initClient(server)
       const version = client.getServerVersion()
+      // 上游同形状：只回 serverInfo.version（不拼服务名）。
       if (version === undefined) return null
-      return (
-        [version.name, version.version].filter((part) => typeof part === 'string' && part.length > 0).join(' ') || null
-      )
+      return typeof version.version === 'string' && version.version.length > 0 ? version.version : null
     } catch {
       return null
     }

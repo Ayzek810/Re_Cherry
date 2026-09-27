@@ -3375,6 +3375,30 @@ const migrateConfig = {
       logger.error('migrate 223 error', error as Error)
       return state
     }
+  },
+  '224': (state: RootState) => {
+    try {
+      // v0.4 验收轮：preprocess 切片与默认表对账重播种——旧持久化数组缺新默认条目
+      // （如 local-paddle 是后加的）或条目 name 缺失/为空时，设置页下拉出现空选项。
+      // 缺失条目补入（照 addPreprocessProviders 先例），空白 name 按默认表回填；
+      // 用户已配置的 apiKey/apiHost 原样保留。
+      if (state.preprocess && Array.isArray(state.preprocess.providers)) {
+        for (const provider of state.preprocess.providers) {
+          if (!provider.name || provider.name.trim().length === 0) {
+            provider.name = defaultPreprocessProviders.find((p) => p.id === provider.id)?.name ?? provider.name
+          }
+        }
+        for (const provider of defaultPreprocessProviders) {
+          if (!state.preprocess.providers.find((p) => p.id === provider.id)) {
+            state.preprocess.providers.push({ ...provider })
+          }
+        }
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 224 error', error as Error)
+      return state
+    }
   }
 }
 

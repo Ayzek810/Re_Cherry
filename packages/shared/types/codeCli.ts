@@ -1,5 +1,5 @@
 // fork 移植自 cherry-studio v2 src/shared/types/codeCli.ts（2026-09-24，v0.3.4-1）。
-// 逐字率自证见 docs/v0.3.4_doc.md；改动仅两处裁剪，均已标 `// fork 缝`。
+// 改动仅两处裁剪，均已标 `// fork 缝`。
 
 export enum CodeCli {
   // fork 缝：内置项按用户裁决裁剪为 deepseek-harness + hermes 两项（原 14 项）。

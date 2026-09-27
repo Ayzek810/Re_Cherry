@@ -45,6 +45,11 @@ export class WebSearchKernelService extends Service {
   setTurnProvider(topicId: string, providerId: string | undefined): void {
     webSearchService.setTurnProvider(topicId, providerId)
   }
+
+  /** 本轮结果全局编号偏移（同轮多次搜索接续编号，见 WebSearchService.bumpTurnResultOffset）。 */
+  bumpTurnResultOffset(topicId: string, resultCount: number): number {
+    return webSearchService.bumpTurnResultOffset(topicId, resultCount)
+  }
 }
 
 logger.debug('web search kernel service module loaded')

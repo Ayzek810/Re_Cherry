@@ -283,7 +283,8 @@ function getLoginShellEnvironment(signal?: AbortSignal): Promise<Record<string, 
       cwd: homeDirectory, // Run the command in the user's home directory
       detached: false, // Stay attached so we can clean up reliably
       stdio: ['ignore', 'pipe', 'pipe'], // stdin, stdout, stderr
-      shell: false // We are specifying the shell command directly
+      shell: false, // We are specifying the shell command directly
+      windowsHide: true // 登录 shell 是控制台子系统：不加则从 GUI 进程 spawn 时闪控制台窗口
     })
 
     let output = ''

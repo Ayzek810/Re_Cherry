@@ -1,23 +1,24 @@
 /**
  * v0.3.2 自 CS_V1 移植（单个文档处理 provider 表单）。
- * fork 裁剪：provider logo 与官网/取 key 外链不搬（config/preprocessProviders 的
- * PREPROCESS_PROVIDER_CONFIG 未移植）；多 Key 管理弹窗（ApiKeyListPopup）保留。
+ * v0.4 验收轮补 V1 的官网/取密钥外链（PREPROCESS_PROVIDER_CONFIG）：标题行官网
+ * 图标链接 + apiKey 帮助行「点击这里获取密钥」。多 Key 管理弹窗（ApiKeyListPopup）保留。
  * 表单为本地 state + blur 提交（apiKey 经 formatApiKeys 规范化逗号分隔多 key；
  * apiHost trim 去尾 /）；无 model 字段 UI（mistral 默认值来自切片初始表）。
  */
+import { PREPROCESS_PROVIDER_CONFIG } from '@renderer/config/preprocessProviders'
 import { ApiKeyListPopup } from '@renderer/components/Popups/ApiKeyListPopup'
 import { useLocalModel } from '@renderer/hooks/useLocalModel'
 import { usePreprocessProvider } from '@renderer/hooks/usePreprocess'
 import type { PreprocessProvider } from '@renderer/types'
 import { formatApiKeys, hasObjectKey } from '@renderer/utils'
 import { Button, Divider, Flex, Input, Progress, Tooltip } from 'antd'
-import { List } from 'lucide-react'
+import { ExternalLink, List } from 'lucide-react'
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
-import { SettingHelpText, SettingHelpTextRow, SettingSubtitle, SettingTitle } from '..'
+import { SettingHelpLink, SettingHelpText, SettingHelpTextRow, SettingSubtitle, SettingTitle } from '..'
 
 interface Props {
   provider: PreprocessProvider
@@ -37,6 +38,10 @@ const PreprocessProviderSettings: FC<Props> = ({ provider: _provider }) => {
   // 真实切片下 id 恒在默认五家之内；防线仅为类型诚实（未知 id 无表单可渲）。
   // 位置在全部 hooks 之后——hook 顺序不得条件化。
   if (!preprocessProvider) return null
+
+  const providerConfig = PREPROCESS_PROVIDER_CONFIG[preprocessProvider.id]
+  const officialWebsite = providerConfig?.official
+  const apiKeyWebsite = providerConfig?.apiKey
 
   const onUpdateApiKey = () => {
     if (apiKey !== preprocessProvider.apiKey) {
@@ -69,6 +74,11 @@ const PreprocessProviderSettings: FC<Props> = ({ provider: _provider }) => {
       <SettingTitle>
         <Flex align="center" gap={8}>
           <ProviderName>{preprocessProvider.name}</ProviderName>
+          {officialWebsite && (
+            <SettingHelpLink target="_blank" href={officialWebsite}>
+              <ExternalLink className="text-[12px]" />
+            </SettingHelpLink>
+          )}
         </Flex>
       </SettingTitle>
       <Divider className="my-[10px] w-full" />
@@ -101,7 +111,12 @@ const PreprocessProviderSettings: FC<Props> = ({ provider: _provider }) => {
             />
           </Flex>
           {preprocessProvider.id !== 'paddleocr' && (
-            <SettingHelpTextRow className="mt-[5px]">
+            <SettingHelpTextRow className="mt-[5px] justify-between">
+              {apiKeyWebsite && (
+                <SettingHelpLink target="_blank" href={apiKeyWebsite}>
+                  {t('settings.provider.get_api_key')}
+                </SettingHelpLink>
+              )}
               <SettingHelpText>{t('settings.provider.api_key.tip')}</SettingHelpText>
             </SettingHelpTextRow>
           )}

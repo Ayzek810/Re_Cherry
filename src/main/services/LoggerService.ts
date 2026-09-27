@@ -379,6 +379,9 @@ class LoggerService {
    * Register IPC handler for renderer process logging
    */
   private registerIpcHandler(): void {
+    // dev watch 热重载后模块树重求值而 ipcMain 全局留存：旧 handler 还在，单例重建
+    // 即抛 "second handler" 且成为未处理拒绝（启动日志噪音源头）。先摘再挂。
+    ipcMain.removeHandler(IpcChannel.App_LogToMain)
     ipcMain.handle(
       IpcChannel.App_LogToMain,
       (_, source: LogSourceWithContext, level: LogLevel, message: string, data: any[]) => {

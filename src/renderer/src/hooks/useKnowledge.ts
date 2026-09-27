@@ -143,19 +143,34 @@ export const useKnowledge = (baseId: string) => {
     enqueueItem(item, { kind: 'url', baseId, itemId: item.id, url })
   }
 
-  // 添加 Sitemap
+  // 添加 Sitemap（v0.4 接入处理链：解析 → 逐页抓取 → 分块入库）
   const addSitemap = (url: string) => {
-    dispatch(addItemAction({ baseId, item: createKnowledgeItem('sitemap', url) }))
+    const item = createKnowledgeItem('sitemap', url)
+    dispatch(addItemAction({ baseId, item }))
+    enqueueItem(item, { kind: 'sitemap', baseId, itemId: item.id, url })
   }
 
-  // Add directory support
+  // 添加目录（v0.4 接入处理链：递归枚举可摄取文件 → 逐文件抽取入库）
   const addDirectory = (path: string) => {
-    dispatch(addItemAction({ baseId, item: createKnowledgeItem('directory', path) }))
+    const item = createKnowledgeItem('directory', path)
+    dispatch(addItemAction({ baseId, item }))
+    enqueueItem(item, { kind: 'directory', baseId, itemId: item.id, dirPath: path })
   }
 
-  // add video support
+  // add video support（v0.4 接入处理链：V1 预留契约——视频 + .srt 字幕对，
+  // 字幕窗口文本入库；缺 .srt 时主进程如实报错，不静默成功）
   const addVideo = (files: FileMetadata[]) => {
-    dispatch(addItemAction({ baseId, item: createKnowledgeItem('video', files) }))
+    const item = createKnowledgeItem('video', files)
+    dispatch(addItemAction({ baseId, item }))
+    const videoFile = files.find((file) => !file.path.toLowerCase().endsWith('.srt')) ?? files[0]
+    const srtFile = files.find((file) => file.path.toLowerCase().endsWith('.srt'))
+    enqueueItem(item, {
+      kind: 'video',
+      baseId,
+      itemId: item.id,
+      videoPath: videoFile?.path ?? '',
+      srtPath: srtFile?.path ?? ''
+    })
   }
 
   // 更新笔记内容（fork：笔记正文在条目 content 上，纯 redux 更新）
@@ -232,6 +247,30 @@ export const useKnowledge = (baseId: string) => {
       )
     } else if (item.type === 'url' && typeof item.content === 'string') {
       enqueueItem({ ...item, processingStatus: 'pending' }, { kind: 'url', baseId, itemId: item.id, url: item.content })
+    } else if (item.type === 'sitemap' && typeof item.content === 'string') {
+      // v0.4 验收轮修正：三类新条目的刷新此前只删向量不再摄取（静默丢内容）。
+      enqueueItem(
+        { ...item, processingStatus: 'pending' },
+        { kind: 'sitemap', baseId, itemId: item.id, url: item.content }
+      )
+    } else if (item.type === 'directory' && typeof item.content === 'string') {
+      enqueueItem(
+        { ...item, processingStatus: 'pending' },
+        { kind: 'directory', baseId, itemId: item.id, dirPath: item.content }
+      )
+    } else if (item.type === 'video' && Array.isArray(item.content)) {
+      const videoFile = item.content.find((file) => !file.path.toLowerCase().endsWith('.srt')) ?? item.content[0]
+      const srtFile = item.content.find((file) => file.path.toLowerCase().endsWith('.srt'))
+      enqueueItem(
+        { ...item, processingStatus: 'pending' },
+        {
+          kind: 'video',
+          baseId,
+          itemId: item.id,
+          videoPath: videoFile?.path ?? '',
+          srtPath: srtFile?.path ?? ''
+        }
+      )
     }
   }
 

@@ -1,0 +1,46 @@
+diff --git a/lib/types-CNjZgO4h.js b/lib/types-CNjZgO4h.js
+index 3a737a6e66db2524da1afcf13299f68aa5c0351d..0bfe4276139f5840b9f9abc962b94f19e0d70e99 100644
+--- a/lib/types-CNjZgO4h.js
++++ b/lib/types-CNjZgO4h.js
+@@ -854,14 +854,20 @@ function spawnSandboxed(api, token, options) {
+ 	const startupInfo = allocStartupInfo();
+ 	encodeStartupInfo(startupInfo, {
+ 		cb: 104,
+-		dwFlags: 256,
++		// [re-cherry] STARTF_USESTDHANDLES(256) | STARTF_USESHOWWINDOW(1) + wShowWindow
++		// SW_HIDE(0)：新建控制台但隐藏窗口。Electron 宿主无控制台，缺省创建标志让每个
++		// pwsh 子进程分配一个可见控制台（真机 2026-09-27 用户反馈闪窗）。不用
++		// CREATE_NO_WINDOW——受限令牌子进程在该标志下 DLL 初始化失败（0xC0000142，
++		// 包内 win32-abi 实证），NEW_CONSOLE+SW_HIDE 是完整控制台、仅窗口隐藏。
++		dwFlags: 257,
++		wShowWindow: 0,
+ 		hStdInput: stdIn.read,
+ 		hStdOutput: stdOut.write,
+ 		hStdError: stdErr.write
+ 	});
+ 	const processInfo = allocProcessInfo();
+ 	const commandLine = buildCommandLine(options.command, options.args);
+-	if (api.createProcessAsUserW(token, null, commandLine, null, null, 1, 0, null, options.cwd, startupInfo, processInfo) === 0) {
++	if (api.createProcessAsUserW(token, null, commandLine, null, null, 1, 20, null, options.cwd, startupInfo, processInfo) === 0) {
+ 		const win32Code = api.getLastError();
+ 		api.closeHandle(stdIn.read);
+ 		api.closeHandle(stdIn.write);
+@@ -991,14 +997,16 @@ function spawnSandboxedInherited(api, token, options) {
+ 	const startupInfo = allocStartupInfo();
+ 	encodeStartupInfo(startupInfo, {
+ 		cb: 104,
+-		dwFlags: 256,
++		// [re-cherry] 同上：NEW_CONSOLE + SW_HIDE（两处受限 spawn 点同批）。
++		dwFlags: 257,
++		wShowWindow: 0,
+ 		hStdInput: stdIn,
+ 		hStdOutput: stdOut,
+ 		hStdError: stdErr
+ 	});
+ 	const processInfo = allocProcessInfo();
+ 	const commandLine = buildCommandLine(options.command, options.args);
+-	const created = api.createProcessAsUserW(token, null, commandLine, null, null, 1, 4, null, options.cwd, startupInfo, processInfo);
++	const created = api.createProcessAsUserW(token, null, commandLine, null, null, 1, 20, null, options.cwd, startupInfo, processInfo);
+ 	restoreInherit(stdIn);
+ 	restoreInherit(stdOut);
+ 	restoreInherit(stdErr);

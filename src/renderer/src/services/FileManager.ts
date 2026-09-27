@@ -183,7 +183,7 @@ class FileManager {
         repaired += 1
       }
       if (repaired > 0) {
-        // warn 级：真机取证要看这条（renderer 的 info 不落盘，见 经验教训 §4.43）
+        // warn 级：真机取证要看这条（renderer 的 info 不落盘）
         logger.warn(`FileManager: repaired ${repaired} legacy downloaded file row(s) misclassified as "other"`)
       }
       return repaired

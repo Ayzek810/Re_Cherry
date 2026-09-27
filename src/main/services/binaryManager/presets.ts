@@ -2,7 +2,7 @@
 // 只消费获取事实（id/executable/packageName/install/requiredPeer），mise 命令面字段
 // （miseTool/skillNamespace/miseNpmShellOut 等）不进入本视图。数据不复制，单一事实源在
 // @shared/data/presets/codeCliTools（V2 同名文件的 fork 裁剪版）；设计来源：V2 BinaryManager
-// + 勘查报告结论（docs/v0.3.4_doc.md）。
+// + 勘查报告结论。
 
 import { CODE_CLI_TOOL_PRESETS, type CodeCliToolPreset } from '@shared/data/presets/codeCliTools'
 

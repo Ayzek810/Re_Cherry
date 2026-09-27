@@ -73,6 +73,7 @@ function executeRipgrep(args: string[]): Promise<{ exitCode: number; output: str
 
     const { spawn } = require('child_process')
     const child = spawn(ripgrepBinaryPath, ['--no-config', '--ignore-case', ...args], {
+      windowsHide: true, // rg 是控制台子系统：不加则从 GUI 进程 spawn 时闪出控制台窗口
       stdio: ['pipe', 'pipe', 'pipe']
     })
 

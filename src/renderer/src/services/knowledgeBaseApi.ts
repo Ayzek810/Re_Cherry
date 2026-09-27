@@ -55,6 +55,9 @@ export const knowledgeBaseApi = {
       | { kind: 'file'; baseId: string; itemId: string; filePath: string }
       | { kind: 'url'; baseId: string; itemId: string; url: string }
       | { kind: 'note'; baseId: string; itemId: string; text: string }
+      | { kind: 'sitemap'; baseId: string; itemId: string; url: string }
+      | { kind: 'directory'; baseId: string; itemId: string; dirPath: string }
+      | { kind: 'video'; baseId: string; itemId: string; videoPath: string; srtPath: string }
     embedding: KnowledgeEmbeddingRefPayload
   }): Promise<{ entriesAdded: number; uniqueId: string; uniqueIds: string[]; loaderType: string }> => {
     return (await window.api.knowledgeBase.add(payload)) as {

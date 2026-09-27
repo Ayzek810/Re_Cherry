@@ -181,7 +181,7 @@ describe('providerReasoningCompat（B 登记 / C 泛用推断 / A 用户声明 �
 })
 
 /**
- * 镜像守门（未清债 §3「PI_AI_DETECTED_HOSTS 镜像失同步」的收口）：
+ * 镜像守门（PI_AI_DETECTED_HOSTS 镜像失同步风险的收口）：
  * 本文件顶部的名单与 pi-ai 引擎 detectCompat 的 baseUrl 名单是两套真相源，引擎升级
  * 新增 host 时镜像不会自动跟——C 层会把引擎已识别的网关误当「无名网关」施加 qwen 协议。
  * 此测试直接读取引擎 dist 源码抽取 host 字面量做包含断言，把静默漂移变成红灯。

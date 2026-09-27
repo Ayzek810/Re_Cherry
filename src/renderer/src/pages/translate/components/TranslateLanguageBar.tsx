@@ -90,7 +90,7 @@ const TranslateLanguageBar: FC<Props> = ({
           `translate.target_language` 标签，fork 改用 `aria-label`（同源语言）。
           仍缺一项：V2 还会把**检测到的语言**显示在源语言取值处，fork 无检测引擎
           （V2 走 `franc-min` + `useDetectLang`，fork 无该依赖）——保留"自动检测"占位，
-          见 `未清债.md`。 */}
+          待对齐 V2 的检测语言显示（检测引擎未移植）。 */}
       <Select
         className={LANGUAGE_SELECT_CLASS}
         value={target}

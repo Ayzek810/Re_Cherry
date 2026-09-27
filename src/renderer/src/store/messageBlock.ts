@@ -320,10 +320,10 @@ export const formatCitationsFromBlock = (
     formattedCitations.push(
       ...block.knowledge.map((result, index) => {
         const filePattern = /\[(.*?)]\(http:\/\/file\/(.*?)\)/
-        const fileMatch = result.source.match(filePattern)
+        const fileMatch = result.sourceUrl.match(filePattern)
 
-        let url = result.source
-        let title = result.source
+        let url = result.sourceUrl
+        let title = result.sourceUrl
         const showFavicon = true
 
         // 如果匹配文件链接格式 [filename](http://file/xxx)
@@ -333,7 +333,7 @@ export const formatCitationsFromBlock = (
         }
 
         // 托管副本名反查：展示原始文件名，点击打开真实路径（未命中回退存储名）
-        const resolved = knowledgeFileIndex?.get(result.source)
+        const resolved = knowledgeFileIndex?.get(result.sourceUrl)
         if (resolved) {
           title = resolved.title
           url = resolved.path

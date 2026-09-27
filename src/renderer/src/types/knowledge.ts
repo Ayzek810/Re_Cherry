@@ -1,8 +1,7 @@
 /**
  * 知识库类型（v0.3.2 按 CS_V1 全形恢复）。
- * fork 分叉点：`KnowledgeReference` 保持 fork 消息投影形状（{id: string; source: string; content: string}，
- * 被 newMessage/chunk/index 的消息块消费）——V1 形状（{id: number; sourceUrl; type; file?; metadata?}）
- * 在批次4（知识库接线）落地 Citation knowledge 分支时统一，届时两处消费方同批切换。
+ * KnowledgeReference 已于 v0.4 统一到 V1 形状（{id: number; content; sourceUrl; type; file?; metadata?}），
+ * 生产方（kernel/knowledgeSearchTool 的 meta 通道）与消费方（store/messageBlock 引用卡格式化）同批切换。
  */
 import type { Model } from '.'
 import type { FileMetadata } from './file'
@@ -157,9 +156,13 @@ export interface PreprocessProvider {
   options?: any
 }
 
-/** 消息投影里的知识引用（fork 现状形状，消费方见文件头注释；V1 形状批次4 统一时切换）。 */
+/** 消息投影里的知识引用（v0.4 统一到 V1 形状：types/knowledge.ts 逐字段一致）。
+ *  消费方：kernelChat 建引用载体、store/messageBlock 格式化引用卡。 */
 export type KnowledgeReference = {
-  id: string
-  source: string
+  id: number
   content: string
+  sourceUrl: string
+  type: KnowledgeItemType
+  file?: FileMetadata
+  metadata?: Record<string, any>
 }

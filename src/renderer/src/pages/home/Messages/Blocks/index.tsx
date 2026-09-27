@@ -199,9 +199,16 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
   // Check if message is still processing
   const isProcessing = isMessageProcessing(message)
   const allowCollapseExecutionDetails = !(message.role === 'assistant' && isProcessing)
+  // 引用载体块恒渲染在正文之前（v0.4 验收轮：web_search 常在首段正文之后才返回，
+  // 载体块按事件序排在正文后 → "引用 N"卡不在正文上方；显示层提升，数据序不动）
+  const orderedBlocks = useMemo(() => {
+    const citations = renderedBlocks.filter((block) => block.type === MessageBlockType.CITATION)
+    if (citations.length === 0) return renderedBlocks
+    return [...citations, ...renderedBlocks.filter((block) => block.type !== MessageBlockType.CITATION)]
+  }, [renderedBlocks])
   const groupedBlocks = useMemo(
-    () => groupSimilarBlocks(renderedBlocks, allowCollapseExecutionDetails),
-    [renderedBlocks, allowCollapseExecutionDetails]
+    () => groupSimilarBlocks(orderedBlocks, allowCollapseExecutionDetails),
+    [orderedBlocks, allowCollapseExecutionDetails]
   )
 
   return (

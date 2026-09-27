@@ -1,7 +1,7 @@
 // fork 缝（原创）：V2 为 mise 驱动，本件为 portable 等价实现——快照/操作状态机/mutex 串行/
 // availability 广播的形状照抄 V2 src/main/services/binaryManager/BinaryManager.ts，mise 命令
 // 面全部替换为 npm --prefix / python venv + pip（设计来源：V2 BinaryManager + pythonRuntime，
-// 勾勒自勘查报告结论，docs/v0.3.4_doc.md）。一切钉在 {userData}/Data/CodeMate/ 子树：不改
+// 勾勒自勘查报告结论）。一切钉在 {userData}/Data/CodeMate/ 子树：不改
 // 系统 PATH、不写用户全局配置，卸载 = 删子树。BinaryToolSnapshot 为 V2
 // src/shared/types/binary.ts 的子集抄形状（fork 不建 shared 文件，operation/definition 面若
 // UI 需要随批次4 再补）。

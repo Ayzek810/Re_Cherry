@@ -5,8 +5,8 @@
 ## Roadmap (from the project plan)
 
 - **Main goal**: unified agent+chatbot page/logic, wired to MCP and skills, with in-chat one-tap switch between pure chat / safe-tools chat / full working mode.
-- **Side goals**: port CS v2 edge features (translate, KB, paint) as modules (done); web pages as mini-apps (done); exe programs as mini-apps (deferred — needs main-process subprocess management).
-- **Versions**: through v0.3.4-1 shipped (minapps, Code Mate coding assistant, community stack channel). **v0.4**: requirements frozen, pay all outstanding debt, performance + footprint slimming. **v1**: full review, deploy, ship.
+- **Side goals**: port CS v2 edge features (translate, KB, paint) as modules (done); web pages as mini-apps (done).
+- **Versions**: v0.3.4-1 shipped (minapps, Code Mate, community stack). **v0.4** shipped: debt paid off, docs consolidated into this file, dead code removed, and the engineering items landed (main-process Readability extraction, KB sitemap/directory/video ingestion, xlsx/pptx Markdown fidelity, OCR DirectML/CoreML acceleration, MCPService file-by-file reconciliation with upstream, console-window flash eliminated via `windowsHide` on all main-process spawns incl. the subprocess-local patch). **v1**: full review, deploy, ship.
 
 ## Environment
 
@@ -21,7 +21,6 @@ $env:CI = "true"                        # avoids ERR_PNPM_ABORTED_REMOVE_MODULES
 - After any `resolveJsonModule`-imported JSON shape change (e.g. locale files), delete `*.tsbuildinfo` before tsgo — stale incremental cache produces fake "property does not exist" error families.
 - **Windows shell traps**: trust only the real exit code captured immediately after a command (pipelines swallow/alter codes); PowerShell 5.1 mis-decodes ANSI and writes UTF-16LE by default — read via file tools / `[System.IO.File]::ReadAllText`, write UTF-8 no BOM. In Git Bash, `${PIPESTATUS[0]}` recovers the pre-pipe exit code.
 - **vitest uses the forks pool** (threads pool crashes natively on this machine). Timing is never a regression signal — exit codes and test counts are. A full-suite red under parallel load must be re-run on an idle machine before it counts.
-- **Local `git commit` is allowed** (user-approved standing permission): commit at acceptance-ready milestones as rollback checkpoints. Never push, never tag, never rewrite history without explicit user instruction.
 - Lint chains with `--fix` do semantic rewrites (e.g. `useContext` → `use`) and may land half-done — always follow with both typechecks.
 
 ## Static-check suite (10 checks, lives outside the repo)
@@ -129,9 +128,8 @@ Aliases: `@main` → `src/main/`, `@renderer` → `src/renderer/src/`, `@shared`
 - ~130 i18n orphan keys deliberately kept (pruning = rewrite next version).
 - The image-generation preset implementation (collect/generate/edit trio) is deliberate, not upstream garbage.
 - A zero-referenced SDK chunk is the ripgrep binary source — re-source ripgrep **before** removing that dependency.
-- Restricted-mode pwsh flashes a console window (cosmetic; upstream DSH should default `windowsHide` — reported, not patched).
+- Windows sandbox children spawn with `CREATE_NEW_CONSOLE + STARTF_USESHOWWINDOW(SW_HIDE)` (patch on `dsh-sandbox-windows-acl`, both restricted spawn sites). The restricted-token scheme **forbids `CREATE_NO_WINDOW`** — hidden-console children die with 0xC0000142 (empirically established upstream) — and the Electron host has no console for children to share, so without the patch every pwsh/fs child allocated a *visible* console. Do not "simplify" it back to `windowsHide`.
 - Knowledge-base retrieval is O(n) cosine (fine at personal scale); rerank is a type-only shape.
-- The About page fetches upstream releases (kept).
 - `agents.create({ sessionId })` upstream semantics on existing log ids were never proven — three fork versions routed around it; re-verify only on a kernel major upgrade.
 - `PasteService` prefers text over images when both are pasted (fork-inherited semantics; V2 swallows via TipTap runtime) — changing it means reworking the paste parser.
 - The deprecated top-level `Provider.isNotSupport*` fields are migration-input carriers (read by `store/migrate.ts`); three of four are also live via utils/UI — do not strip them from the type.

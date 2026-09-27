@@ -18,8 +18,9 @@ export type WebSearchProviderResponse = {
   query?: string
   results: WebSearchProviderResult[]
   /** 压缩摘要（WebSearchService.applyCompression 实际生效时附加；none/未压缩无此字段）。
-   * web_search 工具据此在结果文本里向用户报告压缩启用状态与前后条数。 */
-  compression?: { method: string; before: number; after: number }
+   * web_search 工具据此在结果文本里向用户报告压缩启用状态与前后条数。
+   * error 非空 = 压缩失败如实上报（v0.4 验收轮：静默降级是禁则，失败原因直达工具文本）。 */
+  compression?: { method: string; before: number; after: number; error?: string }
 }
 
 /** 主进程 fetch 的透传选项（abortsignal 一路透传到 provider 的 HTTP 请求与刮取窗口）。 */

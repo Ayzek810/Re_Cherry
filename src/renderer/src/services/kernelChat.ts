@@ -815,33 +815,56 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
   }
   // 统一引用机制：搜索类工具的结构化 meta → 隐形 CitationBlock 数据载体
   //（不渲染成卡——UI 即正文药丸 + 悬浮胶囊；载体仅持有数据供正文引用）。
-  const citationBlock = buildSearchCitationBlock(state.assistantMessageId, event.data.meta, failed)
-  if (citationBlock !== undefined) {
-    state.citationBlockId = citationBlock.id
-    state.citationBlockSource = citationBlock.response?.source
-    state.blockIds.push(citationBlock.id)
-    store.dispatch(upsertManyBlocks([citationBlock]))
-    // 本 step 当前流式正文块立即补挂引用（先文后搜索、[n] 出现在同块的场景）
-    if (state.mainBlockId !== undefined) {
-      store.dispatch(
-        updateOneBlock({
-          id: state.mainBlockId,
-          changes: {
-            citationReferences: [
-              { citationBlockId: citationBlock.id, citationBlockSource: citationBlock.response?.source }
-            ]
-          }
-        })
-      )
+  // 同轮多次 web_search 合并进既有载体（v0.4 验收轮：配合内核全局编号，单一引用卡）。
+  const existingCarrier =
+    state.citationBlockId !== undefined
+      ? (store.getState().messageBlocks.entities[state.citationBlockId] as CitationMessageBlock | undefined)
+      : undefined
+  const citationResult = buildSearchCitationBlock(state.assistantMessageId, event.data.meta, failed, existingCarrier)
+  if (citationResult !== undefined) {
+    const citationBlock = citationResult.block
+    if (citationResult.merged) {
+      store.dispatch(updateOneBlock({ id: citationBlock.id, changes: { response: citationBlock.response } }))
+    } else {
+      state.citationBlockId = citationBlock.id
+      state.citationBlockSource = citationBlock.response?.source
+      state.blockIds.push(citationBlock.id)
+      store.dispatch(upsertManyBlocks([citationBlock]))
+      // 本 step 当前流式正文块立即补挂引用（先文后搜索、[n] 出现在同块的场景）
+      if (state.mainBlockId !== undefined) {
+        store.dispatch(
+          updateOneBlock({
+            id: state.mainBlockId,
+            changes: {
+              citationReferences: [
+                { citationBlockId: citationBlock.id, citationBlockSource: citationBlock.response?.source }
+              ]
+            }
+          })
+        )
+      }
     }
     syncMessageBlocks(topicId, state)
   }
 }
 
-/** 搜索类工具 meta → 隐形 CitationBlock 数据载体（web-search / knowledge 两形态；
+/**
+ * 搜索类工具 meta → 隐形 CitationBlock 数据载体（web-search / knowledge 两形态；
  * 统一引用机制：无 meta 或失败返回 undefined；UI 层不渲染为卡，仅作 Citation[] 源）。
- * 各放弃分支留 info/warn 日志——引用药丸缺失时按日志定位到具体环节。 */
-function buildSearchCitationBlock(messageId: string, meta: unknown, failed: boolean): CitationMessageBlock | undefined {
+ * 各放弃分支留 info/warn 日志——引用药丸缺失时按日志定位到具体环节。
+ *
+ * v0.4 验收轮：同轮多次 web_search 合并进既有载体（`existing` 传入本轮已建的
+ * websearch 载体块时条目追加、返回原块），配合内核的全局编号偏移——模型正文
+ * [n] 与合并后的单一引用卡同序同号，不再出现两张 1-6 卡。merged 返回值语义：
+ * 块已就地更新，调用方仅需触发 store 更新，不再 push/attach。
+ */
+/** 导出仅供测试（冻结块合并回归）；生产消费方为上方两处调用点。 */
+export function buildSearchCitationBlock(
+  messageId: string,
+  meta: unknown,
+  failed: boolean,
+  existing?: CitationMessageBlock
+): { block: CitationMessageBlock; merged: boolean } | undefined {
   if (failed || meta === null || typeof meta !== 'object') return undefined
   const payload = meta as { kind?: string; results?: unknown }
   if (payload.kind === 'web-search') {
@@ -851,6 +874,30 @@ function buildSearchCitationBlock(messageId: string, meta: unknown, failed: bool
       logger.warn('kernelChat: web-search meta carried no results; skip citation block')
       return undefined
     }
+    const entries = payload.results as unknown[]
+    if (
+      existing !== undefined &&
+      existing.response?.source === WEB_SEARCH_SOURCE.WEBSEARCH &&
+      existing.response.results !== null &&
+      typeof existing.response.results === 'object'
+    ) {
+      // 不可变合并（v0.4 验收轮第二轮修正）：RTK 会冻结已入 store 的块对象，
+      // 原地赋值 `wrapper.results = …` 抛 "Cannot assign to read only property" →
+      // 事件处理中断 → 第二次搜索的引用整体丢失（真机 15:40 实证）。必须新建
+      // 响应对象；调用方用新引用触发 store 更新。
+      const wrapper = existing.response.results as { results: unknown[] }
+      const mergedBlock: CitationMessageBlock = {
+        ...existing,
+        response: {
+          ...existing.response,
+          results: { results: [...wrapper.results, ...entries] } as WebSearchProviderResponse
+        }
+      }
+      logger.info(
+        `kernelChat: citation carrier (web-search) merged, ${(mergedBlock.response?.results as { results: unknown[] }).results.length} entries total`
+      )
+      return { block: mergedBlock, merged: true }
+    }
     const wrapper = { results: payload.results } as unknown as WebSearchProviderResponse
     const block = createCitationBlock(messageId, {
       response: {
@@ -859,7 +906,7 @@ function buildSearchCitationBlock(messageId: string, meta: unknown, failed: bool
       }
     })
     logger.info(`kernelChat: citation carrier (web-search) created with ${payload.results.length} entries`)
-    return block
+    return { block, merged: false }
   }
   if (payload.kind === 'knowledge') {
     if (!Array.isArray(payload.results) || payload.results.length === 0) {
@@ -870,7 +917,7 @@ function buildSearchCitationBlock(messageId: string, meta: unknown, failed: bool
       knowledge: payload.results as unknown as KnowledgeReference[]
     })
     logger.info(`kernelChat: citation carrier (knowledge) created with ${payload.results.length} entries`)
-    return block
+    return { block, merged: false }
   }
   logger.warn(`kernelChat: unrecognized search meta kind "${String(payload.kind)}"; skip citation block`)
   return undefined
@@ -1199,13 +1246,31 @@ async function projectEventsToMessages(
           }
         }
         // 统一引用机制：与直播路径同构（隐形载体 + 正文引用联动；meta 持久化在
-        // 会话日志，重开话题即复现药丸与胶囊）。
-        const citationBlock = buildSearchCitationBlock(reply.messageId, event.data.meta, failed)
-        if (citationBlock !== undefined) {
-          reply.citationBlockId = citationBlock.id
-          reply.citationBlockSource = citationBlock.response?.source
-          blocks.push(citationBlock)
-          reply.blockIds.push(citationBlock.id)
+        // 会话日志，重开话题即复现药丸与胶囊）。同轮多次 web_search 合并进既有
+        // 载体（v0.4 验收轮，与直播路径同构）。
+        const currentReply = reply
+        const existingCarrier =
+          currentReply.citationBlockSource === WEB_SEARCH_SOURCE.WEBSEARCH && currentReply.citationBlockId !== undefined
+            ? (blocks.find((b) => b.id === currentReply.citationBlockId) as CitationMessageBlock | undefined)
+            : undefined
+        const citationResult = buildSearchCitationBlock(
+          currentReply.messageId,
+          event.data.meta,
+          failed,
+          existingCarrier
+        )
+        if (citationResult !== undefined) {
+          const citationBlock = citationResult.block
+          if (citationResult.merged) {
+            // 不可变合并的新块对象替换 blocks 里的旧元素（同 id；store 快照稍后统一 upsert）
+            const index = blocks.findIndex((b) => b.id === citationBlock.id)
+            if (index >= 0) blocks[index] = citationBlock
+          } else {
+            currentReply.citationBlockId = citationBlock.id
+            currentReply.citationBlockSource = citationBlock.response?.source
+            blocks.push(citationBlock)
+            currentReply.blockIds.push(citationBlock.id)
+          }
         }
         break
       }

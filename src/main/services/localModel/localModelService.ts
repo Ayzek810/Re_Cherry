@@ -1,7 +1,7 @@
 /**
  * 本地模型下载服务（v0.3.2 自 CS_V2 移植，fork 裁剪：仅 OCR 一种；进度走渲染层
  * 轮询而非事件广播；onnxruntime 二进制不下载——dev 下直接用 node_modules 的原生
- * 绑定，打包形态的运行时下载留未清债）。
+ * 绑定，打包形态的运行时下载仍待真机验证）。
  * 状态机 not_downloaded | downloading | ready | error | unsupported；盘 = 真相源，
  * 重启无状态。.tmp + rename 原子落盘，minBytes 拒 LFS 指针/错误页；镜像逐文件
  * 回退（顺序见 modelSource）。下载失败不清理模型目录：先前已完成的权重保留，

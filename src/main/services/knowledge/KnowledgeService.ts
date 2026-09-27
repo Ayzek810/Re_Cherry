@@ -22,7 +22,15 @@ import { getDataPath } from '@main/utils'
 
 import { chunkText } from './chunker'
 import { EmbeddingClient, type EmbeddingModelRef } from './embeddings'
-import { extractFromFile, extractFromNote, extractFromUrl } from './extractors'
+import {
+  extractFromFile,
+  extractFromNote,
+  extractFromSitemap,
+  extractFromVideoPair,
+  extractFromUrl,
+  listDirectoryFiles,
+  type ExtractedContent
+} from './extractors'
 import { BaseVectorStore } from './vectorStore'
 
 const logger = loggerService.withContext('KnowledgeService')
@@ -77,6 +85,9 @@ export type KnowledgeAddPayload =
   | { kind: 'file'; baseId: string; itemId: string; filePath: string }
   | { kind: 'url'; baseId: string; itemId: string; url: string }
   | { kind: 'note'; baseId: string; itemId: string; text: string }
+  | { kind: 'sitemap'; baseId: string; itemId: string; url: string }
+  | { kind: 'directory'; baseId: string; itemId: string; dirPath: string }
+  | { kind: 'video'; baseId: string; itemId: string; videoPath: string; srtPath: string }
 
 /**
  * read_document 空抽取出口的中性提示（V2 noExtractableTextNote 同形状，一句话
@@ -294,7 +305,10 @@ export class KnowledgeService {
     signal?: AbortSignal
   ): Promise<LoaderReturn> {
     try {
-      let extracted
+      // 文档集形态：file/url/note 单文档；sitemap/directory/video 多文档（v0.4 工程项
+      // 三类条目接入处理链）。多文档按文档粒度分块入库（uniqueId 统一为 itemId——
+      // removeItem 按 uniqueIds 删除即整条移除），单文档失败语义各异（见各分支）。
+      let docs: Array<ExtractedContent>
       if (payload.kind === 'file') {
         // V2 对齐（2026-09-22 用户裁决）：配置即路由——库配置了文档处理服务商 →
         // 所有 PDF 整本走该服务商（文本/扫描由服务商内部自判，混合书整本处理）；
@@ -320,39 +334,71 @@ export class KnowledgeService {
           if (ocrText.trim().length === 0) {
             throw new Error(`document "${payload.itemId}" produced no text — pages may be blank or unreadable`)
           }
-          extracted = { text: ocrText, source: payload.itemId }
+          docs = [{ text: ocrText, source: payload.itemId }]
         } else {
-          extracted = await extractFromFile(payload.filePath)
+          docs = [await extractFromFile(payload.filePath)]
         }
       } else if (payload.kind === 'url') {
-        extracted = await extractFromUrl(payload.url, signal)
+        docs = [await extractFromUrl(payload.url, signal)]
+      } else if (payload.kind === 'note') {
+        docs = [extractFromNote(payload.text, `note:${payload.itemId}`)]
+      } else if (payload.kind === 'sitemap') {
+        docs = await extractFromSitemap(payload.url, signal)
+      } else if (payload.kind === 'directory') {
+        const files = await listDirectoryFiles(payload.dirPath)
+        if (files.length === 0) {
+          throw new Error(`knowledge: directory "${payload.dirPath}" contains no ingestible files`)
+        }
+        logger.info(`knowledge: directory "${payload.dirPath}" -> ${files.length} file(s)`)
+        docs = []
+        // 单文件失败跳过不整链失败（V1 directoryTask 同语义）；全部失败时下方统一报错。
+        for (const filePath of files) {
+          try {
+            docs.push(await extractFromFile(filePath))
+          } catch (error) {
+            logger.warn(`knowledge: directory file "${filePath}" failed, skipping:`, toLoggableError(error))
+          }
+        }
+      } else if (payload.kind === 'video') {
+        docs = await extractFromVideoPair(payload.videoPath, payload.srtPath)
       } else {
-        extracted = extractFromNote(payload.text, `note:${payload.itemId}`)
+        throw new Error(`knowledge: unsupported payload kind "${String((payload as { kind?: string }).kind)}"`)
       }
-      if (extracted.text.trim().length === 0) {
+      // 空文档跳过（多文档形态的正常形态）；全部为空才报错。
+      docs = docs.filter((doc) => doc.text.trim().length > 0)
+      if (docs.length === 0) {
         throw new Error('knowledge: no text extracted from item')
       }
       const store = await this.openStore(base.id)
-      const chunks = chunkText(extracted.text, base.chunkSize, base.chunkOverlap)
-      if (chunks.length === 0) {
+      let totalChunks = 0
+      for (const doc of docs) {
+        const chunks = chunkText(doc.text, base.chunkSize, base.chunkOverlap)
+        if (chunks.length === 0) {
+          continue
+        }
+        const vectors = await this.embeddings.embed(
+          embedding,
+          chunks.map((chunk) => chunk.content),
+          signal
+        )
+        await store.insert(
+          chunks.map((chunk, index) => ({
+            uniqueId: payload.itemId,
+            content: chunk.content,
+            metadata: { source: doc.source, index },
+            vector: vectors[index]
+          }))
+        )
+        totalChunks += chunks.length
+      }
+      if (totalChunks === 0) {
         throw new Error('knowledge: chunking produced no chunks')
       }
-      const vectors = await this.embeddings.embed(
-        embedding,
-        chunks.map((chunk) => chunk.content),
-        signal
+      logger.info(
+        `knowledge: added item "${payload.itemId}" to base "${base.id}" (${docs.length} doc(s) / ${totalChunks} chunks)`
       )
-      await store.insert(
-        chunks.map((chunk, index) => ({
-          uniqueId: payload.itemId,
-          content: chunk.content,
-          metadata: { source: extracted.source, index },
-          vector: vectors[index]
-        }))
-      )
-      logger.info(`knowledge: added item "${payload.itemId}" to base "${base.id}" (${chunks.length} chunks)`)
       return {
-        entriesAdded: chunks.length,
+        entriesAdded: totalChunks,
         uniqueId: payload.itemId,
         uniqueIds: [payload.itemId],
         loaderType: payload.kind

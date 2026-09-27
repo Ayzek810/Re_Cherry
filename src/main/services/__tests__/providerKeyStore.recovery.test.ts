@@ -1,7 +1,7 @@
 /**
  * provider key 的跨目录补齐（v0.3.3-1 修复"更新后 key 消失要重填"）。
  *
- * 真机事故链（详见 `docs/v0.3.3-1_doc.md` §5）：electron-store 在**构造时**取
+ * 真机事故链：electron-store 在**构造时**取
  * `app.getPath('userData')`，而 `ProviderKeyStore` 单例在打包产物里被入口最先 require ⇒ 构造早于
  * `initAppDataDir()` 的重定向 ⇒ key 文件落在 Electron 默认目录，与应用其余数据分居两地；构建的
  * chunk 切分一变就读到另一个文件，用户此前填的 key"消失"。

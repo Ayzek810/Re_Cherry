@@ -1,8 +1,8 @@
 diff --git a/lib/index.js b/lib/index.js
-index 698efc9..7f5bd31 100644
+index 698efc9357d249cf03adf82a9962499f9455fe66..5b324515da07d7850ccf11ed9ed35ec8e3902ce6 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -794,6 +794,10 @@ function spawnSubprocess(spec, internals = {}) {
+@@ -794,9 +794,16 @@ function spawnSubprocess(spec, internals = {}) {
  	const errMode = spec.stdio.stderr;
  	const stdinMode = spec.stdio.stdin;
  	const env = childEnv(spec.env);
@@ -13,3 +13,9 @@ index 698efc9..7f5bd31 100644
  	const child = spawn(program, args, {
  		cwd: spec.cwd,
  		env,
++		// [re-cherry] pwsh/沙箱 runner/jobs 的可执行体多为控制台子系统——从 GUI 进程
++		// spawn 不加 windowsHide 会闪出控制台窗口（真机 2026-09-27 用户反馈）。
++		windowsHide: true,
+ 		stdio: [
+ 			stdinMode === "ignore" ? "ignore" : "pipe",
+ 			outMode === "inherit" ? "inherit" : "pipe",

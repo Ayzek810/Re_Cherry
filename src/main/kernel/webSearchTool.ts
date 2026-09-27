@@ -96,12 +96,18 @@ export function apply(ctx: Context): void {
         // 执行侧防线拒答（与 describe_images 的双层门同型）。
         const topicId = exec.agent?.session?.id
         const providerId = topicId === undefined ? undefined : webSearchService.getTurnProvider(topicId)
-        if (providerId === undefined) {
+        if (topicId === undefined || providerId === undefined) {
           throw new Error('web_search: no web search provider is configured for this conversation turn')
         }
-        const count =
-          typeof args.count === 'number' && Number.isFinite(args.count) ? Math.max(1, Math.trunc(args.count)) : 6
+        // v0.4 验收轮：缺省 count 改读用户设置 maxResults（此前硬编码 6——设置被无视）；
+        // 模型显式传 count 时仍尊重（钳制到 1..12 防失控）。
+        const rawCount = typeof args.count === 'number' && Number.isFinite(args.count) ? Math.trunc(args.count) : NaN
+        const count = Number.isFinite(rawCount)
+          ? Math.min(12, Math.max(1, rawCount))
+          : webSearchService.getConfiguredMaxResults()
         const result = await webSearchService.search(providerId, query, { count, signal: exec.signal })
+        // 同轮多次搜索的全局编号偏移（每轮发送时重置）。
+        const offset = webSearchService.bumpTurnResultOffset(topicId, result.results.length)
         logger.info(
           `web_search: "${query}" via ${providerId} -> ${result.results.length} results` +
             (result.compression
@@ -109,14 +115,19 @@ export function apply(ctx: Context): void {
               : '')
         )
         // [n] 标号文本：与上游 toModelOutput 的引用指令同语义（模型按 [n] 引用）。
-        // 压缩关闭时单条正文截 1200 字符防原始抓取失控；压缩开启时正文已被
-        // cutoff/RAG 控量，放开切片（否则把压缩成果又裁没了）。
-        const sliceLimit = webSearchService.isCompressionActive() ? Number.MAX_SAFE_INTEGER : 1200
+        // 压缩关闭时单条正文截 1200 字符防原始抓取失控；压缩开启且成功时正文已被
+        // cutoff/RAG 控量，放开切片（否则把压缩成果又裁没了）；压缩失败回落 1200。
+        const sliceLimit =
+          webSearchService.isCompressionActive() && result.compression?.error === undefined
+            ? Number.MAX_SAFE_INTEGER
+            : 1200
         // 压缩状态明示（用户此前无法判断 RAG/cutoff 是否真的启用）：有摘要即报
         // 方法名与前后条数；未压缩不出现该行。
         const compressionLine = result.compression
           ? [
-              `Compression: ${result.compression.method} applied (${result.compression.before} -> ${result.compression.after} results).`
+              result.compression.error !== undefined
+                ? `Compression: ${result.compression.method} FAILED (${result.compression.error}) — results are uncompressed.`
+                : `Compression: ${result.compression.method} applied (${result.compression.before} -> ${result.compression.after} results).`
             ]
           : []
         const text =
@@ -125,8 +136,10 @@ export function apply(ctx: Context): void {
             : [
                 `Web results for "${query}" (cited as [n]):`,
                 ...compressionLine,
+                // v0.4 验收轮：同轮多次搜索接续全局编号（第二次搜索 [offset+1] 起），
+                // 模型正文 [n] 与合并后的单一引用卡同序同号。
                 ...result.results.map(
-                  (r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content?.slice(0, sliceLimit) ?? ''}`
+                  (r, i) => `[${offset + i + 1}] ${r.title}\n${r.url}\n${r.content?.slice(0, sliceLimit) ?? ''}`
                 ),
                 'Citation rule: in your answer, place the matching [n] marker immediately after each statement these results support.'
               ].join('\n\n')

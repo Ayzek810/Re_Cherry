@@ -58,9 +58,11 @@ export function apply(ctx: Context): void {
                 type: 'object',
                 additionalProperties: false,
                 properties: {
-                  id: { type: 'string', required: true },
-                  source: { type: 'string', required: true },
-                  content: { type: 'string', required: true }
+                  id: { type: 'number', required: true },
+                  content: { type: 'string', required: true },
+                  sourceUrl: { type: 'string', required: true },
+                  type: { type: 'string', required: true },
+                  metadata: { type: 'object', additionalProperties: true }
                 }
               }
             },
@@ -199,7 +201,15 @@ export function apply(ctx: Context): void {
           query,
           bases: bases.length,
           results: documents.length,
-          entries: documents.map((doc) => ({ id: doc.baseId, source: doc.source, content: doc.content })),
+          // KnowledgeReference V1 形状（v0.4 统一）：数字序号 id + sourceUrl + type；
+          // baseId 留在 metadata 供排查。
+          entries: documents.map((doc, index) => ({
+            id: index + 1,
+            content: doc.content,
+            sourceUrl: doc.source,
+            type: 'file' as const,
+            metadata: { baseId: doc.baseId }
+          })),
           text
         }
       }

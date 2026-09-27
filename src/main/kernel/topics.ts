@@ -588,13 +588,29 @@ export function shouldSweepOrphans(
   return { sweep: true, reason: 'registry loaded with rows: persisted sessions without a row are orphans' }
 }
 
-async function persistRegistry(): Promise<void> {
-  const file = registryPath()
-  await mkdir(dirname(file), { recursive: true })
-  const payload = JSON.stringify({ topics: [...topics.values()] }, null, 2)
-  const temp = `${file}.tmp`
-  await writeFile(temp, payload, 'utf8')
-  await rename(temp, file)
+/**
+ * 注册表持久化串行闸 + 唯一 tmp 名（v0.4 真机实证修复）：渲染层多选删除会并发发起
+ * 大量 dsh:topic-delete，各自的 persistRegistry 在**固定 tmp 名**下交错——A 写完 tmp、
+ * B 重写同一 tmp、A rename（tmp 消失）、B rename → ENOENT 连环报错，注册表持久化
+ * 中断。串行化保证写-改名成对完成，唯一 tmp 名让任何残余并发也互不踩踏（原子 rename
+ * 语义不变：最后一次完整的 rename 胜出，文件永远是完整 JSON）。
+ */
+let registryPersistQueue: Promise<void> = Promise.resolve()
+
+/** 供回归测试直呼（并发持久化不互踩；生产调用方走各操作内部 await）。 */
+export async function persistRegistry(): Promise<void> {
+  const run = registryPersistQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const file = registryPath()
+      await mkdir(dirname(file), { recursive: true })
+      const payload = JSON.stringify({ topics: [...topics.values()] }, null, 2)
+      const temp = `${file}.${randomUUID()}.tmp`
+      await writeFile(temp, payload, 'utf8')
+      await rename(temp, file)
+    })
+  registryPersistQueue = run
+  return run
 }
 
 /** 启动话题子系统：加载注册表。（v0.3.1 起标题不再经 session 事件回写：命名由渲染层

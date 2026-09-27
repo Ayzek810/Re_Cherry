@@ -57,6 +57,13 @@ export class WebSearchService {
    */
   private turnProviders = new Map<string, string | undefined>()
 
+  /**
+   * 本轮结果编号偏移（v0.4 验收轮）：topicId → 已产出的结果条数。同轮多次搜索
+   * 接续全局编号（第二次搜索从 [offset+1] 起），模型正文 [n] 与合并后的引用卡
+   * 保持同序同号；随 setTurnProvider 重置。
+   */
+  private turnResultOffsets = new Map<string, number>()
+
   /** 渲染层 websearch 切片 → 引擎配置投影（启动与切片变更时整体替换）。 */
   public setConfig(config: KernelWebSearchConfig): void {
     // 拷贝防投影侧后续原地修改；apiKey 只存本进程内存
@@ -80,11 +87,24 @@ export class WebSearchService {
   /** 每轮搜索提供商登记（topics.sendMessage 写入；undefined = 本轮未启用）。 */
   public setTurnProvider(topicId: string, providerId: string | undefined): void {
     this.turnProviders.set(topicId, providerId)
+    // 本轮 [n] 全局编号随每轮登记重置（同轮多次搜索接续编号——修复"两次搜索
+    // 两张 1-6 卡"且模型正文 [n] 与引用卡错位）。
+    this.turnResultOffsets.delete(topicId)
   }
 
   /** web_search 工具执行时读取本轮登记的提供商。 */
   public getTurnProvider(topicId: string): string | undefined {
     return this.turnProviders.get(topicId)
+  }
+
+  /**
+   * 本轮结果全局编号偏移：同轮第 N 次搜索的条目从 offset+1 起编号（调用后偏移
+   * 累加 count）。工具正文编号与合并后的引用卡条目同序同号。
+   */
+  public bumpTurnResultOffset(topicId: string, resultCount: number): number {
+    const offset = this.turnResultOffsets.get(topicId) ?? 0
+    this.turnResultOffsets.set(topicId, offset + resultCount)
+    return offset
   }
 
   private findProvider(providerId: string): KernelWebSearchProviderConfig {
@@ -148,6 +168,11 @@ export class WebSearchService {
     return Boolean(compression.embedding)
   }
 
+  /** 用户设置的单次搜索最大条数（v0.4 验收轮：web_search 工具缺省 count 不再硬编码 6）。 */
+  public getConfiguredMaxResults(): number {
+    return Math.max(1, Math.trunc(this.config?.maxResults ?? DEFAULT_MAX_RESULTS))
+  }
+
   private async applyCompression(
     query: string,
     response: WebSearchProviderResponse,
@@ -156,13 +181,39 @@ export class WebSearchService {
     const compression = this.config?.compression
     const results = response.results ?? []
     if (!compression || compression.method === 'none' || results.length === 0) return response
+    // v0.4 验收轮（静默降级禁则）：压缩失败不再无声回落原始结果——失败原因随
+    // compression.error 上浮，web_search 工具文本如实报告（用户此前完全无感知）。
     if (compression.method === 'rag') {
-      const compressed = await compressWithRag([query], results, compression, signal)
-      // 压缩摘要随响应上行：web_search 工具据此向用户报告压缩确实启用（before→after）
-      return {
-        ...response,
-        results: compressed,
-        compression: { method: 'rag', before: results.length, after: compressed.length }
+      if (!compression.embedding) {
+        return {
+          ...response,
+          compression: {
+            method: 'rag',
+            before: results.length,
+            after: results.length,
+            error: 'RAG compression requires an embedding model (设置 → 网络搜索 → 结果压缩)'
+          }
+        }
+      }
+      try {
+        const compressed = await compressWithRag([query], results, compression, signal)
+        // 压缩摘要随响应上行：web_search 工具据此向用户报告压缩确实启用（before→after）
+        return {
+          ...response,
+          results: compressed,
+          compression: { method: 'rag', before: results.length, after: compressed.length }
+        }
+      } catch (error) {
+        logger.warn('web search: RAG compression failed, supplying raw results', error as Error)
+        return {
+          ...response,
+          compression: {
+            method: 'rag',
+            before: results.length,
+            after: results.length,
+            error: error instanceof Error ? error.message : String(error)
+          }
+        }
       }
     }
     if (compression.method === 'cutoff' && compression.cutoffLimit) {

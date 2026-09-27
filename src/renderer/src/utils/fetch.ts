@@ -121,7 +121,10 @@ export async function fetchWebContent(
       throw e
     }
 
-    logger.error(`Failed to fetch ${url}`, e as Error)
+    // v0.4 验收轮降噪：目标站反爬（403）与不可达（Failed to fetch）是引用卡摘要
+    // 抓取的常态（saturdaygift/facebook/bbc 等必然拒绝）——降为 debug（这些错误
+    // 已被 noContent 兜底消化，非缺陷信号；error 级在真机日志里全是噪音）。
+    logger.debug(`Failed to fetch ${url}`, e as Error)
     return {
       title: url,
       url: url,

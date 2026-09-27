@@ -1,6 +1,8 @@
 import { loggerService } from '@logger'
 import { net } from 'electron'
 
+import { readableContentService } from '@main/services/readableContent/ReadableContentService'
+
 import { searchService } from '../SearchService'
 import type { WebSearchHttpOptions, WebSearchProviderResult } from './types'
 
@@ -137,7 +139,18 @@ function decodeEntities(text: string): string {
   })
 }
 
-function buildContentResult(html: string, url: string, format: WebContentFormat): WebSearchProviderResult {
+/**
+ * v0.4 起 markdown/text 正文抽取改走 V2 Readability worker（readableContentService，
+ * jsdom + @mozilla/readability + turndown），失败或空正文回退本文件遗留的轻量抽取
+ * （V2 无回退路径，整批抛错——fork 保留三级抓取链的既有价值）。format='html' 无
+ * 内核调用者，维持轻量剔除路径。
+ */
+async function buildContentResult(
+  html: string,
+  url: string,
+  format: WebContentFormat,
+  signal?: AbortSignal
+): Promise<WebSearchProviderResult> {
   const title = extractPageTitle(html, url)
   switch (format) {
     case 'html': {
@@ -147,9 +160,43 @@ function buildContentResult(html: string, url: string, format: WebContentFormat)
     case 'markdown':
     case 'text':
     default: {
+      try {
+        const article = await readableContentService.extractReadableMarkdown(html, { signal })
+        const content = article.content.trim()
+        if (content.length > 0) {
+          return { title: article.title || title, url, content }
+        }
+        logger.warn(`readable content extraction produced empty body, falling back to plain text: ${url}`)
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw error
+        }
+        logger.warn(`readable content extraction failed, falling back to plain text: ${url}`, error as Error)
+      }
       const content = htmlToPlainText(html)
       return { title, url, content: content.length > 0 ? content : noContent }
     }
+  }
+}
+
+/**
+ * 字符集解析与解码。undici/Electron 的 response.text() 恒按 UTF-8 解码——GBK/Big5
+ * 中文页面整页乱码（V1 渲染层 fetch 按 header charset 解码，无此问题；v0.4 验收轮
+ * "正文质量差"的主根因）。声明源优先级：Content-Type header → HTML meta 嗅探
+ * （前 2KB 按 latin1 无损读字节再正则，charset 名恒为 ASCII）→ 缺省 utf-8。
+ */
+function sniffHtmlCharset(buffer: ArrayBuffer): string | undefined {
+  const prefix = new TextDecoder('latin1').decode(buffer.slice(0, 2048))
+  return /charset=["']?([\w-]+)/i.exec(prefix)?.[1]
+}
+
+function decodeBody(buffer: ArrayBuffer, contentType: string | null): string {
+  const declared = /charset=([\w-]+)/i.exec(contentType ?? '')?.[1] ?? sniffHtmlCharset(buffer) ?? 'utf-8'
+  try {
+    return new TextDecoder(declared.toLowerCase()).decode(buffer)
+  } catch {
+    logger.warn(`unsupported charset "${declared}", decoding as utf-8`)
+    return new TextDecoder('utf-8').decode(buffer)
   }
 }
 
@@ -163,17 +210,13 @@ async function fetchHtmlDirect(url: string, signal?: AbortSignal): Promise<strin
   const timeoutSignal = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)])
     : AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  const headers = { 'User-Agent': BROWSER_USER_AGENT }
   try {
-    const response = await net.fetch(url, {
-      headers: {
-        'User-Agent': BROWSER_USER_AGENT
-      },
-      signal: timeoutSignal
-    })
+    const response = await net.fetch(url, { headers, signal: timeoutSignal })
     if (!response.ok) {
       throw new Error(`HTTP error: ${response.status}`)
     }
-    const html = await response.text()
+    const html = decodeBody(await response.arrayBuffer(), response.headers.get('content-type'))
     if (html.length > 0) {
       return html
     }
@@ -184,16 +227,11 @@ async function fetchHtmlDirect(url: string, signal?: AbortSignal): Promise<strin
     }
     logger.warn(`net.fetch failed, falling back to node fetch: ${url}`, error as Error)
   }
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': BROWSER_USER_AGENT
-    },
-    signal: timeoutSignal
-  })
+  const response = await fetch(url, { headers, signal: timeoutSignal })
   if (!response.ok) {
     throw new Error(`HTTP error: ${response.status}`)
   }
-  return await response.text()
+  return decodeBody(await response.arrayBuffer(), response.headers.get('content-type'))
 }
 
 export async function fetchWebContent(
@@ -225,7 +263,7 @@ export async function fetchWebContent(
       }
     }
 
-    return buildContentResult(html, url, format)
+    return await buildContentResult(html, url, format, signal)
   } catch (e: unknown) {
     if (isAbortError(e)) {
       throw e

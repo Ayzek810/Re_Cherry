@@ -194,7 +194,7 @@ export class ProviderKeyStore {
       const { keys, added, updated, usedFrom } = mergeVaults(ours, candidates)
       if (added.length === 0 && updated.length === 0) return
       store.set('keys', keys)
-      // 用 warn 级：renderer/info 级日志不落盘（经验教训 §4.43），而这条是真机取证要看的状态变更。
+      // 用 warn 级：renderer/info 级日志不落盘，而这条是真机取证要看的状态变更。
       logger.warn(
         `providerKeyStore: merged keys from ${usedFrom.join(', ')} -> ${ours.path} (added ${added.length}, updated ${updated.length})`
       )
