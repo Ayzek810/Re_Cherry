@@ -29,7 +29,14 @@ vi.mock('@main/services/preprocess/localPaddle', () => ({
   remove: vi.fn()
 }))
 
+vi.mock('@main/services/preprocess/vision', () => ({
+  parsePdf: vi.fn(),
+  visionWorkerPath: vi.fn(() => 'C:/mock/visionWorker.js'),
+  VISION_DOCUMENT_PROMPT: 'test prompt'
+}))
+
 import { parsePdf as parsePdfWithLocalPaddle } from '@main/services/preprocess/localPaddle'
+import { parsePdf as parsePdfWithVisionModel } from '@main/services/preprocess/vision'
 
 import {
   isProviderConfigured,
@@ -136,6 +143,12 @@ describe('preprocessChannel 注册表（配置投影 + 每轮登记）', () => {
     expect(isProviderConfigured({ id: 'paddleocr', apiKey: 'k', apiHost: 'http://h' })).toBe(true)
     expect(isProviderConfigured({ id: 'paddleocr', apiKey: 'k' })).toBe(false)
     expect(isProviderConfigured({ id: 'nope' })).toBe(false)
+    // vision-model：选定视觉模型（provider+model 齐全）才算配置好
+    expect(isProviderConfigured({ id: 'vision-model', visionModel: { provider: 'silicon', model: 'qwen-vl' } })).toBe(
+      true
+    )
+    expect(isProviderConfigured({ id: 'vision-model' })).toBe(false)
+    expect(isProviderConfigured({ id: 'vision-model', visionModel: { provider: 'silicon', model: '' } })).toBe(false)
   })
 })
 
@@ -147,6 +160,24 @@ describe('parsePdfWithProvider 路由与时间预算', () => {
     expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][0]).toBe('C:/books/scan.pdf')
     expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][1]).toBeInstanceOf(AbortSignal)
     expect(text).toBe('本地 OCR 全文')
+  })
+
+  it('vision-model → 视觉文档解析编排（visionModel 引用 + signal 透传；未选模型明错）', async () => {
+    vi.mocked(parsePdfWithVisionModel).mockResolvedValue('# 视觉转写全文')
+    const text = await parsePdfWithProvider(
+      { id: 'vision-model', visionModel: { provider: 'silicon', model: 'qwen-vl' } },
+      'C:/books/scan.pdf'
+    )
+    expect(parsePdfWithVisionModel).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][0]).toBe('C:/books/scan.pdf')
+    expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][1]).toEqual({ provider: 'silicon', model: 'qwen-vl' })
+    expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][2]).toBeInstanceOf(AbortSignal)
+    expect(text).toBe('# 视觉转写全文')
+
+    await expect(parsePdfWithProvider({ id: 'vision-model' }, 'C:/books/scan.pdf')).rejects.toThrow(
+      /vision model is not selected/
+    )
+    expect(parsePdfWithVisionModel).toHaveBeenCalledTimes(1)
   })
 
   it('未知服务商 id：明错并列出支持面', async () => {

@@ -23,6 +23,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { loggerService } from '@logger'
+import { setCodeMateProviders } from '@main/services/codeCli/providerSnapshot'
 import { getFilesDir } from '@main/utils/file'
 import type { KernelWebSearchConfig } from '@shared/config/types'
 import { isWorkModeApprovalTier, type WorkModeApprovalTier } from '@shared/config/workMode'
@@ -35,7 +36,7 @@ import { app, BrowserWindow, ipcMain } from 'electron'
 
 import type { KnowledgeTurnBase, TurnDocument } from '../services/knowledge/KnowledgeService'
 import { knowledgeService } from '../services/knowledge/KnowledgeService'
-import { preprocessChannel, type PreprocessProviderConfig } from '../services/preprocess/preprocessChannel'
+import { preprocessChannel } from '../services/preprocess/preprocessChannel'
 import type { SkillTurnEntry } from '../services/skills/SkillService'
 import {
   attachmentFileExtension,
@@ -55,7 +56,6 @@ import { KnowledgeKernelService } from './knowledgeKernelService'
 // fork 缝：流式补全真取消（Dsh_StreamAbort → abortLightStream）。
 import { abortLightStream, lightOneShot, lightStream } from './lightLlm'
 import { abortLightImage, lightEditImage, lightGenerateImage, setLightLlmProviderRoutes } from './lightLlmModalities'
-import { setCodeMateProviders } from '@main/services/codeCli/providerSnapshot'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
@@ -378,13 +378,36 @@ function registerKernelIpc(): void {
   // 文档处理通道配置同步（§7.17 三轮）：preprocess 切片 providers 整体投影
   //（apiKey 只进主进程内存，webSearch/MCP 同先例）。ocr_document 工具与知识库
   // 摄取的 PDF 路由按此配置表反查服务商（V2 对齐：配置即路由）。
+  // v0.4.4：投影按字段白名单收敛（渲染层输入一律校验）——vision-model 条目的
+  // 视觉模型引用取 { provider, model } 两个非空字符串，畸形即视为未配置。
   ipcMain.handle(IpcChannel.Dsh_SyncPreprocess, async (_event, providers: unknown) => {
     if (!Array.isArray(providers)) throw new Error('kernel: invalid preprocess sync payload')
     const configs = providers.map((provider) => {
       if (typeof provider !== 'object' || provider === null || typeof (provider as { id?: unknown }).id !== 'string') {
         throw new Error('kernel: invalid preprocess provider entry')
       }
-      return provider as PreprocessProviderConfig
+      const entry = provider as {
+        id: string
+        apiKey?: unknown
+        apiHost?: unknown
+        model?: unknown
+        visionModel?: unknown
+      }
+      const rawVision = entry.visionModel as { provider?: unknown; model?: unknown } | undefined
+      const visionModel =
+        typeof rawVision?.provider === 'string' &&
+        rawVision.provider.length > 0 &&
+        typeof rawVision.model === 'string' &&
+        rawVision.model.length > 0
+          ? { provider: rawVision.provider, model: rawVision.model }
+          : undefined
+      return {
+        id: entry.id,
+        ...(typeof entry.apiKey === 'string' ? { apiKey: entry.apiKey } : {}),
+        ...(typeof entry.apiHost === 'string' ? { apiHost: entry.apiHost } : {}),
+        ...(typeof entry.model === 'string' ? { model: entry.model } : {}),
+        ...(visionModel === undefined ? {} : { visionModel })
+      }
     })
     preprocessChannel.setConfig(configs)
     return { ok: true }

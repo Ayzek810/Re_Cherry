@@ -139,4 +139,58 @@ describe('store migrations', () => {
       expect(noSettings.settings).toBeUndefined()
     })
   })
+
+  describe('migration 225: VisionModel default provider backfill (v0.4.4 视觉模型文档处理)', () => {
+    it('appends the missing vision-model entry to the persisted array', async () => {
+      const state = {
+        preprocess: {
+          providers: [
+            { id: 'doc2x', name: 'Doc2X', apiKey: 'k' },
+            { id: 'local-paddle', name: 'LocalPaddle' }
+          ],
+          defaultProvider: 'mineru'
+        },
+        _persist: { version: 224, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 225)
+      const ids = migrated.preprocess.providers.map((p: { id: string }) => p.id)
+
+      expect(ids).toContain('vision-model')
+      expect(ids).toContain('doc2x')
+      expect(ids).toContain('local-paddle')
+    })
+
+    it('preserves user-modified entries (apiKey/visionModel survive) and does not duplicate', async () => {
+      const state = {
+        preprocess: {
+          providers: [
+            { id: 'doc2x', name: 'Doc2X', apiKey: 'user-key' },
+            { id: 'vision-model', name: 'VisionModel', visionModel: { id: 'qwen-vl', name: 'Qwen-VL', provider: 'silicon' } }
+          ],
+          defaultProvider: 'doc2x'
+        },
+        _persist: { version: 224, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 225)
+      const vision = migrated.preprocess.providers.filter((p: { id: string }) => p.id === 'vision-model')
+
+      expect(vision).toHaveLength(1)
+      expect(vision[0].visionModel).toEqual({ id: 'qwen-vl', name: 'Qwen-VL', provider: 'silicon' })
+      expect(migrated.preprocess.providers.find((p: { id: string }) => p.id === 'doc2x').apiKey).toBe('user-key')
+      expect(migrated.preprocess.defaultProvider).toBe('doc2x')
+    })
+
+    it('tolerates a missing or malformed preprocess slice', async () => {
+      const noSlice: any = await migrate({ _persist: { version: 224, rehydrated: false } } as any, 225)
+      const badSlice: any = await migrate(
+        { preprocess: { providers: 'not-an-array' }, _persist: { version: 224, rehydrated: false } } as any,
+        225
+      )
+
+      expect(noSlice.preprocess).toBeUndefined()
+      expect(badSlice.preprocess.providers).toBe('not-an-array')
+    })
+  })
 })

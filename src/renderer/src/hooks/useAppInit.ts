@@ -230,7 +230,8 @@ export function useAppInit() {
 
   // §7.17 三轮 文档处理通道：preprocess 切片 providers（含 apiKey，只进主进程内存，
   // webSearch/MCP 同先例）整体投影进主进程内存配置表——ocr_document 工具与知识库
-  // 摄取的扫描件回退按此路由服务商。
+  // 摄取的 PDF 路由按此表反查服务商。v0.4.4：vision-model 条目的视觉模型引用
+  //（provider + model 两个 id）同行投影，主进程按它走 OpenAI 兼容多模态 chat。
   const preprocessProviders = useAppSelector((state) => state.preprocess.providers)
 
   useEffect(() => {
@@ -239,7 +240,11 @@ export function useAppInit() {
         id: provider.id,
         apiKey: provider.apiKey,
         apiHost: provider.apiHost,
-        model: provider.model
+        model: provider.model,
+        visionModel:
+          provider.visionModel === undefined
+            ? undefined
+            : { provider: provider.visionModel.provider, model: provider.visionModel.id }
       }))
     )
   }, [preprocessProviders])

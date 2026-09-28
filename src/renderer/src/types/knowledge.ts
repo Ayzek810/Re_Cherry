@@ -138,7 +138,10 @@ export const PreprocessProviderIds = {
   'open-mineru': 'open-mineru',
   paddleocr: 'paddleocr',
   /** 本地 PaddleOCR（v0.3.2 自 CS_V2 移植）：内置推理，权重按需下载，无密钥无 apiHost。 */
-  'local-paddle': 'local-paddle'
+  'local-paddle': 'local-paddle',
+  /** 视觉模型文档解析（v0.4.4）：通道里的服务商条目——用用户配置的视觉模型逐页
+   *  转写文档（本机光栅化 → OpenAI 兼容多模态 chat），无密钥无 apiHost 无模型权重。 */
+  'vision-model': 'vision-model'
 } as const
 
 export type PreprocessProviderId = keyof typeof PreprocessProviderIds
@@ -153,6 +156,11 @@ export interface PreprocessProvider {
   apiKey?: string
   apiHost?: string
   model?: string
+  /**
+   * 视觉模型文档解析条目（vision-model）选定的视觉模型；llm 切片 imageDescriberModel
+   * 同款"持久化 Model 对象"形态（含 provider，重启后可回显）。undefined = 未配置。
+   */
+  visionModel?: Model
   options?: any
 }
 

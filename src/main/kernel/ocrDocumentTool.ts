@@ -26,12 +26,12 @@ export const inject = ['tools']
 
 const DESCRIPTION =
   'Read an attached PDF by processing it through the document-processing channel (设置 → 文档处理): the ' +
-  'configured provider (MinerU, Doc2x, Mistral, Open MinerU, PaddleOCR, or LocalPaddle for on-device OCR) ' +
-  'parses the whole document and returns its full text. Use this when read_document reports that a PDF has ' +
-  'no meaningful text layer (scanned document), when the extracted text looks empty or garbled, or when the ' +
-  'user explicitly asks for OCR. Large PDFs can take several minutes (8-minute budget). If no provider is ' +
-  'configured yet, an actionable error is returned. PDF only; the document must be attached to this ' +
-  'conversation turn. Pass the document name exactly as listed under "Attached documents".'
+  'configured provider (MinerU, Doc2x, Mistral, Open MinerU, PaddleOCR, LocalPaddle for on-device OCR, or a ' +
+  'selected vision model) parses the whole document and returns its full text. Use this when read_document ' +
+  'reports that a PDF has no meaningful text layer (scanned document), when the extracted text looks empty or ' +
+  'garbled, or when the user explicitly asks for OCR. Large PDFs can take several minutes (8-minute budget). ' +
+  'If no provider is configured yet, an actionable error is returned. PDF only; the document must be attached ' +
+  'to this conversation turn. Pass the document name exactly as listed under "Attached documents".'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(

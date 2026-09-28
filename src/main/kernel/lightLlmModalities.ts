@@ -1,10 +1,12 @@
 /**
- * 轻量 AI 服务面的非 chat 模态（embed/rerank/image）：OpenAI 兼容平面直连，
- * provider 路由解析与 chat 共用一套底座（Dsh_SyncProviders 快照 + ProviderKeyStore 兜底）。
+ * 轻量 AI 服务面的非 session 模态（embed/rerank/vision-document/image）：OpenAI 兼容
+ * 平面直连，provider 路由解析与 chat 共用一套底座（Dsh_SyncProviders 快照 +
+ * ProviderKeyStore 兜底）。
  *
- * embed/rerank 仅供主进程内部消费（搜索压缩/知识库检索），不开 IPC 通道——
- * 无渲染层消费者就不预置通道（generateImages 骨架教训）；image 经
- * Dsh_LightImage/Dsh_LightImageAbort 暴露给渲染层（绘画页/生图工具的执行缝）。
+ * embed/rerank/vision-document 仅供主进程内部消费（搜索压缩/知识库检索/文档处理
+ * 通道的视觉模型服务商），不开 IPC 通道——无渲染层消费者就不预置通道
+ * （generateImages 骨架教训）；image 经 Dsh_LightImage/Dsh_LightImageAbort 暴露给
+ * 渲染层（绘画页/生图工具的执行缝）。
  * 异步 poll 型图像厂商（提交后轮询任务）不支持，命中明错。
  */
 import { loggerService } from '@logger'
@@ -68,10 +70,12 @@ function endpoint(apiHost: string, path: string): string {
  *
  * `v0.3.3-9`：补 `/api/v3`（火山 Ark 的图像接口就是 `{base}/images/generations`，
  * seedream 系列走这里）——此前 doubao 被当作"范围外"拒绝，属于**误杀**。
+ * `v0.4.4`：同一规则由图像平面推广到 chat 形端点（视觉文档解析的
+ * `/chat/completions`），故命名从 `imageEndpoint` 收敛为 `compatibleEndpoint`。
  */
 const VERSIONED_API_HOST_SUFFIXES = ['/api/paas/v4', '/api/v3']
 
-function imageEndpoint(apiHost: string, path: string): string {
+function compatibleEndpoint(apiHost: string, path: string): string {
   const base = apiHost.replace(/\/+$/, '')
   if (VERSIONED_API_HOST_SUFFIXES.some((suffix) => base.endsWith(suffix))) return `${base}${path}`
   return endpoint(apiHost, path)
@@ -197,6 +201,74 @@ export async function lightRerank(call: LightRerankCall, signal?: AbortSignal): 
   return { results }
 }
 
+// ---- vision document（文档处理通道 vision-model 条目的执行缝；主进程内部消费） ----
+
+/** 页图（base64 不带 data: 前缀；mediaType 与 LightLlmImage 同封闭联合）。 */
+export interface LightVisionDocumentImage {
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp'
+  data: string
+}
+
+export interface LightVisionDocumentCall {
+  providerId: string
+  modelId: string
+  /** 转写指令（调用方持有，见 preprocess/vision 的 VISION_DOCUMENT_PROMPT）。 */
+  prompt: string
+  images: LightVisionDocumentImage[]
+  maxTokens?: number
+}
+
+/**
+ * 视觉文档解析：OpenAI 兼容 `/chat/completions`，多模态 content = 指令文本 + 页图
+ * data URL，返回首条 choice 的文本。
+ *
+ * 定位（用户裁决：视觉模型 = 文档处理子系统的服务商，不是独立系统）：本函数只是
+ * 文档处理通道的一个执行缝，与 embed/rerank 同面（主进程内部消费、不开 IPC）。
+ * 图不经内核附件仓——页图是**一次请求的中间产物**，调用方用完即弃，不产生可回放
+ * 引用的持久字节（比 LightLlmCall.ephemeralImages 更彻底：根本不入仓）。
+ * 非 OpenAI 兼容端点的服务商在此如实报错（HTTP 细节上浮），不静默降级。
+ */
+export async function lightVisionDocument(call: LightVisionDocumentCall, signal?: AbortSignal): Promise<string> {
+  assertNonEmptyString(call.providerId, 'providerId')
+  assertNonEmptyString(call.modelId, 'modelId')
+  assertNonEmptyString(call.prompt, 'prompt')
+  if (!Array.isArray(call.images) || call.images.length === 0) {
+    throw new Error('lightLlm: invalid vision document images')
+  }
+  const route = resolveRoute(call.providerId)
+  const body = {
+    model: call.modelId,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: call.prompt },
+          ...call.images.map((image) => ({
+            type: 'image_url',
+            image_url: { url: `data:${image.mediaType};base64,${image.data}` }
+          }))
+        ]
+      }
+    ],
+    ...(call.maxTokens !== undefined && call.maxTokens > 0 ? { max_tokens: call.maxTokens } : {})
+  }
+  const response = await fetch(compatibleEndpoint(route.apiHost, '/chat/completions'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(route) },
+    body: JSON.stringify(body),
+    signal
+  })
+  if (!response.ok) {
+    throw new Error(`lightLlm: vision document request failed (${response.status}): ${await readErrorDetail(response)}`)
+  }
+  const data = (await response.json()) as { choices?: Array<{ message?: { content?: unknown } }> }
+  const content = data.choices?.[0]?.message?.content
+  if (typeof content !== 'string') {
+    throw new Error('lightLlm: unexpected vision document response shape')
+  }
+  return content
+}
+
 // ---- image（绘画页 / generate_image 工具的执行缝；OpenAI 兼容平面直连） ----
 
 /** 渲染层取消注册表：requestId → AbortController（Dsh_LightImageAbort 命中）。 */
@@ -300,7 +372,7 @@ export async function lightGenerateImage(
   const route = resolveRoute(call.provider)
   const abort = beginImageAbort(call.requestId)
   try {
-    const response = await fetch(imageEndpoint(route.apiHost, '/images/generations'), {
+    const response = await fetch(compatibleEndpoint(route.apiHost, '/images/generations'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(route) },
       body: JSON.stringify(generationBody(call)),
@@ -354,7 +426,7 @@ export async function lightEditImage(call: LightImageEditCall, signal?: AbortSig
       }
       const blob = imageToBlob(input)
       form.append('image', blob, `image.${blob.type.split('/')[1] ?? 'png'}`)
-      const response = await fetch(imageEndpoint(route.apiHost, '/images/edits'), {
+      const response = await fetch(compatibleEndpoint(route.apiHost, '/images/edits'), {
         method: 'POST',
         headers: authHeaders(route),
         body: form,

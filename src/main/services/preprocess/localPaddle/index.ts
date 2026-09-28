@@ -9,8 +9,8 @@
  * download/cancel/remove（IPC 薄转发 + 渲染层 useLocalPaddle）。
  */
 import { runLocalOcr } from './localOcr'
-import { localPaddleModelStore } from './modelStore'
 import type { LocalPaddleStatus } from './modelStore'
+import { localPaddleModelStore } from './modelStore'
 
 export type { LocalPaddleStatus } from './modelStore'
 

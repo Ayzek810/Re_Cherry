@@ -44,6 +44,14 @@ export const defaultPreprocessProviders: PreprocessProvider[] = [
      * 设置面板渲染模型下载卡片；执行缝走文档处理通道 parsePdf 路由。 */
     id: 'local-paddle',
     name: 'LocalPaddle'
+  },
+  {
+    /** 视觉模型文档解析条目（v0.4.4）：视觉模型 = 文档处理子系统的服务商，不是独立
+     * 系统——无密钥无 apiHost（模型的服务商/密钥走 LLM provider 快照），设置面板选
+     * 一个视觉模型；执行缝 src/main/services/preprocess/vision/（本机光栅化 +
+     * OpenAI 兼容多模态 chat 逐页转写）。 */
+    id: 'vision-model',
+    name: 'VisionModel'
   }
 ]
 

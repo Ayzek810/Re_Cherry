@@ -4,17 +4,24 @@
  * 图标链接 + apiKey 帮助行「点击这里获取密钥」。多 Key 管理弹窗（ApiKeyListPopup）保留。
  * 表单为本地 state + blur 提交（apiKey 经 formatApiKeys 规范化逗号分隔多 key；
  * apiHost trim 去尾 /）；无 model 字段 UI（mistral 默认值来自切片初始表）。
+ * v0.4.4：local-paddle（模型下载卡片）与 vision-model（视觉模型选择器）两个本地/自带
+ * 模型条目各有专属面板——两者都是通道里的服务商条目，不是独立系统。
  */
+import ModelSelector from '@renderer/components/ModelSelector'
 import { ApiKeyListPopup } from '@renderer/components/Popups/ApiKeyListPopup'
+import { isVisionModel } from '@renderer/config/models'
 import { PREPROCESS_PROVIDER_CONFIG } from '@renderer/config/preprocessProviders'
 import { useLocalPaddle } from '@renderer/hooks/useLocalPaddle'
 import { usePreprocessProvider } from '@renderer/hooks/usePreprocess'
-import type { PreprocessProvider } from '@renderer/types'
+import { useProviders } from '@renderer/hooks/useProvider'
+import { getModelUniqId, hasModel } from '@renderer/services/ModelService'
+import type { Model, PreprocessProvider } from '@renderer/types'
 import { formatApiKeys, hasObjectKey } from '@renderer/utils'
 import { Button, Divider, Flex, Input, Progress, Tooltip } from 'antd'
+import { find } from 'lodash'
 import { ExternalLink, List } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -83,6 +90,7 @@ const PreprocessProviderSettings: FC<Props> = ({ provider: _provider }) => {
       </SettingTitle>
       <Divider className="my-[10px] w-full" />
       {preprocessProvider.id === 'local-paddle' && <LocalPaddleModelPanel />}
+      {preprocessProvider.id === 'vision-model' && <VisionModelPanel />}
       {hasObjectKey(preprocessProvider, 'apiKey') && (
         <>
           <SettingSubtitle className="mt-[5px] mb-[10px] flex items-center justify-between">
@@ -213,6 +221,53 @@ const LocalPaddleModelPanel: FC = () => {
       )}
       <SettingHelpTextRow className="!flex-col">
         <SettingHelpText>{t('settings.tool.preprocess.local_paddle.help')}</SettingHelpText>
+      </SettingHelpTextRow>
+    </>
+  )
+}
+
+/**
+ * 视觉模型文档解析面板（v0.4.4）：选一个视觉模型写入 preprocess 切片该条目的
+ * visionModel 字段（持久化 Model 对象，llm.imageDescriberModel 同款形态）——
+ * 执行缝在 preprocess/vision（本机光栅化 + 多模态 chat 逐页转写）。
+ * 下拉只列视觉模型（isVisionModel 是唯一判据，与设置页转述模型共用）。
+ */
+const VisionModelPanel: FC = () => {
+  const { provider, updateProvider } = usePreprocessProvider('vision-model')
+  const { providers } = useProviders()
+  const { t } = useTranslation()
+  const allModels = useMemo(() => providers.flatMap((p) => p.models), [providers])
+  const visionModel = provider?.visionModel
+  const value = useMemo(
+    () => (visionModel && hasModel(visionModel) ? getModelUniqId(visionModel) : undefined),
+    [visionModel]
+  )
+  const onSelect = useCallback(
+    (selected: string) => {
+      const model = find(allModels, JSON.parse(selected)) as Model | undefined
+      if (model !== undefined) {
+        updateProvider({ visionModel: model })
+      }
+    },
+    [allModels, updateProvider]
+  )
+
+  return (
+    <>
+      <SettingSubtitle className="mt-[5px] mb-[10px]">
+        {t('settings.tool.preprocess.vision_model.model_title')}
+      </SettingSubtitle>
+      <ModelSelector
+        providers={providers}
+        predicate={isVisionModel}
+        value={value}
+        defaultValue={value}
+        style={{ width: '100%' }}
+        onChange={onSelect}
+        placeholder={t('settings.tool.preprocess.vision_model.model_placeholder')}
+      />
+      <SettingHelpTextRow className="!flex-col">
+        <SettingHelpText>{t('settings.tool.preprocess.vision_model.help')}</SettingHelpText>
       </SettingHelpTextRow>
     </>
   )

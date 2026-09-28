@@ -300,6 +300,8 @@ export async function syncPreprocessToKernel(
     apiKey?: string
     apiHost?: string
     model?: string
+    /** vision-model 条目的视觉模型引用（v0.4.4）：provider + model 两个 id。 */
+    visionModel?: { provider: string; model: string }
   }>
 ): Promise<void> {
   try {

@@ -12,6 +12,7 @@ import {
   lightEmbed,
   lightGenerateImage,
   lightRerank,
+  lightVisionDocument,
   normalizeVector,
   setLightLlmProviderRoutes
 } from '../lightLlmModalities'
@@ -438,5 +439,66 @@ describe('lightEditImage', () => {
     await expect(
       lightEditImage({ provider: 'silicon', model: 'm', prompt: 'p', inputImages: ['data:image/png;base64,AAAA'] })
     ).rejects.toThrow('image edit failed (400): bad mask')
+  })
+})
+
+describe('lightVisionDocument（文档处理通道 vision-model 执行缝）', () => {
+  const image = { mediaType: 'image/png' as const, data: 'UE5H' }
+
+  it('POST /v1/chat/completions：多模态 content = 指令文本 + data URL 页图，返回首条文本', async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ choices: [{ message: { content: '# 页一' } }] }))
+    const text = await lightVisionDocument({
+      providerId: 'silicon',
+      modelId: 'qwen-vl',
+      prompt: 'transcribe',
+      images: [image]
+    })
+    expect(text).toBe('# 页一')
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://api.siliconflow.cn/v1/chat/completions')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-test')
+    const body = JSON.parse(String(init.body)) as {
+      model: string
+      messages: Array<{ content: Array<{ type: string; text?: string; image_url?: { url: string } }> }>
+    }
+    expect(body.model).toBe('qwen-vl')
+    expect(body.messages[0].content[0]).toEqual({ type: 'text', text: 'transcribe' })
+    expect(body.messages[0].content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,UE5H' }
+    })
+  })
+
+  it('自带版本段的网关（智谱 /api/paas/v4）不再叠加 /v1', async () => {
+    setLightLlmProviderRoutes([{ id: 'zhipu', apiHost: 'https://open.bigmodel.cn/api/paas/v4', apiKey: 'k' }])
+    fetchMock.mockResolvedValueOnce(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    await lightVisionDocument({ providerId: 'zhipu', modelId: 'glm-4v', prompt: 'p', images: [image] })
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://open.bigmodel.cn/api/paas/v4/chat/completions')
+  })
+
+  it('requestId 无关：AbortSignal 原样透传给 fetch（预算打断在途请求）', async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    const controller = new AbortController()
+    await lightVisionDocument({ providerId: 'silicon', modelId: 'm', prompt: 'p', images: [image] }, controller.signal)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.signal).toBe(controller.signal)
+  })
+
+  it('明错面：空 images / 无 host / HTTP 失败带状态与细节 / 响应形状不符', async () => {
+    await expect(lightVisionDocument({ providerId: 'silicon', modelId: 'm', prompt: 'p', images: [] })).rejects.toThrow(
+      'invalid vision document images'
+    )
+    await expect(
+      lightVisionDocument({ providerId: 'nobody', modelId: 'm', prompt: 'p', images: [image] })
+    ).rejects.toThrow('no apiHost configured')
+    fetchMock.mockResolvedValueOnce(errorResponse(429, 'rate limited'))
+    await expect(
+      lightVisionDocument({ providerId: 'silicon', modelId: 'm', prompt: 'p', images: [image] })
+    ).rejects.toThrow('vision document request failed (429): rate limited')
+    fetchMock.mockResolvedValueOnce(okResponse({ choices: [{ message: { content: [{ type: 'text' }] } }] }))
+    await expect(
+      lightVisionDocument({ providerId: 'silicon', modelId: 'm', prompt: 'p', images: [image] })
+    ).rejects.toThrow('unexpected vision document response shape')
   })
 })

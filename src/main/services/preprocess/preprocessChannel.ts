@@ -15,6 +15,11 @@
  * zip 解包用 fork 已有 node-stream-zip（BackupManager 同款），multipart 用
  * Node 全局 FormData/Blob，零新依赖。
  *
+ * 本地/自带模型两条腿（v0.4.4 用户裁决：都是文档处理的子系统，不是独立系统）：
+ * - local-paddle：本机 PP-OCRv6 推理（preprocess/localPaddle/，utility 子进程）；
+ * - vision-model：本机光栅化 + 用户配置的视觉模型 OpenAI 兼容多模态 chat 逐页转写
+ *  （preprocess/vision/）。两者都是「通道里的服务商条目」。
+ *
  * 配置表：渲染层 preprocess 切片整体推送（Dsh_SyncPreprocess，webSearch 同构，
  * apiKey 只进主进程内存，不落盘不进会话）；每轮走哪个服务商由 topics.sendMessage
  * 登记（渲染层上行本轮默认服务商 id），工具执行时按 topicId 反查。
@@ -25,6 +30,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { parsePdf as parsePdfWithLocalPaddle } from '@main/services/preprocess/localPaddle'
+import { parsePdf as parsePdfWithVisionModel } from '@main/services/preprocess/vision'
 import { net } from 'electron'
 import StreamZip from 'node-stream-zip'
 
@@ -41,6 +47,8 @@ export interface PreprocessProviderConfig {
   apiKey?: string
   apiHost?: string
   model?: string
+  /** vision-model 条目（v0.4.4）：用户选定的视觉模型引用（provider + model 两个 id）。 */
+  visionModel?: { provider: string; model: string }
 }
 
 export interface ParsePdfOptions {
@@ -87,11 +95,19 @@ class PreprocessChannelRegistry {
 
 export const preprocessChannel = new PreprocessChannelRegistry()
 
-/** 服务商是否已配置到可执行（挂载门用；local-paddle 的模型检查在执行时如实报错）。 */
+/** 服务商是否已配置到可执行（挂载门用；local-paddle 的模型检查、vision-model 的
+ *  模型引用校验在执行时如实报错）。 */
 export function isProviderConfigured(config: PreprocessProviderConfig): boolean {
   switch (config.id) {
     case 'local-paddle':
       return true
+    case 'vision-model':
+      return (
+        typeof config.visionModel?.provider === 'string' &&
+        config.visionModel.provider.length > 0 &&
+        typeof config.visionModel.model === 'string' &&
+        config.visionModel.model.length > 0
+      )
     case 'mineru':
     case 'doc2x':
     case 'mistral':
@@ -146,6 +162,14 @@ export async function parsePdfWithProvider(
     switch (config.id) {
       case 'local-paddle':
         return await parsePdfWithLocalPaddle(filePath, controller.signal)
+      case 'vision-model': {
+        // 未选模型在本条如实报错（不静默降级到别家；§7.18 裁决同款语义）。
+        const visionModel = config.visionModel
+        if (visionModel === undefined || visionModel.provider.length === 0 || visionModel.model.length === 0) {
+          throw new Error('vision model is not selected (设置 → 文档处理 → VisionModel → 选择模型)')
+        }
+        return await parsePdfWithVisionModel(filePath, visionModel, controller.signal)
+      }
       case 'mineru':
         return await parseWithMineru(config, filePath, controller.signal)
       case 'doc2x':
@@ -158,7 +182,7 @@ export async function parsePdfWithProvider(
         return await parseWithPaddleOcr(config, filePath, controller.signal)
       default:
         throw new Error(
-          `unknown document-processing provider "${config.id}" (supported: mineru, doc2x, mistral, open-mineru, paddleocr, local-paddle)`
+          `unknown document-processing provider "${config.id}" (supported: mineru, doc2x, mistral, open-mineru, paddleocr, local-paddle, vision-model)`
         )
     }
   } finally {

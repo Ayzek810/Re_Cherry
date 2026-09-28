@@ -3399,6 +3399,25 @@ const migrateConfig = {
       logger.error('migrate 224 error', error as Error)
       return state
     }
+  },
+  '225': (state: RootState) => {
+    try {
+      // v0.4.4 视觉模型文档处理：preprocess 默认表新增 vision-model 条目——
+      // providers 是持久化数组，redux-persist 回水整体覆盖 initialState，新增默认
+      // 条目只对全新安装生效（migrate 218 local-paddle / 224 同一坑），故按 id 补缺。
+      // 条目缺失即补；用户已改的 apiKey/apiHost/visionModel 原样保留，defaultProvider 不动。
+      if (state.preprocess && Array.isArray(state.preprocess.providers)) {
+        for (const provider of defaultPreprocessProviders) {
+          if (!state.preprocess.providers.find((p) => p.id === provider.id)) {
+            state.preprocess.providers.push({ ...provider })
+          }
+        }
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 225 error', error as Error)
+      return state
+    }
   }
 }
 

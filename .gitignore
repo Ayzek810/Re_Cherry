@@ -81,7 +81,7 @@ tools/scratch-verify/models/
 tools/scratch-verify/probe-userdata/
 tools/scratch-verify/probe-*.pdf
 tools/scratch-verify/probe-*.png
-probe-f-orchestrator.bundle.cjs
+probe-*.bundle.cjs
 
 YOUR_MEMORY_FILE_PATH
 
