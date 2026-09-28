@@ -202,7 +202,8 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     window.electron.ipcRenderer.on(IpcChannel.ShowMiniWindow, onWindowShow)
 
     return () => {
-      window.electron.ipcRenderer.removeAllListeners(IpcChannel.ShowMiniWindow)
+      // 具名解绑：removeAllListeners 会误杀同通道的其他订阅者
+      window.electron.ipcRenderer.removeListener(IpcChannel.ShowMiniWindow, onWindowShow)
     }
   }, [onWindowShow])
 

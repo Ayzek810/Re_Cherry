@@ -854,28 +854,32 @@ class BackupManager {
     try {
       const items = await fs.readdir(dirPath, { withFileTypes: true })
 
-      for (const item of items) {
-        const fullPath = path.join(dirPath, item.name)
-        const entry = await this.getEffectiveEntryStats(fullPath, copyOptions)
+      // 每层并行 stat/递归（此前逐条 await，整树串行）；符号链接错误的吞并语义保持不变
+      const sizes = await Promise.all(
+        items.map(async (item) => {
+          const fullPath = path.join(dirPath, item.name)
+          const entry = await this.getEffectiveEntryStats(fullPath, copyOptions)
 
-        if (!entry) {
-          continue
-        }
-
-        if (entry.stats.isDirectory()) {
-          if (entry.isSymlink) {
-            try {
-              size += await this.getDirSize(fullPath, copyOptions, activeDirectoryRealPaths)
-            } catch (error) {
-              this.logSkippedSymlink(fullPath, error)
-            }
-          } else {
-            size += await this.getDirSize(fullPath, copyOptions, activeDirectoryRealPaths)
+          if (!entry) {
+            return 0
           }
-        } else if (entry.stats.isFile()) {
-          size += entry.stats.size
-        }
-      }
+
+          if (entry.stats.isDirectory()) {
+            if (entry.isSymlink) {
+              try {
+                return await this.getDirSize(fullPath, copyOptions, activeDirectoryRealPaths)
+              } catch (error) {
+                this.logSkippedSymlink(fullPath, error)
+                return 0
+              }
+            }
+            return await this.getDirSize(fullPath, copyOptions, activeDirectoryRealPaths)
+          }
+          return entry.stats.isFile() ? entry.stats.size : 0
+        })
+      )
+
+      size = sizes.reduce((sum, s) => sum + s, 0)
     } finally {
       activeDirectoryRealPaths.delete(directoryRealPath)
     }
@@ -1167,20 +1171,26 @@ class BackupManager {
   async listLocalBackupFiles(_: Electron.IpcMainInvokeEvent, localBackupDir: string) {
     try {
       const files = await fs.readdir(localBackupDir)
-      const result: Array<{ fileName: string; modifiedTime: string; size: number }> = []
 
-      for (const file of files) {
-        const filePath = path.join(localBackupDir, file)
-        const stat = await fs.stat(filePath)
+      // 并行 stat 全部条目（此前逐个 await）
+      const stats = await Promise.all(
+        files.map(async (file) => {
+          try {
+            return { file, stat: await fs.stat(path.join(localBackupDir, file)) }
+          } catch {
+            return null
+          }
+        })
+      )
 
-        if (stat.isFile() && file.endsWith('.zip')) {
-          result.push({
-            fileName: file,
-            modifiedTime: stat.mtime.toISOString(),
-            size: stat.size
-          })
-        }
-      }
+      const result = stats
+        .filter((entry): entry is { file: string; stat: fs.Stats } => entry !== null)
+        .filter(({ file, stat }) => stat.isFile() && file.endsWith('.zip'))
+        .map(({ file, stat }) => ({
+          fileName: file,
+          modifiedTime: stat.mtime.toISOString(),
+          size: stat.size
+        }))
 
       // Sort by modified time, newest first
       return result.sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())

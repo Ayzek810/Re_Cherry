@@ -260,6 +260,16 @@ export async function startNutstoreAutoSync() {
       return
     }
 
+    // 流式进行中延迟备份（与 BackupService.performAutoBackup 同一规则；此前这里
+    // 缺失该检查，会在回复生成中途打出一份中间态备份）
+    const state = store.getState()
+    const anyTopicLoading = Object.values(state.messages.loadingByTopic).some((loading) => loading === true)
+    if (anyTopicLoading) {
+      logger.info('[Nutstore AutoSync] Streaming in progress, deferring backup')
+      scheduleNextBackup()
+      return
+    }
+
     isAutoBackupRunning = true
     try {
       logger.verbose('[Nutstore AutoSync] Starting auto backup...')

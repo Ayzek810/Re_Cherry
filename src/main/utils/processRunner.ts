@@ -1,12 +1,7 @@
-import { type ChildProcess, execFile, spawn, type SpawnOptions } from 'child_process'
-import path from 'path'
+import { type ChildProcess, execFile, type SpawnOptions } from 'child_process'
 import { promisify } from 'util'
 
 import crossSpawn from 'cross-spawn'
-
-// fork 缝：V2 的 @application 路径系统未移植；'app.root.resources.scripts'
-// （= app 根目录下 resources/scripts，见 V2 pathRegistry.ts）用 electron app 等价表达。
-import { app } from 'electron'
 
 import { loggerService } from '@logger'
 // fork 缝：V2 平台常量位于 @main/core/platform，fork 等价物为 @main/constant。
@@ -42,37 +37,6 @@ export const removeEnvProxy = (env: NodeJS.ProcessEnv) => {
       delete env[key]
     }
   }
-}
-
-export function runInstallScript(scriptPath: string, extraEnv?: Record<string, string>): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    // fork 缝：application.getPath('app.root.resources.scripts') → app 根下 resources/scripts
-    const installScriptPath = path.join(app.getAppPath(), 'resources', 'scripts', scriptPath)
-    logger.info(`Running script at: ${installScriptPath}`)
-
-    const nodeProcess = spawn(process.execPath, [installScriptPath], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...extraEnv },
-      windowsHide: true
-    })
-
-    nodeProcess.stdout.on('data', (data) => {
-      logger.debug(`Script output: ${data}`)
-    })
-
-    nodeProcess.stderr.on('data', (data) => {
-      logger.error(`Script error: ${data}`)
-    })
-
-    nodeProcess.on('close', (code) => {
-      if (code === 0) {
-        logger.debug('Script completed successfully')
-        resolve()
-      } else {
-        logger.warn(`Script exited with code ${code}`)
-        reject(new Error(`Process exited with code ${code}`))
-      }
-    })
-  })
 }
 
 /**

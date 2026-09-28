@@ -219,6 +219,10 @@ const ChatFlowHistory: FC<ChatFlowHistoryProps> = ({ conversationId }) => {
   const messages = useSelector(
     (state: RootState) => selectMessagesForTopic(state, topicId || ''),
     (prev, next) => {
+      // 快路径：块内容流式更新不触碰 messages 切片，reselect 输出引用不变，
+      // 直接短路——否则每次 dispatch 都要对全量消息做逐块全文拼接比较
+      if (prev === next) return true
+
       // 只比较消息的关键属性，忽略展示相关的属性（如foldSelected）
       if (prev.length !== next.length) return false
 

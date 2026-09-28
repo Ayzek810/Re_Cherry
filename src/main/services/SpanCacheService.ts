@@ -16,7 +16,14 @@ class SpanCacheService implements TraceCache {
   private topicMap: Map<string, string> = new Map<string, string>()
   private fileDir: string
   private cache: Map<string, SpanEntity> = new Map<string, SpanEntity>()
-  pri
+  // 流式文本按 span 分块缓冲：stream delta 只做数组 push；读取/落盘时才 join 一次。
+  // 此前每 delta 对累积全文做字符串拼接并沿父链递归重拼，流越长每 delta 越贵，
+  // 整体 O(n²)。
+  private streamTextBuffers: Map<string, string[]> = new Map<string, string[]>()
+  // 缓存上限：开发者模式长期运行时 topicMap/cache 只增不减会无限累积；
+  // Map 保持插入序，超限淘汰最早条目（最老的回合早已完结，淘汰后走文件历史路径）
+  private static readonly MAX_TOPIC_MAP = 512
+  private static readonly MAX_CACHE = 4000
 
   constructor() {
     this.fileDir = path.join(os.homedir(), HOME_CHERRY_DIR, 'trace')
@@ -29,6 +36,7 @@ class SpanCacheService implements TraceCache {
     const spanEntity = convertSpanToSpanEntity(span)
     spanEntity.topicId = this.topicMap.get(spanEntity.traceId)
     this.cache.set(span.spanContext().spanId, spanEntity)
+    this._evictCache()
     this._updateModelName(spanEntity)
   }
 
@@ -53,11 +61,12 @@ class SpanCacheService implements TraceCache {
 
   clear: () => void = () => {
     this.cache.clear()
+    this.streamTextBuffers.clear()
   }
 
   async cleanTopic(topicId: string, traceId?: string, modelName?: string) {
     const spans = Array.from(this.cache.values().filter((e) => e.topicId === topicId))
-    spans.map((e) => e.id).forEach((id) => this.cache.delete(id))
+    spans.map((e) => e.id).forEach((id) => this._deleteCachedSpan(id))
 
     await this._checkFolder(path.join(this.fileDir, topicId))
 
@@ -117,7 +126,10 @@ class SpanCacheService implements TraceCache {
         .filter((spanEntity) => {
           return !modelName || spanEntity.modelName === modelName
         })
-        .forEach((sp) => spans.push(sp))
+        .forEach((sp) => {
+          this._materializeStreamText(sp)
+          spans.push(sp)
+        })
       return spans
     } else {
       return this._getHisData(topicId, traceId, modelName)
@@ -131,6 +143,11 @@ class SpanCacheService implements TraceCache {
    */
   setTopicId(traceId: string, topicId: string): void {
     this.topicMap.set(traceId, topicId)
+    while (this.topicMap.size > SpanCacheService.MAX_TOPIC_MAP) {
+      const oldest = this.topicMap.keys().next().value
+      if (oldest === undefined) break
+      this.topicMap.delete(oldest)
+    }
   }
 
   getEntity(spanId: string): SpanEntity | undefined {
@@ -273,32 +290,56 @@ class SpanCacheService implements TraceCache {
       .filter((span) => {
         return span && span.traceId === traceId && (!modelName || span.modelName === modelName)
       })
-      .forEach((span) => this.cache.delete(span.id))
+      .forEach((span) => this._deleteCachedSpan(span.id))
   }
 
+  /**
+   * 沿父链把流式增量记入各祖先 span 的缓冲（push，O(1)），不在此处拼字符串。
+   * 语义与原实现一致：有 attributes 且有 modelName 的祖先把增量并入 streamText；
+   * 只有 modelName 的祖先写入 outputs[modelName] = context（覆盖，保持原行为）。
+   */
   private _updateParentOutputs(spanId: string, modelName: string, context: string) {
     const span = this.cache.get(spanId)
     if (!span || !context) {
       return
     }
-    const attributes = span.attributes
-    // 如果含有modelName属性，是具体的某个modalName输出，拼接到streamText下面
-    if (attributes && span.modelName) {
-      const currentValue = attributes['outputs']
-      if (currentValue && typeof currentValue === 'object') {
-        const allContext = (currentValue['streamText'] || '') + context
-        attributes['outputs'] = { ...currentValue, streamText: allContext }
-      } else {
-        attributes['outputs'] = { streamText: context }
+    if (span.attributes && span.modelName) {
+      const currentValue = span.attributes['outputs']
+      if (!(currentValue && typeof currentValue === 'object')) {
+        span.attributes['outputs'] = { streamText: '' }
       }
-      span.attributes = attributes
+      this._appendStreamChunk(span.id, context)
+      this._updateParentOutputs(span.parentId, modelName, context)
     } else if (span.modelName) {
       span.attributes = { outputs: { [`${modelName}`]: context } } as Attributes
     } else {
       return
     }
     this.cache.set(span.id, span)
-    this._updateParentOutputs(span.parentId, modelName, context)
+  }
+
+  private _appendStreamChunk(spanId: string, context: string) {
+    let buf = this.streamTextBuffers.get(spanId)
+    if (!buf) {
+      buf = []
+      this.streamTextBuffers.set(spanId, buf)
+    }
+    buf.push(context)
+  }
+
+  /** 把缓冲物化回 attributes.outputs.streamText（读取/落盘前调用；缓冲折叠为已合并结果） */
+  private _materializeStreamText(span: SpanEntity) {
+    const buf = this.streamTextBuffers.get(span.id)
+    if (!buf || !span.attributes) {
+      return
+    }
+    const joined = buf.join('')
+    buf.length = 0
+    buf.push(joined)
+    const outputs = span.attributes['outputs']
+    if (outputs && typeof outputs === 'object') {
+      span.attributes['outputs'] = { ...outputs, streamText: joined }
+    }
   }
 
   private _updateParentUsage(spanId: string, usage: TokenUsage) {
@@ -325,13 +366,33 @@ class SpanCacheService implements TraceCache {
 
     const filePath = path.join(dirPath, traceId)
 
-    const writeOperations = spans
-      .filter((span) => span.topicId)
-      .map(async (span) => {
-        await fs.appendFile(filePath, JSON.stringify(span) + '\n')
+    const serializable = spans.filter((span) => span.topicId)
+    if (serializable.length === 0) {
+      return
+    }
+    // 先物化流缓冲，再把全部行拼成一次写入：此前对同一文件并发 appendFile，
+    // 行序可能交错、Windows 上还会触发共享冲突
+    const payload = serializable
+      .map((span) => {
+        this._materializeStreamText(span)
+        return JSON.stringify(span) + '\n'
       })
+      .join('')
+    await fs.appendFile(filePath, payload)
+  }
 
-    await Promise.all(writeOperations)
+  private _evictCache() {
+    while (this.cache.size > SpanCacheService.MAX_CACHE) {
+      const oldest = this.cache.keys().next().value
+      if (oldest === undefined) break
+      this.cache.delete(oldest)
+      this.streamTextBuffers.delete(oldest)
+    }
+  }
+
+  private _deleteCachedSpan(spanId: string) {
+    this.cache.delete(spanId)
+    this.streamTextBuffers.delete(spanId)
   }
 
   private async _getHisData(topicId: string, traceId: string, modelName?: string) {

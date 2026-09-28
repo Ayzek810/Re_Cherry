@@ -68,9 +68,13 @@ export function useAppInit() {
   }, [])
 
   useEffect(() => {
-    window.electron.ipcRenderer.on(IpcChannel.App_SaveData, async () => {
-      await handleSaveData()
-    })
+    const handler = () => handleSaveData()
+    window.electron.ipcRenderer.on(IpcChannel.App_SaveData, handler)
+    // 具名解绑：组件重挂载（严格模式/HMR）时监听器叠加会让一次保存触发 N 次 flush
+    return () => {
+      window.electron.ipcRenderer.removeListener(IpcChannel.App_SaveData, handler)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useFullScreenNotice()

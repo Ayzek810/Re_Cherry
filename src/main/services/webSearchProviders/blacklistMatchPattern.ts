@@ -38,179 +38,17 @@ const logger = loggerService.withContext('BlacklistMatchPattern')
  *
  * https://github.com/iorate/ublacklist
  */
-export type ParsedMatchPattern =
-  | {
-      allURLs: true
-    }
-  | {
-      allURLs: false
-      scheme: string
-      host: string
-      path: string
-    }
 
-export function parseMatchPattern(pattern: string): ParsedMatchPattern | null {
-  const execResult = matchPatternRegExp.exec(pattern)
-  if (!execResult) {
-    return null
-  }
-  const groups = execResult.groups as
-    | { allURLs: string }
-    | { allURLs?: never; scheme: string; host: string; path: string }
-  return groups.allURLs != null
-    ? { allURLs: true }
-    : {
-        allURLs: false,
-        scheme: groups.scheme.toLowerCase(),
-        host: groups.host.toLowerCase(),
-        path: groups.path
-      }
-}
+// ublacklist match pattern 核心已收口到 packages/shared/utils/matchPattern.ts（渲染层同源），
+// 本文件只保留主进程侧的过滤适配（excludeDomains 域名匹配 + 编译缓存）。
+import { MatchPatternMap } from '@shared/utils/matchPattern'
 
-const matchPatternRegExp = (() => {
-  const allURLs = String.raw`(?<allURLs><all_urls>)`
-  const scheme = String.raw`(?<scheme>\*|[A-Za-z][0-9A-Za-z+.-]*)`
-  const label = String.raw`(?:[0-9A-Za-z](?:[0-9A-Za-z-]*[0-9A-Za-z])?)`
-  const host = String.raw`(?<host>(?:\*|${label})(?:\.${label})*)`
-  const path = String.raw`(?<path>/(?:\*|[0-9A-Za-z._~:/?[\]@!$&'()+,;=-]|%[0-9A-Fa-f]{2})*)`
-  return new RegExp(String.raw`^(?:${allURLs}|${scheme}://${host}${path})$`)
-})()
-
-export type MatchPatternMapJSON<T> = [allURLs: T[], hostMap: HostMap<T>]
-
-export class MatchPatternMap<T> {
-  static supportedSchemes: string[] = ['http', 'https']
-
-  private allURLs: T[]
-  private hostMap: HostMap<T>
-
-  constructor(json?: Readonly<MatchPatternMapJSON<T>>) {
-    if (json) {
-      this.allURLs = json[0]
-      this.hostMap = json[1]
-    } else {
-      this.allURLs = []
-      this.hostMap = [[], []]
-    }
-  }
-
-  toJSON(): MatchPatternMapJSON<T> {
-    return [this.allURLs, this.hostMap]
-  }
-
-  get(url: string): T[] {
-    const { protocol, hostname: host, pathname, search } = new URL(url)
-    const scheme = protocol.slice(0, -1)
-    const path = `${pathname}${search}`
-    if (!MatchPatternMap.supportedSchemes.includes(scheme)) {
-      return []
-    }
-    const values: T[] = [...this.allURLs]
-    let node = this.hostMap
-    for (const label of host.split('.').reverse()) {
-      collectBucket(node[1], scheme, path, values)
-      if (!node[2]?.[label]) {
-        break
-      }
-      node = node[2][label]
-    }
-    collectBucket(node[1], scheme, path, values)
-    collectBucket(node[0], scheme, path, values)
-    return values
-  }
-
-  set(pattern: string, value: T) {
-    const parseResult = parseMatchPattern(pattern)
-    if (!parseResult) {
-      throw new Error(`Invalid match pattern: ${pattern}`)
-    }
-    if (parseResult.allURLs) {
-      this.allURLs.push(value)
-      return
-    }
-    const { scheme, host, path } = parseResult
-    if (scheme !== '*' && !MatchPatternMap.supportedSchemes.includes(scheme)) {
-      throw new Error(`Unsupported scheme: ${scheme}`)
-    }
-    const labels = host.split('.').reverse()
-    const anySubdomain = labels[labels.length - 1] === '*'
-    if (anySubdomain) {
-      labels.pop()
-    }
-    let node = this.hostMap
-    for (const label of labels) {
-      node[2] ||= {}
-      node = node[2][label] ||= [[], []]
-    }
-    node[anySubdomain ? 1 : 0].push(
-      path === '/*' ? (scheme === '*' ? [value] : [value, scheme]) : [value, scheme, path]
-    )
-  }
-}
-
-type HostMap<T> = [self: HostMapBucket<T>, anySubdomain: HostMapBucket<T>, subdomains?: Record<string, HostMap<T>>]
-
-type HostMapBucket<T> = [value: T, scheme?: string, path?: string][]
-
-function collectBucket<T>(bucket: HostMapBucket<T>, scheme: string, path: string, values: T[]): void {
-  for (const [value, schemePattern = '*', pathPattern = '/*'] of bucket) {
-    if (testScheme(schemePattern, scheme) && testPath(pathPattern, path)) {
-      values.push(value)
-    }
-  }
-}
-
-function testScheme(schemePattern: string, scheme: string): boolean {
-  return schemePattern === '*' ? scheme === 'http' || scheme === 'https' : scheme === schemePattern
-}
-
-function testPath(pathPattern: string, path: string): boolean {
-  if (pathPattern === '/*') {
-    return true
-  }
-  const [first, ...rest] = pathPattern.split('*')
-  if (rest.length === 0) {
-    return path === first
-  }
-  if (!path.startsWith(first)) {
-    return false
-  }
-  let pos = first.length
-  for (const part of rest.slice(0, -1)) {
-    const partPos = path.indexOf(part, pos)
-    if (partPos === -1) {
-      return false
-    }
-    pos = partPos + part.length
-  }
-  return path.slice(pos).endsWith(rest[rest.length - 1])
-}
-
-/** 解析订阅源内容为黑名单模式串列表（上游同款；订阅拉取由配置侧完成后传入）。 */
-export async function parseSubscribeContent(url: string): Promise<string[]> {
-  try {
-    // 获取订阅源内容
-    const response = await fetch(url)
-    logger.debug('[parseSubscribeContent] response', response)
-    if (!response.ok) {
-      throw new Error('Failed to fetch subscribe content')
-    }
-
-    const content = await response.text()
-
-    // 按行分割内容
-    const lines = content.split('\n')
-
-    // 过滤出有效的匹配模式
-    return lines
-      .filter((line) => line.trim() !== '' && !line.startsWith('#'))
-      .map((line) => line.trim())
-      .filter((pattern) => parseMatchPattern(pattern) !== null)
-  } catch (error) {
-    logger.error('Error parsing subscribe content:', error as Error)
-    throw error
-  }
-}
+export {
+  parseMatchPattern,
+  MatchPatternMap,
+  type ParsedMatchPattern,
+  type MatchPatternMapJSON
+} from '@shared/utils/matchPattern'
 
 /** 纯域名串 → hostname 匹配（v0.3.2 批次2 适配：上游裸域名在 MatchPatternMap 里会被丢弃）。 */
 function matchesExcludeDomain(hostname: string, domain: string): boolean {
@@ -223,6 +61,57 @@ function matchesExcludeDomain(hostname: string, domain: string): boolean {
     return false
   }
   return hostname === normalized || hostname.endsWith(`.${normalized}`)
+}
+
+interface CompiledBlacklist {
+  regexPatterns: RegExp[]
+  patternMap: MatchPatternMap<string>
+}
+
+const blacklistCompileCache = new Map<string, CompiledBlacklist>()
+const BLACKLIST_CACHE_LIMIT = 32
+
+/** 黑名单规则 → 编译产物（正则 + MatchPatternMap），按规则串签名缓存（LRU 上限 32）。 */
+function getCompiledBlacklist(blacklistPatterns: string[]): CompiledBlacklist {
+  const key = blacklistPatterns.join('\n')
+  const cached = blacklistCompileCache.get(key)
+  if (cached) {
+    // 触碰即重插，维持 LRU 语义
+    blacklistCompileCache.delete(key)
+    blacklistCompileCache.set(key, cached)
+    return cached
+  }
+
+  // 分类处理黑名单规则（/regex/ → 正则，其余按 match pattern）
+  const patternMap = new MatchPatternMap<string>()
+  const regexPatterns: RegExp[] = []
+  blacklistPatterns.forEach((pattern) => {
+    if (pattern.startsWith('/') && pattern.endsWith('/')) {
+      // 处理正则表达式格式
+      try {
+        const regexPattern = pattern.slice(1, -1)
+        regexPatterns.push(new RegExp(regexPattern, 'i'))
+      } catch (error) {
+        logger.error(`Invalid regex pattern: ${pattern}`, error as Error)
+      }
+    } else {
+      // 处理匹配模式格式
+      try {
+        patternMap.set(pattern, pattern)
+      } catch (error) {
+        logger.error(`Invalid match pattern: ${pattern}`, error as Error)
+      }
+    }
+  })
+
+  const compiled: CompiledBlacklist = { regexPatterns, patternMap }
+  blacklistCompileCache.set(key, compiled)
+  while (blacklistCompileCache.size > BLACKLIST_CACHE_LIMIT) {
+    const oldest = blacklistCompileCache.keys().next().value
+    if (oldest === undefined) break
+    blacklistCompileCache.delete(oldest)
+  }
+  return compiled
 }
 
 /**
@@ -245,31 +134,10 @@ export async function filterResultWithBlacklist<T extends { url: string }>(
     return response
   }
 
-  // 创建匹配模式映射实例
-  const patternMap = new MatchPatternMap<string>()
-
-  // 正则表达式规则集合
-  const regexPatterns: RegExp[] = []
-
-  // 分类处理黑名单规则（/regex/ → 正则，其余按 match pattern）
-  blacklistPatterns.forEach((pattern) => {
-    if (pattern.startsWith('/') && pattern.endsWith('/')) {
-      // 处理正则表达式格式
-      try {
-        const regexPattern = pattern.slice(1, -1)
-        regexPatterns.push(new RegExp(regexPattern, 'i'))
-      } catch (error) {
-        logger.error(`Invalid regex pattern: ${pattern}`, error as Error)
-      }
-    } else {
-      // 处理匹配模式格式
-      try {
-        patternMap.set(pattern, pattern)
-      } catch (error) {
-        logger.error(`Invalid match pattern: ${pattern}`, error as Error)
-      }
-    }
-  })
+  // 编译产物按规则串缓存：黑名单在一次会话内基本不变，而此函数每次搜索请求都会被
+  // 调用，逐次 new RegExp + 重建 MatchPatternMap 是纯浪费。
+  const compiled = getCompiledBlacklist(blacklistPatterns)
+  const { regexPatterns, patternMap } = compiled
 
   // 过滤搜索结果
   const filteredResults = response.results.filter((result) => {

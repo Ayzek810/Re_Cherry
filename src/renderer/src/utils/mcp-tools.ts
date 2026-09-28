@@ -1,38 +1,11 @@
 /**
  * v0.3.2 自 CS_V1 utils/mcp-tools.ts 移植（批次1 MCPSettings 页面依赖）。
  * fork 改动点：暂不移植 callMCPTool——它依赖主进程 window.api.mcp.callTool 通道
- * （批次3 接线）；callBuiltInTool / getMcpServerByTool / isToolAutoApproved 为纯逻辑，原样保留。
+ * （批次3 接线）；getMcpServerByTool / isToolAutoApproved 为纯逻辑，原样保留。
  */
-import { loggerService } from '@logger'
 import store from '@renderer/store'
 import { hubMCPServer } from '@renderer/store/mcp'
-import type { MCPCallToolResponse, MCPServer, MCPTool, MCPToolResponse } from '@renderer/types'
-
-const logger = loggerService.withContext('Utils:MCPTools')
-
-export async function callBuiltInTool(toolResponse: MCPToolResponse): Promise<MCPCallToolResponse | undefined> {
-  logger.info(`[BuiltIn] Calling Built-in Tool: ${toolResponse.tool.name}`, toolResponse.tool)
-
-  if (
-    toolResponse.tool.name === 'think' &&
-    typeof toolResponse.arguments === 'object' &&
-    toolResponse.arguments !== null &&
-    !Array.isArray(toolResponse.arguments)
-  ) {
-    const thought = toolResponse.arguments?.thought
-    return {
-      isError: false,
-      content: [
-        {
-          type: 'text',
-          text: (thought as string) || ''
-        }
-      ]
-    }
-  }
-
-  return undefined
-}
+import type { MCPServer, MCPTool } from '@renderer/types'
 
 export function getMcpServerByTool(tool: MCPTool) {
   const servers = store.getState().mcp.servers

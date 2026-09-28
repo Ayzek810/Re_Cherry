@@ -87,6 +87,7 @@ export class WebSearchService {
   /** 每轮搜索提供商登记（topics.sendMessage 写入；undefined = 本轮未启用）。 */
   public setTurnProvider(topicId: string, providerId: string | undefined): void {
     this.turnProviders.set(topicId, providerId)
+    this.capTurnMaps()
     // 本轮 [n] 全局编号随每轮登记重置（同轮多次搜索接续编号——修复"两次搜索
     // 两张 1-6 卡"且模型正文 [n] 与引用卡错位）。
     this.turnResultOffsets.delete(topicId)
@@ -105,6 +106,22 @@ export class WebSearchService {
     const offset = this.turnResultOffsets.get(topicId) ?? 0
     this.turnResultOffsets.set(topicId, offset + resultCount)
     return offset
+  }
+
+  /** 每话题一条小记录、长期运行下无界累积：超上限淘汰最早登记（活跃回合不可能同时超过）。 */
+  private capTurnMaps(): void {
+    const LIMIT = 512
+    while (this.turnProviders.size > LIMIT) {
+      const oldest = this.turnProviders.keys().next().value
+      if (oldest === undefined) break
+      this.turnProviders.delete(oldest)
+      this.turnResultOffsets.delete(oldest)
+    }
+    while (this.turnResultOffsets.size > LIMIT) {
+      const oldest = this.turnResultOffsets.keys().next().value
+      if (oldest === undefined) break
+      this.turnResultOffsets.delete(oldest)
+    }
   }
 
   private findProvider(providerId: string): KernelWebSearchProviderConfig {

@@ -22,18 +22,51 @@ import { loggerService } from '@logger'
 import { getDataPath } from '@main/utils'
 import StreamZip from 'node-stream-zip'
 
-import { findAllSkillDirectories, findSkillMdPath, parseSkillMetadata, sanitizeFolderName } from './skillMetadata'
+import {
+  findAllSkillDirectories,
+  findSkillMdPath,
+  parseSkillMdContent,
+  sanitizeFolderName,
+  type ParsedSkillMetadata
+} from './skillMetadata'
 
 const logger = loggerService.withContext('SkillService')
 
-/** SKILL.md 的 SHA-256（切片 contentHash 对齐；无 md 时空串）。 */
-function hashSkillMd(skillDir: string): string {
+/** SKILL.md 的解析产物缓存：Skill_List 每次都对每个技能全量读 md（frontmatter 一遍、
+ * sha256 一遍）；文件在会话内基本不变，按 mtime 缓存一次读取的两样产物。 */
+interface SkillMdCacheEntry {
+  mtimeMs: number
+  metadata: ParsedSkillMetadata | null
+  hash: string
+}
+const skillMdCache = new Map<string, SkillMdCacheEntry>()
+
+/** 读取并解析 SKILL.md：返回元数据与 SHA-256（无 md/解析失败时 metadata 为 null、hash 为空串）。 */
+async function loadSkillMd(skillDir: string): Promise<{ metadata: ParsedSkillMetadata | null; hash: string }> {
   const mdPath = findSkillMdPath(skillDir)
-  if (mdPath === null) return ''
+  if (mdPath === null) return { metadata: null, hash: '' }
   try {
-    return createHash('sha256').update(fs.readFileSync(mdPath)).digest('hex')
+    const mtimeMs = (await fsp.stat(mdPath)).mtimeMs
+    const cached = skillMdCache.get(mdPath)
+    if (cached && cached.mtimeMs === mtimeMs) {
+      return { metadata: cached.metadata, hash: cached.hash }
+    }
+    const buf = await fsp.readFile(mdPath)
+    const hash = createHash('sha256').update(buf).digest('hex')
+    let metadata: ParsedSkillMetadata | null
+    try {
+      metadata = parseSkillMdContent(buf.toString('utf-8'), skillDir)
+    } catch (error) {
+      logger.warn(
+        `skills: failed to parse metadata in "${skillDir}"`,
+        error instanceof Error ? error : new Error(String(error))
+      )
+      metadata = null
+    }
+    skillMdCache.set(mdPath, { mtimeMs, metadata, hash })
+    return { metadata, hash }
   } catch {
-    return ''
+    return { metadata: null, hash: '' }
   }
 }
 
@@ -164,7 +197,7 @@ export class SkillService {
     const installed: SkillTurnEntry[] = []
     await fsp.mkdir(this.skillsRoot(), { recursive: true })
     for (const skillDir of skillDirs) {
-      const metadata = parseSkillMetadata(skillDir)
+      const { metadata, hash } = await loadSkillMd(skillDir)
       if (metadata === null) continue
       const folderName = sanitizeFolderName(metadata.name)
       const targetDir = this.skillDir(folderName)
@@ -180,7 +213,7 @@ export class SkillService {
         folderName,
         name: metadata.name,
         description: metadata.description,
-        contentHash: hashSkillMd(skillDir),
+        contentHash: hash,
         author: metadata.author ?? null
       })
       logger.info(`skills: installed "${metadata.name}" as ${folderName}`)
@@ -202,14 +235,14 @@ export class SkillService {
     const skillDirs = await findAllSkillDirectories(root)
     const skills: SkillTurnEntry[] = []
     for (const dir of skillDirs) {
-      const metadata = parseSkillMetadata(dir)
+      const { metadata, hash } = await loadSkillMd(dir)
       if (metadata === null) continue
       skills.push({
         id: path.basename(dir),
         folderName: path.basename(dir),
         name: metadata.name,
         description: metadata.description,
-        contentHash: hashSkillMd(dir),
+        contentHash: hash,
         author: metadata.author ?? null
       })
     }

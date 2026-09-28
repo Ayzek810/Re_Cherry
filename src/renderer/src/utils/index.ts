@@ -28,33 +28,6 @@ export const delay = (seconds: number): Promise<any> => {
   })
 }
 
-/**
- * 等待异步函数返回 true。
- * @param {() => Promise<any>} fn 要等待的异步函数
- * @param {number} [interval=200] 检查间隔时间（毫秒）
- * @param {number} [stopTimeout=60000] 停止等待的超时时间（毫秒）
- * @returns {Promise<any>} 异步函数返回 true 后的 Promise
- */
-export const waitAsyncFunction = (
-  fn: () => Promise<any>,
-  interval: number = 200,
-  stopTimeout: number = 60000
-): Promise<any> => {
-  let timeout = false
-  const timer = setTimeout(() => (timeout = true), stopTimeout)
-
-  return (async function check(): Promise<any> {
-    if (await fn()) {
-      clearTimeout(timer)
-      return Promise.resolve()
-    } else if (!timeout) {
-      return delay(interval / 1000).then(check)
-    } else {
-      return Promise.resolve()
-    }
-  })()
-}
-
 export const uuid = () => uuidv4()
 
 /**
@@ -108,24 +81,6 @@ export function removeSpecialCharacters(str: string): string {
  */
 export const isValidProxyUrl = (url: string): boolean => {
   return url.includes('://')
-}
-
-/**
- * 动态加载 JavaScript 脚本。
- * @param url 脚本的 URL 地址
- * @returns Promise<void> 脚本加载成功或失败的 Promise
- */
-export function loadScript(url: string) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.src = url
-
-    script.onload = resolve
-    script.onerror = reject
-
-    document.head.appendChild(script)
-  })
 }
 
 /**

@@ -1,4 +1,3 @@
-import * as fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -9,7 +8,7 @@ import iconv from 'iconv-lite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { readTextFileWithAutoEncoding, resolveAndValidatePath } from '../file'
-import { getAllFiles, getConfigDir, getFilesDir, getFileType, getTempDir, isPathInside, untildify } from '../file'
+import { getConfigDir, getFilesDir, getFileType, getTempDir, isPathInside, untildify } from '../file'
 
 // Mock dependencies
 vi.mock('node:fs')
@@ -130,87 +129,6 @@ describe('file', () => {
       expect(getFileType('.tar.gz')).toBe(FILE_TYPE.OTHER)
       expect(getFileType('.文件')).toBe(FILE_TYPE.OTHER)
       expect(getFileType('.файл')).toBe(FILE_TYPE.OTHER)
-    })
-  })
-
-  describe('getAllFiles', () => {
-    it('should return all valid files recursively', () => {
-      // Mock file system
-      // @ts-ignore - override type for testing
-      vi.spyOn(fs, 'readdirSync').mockImplementation((dirPath) => {
-        if (dirPath === '/test') {
-          return ['file1.txt', 'file2.pdf', 'subdir']
-        } else if (dirPath === '/test/subdir') {
-          return ['file3.md', 'file4.docx']
-        }
-        return []
-      })
-
-      vi.mocked(fs.statSync).mockImplementation((filePath) => {
-        const isDir = String(filePath).endsWith('subdir')
-        return {
-          isDirectory: () => isDir,
-          size: 1024
-        } as fs.Stats
-      })
-
-      const result = getAllFiles('/test')
-
-      expect(result).toHaveLength(4)
-      expect(result[0].id).toBe('mock-uuid')
-      expect(result[0].name).toBe('file1.txt')
-      expect(result[0].type).toBe(FILE_TYPE.TEXT)
-      expect(result[1].name).toBe('file2.pdf')
-      expect(result[1].type).toBe(FILE_TYPE.DOCUMENT)
-    })
-
-    it('should skip hidden files', () => {
-      // @ts-ignore - override type for testing
-      vi.spyOn(fs, 'readdirSync').mockReturnValue(['.hidden', 'visible.txt'])
-      vi.mocked(fs.statSync).mockReturnValue({
-        isDirectory: () => false,
-        size: 1024
-      } as fs.Stats)
-
-      const result = getAllFiles('/test')
-
-      expect(result).toHaveLength(1)
-      expect(result[0].name).toBe('visible.txt')
-    })
-
-    it('should skip unsupported file types', () => {
-      // @ts-ignore - override type for testing
-      vi.spyOn(fs, 'readdirSync').mockReturnValue(['image.jpg', 'video.mp4', 'audio.mp3', 'document.pdf'])
-      vi.mocked(fs.statSync).mockReturnValue({
-        isDirectory: () => false,
-        size: 1024
-      } as fs.Stats)
-
-      const result = getAllFiles('/test')
-
-      // Should only include document.pdf as the others are excluded types
-      expect(result).toHaveLength(1)
-      expect(result[0].name).toBe('document.pdf')
-      expect(result[0].type).toBe(FILE_TYPE.DOCUMENT)
-    })
-
-    it('should return empty array for empty directory', () => {
-      // @ts-ignore - override type for testing
-      vi.spyOn(fs, 'readdirSync').mockReturnValue([])
-
-      const result = getAllFiles('/empty')
-
-      expect(result).toHaveLength(0)
-    })
-
-    it('should handle file system errors', () => {
-      // @ts-ignore - override type for testing
-      vi.spyOn(fs, 'readdirSync').mockImplementation(() => {
-        throw new Error('Directory not found')
-      })
-
-      // Since the function doesn't have error handling, we expect it to propagate
-      expect(() => getAllFiles('/nonexistent')).toThrow('Directory not found')
     })
   })
 

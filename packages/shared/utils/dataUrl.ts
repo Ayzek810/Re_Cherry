@@ -46,24 +46,3 @@ export function parseDataUrl(url: string): DataUrlParts | null {
 
   return { mediaType, isBase64, data }
 }
-
-/**
- * Checks if a string is a data URL.
- *
- * @param url - The string to check
- * @returns true if the string is a valid data URL
- */
-export function isDataUrl(url: string): boolean {
-  return url.startsWith('data:') && url.includes(',')
-}
-
-/**
- * Checks if a data URL contains base64-encoded image data.
- *
- * @param url - The data URL to check
- * @returns true if the URL is a base64-encoded image data URL
- */
-export function isBase64ImageDataUrl(url: string): boolean {
-  const parsed = parseDataUrl(url)
-  return parsed?.mediaType?.startsWith('image/') === true && parsed.isBase64
-}

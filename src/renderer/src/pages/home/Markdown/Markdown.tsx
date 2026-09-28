@@ -154,9 +154,12 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     return transformMarkdownOutsideHtmlArtifacts(displayedContent, transform)
   }, [block, displayedContent, t, effectiveHtmlPreviewMode])
 
+  // 布尔化门控：插件数组依赖 messageContent 字符串会让 react-markdown 每个
+  // 流式 tick 重建 unified 处理器管线；依赖布尔值则只在"是否含内联 HTML"翻转时重建
+  const hasRawHtml = useMemo(() => ALLOWED_ELEMENTS.test(messageContent), [messageContent])
   const rehypePlugins = useMemo(() => {
     const plugins: Pluggable[] = []
-    if (ALLOWED_ELEMENTS.test(messageContent)) {
+    if (hasRawHtml) {
       plugins.push(rehypeRaw, rehypeScalableSvg)
     }
     plugins.push([rehypeHeadingIds, { prefix: `heading-${block.id}` }])
@@ -166,10 +169,22 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
       plugins.push(rehypeMathjax)
     }
     return plugins
-  }, [mathEngine, messageContent, block.id])
+  }, [mathEngine, hasRawHtml, block.id])
+
+  // 稳定引用：内联对象同样会让处理器管线逐帧重建
+  const remarkRehypeOptions = useMemo(
+    () => ({
+      footnoteLabel: t('common.footnotes'),
+      footnoteLabelTagName: 'h4' as const,
+      footnoteBackContent: ' '
+    }),
+    [t]
+  )
+
+  const hasStyleTag = useMemo(() => /<style\b[^>]*>/i.test(messageContent), [messageContent])
 
   const components = useMemo(() => {
-    return {
+    const comps: Partial<Components> = {
       a: (props: any) => <Link {...props} />,
       sup: (props: any) => <CitationSup {...props} />,
       code: (props: any) => (
@@ -184,16 +199,20 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
         return <p {...props} />
       },
       svg: MarkdownSvgRenderer
-    } as Partial<Components>
-  }, [block.id, effectiveHtmlPreviewMode])
+    }
+    // 条件放 useMemo 内：之前在渲染体里对 memoized 对象做赋值，<style> 消失后
+    // 残留的 style 覆盖永远不会被清除
+    if (hasStyleTag) {
+      comps.style = MarkdownShadowDOMRenderer as any
+    }
+    return comps
+  }, [block.id, effectiveHtmlPreviewMode, hasStyleTag])
 
   // Hook 必须在任何早退分支之前调用（下方 standaloneArtifact 早退还直接 return 组件）。
   const urlTransform = useCallback((value: string) => {
     if (value.startsWith('data:image/png') || value.startsWith('data:image/jpeg')) return value
     return defaultUrlTransform(value)
-  }, [])
-
-  // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
+  }, [])  // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
   // position 的 end 外推一个围栏长度，让 isOpenFenceBlock 恒判"已闭合"（V2 语境等价）。
   if (standaloneArtifact) {
     const startOffset = standaloneArtifact.start.offset ?? 0
@@ -216,10 +235,6 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     )
   }
 
-  if (/<style\b[^>]*>/i.test(messageContent)) {
-    components.style = MarkdownShadowDOMRenderer as any
-  }
-
   return (
     <div className="markdown">
       <CitationRegistryContext value={citationRegistry}>
@@ -229,11 +244,7 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
           components={components}
           disallowedElements={DISALLOWED_ELEMENTS}
           urlTransform={urlTransform}
-          remarkRehypeOptions={{
-            footnoteLabel: t('common.footnotes'),
-            footnoteLabelTagName: 'h4',
-            footnoteBackContent: ' '
-          }}>
+          remarkRehypeOptions={remarkRehypeOptions}>
           {messageContent}
         </ReactMarkdown>
       </CitationRegistryContext>

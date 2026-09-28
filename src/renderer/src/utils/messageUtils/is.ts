@@ -1,16 +1,11 @@
 import type { Message } from '@renderer/types/newMessage'
 import {
   AssistantMessageStatus,
-  type CitationMessageBlock,
   type CodeMessageBlock,
-  type CompactMessageBlock,
   type ErrorMessageBlock,
-  type FileMessageBlock,
-  type ImageMessageBlock,
   type MainTextMessageBlock,
   type MessageBlock,
   MessageBlockType,
-  type PlaceholderMessageBlock,
   type ThinkingMessageBlock,
   type ToolMessageBlock,
   type VideoMessageBlock
@@ -27,26 +22,6 @@ export function isMainTextBlock(block: MessageBlock): block is MainTextMessageBl
 }
 
 /**
- * Checks if a message block is an Image block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is an ImageMessageBlock, false otherwise.
- */
-export function isImageBlock(block: MessageBlock): block is ImageMessageBlock {
-  return block.type === MessageBlockType.IMAGE
-}
-
-/**
- * Checks if a message block is a File block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is a FileMessageBlock, false otherwise.
- */
-export function isFileBlock(block: MessageBlock): block is FileMessageBlock {
-  return block.type === MessageBlockType.FILE
-}
-
-/**
  * Checks if a message block is a Code block.
  * Acts as a TypeScript type guard.
  * @param block - The message block to check.
@@ -54,26 +29,6 @@ export function isFileBlock(block: MessageBlock): block is FileMessageBlock {
  */
 export function isCodeBlock(block: MessageBlock): block is CodeMessageBlock {
   return block.type === MessageBlockType.CODE
-}
-
-/**
- * Checks if a message block is a Thinking block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is a ThinkingMessageBlock, false otherwise.
- */
-export function isThinkingBlock(block: MessageBlock): block is ThinkingMessageBlock {
-  return block.type === MessageBlockType.THINKING
-}
-
-/**
- * Checks if a message block is an Error block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is an ErrorMessageBlock, false otherwise.
- */
-export function isErrorBlock(block: MessageBlock): block is ErrorMessageBlock {
-  return block.type === MessageBlockType.ERROR
 }
 
 /**
@@ -112,36 +67,6 @@ export function isVideoBlock(block: MessageBlock): block is VideoMessageBlock {
  */
 export function isToolBlock(block: MessageBlock): block is ToolMessageBlock {
   return block.type === MessageBlockType.TOOL
-}
-
-/**
- * Checks if a message block is a Citation block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is a CitationMessageBlock, false otherwise.
- */
-export function isCitationBlock(block: MessageBlock): block is CitationMessageBlock {
-  return block.type === MessageBlockType.CITATION
-}
-
-/**
- * Checks if a message block is a Placeholder block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is a PlaceholderMessageBlock, false otherwise.
- */
-export function isPlaceholderBlock(block: MessageBlock): block is PlaceholderMessageBlock {
-  return block.type === MessageBlockType.UNKNOWN
-}
-
-/**
- * Checks if a message block is a Compact block.
- * Acts as a TypeScript type guard.
- * @param block - The message block to check.
- * @returns True if the block is a CompactMessageBlock, false otherwise.
- */
-export function isCompactBlock(block: MessageBlock): block is CompactMessageBlock {
-  return block.type === MessageBlockType.COMPACT
 }
 
 export function isMessageProcessing(message: Message): boolean {

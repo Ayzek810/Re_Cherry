@@ -7,12 +7,11 @@ import path from 'node:path'
 import { loggerService } from '@logger'
 import { audioExts, documentExts, HOME_CHERRY_DIR, imageExts, MB, textExts, videoExts } from '@shared/config/constant'
 import { parseDataUrl } from '@shared/utils'
-import type { FileMetadata, FileType, NotesTreeNode } from '@types'
+import type { FileType, NotesTreeNode } from '@types'
 import { FILE_TYPE } from '@types'
 import chardet from 'chardet'
 import { app } from 'electron'
 import iconv from 'iconv-lite'
-import { v4 as uuidv4 } from 'uuid'
 
 const logger = loggerService.withContext('Utils:File')
 
@@ -192,47 +191,6 @@ export function parseGeneratedImageSource(source: string): ParsedGeneratedImageS
   return undefined
 }
 
-export function getAllFiles(dirPath: string, arrayOfFiles: FileMetadata[] = []): FileMetadata[] {
-  const files = fs.readdirSync(dirPath)
-
-  files.forEach((file) => {
-    if (file.startsWith('.')) {
-      return
-    }
-
-    const fullPath = path.join(dirPath, file)
-    if (fs.statSync(fullPath).isDirectory()) {
-      arrayOfFiles = getAllFiles(fullPath, arrayOfFiles)
-    } else {
-      const ext = path.extname(file)
-      const fileType = getFileType(ext)
-
-      if ([FILE_TYPE.OTHER, FILE_TYPE.IMAGE, FILE_TYPE.VIDEO, FILE_TYPE.AUDIO].some((type) => type === fileType)) {
-        return
-      }
-
-      const name = path.basename(file)
-      const size = fs.statSync(fullPath).size
-
-      const fileItem: FileMetadata = {
-        id: uuidv4(),
-        name,
-        path: fullPath,
-        size,
-        ext,
-        count: 1,
-        origin_name: name,
-        type: fileType,
-        created_at: new Date().toISOString()
-      }
-
-      arrayOfFiles.push(fileItem)
-    }
-  })
-
-  return arrayOfFiles
-}
-
 export function getTempDir() {
   return path.join(app.getPath('temp'), 'CherryStudio')
 }
@@ -241,11 +199,18 @@ export function getFilesDir() {
   return path.join(app.getPath('userData'), 'Data', 'Files')
 }
 
+// 进程内缓存"已确保存在"的目录：getNotesDir 被 App_Info 等 IPC 反复触发，
+// 每次都 existsSync+mkdirSync 是纯浪费（目录一经创建不会消失，被外部删除属异常场景）
+const ensuredDirs = new Set<string>()
+
 export function getNotesDir() {
   const notesDir = path.join(app.getPath('userData'), 'Data', 'Notes')
-  if (!fs.existsSync(notesDir)) {
-    fs.mkdirSync(notesDir, { recursive: true })
-    logger.info(`Notes directory created at: ${notesDir}`)
+  if (!ensuredDirs.has(notesDir)) {
+    if (!fs.existsSync(notesDir)) {
+      fs.mkdirSync(notesDir, { recursive: true })
+      logger.info(`Notes directory created at: ${notesDir}`)
+    }
+    ensuredDirs.add(notesDir)
   }
   return notesDir
 }
@@ -288,20 +253,6 @@ export async function readTextFileWithAutoEncoding(filePath: string): Promise<st
 
   logger.error(`File ${filePath} failed to decode with all possible encodings, trying UTF-8 encoding`)
   return iconv.decode(data, 'UTF-8')
-}
-
-export async function base64Image(file: FileMetadata): Promise<{ mime: string; base64: string; data: string }> {
-  const filePath = path.join(getFilesDir(), `${file.id}${file.ext}`)
-  const data = await fs.promises.readFile(filePath)
-  const base64 = data.toString('base64')
-  const rawExt = path.extname(filePath).slice(1)
-  const ext = rawExt === 'jpg' ? 'jpeg' : rawExt
-  const mime = ext ? `image/${ext}` : 'image/png'
-  return {
-    mime,
-    base64,
-    data: `data:${mime};base64,${base64}`
-  }
 }
 
 /**

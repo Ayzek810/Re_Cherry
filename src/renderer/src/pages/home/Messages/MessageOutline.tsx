@@ -24,19 +24,39 @@ interface HeadingItem {
   text: string
 }
 
+// 处理器复用：之前每个块每次重算都 unified().use() 新建管线
+const outlineParser = unified().use(remarkParse)
+
+/** 本消息主文本块的轻量投影——目录只关心这两样，其余块变化不应触发重解析 */
+interface OutlineBlockSource {
+  id: string
+  content: string
+}
+
+const outlineSourcesEqual = (a: OutlineBlockSource[], b: OutlineBlockSource[]): boolean => {
+  if (a.length !== b.length) return false
+  return a.every((item, i) => item.id === b[i].id && item.content === b[i].content)
+}
+
 const MessageOutline: FC<MessageOutlineProps> = ({ message }) => {
-  const blockEntities = useSelector((state: RootState) => messageBlocksSelectors.selectEntities(state))
+  // 只订阅本消息 MAIN_TEXT 块的 {id, content} 投影（引用级内容比较）：流式期间任何
+  // 其他块/其他消息的 token 更新都不会让这里重算。之前订阅全量 selectEntities，
+  // 每个 token 都对每条 assistant 消息全文重新 remarkParse。
+  const mainTextBlocks = useSelector(
+    (state: RootState) =>
+      message.blocks.flatMap((blockId) => {
+        const b = messageBlocksSelectors.selectById(state, blockId)
+        return b && b.type === MessageBlockType.MAIN_TEXT ? [{ id: b.id, content: b.content }] : []
+      }),
+    outlineSourcesEqual
+  )
 
   const headings: HeadingItem[] = useMemo(() => {
-    const mainTextBlocks = message.blocks
-      .map((blockId) => blockEntities[blockId])
-      .filter((b) => b?.type === MessageBlockType.MAIN_TEXT)
-
     if (!mainTextBlocks?.length) return []
 
     const result: HeadingItem[] = []
     mainTextBlocks.forEach((mainTextBlock) => {
-      const tree = unified().use(remarkParse).parse(mainTextBlock?.content)
+      const tree = outlineParser.parse(mainTextBlock?.content)
       const slugger = createSlugger()
       visit(tree, ['heading', 'html'], (node) => {
         if (node.type === 'heading') {
@@ -62,7 +82,7 @@ const MessageOutline: FC<MessageOutlineProps> = ({ message }) => {
     })
 
     return result
-  }, [message.blocks, blockEntities])
+  }, [mainTextBlocks])
 
   const miniLevel = useMemo(() => {
     return headings.length ? Math.min(...headings.map((heading) => heading.level)) : 1

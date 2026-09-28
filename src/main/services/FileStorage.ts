@@ -24,10 +24,10 @@ import * as crypto from 'crypto'
 import type { OpenDialogOptions, OpenDialogReturnValue, SaveDialogOptions, SaveDialogReturnValue } from 'electron'
 import { dialog, net, shell } from 'electron'
 import * as fs from 'fs'
-import { writeFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { isBinaryFile } from 'isbinaryfile'
 import officeParser from 'officeparser'
+import * as os from 'os'
 import * as path from 'path'
 import { PDFDocument } from 'pdf-lib'
 import { v4 as uuidv4 } from 'uuid'
@@ -195,37 +195,48 @@ class FileStorage {
   }
 
   private findDuplicateFile = async (filePath: string): Promise<FileMetadata | null> => {
-    const stats = fs.statSync(filePath)
+    const stats = await fs.promises.stat(filePath)
     logger.debug(`stats: ${stats}, filePath: ${filePath}`)
     const fileSize = stats.size
 
     const files = await fs.promises.readdir(this.storageDir)
-    for (const file of files) {
-      const storedFilePath = path.join(this.storageDir, file)
-      const storedStats = fs.statSync(storedFilePath)
+    // 并行 stat 全部存储文件：此前循环内逐个 statSync，文件越多上传越慢且阻塞主进程
+    const storedStats = await Promise.all(
+      files.map(async (file) => {
+        try {
+          return await fs.promises.stat(path.join(this.storageDir, file))
+        } catch {
+          return null
+        }
+      })
+    )
 
-      if (storedStats.size === fileSize) {
-        const [originalHash, storedHash] = await Promise.all([
-          this.getFileHash(filePath),
-          this.getFileHash(storedFilePath)
-        ])
+    for (let i = 0; i < files.length; i++) {
+      const storedStatsItem = storedStats[i]
+      if (!storedStatsItem || storedStatsItem.size !== fileSize) continue
 
-        if (originalHash === storedHash) {
-          const ext = path.extname(file)
-          const id = path.basename(file, ext)
-          const type = await this.getFileType(filePath)
+      const storedFilePath = path.join(this.storageDir, files[i])
+      const [originalHash, storedHash] = await Promise.all([
+        this.getFileHash(filePath),
+        this.getFileHash(storedFilePath)
+      ])
 
-          return {
-            id,
-            origin_name: file,
-            name: file + ext,
-            path: storedFilePath,
-            created_at: storedStats.birthtime.toISOString(),
-            size: storedStats.size,
-            ext,
-            type,
-            count: 2
-          }
+      if (originalHash === storedHash) {
+        const file = files[i]
+        const ext = path.extname(file)
+        const id = path.basename(file, ext)
+        const type = await this.getFileType(filePath)
+
+        return {
+          id,
+          origin_name: file,
+          name: file + ext,
+          path: storedFilePath,
+          created_at: storedStatsItem.birthtime.toISOString(),
+          size: storedStatsItem.size,
+          ext,
+          type,
+          count: 2
         }
       }
     }
@@ -257,7 +268,7 @@ class FileStorage {
     }
 
     const fileMetadataPromises = result.filePaths.map(async (filePath) => {
-      const stats = fs.statSync(filePath)
+      const stats = await fs.promises.stat(filePath)
       const ext = path.extname(filePath)
       const fileType = await this.getFileType(filePath)
 
@@ -277,28 +288,17 @@ class FileStorage {
     return Promise.all(fileMetadataPromises)
   }
 
+  /**
+   * 图片"压缩"层：jimp 移除后此层实际只是复制（>1MB 与 <1MB 行为早已一致）。
+   * 保留方法名维持调用方语义，实现退化为单次拷贝——不再白做压缩尝试。
+   */
   private async compressImage(sourcePath: string, destPath: string): Promise<void> {
     try {
-      const stats = fs.statSync(sourcePath)
-      const fileSizeInMB = stats.size / MB
-
-      // 如果图片大于1MB才进行压缩
-      if (fileSizeInMB > 1) {
-        try {
-          await fs.promises.copyFile(sourcePath, destPath)
-          logger.debug(`Image compressed successfully: ${sourcePath}`)
-        } catch (jimpError) {
-          logger.error('Image compression failed:', jimpError as Error)
-          await fs.promises.copyFile(sourcePath, destPath)
-        }
-      } else {
-        // 小图片直接复制
-        await fs.promises.copyFile(sourcePath, destPath)
-      }
+      await fs.promises.copyFile(sourcePath, destPath)
+      logger.debug(`Image copied successfully: ${sourcePath}`)
     } catch (error) {
       logger.error('Image handling failed:', error as Error)
-      // 错误情况下直接复制原文件
-      await fs.promises.copyFile(sourcePath, destPath)
+      throw error
     }
   }
 
@@ -349,7 +349,7 @@ class FileStorage {
       return null
     }
 
-    const stats = fs.statSync(filePath)
+    const stats = await fs.promises.stat(filePath)
     const fileType = await this.getFileType(filePath)
 
     return {
@@ -408,20 +408,36 @@ class FileStorage {
     }
   }
 
+  /**
+   * moveFile/moveDir/renameFile/renameDir 四段雷同逻辑的统一内核。
+   * rejectExisting：重命名语义下目标已存在要报错；移动语义保持 rename 原语义不预检。
+   */
+  private async renameGuarded(
+    sourcePath: string,
+    targetPath: string,
+    kind: 'file' | 'directory',
+    rejectExisting: boolean
+  ): Promise<void> {
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`Source ${kind} does not exist: ${sourcePath}`)
+    }
+
+    // 确保目标父目录存在
+    const destDir = path.dirname(targetPath)
+    if (!fs.existsSync(destDir)) {
+      await fs.promises.mkdir(destDir, { recursive: true })
+    }
+
+    if (rejectExisting && fs.existsSync(targetPath)) {
+      throw new Error(`Target ${kind} already exists: ${targetPath}`)
+    }
+
+    await fs.promises.rename(sourcePath, targetPath)
+  }
+
   public moveFile = async (_: Electron.IpcMainInvokeEvent, filePath: string, newPath: string): Promise<void> => {
     try {
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`Source file does not exist: ${filePath}`)
-      }
-
-      // 确保目标目录存在
-      const destDir = path.dirname(newPath)
-      if (!fs.existsSync(destDir)) {
-        await fs.promises.mkdir(destDir, { recursive: true })
-      }
-
-      // 移动文件
-      await fs.promises.rename(filePath, newPath)
+      await this.renameGuarded(filePath, newPath, 'file', false)
       logger.debug(`File moved successfully: ${filePath} to ${newPath}`)
     } catch (error) {
       logger.error('Move file failed:', error as Error)
@@ -431,18 +447,7 @@ class FileStorage {
 
   public moveDir = async (_: Electron.IpcMainInvokeEvent, dirPath: string, newDirPath: string): Promise<void> => {
     try {
-      if (!fs.existsSync(dirPath)) {
-        throw new Error(`Source directory does not exist: ${dirPath}`)
-      }
-
-      // 确保目标父目录存在
-      const parentDir = path.dirname(newDirPath)
-      if (!fs.existsSync(parentDir)) {
-        await fs.promises.mkdir(parentDir, { recursive: true })
-      }
-
-      // 移动目录
-      await fs.promises.rename(dirPath, newDirPath)
+      await this.renameGuarded(dirPath, newDirPath, 'directory', false)
       logger.debug(`Directory moved successfully: ${dirPath} to ${newDirPath}`)
     } catch (error) {
       logger.error('Move directory failed:', error as Error)
@@ -452,20 +457,9 @@ class FileStorage {
 
   public renameFile = async (_: Electron.IpcMainInvokeEvent, filePath: string, newName: string): Promise<void> => {
     try {
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`Source file does not exist: ${filePath}`)
-      }
-
       const dirPath = path.dirname(filePath)
       const newFilePath = path.join(dirPath, newName + '.md')
-
-      // 如果目标文件已存在，抛出错误
-      if (fs.existsSync(newFilePath)) {
-        throw new Error(`Target file already exists: ${newFilePath}`)
-      }
-
-      // 重命名文件
-      await fs.promises.rename(filePath, newFilePath)
+      await this.renameGuarded(filePath, newFilePath, 'file', true)
       logger.debug(`File renamed successfully: ${filePath} to ${newFilePath}`)
     } catch (error) {
       logger.error('Rename file failed:', error as Error)
@@ -475,20 +469,9 @@ class FileStorage {
 
   public renameDir = async (_: Electron.IpcMainInvokeEvent, dirPath: string, newName: string): Promise<void> => {
     try {
-      if (!fs.existsSync(dirPath)) {
-        throw new Error(`Source directory does not exist: ${dirPath}`)
-      }
-
       const parentDir = path.dirname(dirPath)
       const newDirPath = path.join(parentDir, newName)
-
-      // 如果目标目录已存在，抛出错误
-      if (fs.existsSync(newDirPath)) {
-        throw new Error(`Target directory already exists: ${newDirPath}`)
-      }
-
-      // 重命名目录
-      await fs.promises.rename(dirPath, newDirPath)
+      await this.renameGuarded(dirPath, newDirPath, 'directory', true)
       logger.debug(`Directory renamed successfully: ${dirPath} to ${newDirPath}`)
     } catch (error) {
       logger.error('Rename directory failed:', error as Error)
@@ -530,7 +513,8 @@ class FileStorage {
       if (detectEncoding) {
         return readTextFileWithAutoEncoding(filePath)
       } else {
-        return fs.readFileSync(filePath, 'utf-8')
+        // File_Read/File_ReadExternal 的热路径：异步读，避免大文件阻塞主进程
+        return await fs.promises.readFile(filePath, 'utf-8')
       }
     } catch (error) {
       logger.error('Failed to read text file:', error as Error)
@@ -822,24 +806,13 @@ class FileStorage {
   }
 
   private async compressImageBuffer(imageBuffer: Buffer, destPath: string, ext: string): Promise<void> {
+    void ext
+    // 原"压缩"管线（先写临时文件再复制）随 jimp 移除已无实际压缩，直接落盘
     try {
-      // 创建临时文件
-      const tempPath = path.join(this.tempDir, `temp_${uuidv4()}${ext}`)
-      await fs.promises.writeFile(tempPath, imageBuffer)
-
-      // 使用现有的压缩方法
-      await this.compressImage(tempPath, destPath)
-
-      // 清理临时文件
-      try {
-        await fs.promises.unlink(tempPath)
-      } catch (error) {
-        logger.warn('Failed to cleanup temp file:', error as Error)
-      }
-    } catch (error) {
-      logger.error('Image buffer compression failed, saving original:', error as Error)
-      // 压缩失败时保存原始文件
       await fs.promises.writeFile(destPath, imageBuffer)
+    } catch (error) {
+      logger.error('Image buffer save failed:', error as Error)
+      throw error
     }
   }
 
@@ -1014,10 +987,20 @@ class FileStorage {
         if (options.searchPattern === '.' || entry.name.toLowerCase().includes(searchPatternLower)) {
           directories.push(fullPath)
         }
+      }
 
-        // Recursively search subdirectories
-        if (options.recursive && currentDepth < options.maxDepth) {
-          const subDirs = await this.searchDirectories(fullPath, options, currentDepth + 1)
+      // 递归并行展开（Promise.all 保序）：此前逐目录串行 await，深树搜索耗时线性叠加
+      if (options.recursive && currentDepth < options.maxDepth) {
+        const subDirPromises = entries
+          .filter(
+            (entry) =>
+              entry.isDirectory() &&
+              (options.includeHidden || !entry.name.startsWith('.')) &&
+              !excludedDirs.has(entry.name)
+          )
+          .map((entry) => this.searchDirectories(path.join(resolvedPath, entry.name).replace(/\\/g, '/'), options, currentDepth + 1))
+        const subResults = await Promise.all(subDirPromises)
+        for (const subDirs of subResults) {
           directories.push(...subDirs)
         }
       }
@@ -1447,7 +1430,7 @@ class FileStorage {
       }
 
       // Get app paths to prevent selection of restricted directories
-      const appDataPath = path.resolve(process.env.APPDATA || path.join(require('os').homedir(), '.config'))
+      const appDataPath = path.resolve(process.env.APPDATA || path.join(os.homedir(), '.config'))
       const filesDir = path.resolve(getFilesDir())
       const currentNotesDir = path.resolve(getNotesDir())
 
@@ -1508,7 +1491,7 @@ class FileStorage {
       }
 
       if (!result.canceled && result.filePath) {
-        writeFileSync(result.filePath, content, { encoding: 'utf-8' })
+        await fs.promises.writeFile(result.filePath, content, { encoding: 'utf-8' })
       }
 
       return result.filePath
@@ -1520,14 +1503,15 @@ class FileStorage {
 
   public saveImage = async (_: Electron.IpcMainInvokeEvent, name: string, data: string): Promise<boolean> => {
     try {
-      const filePath = dialog.showSaveDialogSync({
+      // 异步对话框：showSaveDialogSync 会阻塞整个主进程消息循环
+      const result = await dialog.showSaveDialog({
         defaultPath: `${name}.png`,
         filters: [{ name: t('dialog.png_image'), extensions: ['png'] }]
       })
 
-      if (filePath) {
+      if (!result.canceled && result.filePath) {
         const parseResult = parseDataUrl(data)
-        fs.writeFileSync(filePath, parseResult?.data ?? data, 'base64')
+        await fs.promises.writeFile(result.filePath, parseResult?.data ?? data, 'base64')
         return true
       }
     } catch (error) {
@@ -1977,60 +1961,63 @@ class FileStorage {
 
       // Collect unique folders needed
       const foldersSet = new Set<string>()
-      const fileOperations: Array<{ sourcePath: string; targetPath: string }> = []
 
-      for (const filePath of markdownFiles) {
-        try {
-          // Get relative path if file is from a directory upload
-          const fileName = path.basename(filePath)
-          const relativePath = path.dirname(filePath)
+      // 并行准备文件操作（fileNameGuard 只读文件系统，无顺序依赖）
+      const prepared = await Promise.all(
+        markdownFiles.map(async (filePath) => {
+          try {
+            // Get relative path if file is from a directory upload
+            const fileName = path.basename(filePath)
+            const relativePath = path.dirname(filePath)
 
-          // Determine target directory structure
-          let targetDir = basePath
-          const folderParts: string[] = []
+            // Determine target directory structure
+            let targetDir = basePath
+            const folderParts: string[] = []
 
-          // Extract folder structure from file path for nested uploads
-          // This is a simplified version - in real scenario we'd need the original directory structure
-          if (relativePath && relativePath !== '.') {
-            const parts = relativePath.split(path.sep)
-            // Get the last few parts that represent the folder structure within upload
-            const relevantParts = parts.slice(Math.max(0, parts.length - 3))
-            folderParts.push(...relevantParts)
+            // Extract folder structure from file path for nested uploads
+            // This is a simplified version - in real scenario we'd need the original directory structure
+            if (relativePath && relativePath !== '.') {
+              const parts = relativePath.split(path.sep)
+              // Get the last few parts that represent the folder structure within upload
+              const relevantParts = parts.slice(Math.max(0, parts.length - 3))
+              folderParts.push(...relevantParts)
+            }
+
+            // Build target directory path
+            for (const part of folderParts) {
+              targetDir = path.join(targetDir, part)
+              foldersSet.add(targetDir)
+            }
+
+            // Determine final file name
+            const nameWithoutExt = fileName.endsWith('.md')
+              ? fileName.slice(0, -3)
+              : fileName.endsWith('.markdown')
+                ? fileName.slice(0, -9)
+                : fileName
+
+            const { safeName } = await this.fileNameGuard(_, targetDir, nameWithoutExt, true)
+            const finalPath = path.join(targetDir, safeName + '.md')
+
+            return { sourcePath: filePath, targetPath: finalPath }
+          } catch (error) {
+            logger.error('Failed to prepare file operation:', error as Error, { filePath })
+            return null
           }
+        })
+      )
+      const fileOperations = prepared.filter(
+        (op): op is { sourcePath: string; targetPath: string } => op !== null
+      )
 
-          // Build target directory path
-          for (const part of folderParts) {
-            targetDir = path.join(targetDir, part)
-            foldersSet.add(targetDir)
-          }
-
-          // Determine final file name
-          const nameWithoutExt = fileName.endsWith('.md')
-            ? fileName.slice(0, -3)
-            : fileName.endsWith('.markdown')
-              ? fileName.slice(0, -9)
-              : fileName
-
-          const { safeName } = await this.fileNameGuard(_, targetDir, nameWithoutExt, true)
-          const finalPath = path.join(targetDir, safeName + '.md')
-
-          fileOperations.push({ sourcePath: filePath, targetPath: finalPath })
-        } catch (error) {
-          logger.error('Failed to prepare file operation:', error as Error, { filePath })
-        }
-      }
-
-      // Create folders in order (shallow to deep)
-      const sortedFolders = Array.from(foldersSet).sort((a, b) => a.length - b.length)
-      for (const folder of sortedFolders) {
-        try {
-          if (!fs.existsSync(folder)) {
-            await fs.promises.mkdir(folder, { recursive: true })
-          }
-        } catch (error) {
-          logger.debug('Folder already exists or creation failed', { folder, error: (error as Error).message })
-        }
-      }
+      // 递归 mkdir 幂等且自建中间层：一次调用确保整条目录链，无需逐层 existsSync 预检
+      await Promise.all(
+        Array.from(foldersSet).map((folder) =>
+          fs.promises
+            .mkdir(folder, { recursive: true })
+            .catch((error) => logger.debug('Folder creation failed', { folder, error: (error as Error).message }))
+        )
+      )
 
       // Process files in batches
       const BATCH_SIZE = 10 // Higher batch size since we're in Main process

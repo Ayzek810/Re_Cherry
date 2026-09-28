@@ -20,6 +20,7 @@ import { createEntityAdapter, createSlice } from '@reduxjs/toolkit'
 // Separate type-only imports from value imports
 import type { Message } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
+import type { Topic } from '@renderer/types'
 
 const logger = loggerService.withContext('newMessage')
 
@@ -221,7 +222,8 @@ export const messagesSlice = createSlice({
 
       if (idsToRemove.length > 0) {
         messagesAdapter.removeMany(state, idsToRemove)
-        state.messageIdsByTopic[topicId] = currentTopicIds.filter((id) => !idsToRemove.includes(id))
+        const idsToRemoveSet = new Set(idsToRemove)
+        state.messageIdsByTopic[topicId] = currentTopicIds.filter((id) => !idsToRemoveSet.has(id))
       }
     },
     upsertBlockReference(state, action: PayloadAction<UpsertBlockReferencePayload>) {
@@ -352,26 +354,47 @@ export const selectMessagesForTopic = createSelector(
  * 侧栏只渲染根行——输出统一折叠为**根 id**（`rootTopicIdOf`，Redux 行链同步上溯），
  * 侧栏按根行 id 查询即中。这修复了"重发流黄点全灭"（子会话在打字，根行不知道）。
  */
+// 输出引用稳定性：流式期间 entities 每 rAF 都换引用，reselect 必然重算；但结果集合
+// 只在回合开始/结束才真正变化。内容不变时返回旧 Set 引用，侧栏订阅者才不会逐 token
+// 重渲染。（重算本身仍会发生，但只是引用比较级别的遍历，无 React 侧开销。）
+let cachedGeneratingTopicIds: Set<string> | undefined
+
+const setsHaveSameItems = (a: Set<string>, b: Set<string>): boolean => {
+  if (a.size !== b.size) return false
+  for (const item of a) {
+    if (!b.has(item)) return false
+  }
+  return true
+}
+
 export const selectGeneratingTopicIds = createSelector(
   [
     (state: RootState) => state.messages.messageIdsByTopic,
     (state: RootState) => state.messages.entities as Record<string, Message | undefined>,
-    (state: RootState) => state.assistants.assistants.flatMap((assistant) => assistant.topics ?? [])
+    // 直接选 assistants 数组本体：flatMap 出新数组会让 memoization 永远失效
+    (state: RootState) => state.assistants.assistants
   ],
-  (idsByTopic, entities, topicRows) => {
+  (idsByTopic, entities, assistants) => {
     const result = new Set<string>()
-    for (const [topicId, ids] of Object.entries(idsByTopic)) {
+    let topicRows: Topic[] | undefined
+    for (const topicId of Object.keys(idsByTopic)) {
+      const ids = idsByTopic[topicId]
       if (ids === undefined) continue
       for (const id of ids) {
         const message = entities[id]
         if (message === undefined) continue
         if (message.role !== 'assistant') continue
         if (message.status === AssistantMessageStatus.PENDING || message.status === AssistantMessageStatus.PROCESSING) {
+          topicRows ??= assistants.flatMap((assistant) => assistant.topics ?? [])
           result.add(rootTopicIdOf(topicId, topicRows))
           break
         }
       }
     }
+    if (cachedGeneratingTopicIds && setsHaveSameItems(cachedGeneratingTopicIds, result)) {
+      return cachedGeneratingTopicIds
+    }
+    cachedGeneratingTopicIds = result
     return result
   }
 )

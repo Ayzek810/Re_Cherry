@@ -13,7 +13,7 @@ import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage
 import { isMainTextBlock, isMessageProcessing, isToolBlock, isVideoBlock } from '@renderer/utils/messageUtils/is'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import React, { useMemo } from 'react'
-import { useSelector } from 'react-redux'
+import { shallowEqual, useSelector } from 'react-redux'
 import styled from 'styled-components'
 
 import BlockErrorFallback from './BlockErrorFallback'
@@ -192,10 +192,16 @@ const groupSimilarBlocks = (
 }
 
 const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
-  // 始终调用useSelector，避免条件调用Hook
-  const blockEntities = useSelector((state: RootState) => messageBlocksSelectors.selectEntities(state))
-  // 根据blocks类型处理渲染数据
-  const renderedBlocks = blocks.map((blockId) => blockEntities[blockId]).filter(Boolean)
+  // 按本消息的块 id 逐块订阅（shallowEqual 逐元素比引用）：流式更新只命中"正在生成的
+  // 那条消息"，其余历史消息的本组件在 store 通知后 shallowEqual 短路，不再整树重渲染。
+  // 之前订阅全量 selectEntities，任何一个 token 都会让所有消息的块树重算。
+  const renderedBlocks = useSelector(
+    (state: RootState) =>
+      blocks
+        .map((blockId) => messageBlocksSelectors.selectById(state, blockId))
+        .filter((b): b is MessageBlock => !!b),
+    shallowEqual
+  )
   // Check if message is still processing
   const isProcessing = isMessageProcessing(message)
   const allowCollapseExecutionDetails = !(message.role === 'assistant' && isProcessing)

@@ -334,7 +334,9 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
 
   ipcMain.handle(IpcChannel.App_IsNotEmptyDir, async (_, path: string) => {
-    return fs.readdirSync(path).length > 0
+    // 目录不存在时保持抛错语义（ipcMain.handle 会向渲染层透传 rejection），不得吞成"空"
+    const entries = await fs.promises.readdir(path)
+    return entries.length > 0
   })
 
   // Copy user data to new location

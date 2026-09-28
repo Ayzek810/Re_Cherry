@@ -21,7 +21,7 @@ import { Flex } from 'antd'
 import { debounce } from 'lodash'
 import { AnimatePresence, motion } from 'motion/react'
 import type { FC } from 'react'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
@@ -137,20 +137,32 @@ const Chat: FC<Props> = (props) => {
     })
   }
 
-  let firstUpdateCompleted = false
-  const firstUpdateOrNoFirstUpdateHandler = debounce(() => {
-    contentSearchRef.current?.silentSearch()
-  }, 10)
+  // 首帧标记走 ref：局部 let 每次渲染都会重置，messagesComponentUpdateHandler 里
+  // 读到的永远是 false，silentSearch 联动实际从未生效
+  const firstUpdateCompletedRef = useRef(false)
+  // 防抖器只建一份：在渲染体内创建且从不 cancel 会每次渲染遗弃一个 pending 定时器
+  const firstUpdateDebounceRef = useRef<ReturnType<typeof debounce> | null>(null)
+  if (!firstUpdateDebounceRef.current) {
+    firstUpdateDebounceRef.current = debounce(() => {
+      contentSearchRef.current?.silentSearch()
+    }, 10)
+  }
+  useEffect(
+    () => () => {
+      firstUpdateDebounceRef.current?.cancel()
+    },
+    []
+  )
 
   const messagesComponentUpdateHandler = () => {
-    if (firstUpdateCompleted) {
-      firstUpdateOrNoFirstUpdateHandler()
+    if (firstUpdateCompletedRef.current) {
+      firstUpdateDebounceRef.current?.()
     }
   }
 
   const messagesComponentFirstUpdateHandler = () => {
-    setTimeoutTimer('messagesComponentFirstUpdateHandler', () => (firstUpdateCompleted = true), 300)
-    firstUpdateOrNoFirstUpdateHandler()
+    setTimeoutTimer('messagesComponentFirstUpdateHandler', () => (firstUpdateCompletedRef.current = true), 300)
+    firstUpdateDebounceRef.current?.()
   }
 
   const mainHeight = isTopNavbar ? 'calc(100vh - var(--navbar-height) - 6px)' : 'calc(100vh - var(--navbar-height))'

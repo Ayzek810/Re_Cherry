@@ -65,7 +65,6 @@ type MessageOperationsHandlers = ReturnType<typeof useMessageOperations>
 
 type MessageMenubarButtonContext = {
   assistant: Assistant
-  blockEntities: ReturnType<typeof messageBlocksSelectors.selectEntities>
   confirmDeleteMessage: boolean
   confirmRegenerateMessage: boolean
   copied: boolean
@@ -173,8 +172,6 @@ const MessageMenubar: FC<Props> = (props) => {
   const onEdit = useCallback(async () => {
     startEditing(message.id)
   }, [message.id, startEditing])
-
-  const blockEntities = useSelector(messageBlocksSelectors.selectEntities)
 
   const handleTraceUserMessage = useCallback(async () => {
     if (message.traceId) {
@@ -427,7 +424,6 @@ const MessageMenubar: FC<Props> = (props) => {
 
   const buttonContext: MessageMenubarButtonContext = {
     assistant,
-    blockEntities,
     confirmDeleteMessage,
     confirmRegenerateMessage,
     copied,
@@ -744,13 +740,16 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
       </Tooltip>
     )
   },
-  'inspect-data': ({ message, blockEntities, enableDeveloperMode }) => {
+  'inspect-data': ({ message, enableDeveloperMode }) => {
     if (!enableDeveloperMode) {
       return null
     }
 
     const handleInspect = (e: React.MouseEvent) => {
       e.stopPropagation()
+      // 点击时按需读取：不在 menubar 顶层订阅全量块实体（否则流式期间每个 token
+      // 都会让所有历史消息的 menubar 重渲染）
+      const blockEntities = messageBlocksSelectors.selectEntities(store.getState())
       const blocks = message.blocks.map((blockId) => blockEntities[blockId]).filter(Boolean)
       void InspectMessagePopup.show({
         title: `Message: ${message.id}`,

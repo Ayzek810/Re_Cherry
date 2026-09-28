@@ -1,7 +1,7 @@
 import { lightbulbVariants } from '@renderer/utils/motionVariants'
 import { ChevronRight, Lightbulb } from 'lucide-react'
 import { motion } from 'motion/react'
-import React, { useMemo } from 'react'
+import React, { memo, useMemo, useRef } from 'react'
 import styled from 'styled-components'
 
 interface Props {
@@ -12,8 +12,41 @@ interface Props {
 }
 
 const ThinkingEffect: React.FC<Props> = ({ isThinking, thinkingTimeText, content, expanded }) => {
+  // 增量行处理：流式 content 每 token 变化，全文 split 是 O(全文×token) 的平方级开销。
+  // 已提交的完整行走 ref 增量追加；仅在前缀断裂（换块/重置/截断）时全量重算。
+  const linesRef = useRef<string[]>([])
+  const consumedRef = useRef(0)
+  const prevContentRef = useRef<string | null>(null)
+
   const messages = useMemo(() => {
-    const allLines = (content || '').split('\n')
+    const src = content || ''
+    const prev = prevContentRef.current
+
+    if (prev !== null && src.startsWith(prev.slice(0, consumedRef.current)) && src.length >= consumedRef.current) {
+      let delta = src.slice(consumedRef.current)
+      let nl = delta.indexOf('\n')
+      while (nl !== -1) {
+        linesRef.current.push(delta.slice(0, nl))
+        consumedRef.current += nl + 1
+        delta = delta.slice(nl + 1)
+        nl = delta.indexOf('\n')
+      }
+    } else {
+      linesRef.current = []
+      consumedRef.current = 0
+      let rest = src
+      let nl = rest.indexOf('\n')
+      while (nl !== -1) {
+        linesRef.current.push(rest.slice(0, nl))
+        consumedRef.current += nl + 1
+        rest = rest.slice(nl + 1)
+        nl = rest.indexOf('\n')
+      }
+    }
+    prevContentRef.current = src
+
+    // 与原 split('\n') 语义对齐：committed 完整行 + 末尾未完行；思考中不显示未完行
+    const allLines = [...linesRef.current, src.slice(consumedRef.current)]
     const newMessages = isThinking ? allLines.slice(0, -1) : allLines
     return newMessages.filter((line) => line.trim() !== '')
   }, [content, isThinking])
@@ -56,11 +89,9 @@ const ThinkingEffect: React.FC<Props> = ({ isThinking, thinkingTimeText, content
                 duration: 0.15,
                 ease: 'linear'
               }}>
-              {messages.map((message, index) => {
-                if (index < messages.length - 5) return null
-
-                return <Message key={index}>{message}</Message>
-              })}
+              {messages.slice(-5).map((message, index) => (
+                <Message key={index}>{message}</Message>
+              ))}
             </Messages>
           </Content>
         )}
@@ -187,4 +218,4 @@ const ArrowContainer = styled.div`
   }
 `
 
-export default ThinkingEffect
+export default memo(ThinkingEffect)

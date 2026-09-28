@@ -221,27 +221,3 @@ Follow the instructions mentioned below:
 - DO NOT ADD ANY ADDITIONAL TEXT OR CODEBLOCK IN THE JSON FIELDS WHICH MAKE IT INVALID SUCH AS "\`\`\`json" OR "\`\`\`".
 `
 
-export const updateMemoryUserPrompt: string = `Below is the current content of my memory which I have collected till now. You have to update it in the following format only:
-<oldMemory> 
-{{ retrievedOldMemory }}
-</oldMemory>
-
-The new retrieved facts are mentioned below. You have to analyze the new retrieved facts and determine whether these facts should be added, updated, or deleted in the memory.
-<newFacts>
-{{ newRetrievedFacts }}
-</newFacts>
-
-You have to return the updated memory in the following JSON format:
-
-[
-    {
-        "id": "0",
-        "text": "User is a software engineer",
-        "event": "ADD/UPDATE/DELETE/NONE",
-        "old_memory": "Old memory text if event is UPDATE"
-    },
-    ...
-]
-
-Do not return anything except the JSON format.
-`

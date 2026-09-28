@@ -46,21 +46,25 @@ export function parseSkillMetadata(skillDir: string): ParsedSkillMetadata | null
   const mdPath = findSkillMdPath(skillDir)
   if (mdPath === null) return null
   try {
-    const raw = fs.readFileSync(mdPath, 'utf-8')
-    const parsed = matter(raw, {})
-    const data = (parsed.data ?? {}) as Record<string, unknown>
-    return {
-      name: typeof data.name === 'string' && data.name.trim().length > 0 ? data.name.trim() : path.basename(skillDir),
-      description: typeof data.description === 'string' ? data.description.trim() : '',
-      version: typeof data.version === 'string' ? data.version : undefined,
-      author: typeof data.author === 'string' ? data.author : undefined
-    }
+    return parseSkillMdContent(fs.readFileSync(mdPath, 'utf-8'), skillDir)
   } catch (error) {
     logger.warn(
       `skills: failed to parse metadata in "${skillDir}"`,
       error instanceof Error ? error : new Error(String(error))
     )
     return null
+  }
+}
+
+/** 从 SKILL.md 原文解析 frontmatter（供调用方与文件读取解耦、复用同一次读取）。 */
+export function parseSkillMdContent(raw: string, skillDir: string): ParsedSkillMetadata {
+  const parsed = matter(raw, {})
+  const data = (parsed.data ?? {}) as Record<string, unknown>
+  return {
+    name: typeof data.name === 'string' && data.name.trim().length > 0 ? data.name.trim() : path.basename(skillDir),
+    description: typeof data.description === 'string' ? data.description.trim() : '',
+    version: typeof data.version === 'string' ? data.version : undefined,
+    author: typeof data.author === 'string' ? data.author : undefined
   }
 }
 

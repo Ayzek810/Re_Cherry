@@ -31,47 +31,32 @@ export function toAsarUnpackedPath(filePath: string): string {
   return path.join(unpackedAppPath, path.relative(appPath, filePath))
 }
 
+// 进程内缓存"已确保存在"的目录：getDataPath 在多个 IPC 热路径上被反复调用，
+// 每次 existsSync+mkdirSync 是纯浪费
+const ensuredDirs = new Set<string>()
+
 export function getDataPath(subPath?: string) {
   const dataPath = path.join(app.getPath('userData'), 'Data')
 
-  if (!fs.existsSync(dataPath)) {
-    fs.mkdirSync(dataPath, { recursive: true })
+  if (!ensuredDirs.has(dataPath)) {
+    if (!fs.existsSync(dataPath)) {
+      fs.mkdirSync(dataPath, { recursive: true })
+    }
+    ensuredDirs.add(dataPath)
   }
 
   if (subPath) {
     const fullPath = path.join(dataPath, subPath)
-    if (!fs.existsSync(fullPath)) {
-      fs.mkdirSync(fullPath, { recursive: true })
+    if (!ensuredDirs.has(fullPath)) {
+      if (!fs.existsSync(fullPath)) {
+        fs.mkdirSync(fullPath, { recursive: true })
+      }
+      ensuredDirs.add(fullPath)
     }
     return fullPath
   }
 
   return dataPath
-}
-
-export function debounce(func: (...args: any[]) => void, wait: number, immediate: boolean = false) {
-  let timeout: NodeJS.Timeout | null = null
-  return function (...args: any[]) {
-    if (timeout) clearTimeout(timeout)
-    if (immediate) {
-      func(...args)
-    } else {
-      timeout = setTimeout(() => func(...args), wait)
-    }
-  }
-}
-
-// NOTE: It's an unused function. localStorage should not be accessed in main process.
-// export function dumpPersistState() {
-//   const persistState = JSON.parse(localStorage.getItem('persist:cherry-studio') || '{}')
-//   for (const key in persistState) {
-//     persistState[key] = JSON.parse(persistState[key])
-//   }
-//   return JSON.stringify(persistState)
-// }
-
-export const runAsyncFunction = async (fn: () => Promise<void>) => {
-  await fn()
 }
 
 export function makeSureDirExists(dir: string) {
@@ -84,14 +69,24 @@ export async function calculateDirectorySize(directoryPath: string): Promise<num
   let totalSize = 0
   const items = await fsAsync.readdir(directoryPath)
 
-  for (const item of items) {
-    const itemPath = path.join(directoryPath, item)
-    const stats = await fsAsync.stat(itemPath)
+  // 每层并行 stat（失败条目按 0 计）；子目录递归保持串行避免无界并发
+  const statsWithNames = await Promise.all(
+    items.map(async (item) => {
+      const itemPath = path.join(directoryPath, item)
+      try {
+        return { item, stats: await fsAsync.stat(itemPath) }
+      } catch {
+        return null
+      }
+    })
+  )
 
-    if (stats.isFile()) {
-      totalSize += stats.size
-    } else if (stats.isDirectory()) {
-      totalSize += await calculateDirectorySize(itemPath)
+  for (const entry of statsWithNames) {
+    if (!entry) continue
+    if (entry.stats.isFile()) {
+      totalSize += entry.stats.size
+    } else if (entry.stats.isDirectory()) {
+      totalSize += await calculateDirectorySize(path.join(directoryPath, entry.item))
     }
   }
   return totalSize
