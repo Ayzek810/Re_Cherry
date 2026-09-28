@@ -24,7 +24,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
-import { ocrPdfFile } from '@main/services/localModel/pdfOcr'
+import { parsePdf as parsePdfWithLocalPaddle } from '@main/services/preprocess/localPaddle'
 import { net } from 'electron'
 import StreamZip from 'node-stream-zip'
 
@@ -145,7 +145,7 @@ export async function parsePdfWithProvider(
   try {
     switch (config.id) {
       case 'local-paddle':
-        return await ocrPdfFile(filePath, controller.signal)
+        return await parsePdfWithLocalPaddle(filePath, controller.signal)
       case 'mineru':
         return await parseWithMineru(config, filePath, controller.signal)
       case 'doc2x':

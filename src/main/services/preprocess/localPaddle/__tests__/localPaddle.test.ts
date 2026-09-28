@@ -1,25 +1,47 @@
 /**
- * LocalPaddle 本地模型子系统单元测试（v0.3.2）：
- * - modelSource：双镜像直链形态 + fork 固定顺序（ModelScope 优先）；
- * - localModelCatalog：minBytes/落盘名/权重健全性（下载守门的真相源）；
- * - localModelService.dictTextFromInferenceYml：字典构建的 ppu 兼容格式
+ * LocalPaddle 模型仓单元测试（v0.4.4 收编自 services/localModel 的 localModel.test.ts）：
+ * - modelAssets：双镜像直链形态 + fork 固定顺序（ModelScope 优先）+ minBytes/落盘名/权重健全性；
+ * - modelStore.dictTextFromInferenceYml：字典构建的 ppu 兼容格式
  *   （前导空行 + 逐项换行 + 尾换行——ppu 按行 split 不 trim，index 0 = blank）；
- * - ocrPaths：userData 派生路径 + 三文件就绪探测（electron/fs 均为 main.setup mock）；
- * - isPlatformSupported：darwin-x64 永不支持（onnxruntime-node 无原生绑定）。
+ * - modelStore 路径与就绪探测：userData 派生路径 + 三文件齐（electron/fs 均为 main.setup mock）；
+ * - modelStore.getStatus 状态机：not_downloaded / ready / unsupported（darwin-x64）；
+ * - modelStore.remove：先终止活 OCR 子进程再删盘（Windows 打开句柄会让 unlink 失败）。
  * 下载/推理的运行时行为不在单元面（网络与 onnx 运行时），由 scratch 实证 + 真机验收。
  */
-import { existsSync } from 'node:fs'
+import { existsSync, promises as fsPromises } from 'node:fs'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { LOCAL_MODELS } from '../localModelCatalog'
-import { dictTextFromInferenceYml, localModelService } from '../localModelService'
-import { MODEL_SOURCE_ORDER, resolveModelFileUrl } from '../modelSource'
-import { isLocalOcrModelDownloaded, ocrModelDir, ocrModelPaths } from '../ocrPaths'
+import { terminateActiveOcrProcess } from '../localOcr'
+import { LOCAL_PADDLE_ASSETS, MODEL_SOURCE_ORDER, resolveModelFileUrl } from '../modelAssets'
+import {
+  dictTextFromInferenceYml,
+  isPaddleModelReady,
+  localPaddleModelStore,
+  paddleModelDir,
+  paddleModelPaths
+} from '../modelStore'
+
+vi.mock('../localOcr', () => ({
+  terminateActiveOcrProcess: vi.fn(async () => {})
+}))
+
+// main.setup 的 node:fs mock 缺 promises.rm（本套件 remove 用例需要）——
+// 以真实 fs 为底补齐 existsSync 与 rm 的可断言形态；default 同步带上
+// （modelStore 走 `import fs from 'node:fs'` 默认导入）。
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  const mock = {
+    ...actual,
+    existsSync: vi.fn(),
+    promises: { ...(actual.promises as object), rm: vi.fn(async () => {}) }
+  }
+  return { ...mock, default: mock }
+})
 
 const mockedExistsSync = vi.mocked(existsSync)
 
-describe('modelSource', () => {
+describe('modelAssets（镜像与资产表）', () => {
   it('resolves ModelScope direct URLs with the master revision', () => {
     expect(resolveModelFileUrl('modelscope', 'PaddlePaddle/PP-OCRv6_medium_det_onnx', 'inference.onnx')).toBe(
       'https://www.modelscope.cn/models/PaddlePaddle/PP-OCRv6_medium_det_onnx/resolve/master/inference.onnx'
@@ -35,11 +57,9 @@ describe('modelSource', () => {
   it('fixes the fork order: ModelScope first, HuggingFace fallback', () => {
     expect(MODEL_SOURCE_ORDER).toEqual(['modelscope', 'huggingface'])
   })
-})
 
-describe('localModelCatalog', () => {
   it('keeps weight minBytes far above LFS pointer size and weights ≈ file MB', () => {
-    const { weights, dictionary } = LOCAL_MODELS.ocr
+    const { weights, dictionary } = LOCAL_PADDLE_ASSETS
     for (const file of Object.values(weights)) {
       expect(file.minBytes).toBeGreaterThanOrEqual(1_000_000)
       expect(file.weight).toBeGreaterThan(0)
@@ -65,12 +85,12 @@ describe('dictTextFromInferenceYml', () => {
   })
 })
 
-describe('ocrPaths (electron app + node:fs mocked by main setup)', () => {
+describe('modelStore 路径与就绪探测（electron app + node:fs mocked by main setup）', () => {
   it('derives the model dir from userData, outside Data/ (not backed up)', () => {
-    // node:path 在 vitest builtin 外置下走真实实现（win32 join 归一分隔符）——
-    // 断言契约（userData + Runtime/models/pp-ocrv6）而非分隔符风格。
-    expect(ocrModelDir()).toMatch(/[\\/]mock[\\/]userData[\\/]Runtime[\\/]models[\\/]pp-ocrv6$/)
-    const paths = ocrModelPaths()
+    // node:path 在 vitest builtin 外置下走 setup 的 join（'/' 连接）——断言契约
+    //（userData + Runtime/models/pp-ocrv6）而非分隔符风格。
+    expect(paddleModelDir()).toMatch(/mock[\\/]userData[\\/]Runtime[\\/]models[\\/]pp-ocrv6$/)
+    const paths = paddleModelPaths()
     expect(paths.detection).toContain('PP-OCRv6_medium_det.onnx')
     expect(paths.recognition).toContain('PP-OCRv6_medium_rec.onnx')
     expect(paths.charactersDictionary).toContain('ppocrv6_dict.txt')
@@ -78,25 +98,25 @@ describe('ocrPaths (electron app + node:fs mocked by main setup)', () => {
 
   it('is ready only when all three files exist', () => {
     mockedExistsSync.mockReturnValue(true)
-    expect(isLocalOcrModelDownloaded()).toBe(true)
+    expect(isPaddleModelReady()).toBe(true)
     mockedExistsSync.mockReturnValue(false)
-    expect(isLocalOcrModelDownloaded()).toBe(false)
+    expect(isPaddleModelReady()).toBe(false)
   })
 })
 
-describe('localModelService.getStatus', () => {
+describe('localPaddleModelStore.getStatus', () => {
   beforeEach(() => {
     mockedExistsSync.mockReset()
   })
 
   it('reports not_downloaded when weights are absent (supported platform)', () => {
     mockedExistsSync.mockReturnValue(false)
-    expect(localModelService.getStatus().status).toBe('not_downloaded')
+    expect(localPaddleModelStore.getStatus().status).toBe('not_downloaded')
   })
 
   it('reports ready when all three files exist', () => {
     mockedExistsSync.mockReturnValue(true)
-    const status = localModelService.getStatus()
+    const status = localPaddleModelStore.getStatus()
     expect(status.status).toBe('ready')
     expect(status.percent).toBe(100)
   })
@@ -107,10 +127,30 @@ describe('localModelService.getStatus', () => {
     try {
       Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
       Object.defineProperty(process, 'arch', { value: 'x64', configurable: true })
-      expect(localModelService.getStatus().status).toBe('unsupported')
+      expect(localPaddleModelStore.getStatus().status).toBe('unsupported')
     } finally {
       if (platformDesc) Object.defineProperty(process, 'platform', platformDesc)
       if (archDesc) Object.defineProperty(process, 'arch', archDesc)
     }
+  })
+})
+
+describe('localPaddleModelStore.remove（删除前置终止子进程）', () => {
+  beforeEach(() => {
+    mockedExistsSync.mockReset()
+    vi.clearAllMocks()
+  })
+
+  it('terminates the active OCR process before removing the model dir (Windows handle lock)', async () => {
+    const rmSpy = vi.mocked(fsPromises.rm)
+    await localPaddleModelStore.remove()
+    expect(vi.mocked(terminateActiveOcrProcess)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(terminateActiveOcrProcess).mock.invocationCallOrder[0]).toBeLessThan(
+      rmSpy.mock.invocationCallOrder[0]
+    )
+    expect(rmSpy).toHaveBeenCalledWith(
+      expect.stringContaining('pp-ocrv6'),
+      expect.objectContaining({ recursive: true, force: true })
+    )
   })
 })

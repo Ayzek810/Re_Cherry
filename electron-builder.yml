@@ -57,6 +57,17 @@ asarUnpack:
   - out/proxy/**
   - resources/**
   - "**/*.{metal,exp,lib}"
+  # LocalPaddle（文档处理通道 local-paddle）原生闭包显式解包（v0.4.4）：
+  # .node 绑定 + 同目录 DLL 必须成组落在 app.asar.unpacked（Windows 无法从
+  # asar 加载 DLL；onnxruntime_binding.node 静态依赖同目录 onnxruntime.dll，
+  # sharp 同理）——v0.4.3 及之前 @img/sharp-win32-x64 整包缺失（pnpm 收集器
+  # 对顶层可解析包的 optionalDependencies 存在性校验看不见 .pnpm 虚拟存储，
+  # 静默丢弃），安装版 OCR 必死；scripts/after-pack.js 对此有交付断言。
+  - "**/node_modules/onnxruntime-node/**"
+  - "**/node_modules/@img/**"
+  - "**/node_modules/sharp/**"
+  - "**/node_modules/ppu-ocv/**"
+  - "**/node_modules/ppu-paddle-ocr/**"
 
 win:
   executableName: Re_Cherry

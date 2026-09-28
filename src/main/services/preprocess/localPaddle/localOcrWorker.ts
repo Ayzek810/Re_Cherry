@@ -1,12 +1,14 @@
 /**
- * LocalPaddle OCR utility process 入口（v0.3.2 性能事故修复，2026-09-22）。
+ * LocalPaddle OCR utility process 入口（v0.3.2 性能事故修复，2026-09-22；
+ * v0.4.4 自 services/localModel/ocrWorker.ts 原样收编——实证代码不动语义，
+ * 仅归属与文件名并入文档处理通道）。
  *
  * 事故：一切 PDF → OCR 的路由下，1436 页 PDF 在主进程逐页推理 ≈ 数小时，
  * 主线程被独占 → 窗口整体冻结（真机实锤：dev 日志 `local OCR: page 1/1436`
  * 起步每页 5~25s + 当晚两次 `Renderer process killed`）。
  *
  * 本进程承接全套重活：pdf-parse 逐页光栅化 → sharp 预处理 → ppu-paddle-ocr
- * 推理。主进程（pdfOcr.ts）只做编排与终止——OCR 结果一字不变。
+ * 推理。主进程（localOcr.ts）只做编排与终止——OCR 结果一字不变。
  *
  * **为什么是 utilityProcess 而不是 worker_threads**：本机实测 worker_threads
  * 里加载 onnxruntime/sharp 原生模块 → 整进程 0xC0000005 访问违例（与 vitest
@@ -26,7 +28,13 @@
  * 纪律（违反即事故）：本文件对 electron 的使用**仅限 process.parentPort**；
  * 禁止 @logger（winston 双进程写同一日志文件会互锁），日志一律经 postMessage
  * 交主进程落盘；模型路径由主进程经消息传入（utility 进程里 app.getPath 不可靠
- * 的形态不依赖）。编译产物 out/main/ocrWorker.js（electron.vite.config 多入口）。
+ * 的形态不依赖）。编译产物 out/main/localOcrWorker.js（electron.vite.config
+ * 多入口）。
+ *
+ * 安装版运行时依赖（v0.4.4 实证）：本进程动态 import 的 sharp / ppu-paddle-ocr
+ * / ppu-ocv / onnxruntime-node 必须进包且原生件解包——见 electron-builder.yml
+ * asarUnpack + package.json optionalDependencies + scripts/after-pack.js 断言
+ * （v0.4.3 及之前 @img/sharp-win32-x64 被收集器静默丢弃，安装版 OCR 必死）。
  */
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'

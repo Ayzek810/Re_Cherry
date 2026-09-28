@@ -1,10 +1,13 @@
+/**
+ * LocalPaddle OCR 编排测试（v0.4.4 收编自 services/localModel 的 pdfOcr.test.ts，
+ * 被测缝改名 runLocalOcr，utility 产物名 localOcrWorker.js，语义逐例保持）。
+ */
 import { EventEmitter } from 'node:events'
 
 import { utilityProcess } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { disposeOcrServiceThen } from '../ocrInferenceService'
-import { ocrPdfFile, terminateActiveOcrProcess } from '../pdfOcr'
+import { localOcrWorkerPath, runLocalOcr, terminateActiveOcrProcess } from '../localOcr'
 
 const children: FakeChild[] = []
 
@@ -16,14 +19,22 @@ class FakeChild extends EventEmitter {
 // tests/main.setup.ts 全局 mock 了 electron（含 utilityProcess.fork: vi.fn() 无实现）。
 // 此处静态 import 同一 mock，beforeEach 装行为——每个 FakeChild 自带独立
 // postMessage/kill vi.fn，跨用例无串扰，无需 clearAllMocks。
-vi.mock('@main/services/localModel/ocrPaths', () => ({
-  isLocalOcrModelDownloaded: vi.fn(() => true),
-  ocrModelPaths: vi.fn(() => ({
+vi.mock('@main/services/preprocess/localPaddle/modelStore', () => ({
+  isPaddleModelReady: vi.fn(() => true),
+  paddleModelPaths: vi.fn(() => ({
     detection: 'det.onnx',
     recognition: 'rec.onnx',
     charactersDictionary: 'dict.txt'
   }))
 }))
+
+// 编排层的 worker 产物存在性预检走 node:fs.existsSync——setup 的 mock 无默认
+// 行为，这里默认 true（产物在），缺产物用例单独翻 false。
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  const mock = { ...actual, existsSync: vi.fn(() => true) }
+  return { ...mock, default: mock }
+})
 
 /** EventEmitter 原生 emit（event, ...args）——child.on('message', fn) 的 fn 收到的是 payload。 */
 const emit = (child: FakeChild, message: unknown): void =>
@@ -39,7 +50,7 @@ function installFork(): void {
 }
 
 /**
- * 启动一次 OCR 并同步取回 promise 与子进程。ocrPdfFile 静态链路（模型检查、
+ * 启动一次 OCR 并同步取回 promise 与子进程。runLocalOcr 静态链路（模型检查、
  * fork、postMessage）完全同步，调用返回时 FakeChild 已就位——无需任何 flush。
  *
  * 关键陷阱（本文件曾因此 9/10 假死 20 秒）：绝不能把 OCR promise 从 async
@@ -47,7 +58,7 @@ function installFork(): void {
  * 直接等 OCR 本身结束，喂页/abort 代码永远执行不到。
  */
 function startOcr(filePath: string, signal?: AbortSignal): { promise: Promise<string>; child: FakeChild } {
-  const promise = ocrPdfFile(filePath, signal)
+  const promise = runLocalOcr(filePath, signal)
   const child = children[children.length - 1]
   expect(child).toBeDefined()
   return { promise, child }
@@ -61,7 +72,7 @@ function feedPages(child: FakeChild, pages: string[], totalPages: number): void 
   emit(child, { type: 'done', pagesDone: pages.length, totalPages })
 }
 
-describe('ocrPdfFile（utilityProcess 编排）', () => {
+describe('runLocalOcr（utilityProcess 编排）', () => {
   beforeEach(() => {
     children.length = 0
     installFork()
@@ -75,7 +86,7 @@ describe('ocrPdfFile（utilityProcess 编排）', () => {
     // stdio 'pipe'（2026-09-22 验收事故长期改进）：worker stderr 必须收进主进程
     // 日志——默认 inherit 在安装版里等于丢弃崩溃栈。
     expect(vi.mocked(utilityProcess.fork)).toHaveBeenCalledWith(
-      expect.stringContaining('ocrWorker.js'),
+      expect.stringContaining('localOcrWorker.js'),
       [],
       expect.objectContaining({ serviceName: 'localOcrWorker', stdio: 'pipe' })
     )
@@ -117,10 +128,23 @@ describe('ocrPdfFile（utilityProcess 编排）', () => {
   })
 
   it('模型未下载：不起子进程直接报可行动错误', async () => {
-    const ocrPaths = await import('@main/services/localModel/ocrPaths')
-    vi.mocked(ocrPaths.isLocalOcrModelDownloaded).mockReturnValueOnce(false)
-    await expect(ocrPdfFile('C:/books/a.pdf')).rejects.toThrow('model is not downloaded')
+    const modelStore = await import('@main/services/preprocess/localPaddle/modelStore')
+    vi.mocked(modelStore.isPaddleModelReady).mockReturnValueOnce(false)
+    await expect(runLocalOcr('C:/books/a.pdf')).rejects.toThrow('model is not downloaded')
     expect(children).toHaveLength(0)
+  })
+
+  it('worker 产物缺失：不起子进程直接报构建缺口错误（fail-loud 不留 stderr 猜谜）', async () => {
+    const fs = await import('node:fs')
+    vi.mocked(fs.existsSync).mockReturnValueOnce(false)
+    await expect(runLocalOcr('C:/books/a.pdf')).rejects.toThrow('worker bundle is missing')
+    expect(children).toHaveLength(0)
+  })
+})
+
+describe('localOcrWorkerPath（产物路径锚定）', () => {
+  it('锚定 app 根的 out/main/localOcrWorker.js——不随编排层 chunk 位置漂移（2026-09-28 真机回归）', () => {
+    expect(localOcrWorkerPath()).toBe('/mock/appRoot/out/main/localOcrWorker.js')
   })
 })
 
@@ -147,27 +171,5 @@ describe('terminateActiveOcrProcess（模型删除前置）', () => {
   it('无活进程：直接返回，无 kill', async () => {
     await terminateActiveOcrProcess()
     expect(children).toHaveLength(0)
-  })
-})
-
-describe('disposeOcrServiceThen（模型删除流前置）', () => {
-  beforeEach(() => {
-    children.length = 0
-    installFork()
-  })
-
-  it('fn 在子进程退出之后才执行（Windows 句柄未释放前 unlink 会失败）', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    void promise.catch(() => undefined)
-    let fnRan = false
-    const disposePromise = disposeOcrServiceThen(async () => {
-      fnRan = true
-      return 'done'
-    })
-    expect(child.kill).toHaveBeenCalledTimes(1)
-    expect(fnRan).toBe(false) // kill 已发出但进程未退出：fn 不得提前跑
-    ;(child as unknown as { emit: (event: string, code: number) => void }).emit('exit', 0)
-    await expect(disposePromise).resolves.toBe('done')
-    expect(fnRan).toBe(true)
   })
 })

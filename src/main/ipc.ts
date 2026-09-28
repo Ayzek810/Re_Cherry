@@ -36,7 +36,7 @@ import { fileStorage as fileManager } from './services/FileStorage'
 import FileService from './services/FileSystemService'
 import { hermesDashboardService } from './services/hermes/HermesDashboardService'
 import { knowledgeService } from './services/knowledge/KnowledgeService'
-import { localModelService } from './services/localModel/localModelService'
+import * as localPaddle from './services/preprocess/localPaddle'
 import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
 import NotificationService from './services/NotificationService'
@@ -649,11 +649,11 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     ) => knowledgeService.search(payload.base, payload.embedding, payload.query)
   )
 
-  // 本地模型（v0.3.2 LocalPaddle）：下载生命周期薄转发 + 默认文档处理服务商推送落点。
-  ipcMain.handle(IpcChannel.LocalModel_GetStatus, () => localModelService.getStatus())
-  ipcMain.handle(IpcChannel.LocalModel_Download, () => localModelService.download())
-  ipcMain.handle(IpcChannel.LocalModel_Cancel, () => localModelService.cancel())
-  ipcMain.handle(IpcChannel.LocalModel_Remove, () => localModelService.remove())
+  // 文档处理通道 local-paddle 条目（v0.4.4 收编自 LocalModel_*）：下载生命周期薄转发。
+  ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_GetStatus, () => localPaddle.getStatus())
+  ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_Download, () => localPaddle.download())
+  ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_Cancel, () => localPaddle.cancel())
+  ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_Remove, () => localPaddle.remove())
 
   // 技能（批次5）：薄转发直调 SkillService（磁盘 = 真相源；渲染层切片退为投影）。
   ipcMain.handle(IpcChannel.Skill_InstallFromZip, (_, zipFilePath: string) => skillService.installFromZip(zipFilePath))

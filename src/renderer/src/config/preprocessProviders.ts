@@ -39,8 +39,9 @@ export const defaultPreprocessProviders: PreprocessProvider[] = [
     apiHost: ''
   },
   {
-    /** 本地推理条目（v0.3.2 自 CS_V2 local-paddleocr 移植）：无密钥无 apiHost，
-     * 设置面板渲染模型下载卡片；执行缝在 KnowledgeService（扫描件 OCR 回退）。 */
+    /** 本地推理条目（v0.3.2 自 CS_V2 local-paddleocr 移植；v0.4.4 收编为文档处理
+     * 子系统 src/main/services/preprocess/localPaddle/）：无密钥无 apiHost，
+     * 设置面板渲染模型下载卡片；执行缝走文档处理通道 parsePdf 路由。 */
     id: 'local-paddle',
     name: 'LocalPaddle'
   }

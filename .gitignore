@@ -76,6 +76,14 @@ vitest.config.*.timestamp-*
 playwright-report
 test-results
 
+# scratch 探针运行时生成物（工具源码随仓；模型/伪 userData/产物不入库）
+tools/scratch-verify/models/
+tools/scratch-verify/probe-userdata/
+tools/scratch-verify/probe-*.pdf
+tools/scratch-verify/probe-*.png
+probe-f-orchestrator.bundle.cjs
+
 YOUR_MEMORY_FILE_PATH
 
 .sessions/
+/probe-*.pdf

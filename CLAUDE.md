@@ -90,6 +90,7 @@ Mandatory after: deleting/renaming/moving files, import/export surface changes, 
 - Electron utility workers: `parentPort` only via `process.parentPort` (the d.ts export is a lie); worker-side messages arrive as `MessageEvent` (unwrap `.data`), main-side `utilityProcess` messages as bare values; main-process forks use `stdio: 'pipe'` wired to the logger so child crashes are forensically available.
 - Windows: `env.PATH` is case-sensitive on plain objects — normalize (`withPathPrepend` pattern); EPERM/EBUSY on delete/rename right after killing processes = antivirus/DLL-lock window, retry with backoff.
 - Killing processes must match CommandLine precisely (list before kill) — Electron app, agent hosts and targets may all be `node.exe`.
+- electron-builder's pnpm collector cannot see optionalDependencies of a top-level-resolvable package (its existence check walks top-level node_modules only and skips dot-dirs, so pnpm's `.pnpm` virtual store is invisible) — platform binaries like `@img/sharp-win32-x64` get silently dropped from the package (v0.4.3 and earlier: installed-build LocalPaddle died at `import('sharp')`, dev was green). House pattern: declare runtime platform binaries as root `optionalDependencies` (the root package's own optionalDeps bypass the broken check — same as `@libsql/*`), add explicit `asarUnpack` entries for the native closure, and `scripts/after-pack.js` asserts the unpacked natives exist (this gap must turn red at build time, never on a real machine).
 
 ## Architecture
 

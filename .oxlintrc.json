@@ -12,6 +12,7 @@
     "tests/**",
     "src/main/integration/nutstore/sso/lib/**",
     "packages/**/dist",
+    "tools/scratch-verify/**",
     "eslint.config.mjs"
   ],
   "options": {

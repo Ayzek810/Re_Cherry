@@ -21,12 +21,15 @@ vi.mock('node:os', async (importOriginal) => {
   return { ...patched, default: patched }
 })
 
-vi.mock('@main/services/localModel/pdfOcr', () => ({
-  ocrPdfFile: vi.fn(),
-  terminateActiveOcrProcess: vi.fn(async () => {})
+vi.mock('@main/services/preprocess/localPaddle', () => ({
+  parsePdf: vi.fn(),
+  getStatus: vi.fn(),
+  download: vi.fn(),
+  cancel: vi.fn(),
+  remove: vi.fn()
 }))
 
-import { ocrPdfFile } from '@main/services/localModel/pdfOcr'
+import { parsePdf as parsePdfWithLocalPaddle } from '@main/services/preprocess/localPaddle'
 
 import {
   isProviderConfigured,
@@ -138,11 +141,11 @@ describe('preprocessChannel 注册表（配置投影 + 每轮登记）', () => {
 
 describe('parsePdfWithProvider 路由与时间预算', () => {
   it('local-paddle → 本地 OCR 编排（signal 透传）', async () => {
-    vi.mocked(ocrPdfFile).mockResolvedValue('本地 OCR 全文')
+    vi.mocked(parsePdfWithLocalPaddle).mockResolvedValue('本地 OCR 全文')
     const text = await parsePdfWithProvider({ id: 'local-paddle' }, 'C:/books/scan.pdf')
-    expect(ocrPdfFile).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(ocrPdfFile).mock.calls[0][0]).toBe('C:/books/scan.pdf')
-    expect(vi.mocked(ocrPdfFile).mock.calls[0][1]).toBeInstanceOf(AbortSignal)
+    expect(parsePdfWithLocalPaddle).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][0]).toBe('C:/books/scan.pdf')
+    expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][1]).toBeInstanceOf(AbortSignal)
     expect(text).toBe('本地 OCR 全文')
   })
 
@@ -157,7 +160,7 @@ describe('parsePdfWithProvider 路由与时间预算', () => {
   })
 
   it('时间预算到点：打断在途工作并给可行动错误', async () => {
-    vi.mocked(ocrPdfFile).mockImplementation(
+    vi.mocked(parsePdfWithLocalPaddle).mockImplementation(
       (_filePath: string, signal?: AbortSignal) =>
         new Promise<string>((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
@@ -169,7 +172,7 @@ describe('parsePdfWithProvider 路由与时间预算', () => {
   }, 5000)
 
   it('外部 signal 中止：透传打断', async () => {
-    vi.mocked(ocrPdfFile).mockImplementation(
+    vi.mocked(parsePdfWithLocalPaddle).mockImplementation(
       (_filePath: string, signal?: AbortSignal) =>
         new Promise<string>((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(signal.reason), { once: true })

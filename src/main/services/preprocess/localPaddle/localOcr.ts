@@ -1,31 +1,29 @@
 /**
- * PDF → 本地 OCR 主进程编排（v0.3.2 自 CS_V2 local-document 移植）。
+ * LocalPaddle OCR 主进程编排（v0.4.4 收编：原 services/localModel/pdfOcr.ts，
+ * 推理子进程化与消息协议语义原样保持——2026-09-22 性能事故修复后的实证形态）。
  *
- * 2026-09-22 性能事故修复：推理全部挪入 utilityProcess 子进程（ocrWorker.ts）
- * ——此前 1436 页书在主进程逐页推理数小时，主线程被独占、窗口整体冻结（真机
- * 实锤：dev 日志 page 1/1436 + 两次 Renderer killed）。选 utilityProcess 而非
- * worker_threads：本机 worker_threads 里加载 onnxruntime/sharp → 整进程
- * 0xC0000005（实测），utility 子进程原生崩溃被隔离，即"崩溃隔离"落地。
+ * 事故背景：一切 PDF → OCR 的路由下，1436 页 PDF 在主进程逐页推理数小时且独占
+ * 主线程 → 窗口整体冻结。推理全部挪入 utilityProcess 子进程（localOcrWorker.ts）
+ * ——选 utilityProcess 而非 worker_threads：本机 worker_threads 里加载
+ * onnxruntime/sharp → 整进程 0xC0000005（实测），utility 子进程原生崩溃被隔离。
  * 主进程只做编排、部分结果组装、终止。页与页串行（子进程内单推理队列）；读不
- * 出的页贡献空文本而非整体失败（与上游同语义）。输出不带页标记——下游直接切
- * 块嵌入/喂模型，合成页标题会把文档没有的结构写进向量。
+ * 出的页贡献空文本而非整体失败。输出不带页标记——下游直接切块嵌入/喂模型。
  *
- * 预算落点（2026-09-22 三轮澄清）：页数上限与 200k 文本截断上限删除（终局）；
- * 时间预算 8 分钟由 preprocessChannel.parsePdfWithProvider 的 AbortController 施加
- * （工具路径默认；知识库摄取路径传 Infinity = 无预算）。本编排自身无预算——预算
- * 经 signal 传入，abort 即 kill 子进程并拒绝。
- * 子进程 stderr/stdout 接日志（同轮验收事故的长期改进）：worker 崩溃时其栈
- * 经 pipe 进主进程日志——此前 stdio 默认 inherit，安装版里 worker 崩溃原因
- * 彻底不可见，只能对着 "exited unexpectedly (code 1)" 瞎猜。
+ * 预算落点：时间预算 8 分钟由 preprocessChannel.parsePdfWithProvider 的
+ * AbortController 施加（工具路径默认；知识库摄取路径传 Infinity = 无预算）。
+ * 本编排自身无预算——预算经 signal 传入，abort 即 kill 子进程并拒绝。
+ * 子进程 stderr/stdout 接日志（stdio 'pipe'）：worker 崩溃时其栈经 pipe 进
+ * 主进程日志——默认 inherit 在安装版里 worker 崩溃原因彻底不可见。
  */
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { loggerService } from '@logger'
-import { utilityProcess } from 'electron'
+import { app, utilityProcess } from 'electron'
 
-import { isLocalOcrModelDownloaded, ocrModelPaths } from './ocrPaths'
+import { isPaddleModelReady, paddleModelPaths } from './modelStore'
 
-const logger = loggerService.withContext('PdfOcr')
+const logger = loggerService.withContext('LocalPaddleOcr')
 
 /** 光栅化倍率：PDF 用户空间 72dpi，3x ≈ 216dpi——PP-OCRv6 解析正文够用且页图不过大。 */
 const RENDER_SCALE = 3
@@ -71,20 +69,35 @@ export async function terminateActiveOcrProcess(): Promise<void> {
 }
 
 /**
+ * OCR worker 产物路径。**禁止用 __dirname 推导**（2026-09-28 真机实锤的回归）：
+ * 编排层随动态导入服务图被 rollup 拆进共享 chunk（out/main/chunks/*）——chunk 里
+ * 的 __dirname 是 chunks/ 目录，fork 会指向不存在的 chunks/localOcrWorker.js
+ * → "worker exited unexpectedly (code 1)"。正确锚点是 app 根：dev = 仓库根、
+ * 打包 = app.asar 根（utilityProcess 支持从 asar 路径 fork，probe-e 实证；
+ * `out/main/localOcrWorker.js` 产物契约由 after-pack 断言守门）。
+ */
+export function localOcrWorkerPath(): string {
+  return join(app.getAppPath(), 'out', 'main', 'localOcrWorker.js')
+}
+
+/**
  * 整本 PDF 逐页 OCR。入口先查模型就绪（避免起子进程后才发现没模型）；任务交给
  * utility 子进程，主进程只收敛结果。时间预算（若有）由调用方经 signal 传入——
- * abort 即终止子进程并拒绝（见文件头预算落点）。
+ * abort 即终止子进程并拒绝。
  */
-export async function ocrPdfFile(filePath: string, signal?: AbortSignal): Promise<string> {
-  if (!isLocalOcrModelDownloaded()) {
+export async function runLocalOcr(filePath: string, signal?: AbortSignal): Promise<string> {
+  if (!isPaddleModelReady()) {
     throw new Error('local OCR model is not downloaded (设置 → 文档处理 → LocalPaddle → 下载模型)')
+  }
+  const workerPath = localOcrWorkerPath()
+  if (!existsSync(workerPath)) {
+    // 产物缺失 = 构建/打包缺口（构建面由 after-pack 断言挡；此处 fail-loud 不留 stderr 猜谜）。
+    throw new Error(`local OCR worker bundle is missing at ${workerPath} (build/packaging gap)`)
   }
   // electron 运行时导出是小写实例 utilityProcess（大写 UtilityProcess 只是类型，
   // 动态解构 `const { UtilityProcess } = await import('electron')` 运行时是
   // undefined——tsgo 静态化后当场抓出；此为该雷的纪念碑）。
-  // stdio 'pipe'：worker 的 stdout/stderr 收进主进程日志（崩溃栈可见性，
-  // 默认 inherit 在安装版里=丢弃）。
-  const child: UtilityProcessLike = utilityProcess.fork(join(__dirname, 'ocrWorker.js'), [], {
+  const child: UtilityProcessLike = utilityProcess.fork(workerPath, [], {
     serviceName: 'localOcrWorker',
     stdio: 'pipe'
   })
@@ -148,7 +161,7 @@ export async function ocrPdfFile(filePath: string, signal?: AbortSignal): Promis
     child.postMessage({
       pdfPath: filePath,
       scale: RENDER_SCALE,
-      modelPaths: ocrModelPaths()
+      modelPaths: paddleModelPaths()
     })
   })
 }

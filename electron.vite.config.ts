@@ -38,13 +38,14 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        // 双入口：index = 主进程；ocrWorker = OCR worker 线程（多入口下 rollup
-        // 不允许 inlineDynamicImports——内部动态导入按 chunk 拆分到 out/main/，
-        // electron-builder files "**/*" 全量打包，无 §4.16 闭包缺口；外部依赖
-        // 照旧 externalize，不产生额外 chunk）。
+        // 双入口：index = 主进程；localOcrWorker = LocalPaddle OCR utility 子进程
+        // （文档处理通道 local-paddle 条目，v0.4.4 收编入 preprocess/localPaddle）。
+        // 多入口下 rollup 不允许 inlineDynamicImports——内部动态导入按 chunk 拆分
+        // 到 out/main/，electron-builder files "**/*" 全量打包，无 §4.16 闭包缺口；
+        // 外部依赖照旧 externalize，不产生额外 chunk）。
         input: {
           index: resolve('src/main/index.ts'),
-          ocrWorker: resolve('src/main/services/localModel/ocrWorker.ts')
+          localOcrWorker: resolve('src/main/services/preprocess/localPaddle/localOcrWorker.ts')
         },
         external: ['bufferutil', 'utf-8-validate', 'electron', ...Object.keys(pkg.dependencies)],
         output: {

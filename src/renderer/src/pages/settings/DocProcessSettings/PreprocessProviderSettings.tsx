@@ -5,9 +5,9 @@
  * 表单为本地 state + blur 提交（apiKey 经 formatApiKeys 规范化逗号分隔多 key；
  * apiHost trim 去尾 /）；无 model 字段 UI（mistral 默认值来自切片初始表）。
  */
-import { PREPROCESS_PROVIDER_CONFIG } from '@renderer/config/preprocessProviders'
 import { ApiKeyListPopup } from '@renderer/components/Popups/ApiKeyListPopup'
-import { useLocalModel } from '@renderer/hooks/useLocalModel'
+import { PREPROCESS_PROVIDER_CONFIG } from '@renderer/config/preprocessProviders'
+import { useLocalPaddle } from '@renderer/hooks/useLocalPaddle'
 import { usePreprocessProvider } from '@renderer/hooks/usePreprocess'
 import type { PreprocessProvider } from '@renderer/types'
 import { formatApiKeys, hasObjectKey } from '@renderer/utils'
@@ -158,10 +158,10 @@ const ProviderName = styled.span`
   font-weight: 500;
 `
 
-/** LocalPaddle 模型下载卡片（v0.3.2 自 CS_V2 LocalModelRequirement 形态裁剪）：
- * 状态机 not_downloaded/downloading/ready/error/unsupported，进度轮询自 useLocalModel。 */
+/** LocalPaddle 模型下载卡片（v0.4.4 收编自 CS_V2 LocalModelRequirement 形态裁剪：
+ * 状态机 not_downloaded/downloading/ready/error/unsupported，进度轮询自 useLocalPaddle）。 */
 const LocalPaddleModelPanel: FC = () => {
-  const { status, download, cancel, remove } = useLocalModel()
+  const { status, download, cancel, remove } = useLocalPaddle()
   const { t } = useTranslation()
 
   return (

@@ -167,12 +167,15 @@ const api = {
     remove: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Remove, payload),
     search: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Search, payload)
   },
-  // 本地模型（v0.3.2 LocalPaddle）：下载生命周期；进度由渲染层轮询 getStatus。
-  localModel: {
-    getStatus: () => ipcRenderer.invoke(IpcChannel.LocalModel_GetStatus),
-    download: () => ipcRenderer.invoke(IpcChannel.LocalModel_Download),
-    cancel: () => ipcRenderer.invoke(IpcChannel.LocalModel_Cancel),
-    remove: () => ipcRenderer.invoke(IpcChannel.LocalModel_Remove)
+  // 文档处理通道 local-paddle 条目（v0.4.4 收编自 localModel）：下载生命周期；
+  // 进度由渲染层轮询 getStatus。
+  preprocess: {
+    localPaddle: {
+      getStatus: () => ipcRenderer.invoke(IpcChannel.Preprocess_LocalPaddle_GetStatus),
+      download: () => ipcRenderer.invoke(IpcChannel.Preprocess_LocalPaddle_Download),
+      cancel: () => ipcRenderer.invoke(IpcChannel.Preprocess_LocalPaddle_Cancel),
+      remove: () => ipcRenderer.invoke(IpcChannel.Preprocess_LocalPaddle_Remove)
+    }
   },
   // 技能通道（批次5）：主进程 SkillService 薄转发（磁盘 = 真相源，列表全量投影）。
   skills: {

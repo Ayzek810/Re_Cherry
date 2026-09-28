@@ -1,43 +1,79 @@
 /**
- * 本地模型下载服务（v0.3.2 自 CS_V2 移植，fork 裁剪：仅 OCR 一种；进度走渲染层
- * 轮询而非事件广播；onnxruntime 二进制不下载——dev 下直接用 node_modules 的原生
- * 绑定，打包形态的运行时下载仍待真机验证）。
+ * LocalPaddle 模型仓（v0.4.4 收编：合并原 services/localModel 的 localModelService
+ * + ocrPaths + ocrInferenceService 三文件——「本地模型系统」的通用壳不存在了，
+ * 这里就是文档处理通道 local-paddle 条目的模型盘与下载生命周期）。
+ *
  * 状态机 not_downloaded | downloading | ready | error | unsupported；盘 = 真相源，
  * 重启无状态。.tmp + rename 原子落盘，minBytes 拒 LFS 指针/错误页；镜像逐文件
- * 回退（顺序见 modelSource）。下载失败不清理模型目录：先前已完成的权重保留，
+ * 回退（顺序见 modelAssets）。下载失败不清理模型目录：先前已完成的权重保留，
  * 就绪探测（三文件齐）天然挡住半成品。
+ *
+ * 存储：{userData}/Runtime/models/pp-ocrv6——故意放 Data/ 之外（BackupManager
+ * 全量备份 Data，140MB 权重不该进备份包）。删除前先终止活着的 OCR 子进程
+ * （Windows 打开句柄会让 unlink 失败——原 ocrInferenceService 的唯一存在理由，
+ * 直接调 localOcr.terminateActiveOcrProcess，不再有中间层）。
+ *
+ * onnxruntime 二进制不下载：dev 下直接用 node_modules 的原生绑定；安装版依赖
+ * electron-builder 收集 + asarUnpack（v0.4.4 起显式声明 + after-pack 断言）。
  */
 import fs from 'node:fs'
+import { existsSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
+import path from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web'
 
 import { loggerService } from '@logger'
-import { net } from 'electron'
+import { app, net } from 'electron'
 import { parse as parseYaml } from 'yaml'
 
-import { LOCAL_MODELS } from './localModelCatalog'
-import { MODEL_SOURCE_ORDER, resolveModelFileUrl } from './modelSource'
-import { disposeOcrServiceThen } from './ocrInferenceService'
-import { ensureOcrModelDir, isLocalOcrModelDownloaded, ocrModelDir, ocrModelPaths } from './ocrPaths'
+import { terminateActiveOcrProcess } from './localOcr'
+import { LOCAL_PADDLE_ASSETS, MODEL_SOURCE_ORDER, resolveModelFileUrl } from './modelAssets'
 
-const logger = loggerService.withContext('LocalModelService')
+const logger = loggerService.withContext('LocalPaddleModelStore')
 
-export interface LocalModelStatus {
+export interface LocalPaddleStatus {
   status: 'not_downloaded' | 'downloading' | 'ready' | 'error' | 'unsupported'
   percent?: number
   error?: string
 }
 
+export function paddleModelDir(): string {
+  return path.join(app.getPath('userData'), 'Runtime', 'models', 'pp-ocrv6')
+}
+
+export async function ensurePaddleModelDir(): Promise<string> {
+  const dir = paddleModelDir()
+  await mkdir(dir, { recursive: true })
+  return dir
+}
+
+export function paddleModelPaths(): { detection: string; recognition: string; charactersDictionary: string } {
+  const dir = paddleModelDir()
+  const { weights, dictionary } = LOCAL_PADDLE_ASSETS
+  return {
+    detection: path.join(dir, weights.detection.fileName),
+    recognition: path.join(dir, weights.recognition.fileName),
+    charactersDictionary: path.join(dir, dictionary.fileName)
+  }
+}
+
+/** 检测/识别权重 + 字典三文件齐 = 就绪。 */
+export function isPaddleModelReady(): boolean {
+  const paths = paddleModelPaths()
+  return existsSync(paths.detection) && existsSync(paths.recognition) && existsSync(paths.charactersDictionary)
+}
+
 /** onnxruntime-node 无 darwin-x64 原生绑定（V2 同判定）——该平台永久不支持。 */
-function isPlatformSupported(): boolean {
+export function isPaddlePlatformSupported(): boolean {
   return !(process.platform === 'darwin' && process.arch === 'x64')
 }
 
 /**
  * 从识别模型 inference.yml 的 PostProcess.character_dict 构建字典文本。
  * ppu-paddle-ocr 按行 split 不 trim、CTC 解码 index 0 = blank、尾项 = space 类——
- * 前导空行 + 字典项 + 尾换行逐字节复刻（照 V2）。
+ * 前导空行 + 字典项 + 尾换行逐字节复刻。
  */
 export function dictTextFromInferenceYml(yml: string): string {
   const config = parseYaml(yml) as { PostProcess?: { character_dict?: unknown } } | null
@@ -48,24 +84,24 @@ export function dictTextFromInferenceYml(yml: string): string {
   return `\n${characters.map(String).join('\n')}\n`
 }
 
-class LocalModelService {
+class LocalPaddleModelStore {
   private downloading = false
   private percent = 0
   private error: string | undefined
   private controller: AbortController | undefined
 
-  getStatus(): LocalModelStatus {
-    if (!isPlatformSupported()) return { status: 'unsupported' }
+  getStatus(): LocalPaddleStatus {
+    if (!isPaddlePlatformSupported()) return { status: 'unsupported' }
     if (this.downloading) return { status: 'downloading', percent: this.percent }
-    if (isLocalOcrModelDownloaded()) return { status: 'ready', percent: 100 }
+    if (isPaddleModelReady()) return { status: 'ready', percent: 100 }
     if (this.error !== undefined) return { status: 'error', error: this.error }
     return { status: 'not_downloaded' }
   }
 
   /** 下载（幂等：已在下载中或已就绪时直接返回）。 */
   async download(): Promise<void> {
-    if (!isPlatformSupported()) throw new Error('local OCR is not supported on this platform')
-    if (this.downloading || isLocalOcrModelDownloaded()) return
+    if (!isPaddlePlatformSupported()) throw new Error('local OCR is not supported on this platform')
+    if (this.downloading || isPaddleModelReady()) return
     this.downloading = true
     this.percent = 0
     this.error = undefined
@@ -87,23 +123,26 @@ class LocalModelService {
     this.controller?.abort()
   }
 
-  /** 删除模型（推理会话先释放——Windows 打开句柄会让 unlink 失败）。 */
+  /** 删除模型（推理子进程先释放——Windows 打开句柄会让 unlink 失败）。 */
   async remove(): Promise<void> {
     this.cancel()
-    await disposeOcrServiceThen(async () => {
-      await fs.promises.rm(ocrModelDir(), { recursive: true, force: true })
-    })
+    try {
+      await terminateActiveOcrProcess()
+    } catch (error: unknown) {
+      logger.warn('terminate active OCR process failed before model removal', error as Error)
+    }
+    await fs.promises.rm(paddleModelDir(), { recursive: true, force: true })
     this.error = undefined
     logger.info('local OCR model removed')
   }
 
   private async performDownload(signal: AbortSignal): Promise<void> {
-    const { weights } = LOCAL_MODELS.ocr
-    const paths = ocrModelPaths()
+    const { weights } = LOCAL_PADDLE_ASSETS
+    const paths = paddleModelPaths()
     // 字典是小的抓取+解析步，权重 1；总权重 133（onnxruntime 二进制不下载，fork dev-first）。
     const totalWeight = Object.values(weights).reduce((sum, file) => sum + file.weight, 0) + 1
     let doneWeight = 0
-    await ensureOcrModelDir()
+    await ensurePaddleModelDir()
     for (const key of Object.keys(weights) as Array<keyof typeof weights>) {
       const file = weights[key]
       await this.downloadFile(file, paths[key], signal, (fraction) => {
@@ -145,7 +184,7 @@ class LocalModelService {
 
   /** 抓识别模型的 inference.yml（镜像回退），解析出字典落盘。 */
   private async downloadDictionary(dest: string, signal: AbortSignal): Promise<void> {
-    const { repo, sourceFile, minBytes } = LOCAL_MODELS.ocr.dictionary
+    const { repo, sourceFile, minBytes } = LOCAL_PADDLE_ASSETS.dictionary
     let lastError: unknown
     for (const id of MODEL_SOURCE_ORDER) {
       try {
@@ -209,4 +248,4 @@ class LocalModelService {
   }
 }
 
-export const localModelService = new LocalModelService()
+export const localPaddleModelStore = new LocalPaddleModelStore()

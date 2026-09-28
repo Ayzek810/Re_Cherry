@@ -248,11 +248,11 @@ export enum IpcChannel {
   KnowledgeBase_Add = 'knowledge-base:add',
   KnowledgeBase_Remove = 'knowledge-base:remove',
   KnowledgeBase_Search = 'knowledge-base:search',
-  /** 本地模型（v0.3.2 自 CS_V2 移植）：OCR 权重下载生命周期（进度渲染层轮询 getStatus）。 */
-  LocalModel_GetStatus = 'local-model:get-status',
-  LocalModel_Download = 'local-model:download',
-  LocalModel_Cancel = 'local-model:cancel',
-  LocalModel_Remove = 'local-model:remove',
+  /** 文档处理通道 local-paddle 条目（v0.4.4 收编自 LocalModel_*）：OCR 权重下载生命周期（进度渲染层轮询 getStatus）。 */
+  Preprocess_LocalPaddle_GetStatus = 'preprocess:local-paddle:get-status',
+  Preprocess_LocalPaddle_Download = 'preprocess:local-paddle:download',
+  Preprocess_LocalPaddle_Cancel = 'preprocess:local-paddle:cancel',
+  Preprocess_LocalPaddle_Remove = 'preprocess:local-paddle:remove',
   /** 技能通道（批次5）：zip/目录/URL 安装 + 卸载真删盘 + 库扫描（上游 Skill_* 命名子集）。 */
   Skill_InstallFromZip = 'skill:install-from-zip',
   Skill_InstallFromDirectory = 'skill:install-from-directory',
