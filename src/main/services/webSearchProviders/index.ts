@@ -13,6 +13,10 @@ import WebSearchProviderFactory from './WebSearchProviderFactory'
  * - filterResultWithBlacklist 用主进程同语义实现（./blacklistMatchPattern）：ublacklist
  *   模式串（runtime.blacklistPatterns）与纯排除域（runtime.excludeDomains）两路并行过滤。
  * - 构造期注入 runtime（WebSearchRuntimeState），上游逐调用传 websearch 参数收敛为实例态。
+ *
+ * v0.4.3：maxResults 终审截断。设置页「搜索结果个数」是权威上限（count 权威语义，
+ * 见 WebSearchService.effectiveCount），但个别提供商不在内部截断响应（Bocha/Querit
+ * 直接映射服务端返回），这里统一兜底 slice，防提供商实现疏漏绕过设置。
  */
 export default class WebSearchEngineProvider {
   private sdk: BaseWebSearchProvider
@@ -26,9 +30,15 @@ export default class WebSearchEngineProvider {
   public async search(query: string, httpOptions?: WebSearchHttpOptions): Promise<WebSearchProviderResponse> {
     const result = await this.sdk.search(query, this.runtime, httpOptions)
 
-    return await filterResultWithBlacklist(result, {
+    const filtered = await filterResultWithBlacklist(result, {
       blacklist: this.runtime.blacklistPatterns,
       excludeDomains: this.runtime.excludeDomains
     })
+
+    // maxResults 终审截断（黑名单过滤后执行——过滤产生的短清单不再回填，同上游）
+    if (filtered.results.length > this.runtime.maxResults) {
+      return { ...filtered, results: filtered.results.slice(0, this.runtime.maxResults) }
+    }
+    return filtered
   }
 }

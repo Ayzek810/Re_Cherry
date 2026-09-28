@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
-import { net } from 'electron'
-
 import { readableContentService } from '@main/services/readableContent/ReadableContentService'
+import { net } from 'electron'
 
 import { searchService } from '../SearchService'
 import type { WebSearchHttpOptions, WebSearchProviderResult } from './types'
@@ -10,7 +9,8 @@ const logger = loggerService.withContext('WebSearchFetch')
 
 /**
  * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 src/renderer/src/utils/fetch.ts 的
- * noContent / isValidUrl / fetchWebContent / fetchWebContents）：
+ * noContent / isValidUrl / fetchWebContent；fetchWebContents 于 v0.4.3 删除——唯一
+ * 消费者 processWebsearch 零调用方死码）：
  * - DOM 解析（DOM Parser）+ Readability + turndown 主进程不可用（turndown 的 Node DOM 依赖 jsdom
  *   为 devDep，打包闭包不含），正文抽取改为轻量 HTML→纯文本（去 script/style、剥标签、
  *   实体解码、空白折叠），title 取 <title>/og:title；format='html' 时仅剔除脚本样式。
@@ -310,23 +310,3 @@ export async function fetchSerpPage(url: string, signal: AbortSignal | undefined
   return await fetchHtmlDirect(url, signal)
 }
 
-export async function fetchWebContents(
-  urls: string[],
-  format: WebContentFormat = 'markdown',
-  usingBrowser: boolean = false,
-  httpOptions: WebSearchHttpOptions = {}
-): Promise<WebSearchProviderResult[]> {
-  // parallel using fetchWebContent
-  const results = await Promise.allSettled(urls.map((url) => fetchWebContent(url, format, usingBrowser, httpOptions)))
-  return results.map((result, index) => {
-    if (result.status === 'fulfilled') {
-      return result.value
-    } else {
-      return {
-        title: 'Error',
-        content: noContent,
-        url: urls[index]
-      }
-    }
-  })
-}

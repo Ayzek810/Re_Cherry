@@ -12,7 +12,7 @@ import type {
   WebSearchProviderResult,
   WebSearchRuntimeState
 } from './webSearchProviders/types'
-import { fetchWebContents } from './webSearchProviders/webFetch'
+import { fetchWebContent, isAbortError, noContent } from './webSearchProviders/webFetch'
 
 const logger = loggerService.withContext('WebSearchService')
 
@@ -23,21 +23,32 @@ const DEFAULT_MAX_RESULTS = 5
  * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游
  * src/renderer/src/services/WebSearchService.ts）：
  * - 执行环境渲染层 → 主进程：Redux store（getWebSearchState）→ 配置注入制
- *   setConfig(KernelWebSearchConfig) 整体替换（Dsh_SyncWebSearch 推送）；渲染层 api 桥 / window.keyv
- *   / window.keyv → SearchService 直调与模块内 Map（见 BaseWebSearchProvider /
- *   webFetch）。单例导出名 webSearchService（区别于渲染层刮取的 searchService）。
+ *   setConfig(KernelWebSearchConfig) 整体替换（Dsh_SyncWebSearch 推送）；渲染层 api 桥
+ *   / window.keyv → 主进程内存态。单例导出名 webSearchService（区别于渲染层刮取的
+ *   searchService）。
  * - 压缩相：cutoff 直接移植（cutoffUnit token 用近似折算，tokenx 为渲染层
- *   devDep 不在运行时闭包）；RAG 相批次7 补齐——不走上游临时知识库 IPC，改用
- *   fork 自建内核栈（chunker + EmbeddingClient + cosine，见
- *   webSearchProviders/compression.ts），失败降级直供原始结果（上游是清空）。
- *   上游 setWebSearchStatus 的 runtime phase 推送（default、fetch_complete、rag 系、cutoff）
- *   为渲染层 Redux UI 关切，主进程不移植，phase 枚举随 rag 分支一并裁掉。
- * - Summarize 特例（questions[0]==='summarize' 直接抓 links 正文）：走主进程 webFetch
- *   （先直 fetch，失败回退 SearchService 刮取；usingBrowser=true 直接刮取）。
- * - 上游 checkSearch 返回 {valid, error} → 内核 IPC 需要布尔，收敛为 check(): boolean。
- * - dayjs（devDep）→ 内建本地日期格式化（searchWithTime 前缀）。
- * - processWebsearch 保留上游多 question 并行编排（Promise.allSettled、任一 rejected
- *   即抛、空结果短路、cutoff 压缩）；当前内核 web_search 工具走单 query 的 search()。
+ *   devDep 不在运行时闭包）；RAG 相为 fork 自建内核栈（chunker + EmbeddingClient +
+ *   cosine，见 webSearchProviders/compression.ts），失败降级直供原始结果（上游是清空）。
+ *   上游 setWebSearchStatus 的 runtime phase 推送（default、fetch_complete、rag 系、
+ *   cutoff）为渲染层 Redux UI 关切，主进程不移植。
+ *
+ * v0.4.3 重写（验收标准：设置页控制项实质性反映在网络搜索工具的控制中）：
+ * - count 权威语义：设置页「搜索结果个数」(maxResults) 是单次搜索的唯一权威上限——
+ *   缺省即设置值；模型显式传入的 count 钳制到 [1, 设置值]。此前工具侧硬编码 1..12
+ *   钳制：用户设 3 时模型可传大 count 突破上限，设 100（配合压缩）时被 12 无声截断，
+ *   两个方向设置都不权威。引擎包装层另有终审截断兜底（providers/index.ts，防个别
+ *   提供商内部不截断响应——Bocha/Querit）。
+ * - RAG 预抓全页：API 型提供商返回的 snippet（数百字符）不超过一个分块窗口，每条
+ *   结果至多产出 1 块，而轮转选片预算 maxRefs = 条数 × documentCount ≥ 条数——RAG
+ *   在数学上只能原样通过（报告恒为 N -> N），documentCount/嵌入/重排对这类提供商
+ *   从不生效。现在 RAG 激活时先对贫瘠正文抓全页（fetchWebContent 三级回退链，
+ *   usingBrowser 语义保持），再进压缩相——RAG 控制项对全部提供商实质生效。
+ * - check() 连通性检查走裸搜索：不过压缩相（RAG 下检查不应触发 N 次全页抓取 +
+ *   嵌入调用），保持「真跑一次提供商」的诚实语义。
+ * - processWebsearch（多 question 编排 + summarize 特例）删除：零调用方死码
+ *   （上游 aiCore 意图分析插件的消费面，fork 内核工具路径从不经过）；主进程
+ *   fetchWebContents 随之删除（唯一消费者）。
+ * - searchWithTime 前缀（本地日期格式化）与每轮提供商/编号登记机制保持不变。
  */
 export class WebSearchService {
   private static instance: WebSearchService | null = null
@@ -80,7 +91,10 @@ export class WebSearchService {
       providers: this.config.providers.length,
       blacklistPatterns: this.config.blacklist.length,
       excludeDomains: this.config.excludeDomains.length,
-      searchWithTime: this.config.searchWithTime
+      searchWithTime: this.config.searchWithTime,
+      maxResults: this.config.maxResults,
+      language: this.config.language,
+      compression: this.config.compression?.method ?? 'none'
     })
   }
 
@@ -132,9 +146,20 @@ export class WebSearchService {
     return provider
   }
 
-  private buildRuntime(provider: KernelWebSearchProviderConfig, count?: number): WebSearchRuntimeState {
+  /**
+   * v0.4.3 count 权威语义：设置「搜索结果个数」是唯一权威上限。
+   * 缺省 = 设置值；显式请求钳制到 [1, 设置值]——设置值以下尊重调用方收窄，
+   * 以上一律压回（用户设 3 不会被模型的 count=10 突破）.
+   */
+  private effectiveCount(requested?: number): number {
+    const cap = this.getConfiguredMaxResults()
+    const n = typeof requested === 'number' && Number.isFinite(requested) ? Math.trunc(requested) : NaN
+    return Number.isFinite(n) ? Math.min(cap, Math.max(1, n)) : cap
+  }
+
+  private buildRuntime(provider: KernelWebSearchProviderConfig, count: number): WebSearchRuntimeState {
     return {
-      maxResults: Math.max(1, Math.trunc(count ?? this.config?.maxResults ?? DEFAULT_MAX_RESULTS)),
+      maxResults: count,
       excludeDomains: this.config?.excludeDomains ?? [],
       blacklistPatterns: this.config?.blacklist ?? [],
       searchWithTime: this.config?.searchWithTime ?? false,
@@ -143,7 +168,7 @@ export class WebSearchService {
     }
   }
 
-  /** 上游 searchWithTime：`today is ${dayjs().format('YYYY-MM-DD')} \r\n ${query}`（本地时区）。 */
+  /** 上游 searchWithTime：`today is YYYY-MM-DD \r\n query` 前缀（本地时区，dayjs → 内建格式化）。 */
   private formatQuery(query: string): string {
     if (this.config?.searchWithTime) {
       const now = new Date()
@@ -155,11 +180,12 @@ export class WebSearchService {
   }
 
   /**
-   * 单次网络搜索（内核 web_search 工具入口）：provider 分派 → 引擎搜索 → 黑名单过滤。
+   * 单次网络搜索（内核 web_search 工具入口）：provider 分派 → 引擎搜索（引擎
+   * 包装层含黑名单过滤与 maxResults 终审截断）→ 压缩相。
    * @param providerId 提供商 id（本轮登记或直调方传入）
    * @param query 搜索查询
-   * @param opts.count 最大条数（缺省用 config.maxResults）
-   * @param opts.signal 取消信号（透传到 provider HTTP 与刮取窗口）
+   * @param opts.count 最大条数（缺省用设置 maxResults；超出设置值钳回，见 effectiveCount）
+   * @param opts.signal 取消信号（透传到 provider HTTP、刮取窗口与 RAG 嵌入）
    */
   public async search(
     providerId: string,
@@ -167,14 +193,12 @@ export class WebSearchService {
     opts?: { count?: number; signal?: AbortSignal }
   ): Promise<WebSearchProviderResponse> {
     const provider = this.findProvider(providerId)
-    const runtime = this.buildRuntime(provider, opts?.count)
+    const runtime = this.buildRuntime(provider, this.effectiveCount(opts?.count))
     const engine = new WebSearchEngineProvider(provider, runtime)
     const formattedQuery = this.formatQuery(query)
     const response = await engine.search(formattedQuery, { signal: opts?.signal })
-    // 压缩相（批次7：内核 web_search 工具路径此前从不压缩——cutoff 只活在无
-    // 调用方的 processWebsearch 里）。用原始 query 打分（searchWithTime 前缀会
-    // 污染嵌入相关性）。
-    return this.applyCompression(query, response, opts?.signal)
+    // 压缩相：用原始 query 打分（searchWithTime 前缀会污染嵌入相关性）。
+    return this.applyCompression(provider, query, response, opts?.signal)
   }
 
   /** 压缩是否实际激活（工具侧据此决定是否放开正文的 1200 字符切片）。 */
@@ -185,12 +209,39 @@ export class WebSearchService {
     return Boolean(compression.embedding)
   }
 
-  /** 用户设置的单次搜索最大条数（v0.4 验收轮：web_search 工具缺省 count 不再硬编码 6）。 */
+  /** 用户设置的单次搜索最大条数（设置「搜索结果个数」的权威读取口）。 */
   public getConfiguredMaxResults(): number {
     return Math.max(1, Math.trunc(this.config?.maxResults ?? DEFAULT_MAX_RESULTS))
   }
 
+  /**
+   * RAG 预抓全页（v0.4.3）：正文不足一个分块窗口（chunker DEFAULT_CHUNK_SIZE=1000
+   * 字符）的结果对 RAG 无块可选，先经 fetchWebContent（三级回退链，usingBrowser
+   * 语义保持）补全正文。单条抓取失败保留原 snippet（fetchWebContent 把非取消失败
+   * 兜底为 noContent）；取消信号原样上抛（中途停止不该伪装成压缩失败）。
+   */
+  private async enrichForRag(
+    results: WebSearchProviderResult[],
+    provider: KernelWebSearchProviderConfig,
+    signal?: AbortSignal
+  ): Promise<WebSearchProviderResult[]> {
+    const RAG_CHUNK_WINDOW_CHARS = 1000
+    const poorCount = results.filter((r) => (r.content?.length ?? 0) < RAG_CHUNK_WINDOW_CHARS).length
+    if (poorCount === 0) return results
+    logger.info(`web search RAG enrichment: fetching full pages for ${poorCount} snippet-sized result(s)`)
+    return Promise.all(
+      results.map(async (result) => {
+        if ((result.content?.length ?? 0) >= RAG_CHUNK_WINDOW_CHARS) return result
+        const full = await fetchWebContent(result.url, 'markdown', provider.usingBrowser ?? false, { signal })
+        // 抓取失败（noContent 兜底）或空正文 → 保留 snippet，单条失败不拖垮整轮压缩
+        if (full.content === noContent || full.content.trim().length === 0) return result
+        return { ...result, content: full.content }
+      })
+    )
+  }
+
   private async applyCompression(
+    provider: KernelWebSearchProviderConfig,
     query: string,
     response: WebSearchProviderResponse,
     signal?: AbortSignal
@@ -213,7 +264,9 @@ export class WebSearchService {
         }
       }
       try {
-        const compressed = await compressWithRag([query], results, compression, signal)
+        // v0.4.3：先补全贫瘠正文（snippet 型 API 提供商），RAG 控制项才实质生效
+        const enriched = await this.enrichForRag(results, provider, signal)
+        const compressed = await compressWithRag([query], enriched, compression, signal)
         // 压缩摘要随响应上行：web_search 工具据此向用户报告压缩确实启用（before→after）
         return {
           ...response,
@@ -221,6 +274,7 @@ export class WebSearchService {
           compression: { method: 'rag', before: results.length, after: compressed.length }
         }
       } catch (error) {
+        if (isAbortError(error)) throw error
         logger.warn('web search: RAG compression failed, supplying raw results', error as Error)
         return {
           ...response,
@@ -246,86 +300,20 @@ export class WebSearchService {
 
   /**
    * 连通性检查：'test query' 真跑一次（同一条真实执行路径，上游 checkSearch 语义，
-   * results 可得即视为可用）。
+   * results 可得即视为可用）。裸搜索不过压缩相——RAG 激活时检查不应触发全页抓取
+   * 与嵌入调用，检查验证的是提供商连通性而非压缩管线。
    */
   public async check(providerId: string): Promise<boolean> {
     try {
-      const response = await this.search(providerId, 'test query')
+      const provider = this.findProvider(providerId)
+      const runtime = this.buildRuntime(provider, this.getConfiguredMaxResults())
+      const engine = new WebSearchEngineProvider(provider, runtime)
+      const response = await engine.search(this.formatQuery('test query'))
       logger.debug(`check provider ${providerId}: ${response.results.length} result(s)`)
       return response.results !== undefined
     } catch (error) {
       logger.warn(`check provider ${providerId} failed:`, error as Error)
       return false
-    }
-  }
-
-  /**
-   * 多 question 编排（上游 processWebsearch 语义移植；当前无内核调用方，供后续
-   * 批次与直调使用）：
-   * - questions[0]==='summarize' 且带 links → 直接抓取链接正文（query='summaries'）
-   * - 多 question 并行 Promise.allSettled，任一 rejected 即抛
-   * - 全部为空 → {query: questions.join(' | '), results: []}
-   * - 压缩仅 cutoff（RAG 相不移植）
-   */
-  public async processWebsearch(
-    providerId: string,
-    questions: string[],
-    opts?: { links?: string[]; count?: number; signal?: AbortSignal }
-  ): Promise<WebSearchProviderResponse> {
-    if (!questions || questions.length === 0 || !questions[0] || questions[0].length === 0) {
-      logger.info('No valid question found')
-      return { results: [] }
-    }
-
-    const provider = this.findProvider(providerId)
-    const signal = opts?.signal
-
-    // 处理 summarize：直接抓取链接正文
-    if (questions[0] === 'summarize' && opts?.links && opts.links.length > 0) {
-      const contents = await fetchWebContents(opts.links, 'markdown', provider.usingBrowser ?? false, { signal })
-      return { query: 'summaries', results: contents }
-    }
-
-    const searchPromises = questions.map((q) => this.search(providerId, q, { count: opts?.count, signal }))
-    const searchResults = await Promise.allSettled(searchPromises)
-
-    const successfulSearchCount = searchResults.filter((result) => result.status === 'fulfilled').length
-    logger.debug(`Successful search count: ${successfulSearchCount}`)
-
-    let finalResults: WebSearchProviderResult[] = []
-    searchResults.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        if (result.value.results) {
-          finalResults.push(...result.value.results)
-        }
-      }
-      if (result.status === 'rejected') {
-        throw result.reason
-      }
-    })
-
-    logger.debug(`Fulfilled search result count: ${finalResults.length}`)
-
-    // 如果没有搜索结果，直接返回空结果
-    if (finalResults.length === 0) {
-      return {
-        query: questions.join(' | '),
-        results: []
-      }
-    }
-
-    // 压缩相（批次7：RAG 分支补齐——fork 自建内核栈实现，失败降级直供原始结果；
-    // cutoffLimit 未配置时跳过，与上游一致）
-    const compression = this.config?.compression
-    if (compression?.method === 'rag') {
-      finalResults = await compressWithRag(questions, finalResults, compression, signal)
-    } else if (compression?.method === 'cutoff' && compression.cutoffLimit) {
-      finalResults = compressWithCutoff(finalResults, compression)
-    }
-
-    return {
-      query: questions.join(' | '),
-      results: finalResults
     }
   }
 }

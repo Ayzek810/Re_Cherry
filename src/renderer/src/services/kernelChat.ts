@@ -266,6 +266,8 @@ export async function syncWebSearchToKernel(config: {
   excludeDomains: string[]
   searchWithTime: boolean
   maxResults: number
+  /** 应用语言（BCP-47，v0.4.3 补齐——local-google/bing 的 lang: 过滤消费端此前是死路）。 */
+  language?: string
   /** 结果压缩（websearch 切片 compressionConfig 的收窄投影；rag 的 embeddingModel/rerankModel 收窄为引用）。 */
   compression?: {
     method: 'none' | 'cutoff' | 'rag'

@@ -17,6 +17,11 @@
  * compression.ts），按渲染层设置的 compressionConfig 全局生效；模型原生搜索轨
  *（enableWebSearch
  * 无 providerId 的 provider 专参管道）未接，见到即拒答明错。
+ *
+ * v0.4.3（设置控制项实质生效）：count 不再在工具侧钳制——设置页「搜索结果个数」
+ * (maxResults) 是唯一权威上限，缺省即设置值，模型显式 count 由引擎服务统一钳到
+ * [1, 设置值]（此前硬编码 1..12：设置 3 可被突破、设置 100 被 12 无声截断）。
+ * RAG 压缩对 snippet 型提供商现经全页预抓实质生效（见 services/WebSearchService）。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -50,7 +55,8 @@ export function apply(ctx: Context): void {
         },
         count: {
           type: 'number',
-          description: 'Maximum number of results to return (default 6).'
+          description:
+            'Maximum number of results to return. Omit to use the user-configured value; values beyond it are clamped down to it.'
         }
       },
       output: {
@@ -99,12 +105,11 @@ export function apply(ctx: Context): void {
         if (topicId === undefined || providerId === undefined) {
           throw new Error('web_search: no web search provider is configured for this conversation turn')
         }
-        // v0.4 验收轮：缺省 count 改读用户设置 maxResults（此前硬编码 6——设置被无视）；
-        // 模型显式传 count 时仍尊重（钳制到 1..12 防失控）。
-        const rawCount = typeof args.count === 'number' && Number.isFinite(args.count) ? Math.trunc(args.count) : NaN
-        const count = Number.isFinite(rawCount)
-          ? Math.min(12, Math.max(1, rawCount))
-          : webSearchService.getConfiguredMaxResults()
+        // v0.4.3：count 权威语义收敛进引擎服务（effectiveCount）——设置 maxResults 是
+        // 唯一权威上限，缺省即设置值，模型显式 count 由服务统一钳到 [1, 设置值]。
+        // 工具侧只负责把模型参数原样（或 undefined）下传，不再自带硬编码钳制。
+        const count =
+          typeof args.count === 'number' && Number.isFinite(args.count) ? Math.trunc(args.count) : undefined
         const result = await webSearchService.search(providerId, query, { count, signal: exec.signal })
         // 同轮多次搜索的全局编号偏移（每轮发送时重置）。
         const offset = webSearchService.bumpTurnResultOffset(topicId, result.results.length)

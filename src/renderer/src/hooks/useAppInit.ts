@@ -74,7 +74,7 @@ export function useAppInit() {
     return () => {
       window.electron.ipcRenderer.removeListener(IpcChannel.App_SaveData, handler)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   useFullScreenNotice()
@@ -171,6 +171,8 @@ export function useAppInit() {
   const imageDescriberPrompt = useAppSelector((state) => state.llm.imageDescriberPrompt)
   // 批次2 网络搜索：websearch 切片（providers/blacklist/searchWithTime）变更即推内核
   const webSearchState = useAppSelector((state) => state.websearch)
+  // v0.4.3：应用语言随投影上行——KernelWebSearchConfig.language 供 local-google/bing
+  // 追加 lang: 语言过滤（此前载荷从不携带该字段，消费端是死路）。语言变更也重推。
 
   useEffect(() => {
     void syncWebSearchToKernel({
@@ -190,6 +192,7 @@ export function useAppInit() {
       excludeDomains: webSearchState.excludeDomains ?? [],
       searchWithTime: webSearchState.searchWithTime ?? false,
       maxResults: webSearchState.maxResults ?? 5,
+      language,
       // 结果压缩投影（批次7）：embeddingModel(Model) 收窄为 {providerId, modelId} 引用，
       // 密钥由主进程自解析（同知识库先例），不在此通道传 apiKey。
       compression: webSearchState.compressionConfig
@@ -215,7 +218,7 @@ export function useAppInit() {
           }
         : undefined
     })
-  }, [webSearchState])
+  }, [webSearchState, language])
 
   // 批次3 MCP：mcp 切片 servers（配置含命令/env 密钥）整体投影进主进程 MCPService
   // 内存（不落盘不进会话；内核桥挂载时按 serverId 反查）。
