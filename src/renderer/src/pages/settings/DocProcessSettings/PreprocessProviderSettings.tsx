@@ -17,7 +17,7 @@ import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId, hasModel } from '@renderer/services/ModelService'
 import type { Model, PreprocessProvider } from '@renderer/types'
 import { formatApiKeys, hasObjectKey } from '@renderer/utils'
-import { Button, Divider, Flex, Input, Progress, Tooltip } from 'antd'
+import { Button, Divider, Flex, Input, Progress, Slider, Tooltip } from 'antd'
 import { find } from 'lodash'
 import { ExternalLink, List } from 'lucide-react'
 import type { FC } from 'react'
@@ -251,6 +251,8 @@ const VisionModelPanel: FC = () => {
     },
     [allModels, updateProvider]
   )
+  // 页级并发（用户裁定：缺省 8、上限 20——并发调高是对自己钥匙配额的判断）
+  const concurrency = provider?.visionConcurrency
 
   return (
     <>
@@ -265,6 +267,18 @@ const VisionModelPanel: FC = () => {
         style={{ width: '100%' }}
         onChange={onSelect}
         placeholder={t('settings.tool.preprocess.vision_model.model_placeholder')}
+      />
+      <SettingSubtitle className="mt-[10px] mb-[10px]">
+        {t('settings.tool.preprocess.vision_model.concurrency')}
+      </SettingSubtitle>
+      <Slider
+        defaultValue={concurrency ?? 8}
+        style={{ width: '100%' }}
+        min={1}
+        max={20}
+        step={1}
+        marks={{ 1: '1', 8: '8', 12: '12', 20: '20' }}
+        onChangeComplete={(next) => updateProvider({ visionConcurrency: next })}
       />
       <SettingHelpTextRow className="!flex-col">
         <SettingHelpText>{t('settings.tool.preprocess.vision_model.help')}</SettingHelpText>

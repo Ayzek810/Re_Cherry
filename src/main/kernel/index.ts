@@ -392,6 +392,7 @@ function registerKernelIpc(): void {
         apiHost?: unknown
         model?: unknown
         visionModel?: unknown
+        visionConcurrency?: unknown
       }
       const rawVision = entry.visionModel as { provider?: unknown; model?: unknown } | undefined
       const visionModel =
@@ -401,12 +402,22 @@ function registerKernelIpc(): void {
         rawVision.model.length > 0
           ? { provider: rawVision.provider, model: rawVision.model }
           : undefined
+      // vision-model 页级并发数：整数 1..20 之外（含缺省）不投影，主进程走缺省 8。
+      const rawConcurrency = entry.visionConcurrency
+      const visionConcurrency =
+        typeof rawConcurrency === 'number' &&
+        Number.isInteger(rawConcurrency) &&
+        rawConcurrency >= 1 &&
+        rawConcurrency <= 20
+          ? rawConcurrency
+          : undefined
       return {
         id: entry.id,
         ...(typeof entry.apiKey === 'string' ? { apiKey: entry.apiKey } : {}),
         ...(typeof entry.apiHost === 'string' ? { apiHost: entry.apiHost } : {}),
         ...(typeof entry.model === 'string' ? { model: entry.model } : {}),
-        ...(visionModel === undefined ? {} : { visionModel })
+        ...(visionModel === undefined ? {} : { visionModel }),
+        ...(visionConcurrency === undefined ? {} : { visionConcurrency })
       }
     })
     preprocessChannel.setConfig(configs)

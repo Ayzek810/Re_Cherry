@@ -162,22 +162,31 @@ describe('parsePdfWithProvider 路由与时间预算', () => {
     expect(text).toBe('本地 OCR 全文')
   })
 
-  it('vision-model → 视觉文档解析编排（visionModel 引用 + signal 透传；未选模型明错）', async () => {
+  it('vision-model → 视觉文档解析编排（visionModel/并发透传 + signal；未选模型明错）', async () => {
     vi.mocked(parsePdfWithVisionModel).mockResolvedValue('# 视觉转写全文')
     const text = await parsePdfWithProvider(
-      { id: 'vision-model', visionModel: { provider: 'silicon', model: 'qwen-vl' } },
+      { id: 'vision-model', visionModel: { provider: 'silicon', model: 'qwen-vl' }, visionConcurrency: 12 },
       'C:/books/scan.pdf'
     )
     expect(parsePdfWithVisionModel).toHaveBeenCalledTimes(1)
     expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][0]).toBe('C:/books/scan.pdf')
-    expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][1]).toEqual({ provider: 'silicon', model: 'qwen-vl' })
+    expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][1]).toEqual({
+      provider: 'silicon',
+      model: 'qwen-vl',
+      concurrency: 12
+    })
     expect(vi.mocked(parsePdfWithVisionModel).mock.calls[0][2]).toBeInstanceOf(AbortSignal)
     expect(text).toBe('# 视觉转写全文')
 
+    // 未选模型：如实报错；未配置并发：不透传（主进程走缺省 8）
     await expect(parsePdfWithProvider({ id: 'vision-model' }, 'C:/books/scan.pdf')).rejects.toThrow(
       /vision model is not selected/
     )
-    expect(parsePdfWithVisionModel).toHaveBeenCalledTimes(1)
+    await parsePdfWithProvider(
+      { id: 'vision-model', visionModel: { provider: 'silicon', model: 'qwen-vl' } },
+      'C:/books/a.pdf'
+    )
+    expect(vi.mocked(parsePdfWithVisionModel).mock.calls[1][1]).toEqual({ provider: 'silicon', model: 'qwen-vl' })
   })
 
   it('未知服务商 id：明错并列出支持面', async () => {

@@ -76,13 +76,15 @@ describe('runVisionDocumentParse（utilityProcess 编排）', () => {
       .mockResolvedValueOnce('# 第一页\n\n正文 A')
       .mockResolvedValueOnce('# 第二页\n\n正文 B')
     const { promise, child } = startParse('C:/books/scan.pdf')
-    // 产物路径锚定 app 根（不经 __dirname——编排层会被拆 chunk）；任务是 {pdfPath, scale}。
+    // 产物路径锚定 app 根（不经 __dirname——编排层会被拆 chunk）；任务带信用窗（缺省 8）。
     expect(vi.mocked(utilityProcess.fork)).toHaveBeenCalledWith(
       expect.stringContaining('visionWorker.js'),
       [],
       expect.objectContaining({ serviceName: 'visionDocumentWorker', stdio: 'pipe' })
     )
-    expect(child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ pdfPath: 'C:/books/scan.pdf', scale: 2 }))
+    expect(child.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ pdfPath: 'C:/books/scan.pdf', scale: 2, window: 8 })
+    )
 
     await feedPage(child, 1, 2)
     expect(vi.mocked(lightVisionDocument)).toHaveBeenCalledTimes(1)
@@ -102,7 +104,72 @@ describe('runVisionDocumentParse（utilityProcess 编排）', () => {
     expect(child.kill).toHaveBeenCalledTimes(1)
   })
 
-  it('空页（光栅化不出）：不调模型、仍放行下一页、贡献空文本', async () => {
+  it('并发信用窗：两页同时在途（无需等第一页结算）、乱序完成仍按页序拼装', async () => {
+    const deferred: Array<(value: string) => void> = []
+    vi.mocked(lightVisionDocument).mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          deferred.push(resolve)
+        })
+    )
+    const { promise, child } = startParse('C:/books/scan.pdf')
+    // 信用窗内两页都到达：主进程不等第一页结算就起第二路调用
+    emit(child, { type: 'page', page: 1, totalPages: 2, mediaType: 'image/png', data: 'UE5H' })
+    emit(child, { type: 'page', page: 2, totalPages: 2, mediaType: 'image/png', data: 'UE5I' })
+    expect(vi.mocked(lightVisionDocument)).toHaveBeenCalledTimes(2)
+
+    deferred[1]('第二页') // 第 2 页先完成
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'next' })
+    deferred[0]('第一页')
+    // 协议时序：'done' 经 worker IPC 异步到达，必须让页 1 的结算续体先落地。
+    await Promise.resolve()
+    await Promise.resolve()
+    emit(child, { type: 'done', totalPages: 2 })
+    await expect(promise).resolves.toBe('第一页\n\n第二页')
+  })
+
+  it('done 早于模型返回到达（信用窗下 worker 跑在消费前面）：排空在途后交全量结果', async () => {
+    const deferred: Array<(value: string) => void> = []
+    vi.mocked(lightVisionDocument).mockImplementation(
+      () => new Promise<string>((resolve) => { deferred.push(resolve) })
+    )
+    const { promise, child } = startParse('C:/books/scan.pdf')
+    emit(child, { type: 'page', page: 1, totalPages: 2, mediaType: 'image/png', data: 'UE5H' })
+    emit(child, { type: 'page', page: 2, totalPages: 2, mediaType: 'image/png', data: 'UE5I' })
+    emit(child, { type: 'done', totalPages: 2 }) // worker 先跑完：done 时两页都还在途
+    deferred[1]('第二页')
+    await Promise.resolve()
+    await Promise.resolve()
+    deferred[0]('第一页')
+    await Promise.resolve()
+    await Promise.resolve()
+    await expect(promise).resolves.toBe('第一页\n\n第二页')
+    expect(child.kill).toHaveBeenCalledTimes(1)
+  })
+
+  it('打断交缓存（用户裁定）：预算/中止时已完成页按序交回 + 截断说明', async () => {
+    vi.mocked(lightVisionDocument).mockResolvedValueOnce('第一页内容')
+    const controller = new AbortController()
+    const { promise, child } = startParse('C:/books/a.pdf', controller.signal)
+    await feedPage(child, 1, 3)
+    expect(vi.mocked(lightVisionDocument)).toHaveBeenCalledTimes(1)
+    controller.abort(new Error('time budget'))
+    await expect(promise).resolves.toBe(
+      '第一页内容\n\n[Vision document parse interrupted at page 1 of 3 — time budget exhausted or operation cancelled; the text above covers completed pages only.]'
+    )
+    expect(child.kill).toHaveBeenCalledTimes(1)
+  })
+
+  it('打断时零完成页：无缓存可交，照旧拒绝', async () => {
+    const controller = new AbortController()
+    const { promise } = startParse('C:/books/a.pdf', controller.signal)
+    controller.abort(new Error('user cancelled'))
+    await expect(promise).rejects.toThrow('user cancelled')
+  })
+
+  it('空页（光栅化不出）：不调模型、仍结算回信、贡献空文本', async () => {
     vi.mocked(lightVisionDocument).mockResolvedValueOnce('只有第二页')
     const { promise, child } = startParse('C:/books/scan.pdf')
     await feedPage(child, 1, 2, '')

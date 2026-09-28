@@ -49,6 +49,8 @@ export interface PreprocessProviderConfig {
   model?: string
   /** vision-model 条目（v0.4.4）：用户选定的视觉模型引用（provider + model 两个 id）。 */
   visionModel?: { provider: string; model: string }
+  /** vision-model 条目的页级并发数（1..20；缺省走主进程默认 8）。 */
+  visionConcurrency?: number
 }
 
 export interface ParsePdfOptions {
@@ -168,7 +170,15 @@ export async function parsePdfWithProvider(
         if (visionModel === undefined || visionModel.provider.length === 0 || visionModel.model.length === 0) {
           throw new Error('vision model is not selected (设置 → 文档处理 → VisionModel → 选择模型)')
         }
-        return await parsePdfWithVisionModel(filePath, visionModel, controller.signal)
+        const visionConcurrency =
+          typeof config.visionConcurrency === 'number' && config.visionConcurrency >= 1
+            ? config.visionConcurrency
+            : undefined
+        return await parsePdfWithVisionModel(
+          filePath,
+          { ...visionModel, ...(visionConcurrency === undefined ? {} : { concurrency: visionConcurrency }) },
+          controller.signal
+        )
       }
       case 'mineru':
         return await parseWithMineru(config, filePath, controller.signal)

@@ -2,16 +2,16 @@
  * 视觉模型文档解析编排（v0.4.4）：文档处理通道 vision-model 条目的执行缝。
  *
  * 链路：utility 子进程逐页光栅化（visionWorker）→ 主进程逐页交 lightVisionDocument
- *（OpenAI 兼容多模态 chat，页图 data URL）→ 页文本按序拼装。页与页**串行**：
- * ping-pong 协议（主进程处理完一页才放行下一页）把内存钉死在"一页图 + 一页文本"，
- * 串行也天然避开服务商并发限流。空页（光栅化不出 / 模型回空）不拖垮整本。
+ *（OpenAI 兼容多模态 chat，页图 data URL）→ 页文本按序拼装。**页级并发**（用户裁定：
+ * 默认 8、上限 20）：worker 按信用窗放行页图（job.window = 并发数，结算一页回一信），
+ * 在途模型调用 ≤ 并发数，内存上界 = 并发 × 一页图；页完成顺序乱序，拼装按页号排序。
  *
- * 预算落点：与 local-paddle 同款——时间预算由 preprocessChannel.parsePdfWithProvider
- * 的 AbortController 施加（工具路径 8 分钟；知识库摄取 Infinity），abort 经 signal
- * 同时打断在途 HTTP 请求与光栅化子进程（kill）。
- *
- * 失败语义（诚实面）：模型调用失败 = 服务商失败 → 整本拒绝并上抛（HTTP 细节保留），
- * 不静默降级成空页；整本无文本 → 明确报错（页可能空白或不可读）。
+ * 失败/打断语义（用户裁定）：
+ * - 单页模型调用失败 = 整本拒绝，不加 retry（"假设用户是成年人"——并发调高是用户
+ *   对自己钥匙配额的判断）；失败即终止在途请求（内部 AbortController）。
+ * - **打断交缓存**：预算到点 / 用户中止时，已完成页按序拼装 + 末尾附模型可见的
+ *   截断说明，作为工具结果交回（一页未成则照旧拒绝）。
+ * - 空页（光栅化不出 / 模型回空）不拖垮整本。
  * 页图不落盘、不入内核附件仓——一次请求的中间产物，用完即弃。
  */
 import { existsSync } from 'node:fs'
@@ -25,6 +25,10 @@ const logger = loggerService.withContext('VisionDocument')
 
 /** 光栅化倍率：144dpi——视觉模型不需要 PP-OCR 的 216dpi，页图体积换取网络与费用。 */
 const RENDER_SCALE = 2
+
+/** 页级并发缺省值（用户裁定 8）；面板可调，上限 20（再高服务商限流主导失败面）。 */
+export const DEFAULT_VISION_CONCURRENCY = 8
+export const MAX_VISION_CONCURRENCY = 20
 
 /**
  * 转写指令（内置常量，本批不做用户可配）：要求只输出 markdown 正文、保留结构、
@@ -45,6 +49,8 @@ export const VISION_DOCUMENT_PROMPT = [
 export interface VisionDocumentConfig {
   provider: string
   model: string
+  /** 页级并发数（1..20）；缺省 = DEFAULT_VISION_CONCURRENCY。 */
+  concurrency?: number
 }
 
 interface WorkerPageMessage {
@@ -84,7 +90,7 @@ export function visionWorkerPath(): string {
   return join(app.getAppPath(), 'out', 'main', 'visionWorker.js')
 }
 
-/** 逐页光栅化 + 逐页转写；任一页的模型调用失败即整本拒绝。 */
+/** 逐页光栅化 + 逐页转写；单页模型调用失败即整本拒绝，被打断时交回已完成页。 */
 export async function runVisionDocumentParse(
   filePath: string,
   config: VisionDocumentConfig,
@@ -94,6 +100,11 @@ export async function runVisionDocumentParse(
   if (!existsSync(workerPath)) {
     throw new Error(`vision document worker bundle is missing at ${workerPath} (build/packaging gap)`)
   }
+  const rawConcurrency = config.concurrency ?? DEFAULT_VISION_CONCURRENCY
+  const concurrency = Math.min(
+    MAX_VISION_CONCURRENCY,
+    Math.max(1, Number.isFinite(rawConcurrency) ? Math.floor(rawConcurrency) : DEFAULT_VISION_CONCURRENCY)
+  )
   const child: UtilityProcessLike = utilityProcess.fork(workerPath, [], {
     serviceName: 'visionDocumentWorker',
     stdio: 'pipe'
@@ -105,8 +116,14 @@ export async function runVisionDocumentParse(
     logger.error(`vision document worker stderr: ${String(chunk).trim()}`)
   })
 
+  // 内部中断链：外部 signal（预算/用户中止）与 finish（单页失败）都汇聚到这里，
+  // 一次性掐掉全部在途模型请求；打断路径用它区分「该交缓存」和「该报错」。
+  const controller = new AbortController()
+
   return new Promise<string>((resolve, reject) => {
     const pages = new Map<number, string>()
+    const inflight = new Set<Promise<void>>()
+    let totalPagesSeen = 0
     let settled = false
     let onAbort: (() => void) | null = null
 
@@ -114,6 +131,7 @@ export async function runVisionDocumentParse(
       if (settled) return
       settled = true
       if (onAbort !== null) signal?.removeEventListener('abort', onAbort)
+      controller.abort()
       child.kill()
       fn()
     }
@@ -124,31 +142,60 @@ export async function runVisionDocumentParse(
         .map(([, text]) => text)
         .join('\n\n')
 
-    /** 一页的完整消费：模型调用（含失败）→ 放行下一页；失败即整本拒绝。 */
-    const consumePage = async (message: WorkerPageMessage): Promise<void> => {
-      try {
-        if (message.data.length > 0) {
-          const text = (
-            await lightVisionDocument(
-              {
-                providerId: config.provider,
-                modelId: config.model,
-                prompt: VISION_DOCUMENT_PROMPT,
-                images: [{ mediaType: message.mediaType, data: message.data }]
-              },
-              signal
-            )
-          ).trim()
-          if (text.length > 0) pages.set(message.page, text)
-          logger.info(`vision document: page ${message.page}/${message.totalPages} → ${text.length} chars`)
-        } else {
-          logger.warn(`vision document: page ${message.page}/${message.totalPages} produced no image (skipped)`)
+    /**
+     * 结算前排空在途页：信用窗下 worker 会跑在消费前面（模型调用在途时 `done` /
+     * `exit` 就可能到达），必须等在途消费全部落地再读 pages——否则大书解析出
+     * 前几页就被当成"完成"（Probe G 实锤）。
+     */
+    const drainInflight = (): Promise<void> => Promise.allSettled([...inflight]).then(() => undefined)
+
+    /** 打断交缓存（用户裁定）：预算到点 / 用户中止时已完成页按序拼装交回，零完成则报错。 */
+    const onInterrupted = (): void => {
+      void drainInflight().then(() => {
+        const pagesDone = pages.size
+        finish(() => {
+          if (pagesDone > 0) {
+            const note = `[Vision document parse interrupted at page ${pagesDone} of ${totalPagesSeen} — time budget exhausted or operation cancelled; the text above covers completed pages only.]`
+            resolve(`${assemble()}\n\n${note}`)
+          } else {
+            reject(signal?.reason ?? new Error('vision document parse aborted'))
+          }
+        })
+      })
+    }
+
+    /** 一页的消费：模型调用 → 结算回一信；单页失败 = 整本拒绝（不 retry，用户裁定）。 */
+    const consumePage = (message: WorkerPageMessage): Promise<void> => {
+      const task = (async () => {
+        try {
+          if (message.data.length > 0) {
+            const text = (
+              await lightVisionDocument(
+                {
+                  providerId: config.provider,
+                  modelId: config.model,
+                  prompt: VISION_DOCUMENT_PROMPT,
+                  images: [{ mediaType: message.mediaType, data: message.data }]
+                },
+                controller.signal
+              )
+            ).trim()
+            if (text.length > 0) pages.set(message.page, text)
+            logger.info(`vision document: page ${message.page}/${message.totalPages} → ${text.length} chars`)
+          } else {
+            logger.warn(`vision document: page ${message.page}/${message.totalPages} produced no image (skipped)`)
+          }
+        } catch (error) {
+          // 自身打断引起的请求异常由 onInterrupted 结算，这里只处理真实失败。
+          if (controller.signal.aborted) return
+          finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+          return
         }
-      } catch (error) {
-        finish(() => reject(error instanceof Error ? error : new Error(String(error))))
-        return
-      }
-      if (!settled) child.postMessage({ type: 'next' })
+        if (!settled) child.postMessage({ type: 'next' })
+      })()
+      inflight.add(task)
+      void task.catch(() => undefined).finally(() => inflight.delete(task))
+      return task
     }
 
     child.on('message', (raw: unknown) => {
@@ -157,28 +204,34 @@ export async function runVisionDocumentParse(
       if (message.type === 'log') {
         logger.info(message.message)
       } else if (message.type === 'page') {
-        // 串行由协议保证：worker 收不到 'next' 不会发下一页。
+        totalPagesSeen = message.totalPages
         void consumePage(message)
       } else if (message.type === 'done') {
-        // 'done' 只在最后一页的 'next' 之后到达——此时全部页已消费完（协议保证）。
-        if (pages.size === 0) {
-          finish(() => reject(new Error('vision document parse produced no text — pages may be blank or unreadable')))
-        } else {
-          finish(() => resolve(assemble()))
-        }
+        // worker 可能跑在消费前面（信用窗）：先排空在途页再结算。
+        void drainInflight().then(() => {
+          if (settled) return
+          if (pages.size === 0) {
+            finish(() => reject(new Error('vision document parse produced no text — pages may be blank or unreadable')))
+          } else {
+            finish(() => resolve(assemble()))
+          }
+        })
       } else if (message.type === 'error') {
         finish(() => reject(new Error(message.message)))
       }
     })
     child.on('exit', (code: number) => {
-      if (!settled) finish(() => reject(new Error(`vision document worker exited unexpectedly (code ${code})`)))
+      // 自然退出也可能跑在在途消费前面（信用窗）：先排空再判意外退出。
+      void drainInflight().then(() => {
+        if (!settled) finish(() => reject(new Error(`vision document worker exited unexpectedly (code ${code})`)))
+      })
     })
 
     if (signal !== undefined) {
-      onAbort = (): void => finish(() => reject(signal?.reason ?? new Error('vision document parse aborted')))
+      onAbort = (): void => onInterrupted()
       signal.addEventListener('abort', onAbort, { once: true })
     }
 
-    child.postMessage({ pdfPath: filePath, scale: RENDER_SCALE })
+    child.postMessage({ pdfPath: filePath, scale: RENDER_SCALE, window: concurrency })
   })
 }

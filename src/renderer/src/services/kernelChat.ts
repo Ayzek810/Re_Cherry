@@ -302,6 +302,8 @@ export async function syncPreprocessToKernel(
     model?: string
     /** vision-model 条目的视觉模型引用（v0.4.4）：provider + model 两个 id。 */
     visionModel?: { provider: string; model: string }
+    /** vision-model 条目的页级并发数（1..20；缺省走主进程默认 8）。 */
+    visionConcurrency?: number
   }>
 ): Promise<void> {
   try {

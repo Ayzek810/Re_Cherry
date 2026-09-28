@@ -24,6 +24,11 @@ import { readFile } from 'node:fs/promises'
 interface VisionWorkerJob {
   pdfPath: string
   scale: number
+  /**
+   * 信用窗初始额度（= 主进程的页级并发数）：发一页扣一信，主进程结算完一页回一信
+   * （{type:'next'}）——在途页图恒 ≤ window，几百页书不会把页图堆成 GB 级。
+   */
+  window: number
 }
 
 type WorkerOutgoingMessage =
@@ -36,20 +41,33 @@ const parentPort = process.parentPort
 const post = (message: WorkerOutgoingMessage): void => parentPort?.postMessage(message)
 const log = (message: string): void => post({ type: 'log', message })
 
-/** 放行闸：主进程消费完当前页（模型调用结束）后发 `{type:'next'}` 解开。 */
-let releaseNext: (() => void) | null = null
-const waitForNext = (): Promise<void> =>
-  new Promise((resolve) => {
-    releaseNext = resolve
+/** 信用窗：发一页扣一信（acquire），主进程结算一页回一信（{type:'next'}）。 */
+let credits = 0
+let waiter: (() => void) | null = null
+const acquireCredit = (): Promise<void> => {
+  if (credits > 0) {
+    credits -= 1
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
+    waiter = () => {
+      credits -= 1
+      waiter = null
+      resolve()
+    }
   })
+}
 
 async function run(job: VisionWorkerJob): Promise<void> {
   const { CanvasFactory } = await import('pdf-parse/worker')
   const { PDFParse } = await import('pdf-parse')
   const parser = new PDFParse({ data: new Uint8Array(await readFile(job.pdfPath)), CanvasFactory })
   try {
-    const totalPages = (await parser.getText()).total
-    for (let page = 1; page <= totalPages; page++) {
+    // 页数走 getInfo（零提取，只开文档树）——getText 会把整本文本层白白提取一遍。
+    credits = Math.max(1, Math.floor(job.window))
+    const { total } = await parser.getInfo()
+    for (let page = 1; page <= total; page++) {
+      await acquireCredit()
       const screenshot = await parser.getScreenshot({
         partial: [page],
         scale: job.scale,
@@ -61,13 +79,12 @@ async function run(job: VisionWorkerJob): Promise<void> {
       post({
         type: 'page',
         page,
-        totalPages,
+        totalPages: total,
         mediaType: 'image/png',
         data: rendered ? Buffer.from(rendered).toString('base64') : ''
       })
-      await waitForNext()
     }
-    post({ type: 'done', totalPages })
+    post({ type: 'done', totalPages: total })
   } finally {
     await parser.destroy().catch(() => undefined)
   }
@@ -79,9 +96,8 @@ parentPort?.on('message', (messageEvent) => {
   // 'message' 才是直接值。
   const payload = (messageEvent as { data: unknown }).data as VisionWorkerJob | { type: 'next' }
   if (typeof payload === 'object' && payload !== null && (payload as { type?: string }).type === 'next') {
-    const release = releaseNext
-    releaseNext = null
-    release?.()
+    credits += 1
+    waiter?.()
     return
   }
   const job = payload as VisionWorkerJob

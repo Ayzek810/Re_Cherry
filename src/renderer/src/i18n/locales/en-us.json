@@ -3723,7 +3723,8 @@
           "unsupported": "Local OCR inference is not supported on this platform"
         },
         "vision_model": {
-          "help": "Vision-model document parsing: the PDF is rasterized page by page on this device and handed to the vision model you select, which transcribes it into Markdown (headings, tables and formulas preserved) — the model provider must accept image input; billing is per page",
+          "concurrency": "Concurrent Pages",
+          "help": "Vision-model document parsing: the PDF is rasterized page by page on this device and handed to the vision model you select, which transcribes it into Markdown (headings, tables and formulas preserved) — the model provider must accept image input; billing is per page. Higher concurrency finishes sooner but hits provider rate limits sooner (a rate-limit error discards the whole document — tune it to your key quota)",
           "model_placeholder": "Select a vision model",
           "model_title": "Vision Model"
         },

@@ -244,7 +244,8 @@ export function useAppInit() {
         visionModel:
           provider.visionModel === undefined
             ? undefined
-            : { provider: provider.visionModel.provider, model: provider.visionModel.id }
+            : { provider: provider.visionModel.provider, model: provider.visionModel.id },
+        visionConcurrency: provider.visionConcurrency
       }))
     )
   }, [preprocessProviders])
