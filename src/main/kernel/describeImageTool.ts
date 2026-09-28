@@ -126,7 +126,8 @@ export function apply(ctx: Context): void {
           model: route.model,
           system: describePrompt,
           messages: [message],
-          maxTokens: 4096
+          maxTokens: 4096,
+          signal: exec.signal
         })) {
           assembler.push(chunk)
         }

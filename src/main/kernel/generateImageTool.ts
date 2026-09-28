@@ -108,15 +108,19 @@ export function apply(ctx: Context): void {
         const batchSizeRaw = Number(args.count ?? 1)
         const batchSize = Number.isFinite(batchSizeRaw) ? Math.min(10, Math.max(1, Math.floor(batchSizeRaw))) : 1
         const requestId = `generate-image:${turnKey}:${Date.now()}`
-        const result = await lightGenerateImage({
-          provider: config.providerId,
-          model: config.modelId,
-          prompt,
-          // fork 缝（v0.3.3 批次6）：工具无目录信息，只下发两个基础键；主进程按
-          // provider 的 wire profile 改名（diffusion 档），与旧行为等价。
-          paramValues: { size: imageSize, numImages: batchSize },
-          requestId
-        })
+        const result = await lightGenerateImage(
+          {
+            provider: config.providerId,
+            model: config.modelId,
+            prompt,
+            // fork 缝（v0.3.3 批次6）：工具无目录信息，只下发两个基础键；主进程按
+            // provider 的 wire profile 改名（diffusion 档），与旧行为等价。
+            paramValues: { size: imageSize, numImages: batchSize },
+            requestId
+          },
+          // exec.signal（暂停/中止）优先于 requestId 注册表——工具路径无渲染层取消方。
+          exec.signal
+        )
         logger.info(`generate_image: ${result.images.length} image(s) via ${config.modelId}`)
         return {
           prompt,

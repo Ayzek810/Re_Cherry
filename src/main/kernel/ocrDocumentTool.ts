@@ -63,7 +63,7 @@ export function apply(ctx: Context): void {
         if (topicId === undefined) {
           throw new Error('ocr_document: no active conversation turn')
         }
-        const result = await knowledgeService.ocrTurnDocument(topicId, documentName)
+        const result = await knowledgeService.ocrTurnDocument(topicId, documentName, exec.signal)
         logger.info(`ocr_document: "${documentName}" -> ${result.text.length} chars`)
         return { document: result.name, text: result.text }
       }

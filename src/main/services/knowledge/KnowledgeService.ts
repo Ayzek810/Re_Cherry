@@ -224,7 +224,11 @@ export class KnowledgeService {
    * 保持删除。未登记/未配置时如实报可行动错误，不静默降级（2026-09-22 用户裁决：
    * 删除 local-paddle 缺省兜底）。非 PDF 如实报错（通道只接 PDF）。
    */
-  async ocrTurnDocument(topicId: string, nameOrPath: string): Promise<{ name: string; text: string }> {
+  async ocrTurnDocument(
+    topicId: string,
+    nameOrPath: string,
+    signal?: AbortSignal
+  ): Promise<{ name: string; text: string }> {
     const documents = this.getTurnDocuments(topicId)
     const document = documents?.find((doc) => doc.name === nameOrPath || doc.path === nameOrPath)
     if (document === undefined) {
@@ -242,7 +246,9 @@ export class KnowledgeService {
       throw new Error(`document-processing provider "${providerId}" is not configured yet (设置 → 文档处理)`)
     }
     logger.info(`document processing engaged for "${document.name}" via provider "${config.id}" (ocr_document tool)`)
-    const text = await parsePdfWithProvider(config, document.path)
+    // exec.signal（暂停/中止）与 8 分钟预算在 parsePdfWithProvider 内合并；
+    // 打断走各执行缝的取消缝（local: cancel+部分缓存 / vision: HTTP abort+部分缓存）。
+    const text = await parsePdfWithProvider(config, document.path, signal)
     if (text.trim().length === 0) {
       throw new Error(`document "${document.name}" produced no OCR text — pages may be blank or unreadable`)
     }

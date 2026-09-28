@@ -139,7 +139,8 @@ describe('ocrTurnDocument（§7.17 三轮：挂进文档处理通道，按通道
     expect(preprocessChannel.getConfig).toHaveBeenCalledWith('mineru')
     expect(parsePdfWithProvider).toHaveBeenCalledWith(
       { id: 'mineru', apiKey: 'k', apiHost: 'https://mineru.net' },
-      'C:/books/scan.pdf'
+      'C:/books/scan.pdf',
+      undefined
     )
     expect(result).toEqual({ name: 'scan.pdf', text: '云解析全文' })
   })
