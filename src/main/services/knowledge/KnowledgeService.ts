@@ -103,6 +103,14 @@ export interface LoaderReturn {
   loaderType: string
 }
 
+/** 工具传错文档名的报错：附上本轮有效名单（引号定边界），模型一次自纠不再盲猜。 */
+function notAttachedError(nameOrPath: string, documents: TurnDocument[] | undefined): Error {
+  const attached = (documents ?? []).map((doc) => `"${doc.name}"`).join(', ')
+  return new Error(
+    `document "${nameOrPath}" is not attached to this conversation turn (attached documents: ${attached})`
+  )
+}
+
 export class KnowledgeService {
   private static instance: KnowledgeService | null = null
 
@@ -195,7 +203,7 @@ export class KnowledgeService {
     const documents = this.getTurnDocuments(topicId)
     const document = documents?.find((doc) => doc.name === nameOrPath || doc.path === nameOrPath)
     if (document === undefined) {
-      throw new Error(`document "${nameOrPath}" is not attached to this conversation turn`)
+      throw notAttachedError(nameOrPath, documents)
     }
     const ext = path.extname(document.path).toLowerCase()
     const text = (await extractFromFile(document.path)).text
@@ -220,7 +228,7 @@ export class KnowledgeService {
     const documents = this.getTurnDocuments(topicId)
     const document = documents?.find((doc) => doc.name === nameOrPath || doc.path === nameOrPath)
     if (document === undefined) {
-      throw new Error(`document "${nameOrPath}" is not attached to this conversation turn`)
+      throw notAttachedError(nameOrPath, documents)
     }
     if (path.extname(document.path).toLowerCase() !== '.pdf') {
       throw new Error(`ocr_document only supports PDF documents; "${document.name}" is not a PDF`)

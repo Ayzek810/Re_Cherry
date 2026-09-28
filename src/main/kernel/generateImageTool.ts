@@ -22,10 +22,9 @@ export const name = 'tool-generate-image'
 export const inject = ['tools']
 
 const DESCRIPTION =
-  'Generate images from a text prompt using the dedicated painting model configured by the user. ' +
-  'Use this when the user asks to create, draw or generate an image/picture/poster. ' +
-  'Returns the generated images as attachments in this conversation turn. ' +
-  'If the tool is unavailable the user has not enabled or configured it — say so instead of retrying.'
+  "Generate images from a text prompt with the user's painting model. Use it when the user asks to create, " +
+  'draw or generate an image, picture or poster. Generated images arrive as attachments in this turn. If ' +
+  'the tool errors, the feature is not configured — say so instead of retrying.'
 
 /** 每轮登记的绘画模型（sendMessage options.generateImage；webSearch 同构）。 */
 interface GenerateImageTurnConfig {

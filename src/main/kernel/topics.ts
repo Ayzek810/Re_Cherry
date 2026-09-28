@@ -1594,21 +1594,21 @@ async function ensureAgent(
       })
     }
     // 文档清单（批次6）：read_document 挂载的轮，附件文档名索引进快照节（同上，逐轮新鲜）。
-    // OCR 分体（2026-09-22 用户裁决）：ocr_document 已挂载的轮顺带告知分工——
-    // 模型据此自主选择直读还是 OCR，无需在描述里重复文档清单。
+    // v0.4.4-1（ASD-STE100 + 拼名修复）：文档名加引号定边界（名字含空格/混合文字，
+    // 裸名 + 冗余扩展标记导致模型首轮拼错文件名）；OCR 提示压成一句（与
+    // ocr_document 描述不重复）。工具挂载态决定动词短语（ocr_document 未挂载不提及）。
     if (builtinsMounted.includes('read_document')) {
       const turnDocuments = knowledgeService.getTurnDocuments(topic.id) ?? []
       const index =
         turnDocuments.length > 0
-          ? turnDocuments.map((document) => `- ${document.name}${document.ext ? ` (${document.ext})` : ''}`).join('\n')
+          ? turnDocuments.map((document) => `- "${document.name}"`).join('\n')
           : '(no documents are attached to this turn)'
-      const ocrHint = builtinsMounted.includes('ocr_document')
-        ? ' PDFs are read from their text layer; if a PDF turns out to be scanned (no text layer), read it with the ocr_document tool, which processes it through the document-processing provider configured in settings.'
-        : ''
+      const verbs = builtinsMounted.includes('ocr_document') ? 'read_document or ocr_document' : 'read_document'
+      const ocrHint = builtinsMounted.includes('ocr_document') ? ' PDFs without a text layer need the ocr_document tool.' : ''
       agentCtx.systemPrompt.context({
         name: 'cherry:documents',
         order: 1,
-        text: `Attached documents (${turnDocuments.length}); read one with the read_document tool by its exact name.${ocrHint}\n${index}`
+        text: `Attached documents (${turnDocuments.length}); pass one to the ${verbs} tool, quoted exactly as listed below.${ocrHint}\n${index}`
       })
     }
   }

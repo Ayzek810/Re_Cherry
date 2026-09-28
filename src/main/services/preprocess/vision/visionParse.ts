@@ -26,9 +26,9 @@ const logger = loggerService.withContext('VisionDocument')
 /** 光栅化倍率：144dpi——视觉模型不需要 PP-OCR 的 216dpi，页图体积换取网络与费用。 */
 const RENDER_SCALE = 2
 
-/** 页级并发缺省值（用户裁定 8）；面板可调，上限 20（再高服务商限流主导失败面）。 */
+/** 页级并发缺省值（用户裁定 8）；面板可调，上限 40（用户裁定：20 仍是节点，40 为新最大值）。 */
 export const DEFAULT_VISION_CONCURRENCY = 8
-export const MAX_VISION_CONCURRENCY = 20
+export const MAX_VISION_CONCURRENCY = 40
 
 /**
  * 转写指令（内置常量，本批不做用户可配）：要求只输出 markdown 正文、保留结构、

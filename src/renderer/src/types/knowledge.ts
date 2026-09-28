@@ -161,8 +161,10 @@ export interface PreprocessProvider {
    * 同款"持久化 Model 对象"形态（含 provider，重启后可回显）。undefined = 未配置。
    */
   visionModel?: Model
-  /** 视觉模型文档解析的页级并发数（1 = 串行；缺省走主进程默认 8，上限 20）。 */
+  /** 视觉模型文档解析的页级并发数（1 = 串行；缺省走主进程默认 8，上限 40）。 */
   visionConcurrency?: number
+  /** 本地 OCR 的页级并发数（1 = 串行；缺省走主进程默认 5，上限 20）。 */
+  localConcurrency?: number
   options?: any
 }
 

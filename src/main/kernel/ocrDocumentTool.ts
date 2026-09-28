@@ -25,13 +25,9 @@ export const name = 'tool-ocr-document'
 export const inject = ['tools']
 
 const DESCRIPTION =
-  'Read an attached PDF by processing it through the document-processing channel (设置 → 文档处理): the ' +
-  'configured provider (MinerU, Doc2x, Mistral, Open MinerU, PaddleOCR, LocalPaddle for on-device OCR, or a ' +
-  'selected vision model) parses the whole document and returns its full text. Use this when read_document ' +
-  'reports that a PDF has no meaningful text layer (scanned document), when the extracted text looks empty or ' +
-  'garbled, or when the user explicitly asks for OCR. Large PDFs can take several minutes (8-minute budget). ' +
-  'If no provider is configured yet, an actionable error is returned. PDF only; the document must be attached ' +
-  'to this conversation turn. Pass the document name exactly as listed under "Attached documents".'
+  'Parse a PDF through the document-processing channel (设置 → 文档处理) and return its full text. Use it ' +
+  'when read_document returns empty or garbled text for a PDF, or when the user asks for OCR. PDF only. ' +
+  'Large PDFs take minutes (8-minute budget). Pass the document name exactly as shown under "Attached documents".'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(
@@ -42,7 +38,7 @@ export function apply(ctx: Context): void {
         document: {
           type: 'string',
           required: true,
-          description: 'The document name exactly as listed in the "Attached documents" context note.'
+          description: 'The document name, quoted exactly as listed under "Attached documents".'
         }
       },
       output: {

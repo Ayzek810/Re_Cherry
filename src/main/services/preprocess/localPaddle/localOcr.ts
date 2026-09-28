@@ -1,19 +1,24 @@
 /**
- * LocalPaddle OCR 主进程编排（v0.4.4 收编：原 services/localModel/pdfOcr.ts，
- * 推理子进程化与消息协议语义原样保持——2026-09-22 性能事故修复后的实证形态）。
+ * LocalPaddle OCR 主进程编排（v0.4.4 收编；v0.4.4-1 常驻 worker + 页级并发 + 打断交缓存）。
  *
- * 事故背景：一切 PDF → OCR 的路由下，1436 页 PDF 在主进程逐页推理数小时且独占
- * 主线程 → 窗口整体冻结。推理全部挪入 utilityProcess 子进程（localOcrWorker.ts）
- * ——选 utilityProcess 而非 worker_threads：本机 worker_threads 里加载
- * onnxruntime/sharp → 整进程 0xC0000005（实测），utility 子进程原生崩溃被隔离。
- * 主进程只做编排、部分结果组装、终止。页与页串行（子进程内单推理队列）；读不
- * 出的页贡献空文本而非整体失败。输出不带页标记——下游直接切块嵌入/喂模型。
+ * 事故背景：1436 页 PDF 在主进程逐页推理数小时且独占主线程 → 窗口冻结（真机实锤）。
+ * 推理在 utilityProcess 子进程（localOcrWorker.ts）——worker_threads 加载
+ * onnxruntime/sharp = 整进程 0xC0000005（实测），utility 子进程崩溃被隔离。
  *
- * 预算落点：时间预算 8 分钟由 preprocessChannel.parsePdfWithProvider 的
- * AbortController 施加（工具路径默认；知识库摄取路径传 Infinity = 无预算）。
- * 本编排自身无预算——预算经 signal 传入，abort 即 kill 子进程并拒绝。
- * 子进程 stderr/stdout 接日志（stdio 'pipe'）：worker 崩溃时其栈经 pipe 进
- * 主进程日志——默认 inherit 在安装版里 worker 崩溃原因彻底不可见。
+ * **v0.4.4-1 常驻 + 并发（用户裁定）**：
+ * - **常驻 worker**：句柄跨解析复用，热模型跨本保留（省 ~15s/本冷加载）；worker
+ *   5 分钟无消息自退，主进程静默接管、下次解析重 fork。stdout/stderr/message/exit
+ *   在 fork 时挂**一次**（每解析挂会泄漏监听），经模块级派发器路由给当前解析。
+ * - **页级并发**：信用窗（window = 并发数，默认 5 / 上限 20——用户实测 CPU 跑不满，
+ *   串行循环里光栅化/sharp/推理互相空转）；页完成乱序，拼装按页号。
+ * - **取消不杀进程**：预算/中止发 {type:'cancel'}，worker 停循环、热模型留给下一本；
+ *   解析 promise 走**打断交缓存**（已完成页 + 截断说明，与视觉路径同语义；
+ *   零完成照旧拒绝）。单页识别失败 = 废整本、不加 retry（用户裁定）。
+ * - **解析队列**：编排层串行化（并发调用从"互踩 activeProcess"的隐性 bug 变排队）。
+ * - terminate 契约不变：删模型 kill 常驻 worker 释放文件句柄（Windows unlink 前置）。
+ *
+ * 时间预算：工具路径 8 分钟 / 知识库摄取 Infinity，经 signal 传入（preprocessChannel）。
+ * 子进程 stderr/stdout 接日志（stdio 'pipe'）：崩溃栈可见性。
  */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -28,6 +33,15 @@ const logger = loggerService.withContext('LocalPaddleOcr')
 /** 光栅化倍率：PDF 用户空间 72dpi，3x ≈ 216dpi——PP-OCRv6 解析正文够用且页图不过大。 */
 const RENDER_SCALE = 3
 
+/** 页级并发缺省（用户裁定 5：实测 CPU 跑不满，串行循环三段互相空转）与上限。 */
+export const DEFAULT_LOCAL_OCR_CONCURRENCY = 5
+export const MAX_LOCAL_OCR_CONCURRENCY = 20
+
+export interface LocalOcrOptions {
+  /** 页级并发数（1..20）；缺省 = DEFAULT_LOCAL_OCR_CONCURRENCY。 */
+  concurrency?: number
+}
+
 interface WorkerPageMessage {
   type: 'page'
   page: number
@@ -41,9 +55,19 @@ interface WorkerDoneMessage {
   totalPages: number
 }
 
+interface WorkerCancelledMessage {
+  type: 'cancelled'
+  pagesDone: number
+}
+
 type WorkerLogMessage = { type: 'log'; message: string }
 type WorkerErrorMessage = { type: 'error'; message: string }
-type WorkerOutgoingMessage = WorkerPageMessage | WorkerDoneMessage | WorkerLogMessage | WorkerErrorMessage
+type WorkerOutgoingMessage =
+  | WorkerPageMessage
+  | WorkerDoneMessage
+  | WorkerCancelledMessage
+  | WorkerLogMessage
+  | WorkerErrorMessage
 
 interface UtilityProcessLike {
   readonly stdout: NodeJS.ReadableStream | null
@@ -55,72 +79,130 @@ interface UtilityProcessLike {
   kill(): void
 }
 
-/** 当前活着的 OCR 子进程——模型删除前必须先终止（Windows 打开句柄会让 unlink 失败）。 */
-let activeProcess: UtilityProcessLike | null = null
+/**
+ * 常驻 worker 句柄（跨解析复用）。stdout/stderr/message/exit 监听 fork 时挂一次，
+ * 消息经 `currentDispatch` 路由给在跑的解析；exit 时置空句柄并通知当前解析
+ * （空闲退出无在跑解析 = 静默）。
+ */
+let worker: UtilityProcessLike | null = null
+let workerDispatch: ((message: WorkerOutgoingMessage) => void) | null = null
+let workerExited: (() => void) | null = null
 
-/** 终止活着的 OCR 子进程（若无则空操作）；等待进程真正退出。 */
+/** 终止常驻 worker 并等待真正退出（删模型前置：Windows 打开句柄会让 unlink 失败）。
+ *  在跑的解析经 exit 事件照常收到 "exited unexpectedly" 拒绝（workerExited 不在此清，
+ *  清了在途解析就永远收不到通知而悬挂）。 */
 export async function terminateActiveOcrProcess(): Promise<void> {
-  const child = activeProcess
+  const child = worker
   if (child === null) return
-  activeProcess = null
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve())
+  })
+  worker = null
   child.kill()
   await exited
 }
 
-/**
- * OCR worker 产物路径。**禁止用 __dirname 推导**（2026-09-28 真机实锤的回归）：
- * 编排层随动态导入服务图被 rollup 拆进共享 chunk（out/main/chunks/*）——chunk 里
- * 的 __dirname 是 chunks/ 目录，fork 会指向不存在的 chunks/localOcrWorker.js
- * → "worker exited unexpectedly (code 1)"。正确锚点是 app 根：dev = 仓库根、
- * 打包 = app.asar 根（utilityProcess 支持从 asar 路径 fork，probe-e 实证；
- * `out/main/localOcrWorker.js` 产物契约由 after-pack 断言守门）。
- */
-export function localOcrWorkerPath(): string {
-  return join(app.getAppPath(), 'out', 'main', 'localOcrWorker.js')
-}
-
-/**
- * 整本 PDF 逐页 OCR。入口先查模型就绪（避免起子进程后才发现没模型）；任务交给
- * utility 子进程，主进程只收敛结果。时间预算（若有）由调用方经 signal 传入——
- * abort 即终止子进程并拒绝。
- */
-export async function runLocalOcr(filePath: string, signal?: AbortSignal): Promise<string> {
-  if (!isPaddleModelReady()) {
-    throw new Error('local OCR model is not downloaded (设置 → 文档处理 → LocalPaddle → 下载模型)')
-  }
-  const workerPath = localOcrWorkerPath()
+function acquireWorker(): UtilityProcessLike {
+  if (worker !== null) return worker
+  const workerPath = join(app.getAppPath(), 'out', 'main', 'localOcrWorker.js')
   if (!existsSync(workerPath)) {
     // 产物缺失 = 构建/打包缺口（构建面由 after-pack 断言挡；此处 fail-loud 不留 stderr 猜谜）。
     throw new Error(`local OCR worker bundle is missing at ${workerPath} (build/packaging gap)`)
   }
-  // electron 运行时导出是小写实例 utilityProcess（大写 UtilityProcess 只是类型，
-  // 动态解构 `const { UtilityProcess } = await import('electron')` 运行时是
-  // undefined——tsgo 静态化后当场抓出；此为该雷的纪念碑）。
   const child: UtilityProcessLike = utilityProcess.fork(workerPath, [], {
     serviceName: 'localOcrWorker',
     stdio: 'pipe'
   })
-  activeProcess = child
   child.stdout?.on('data', (chunk: unknown) => {
     logger.info(`local OCR worker stdout: ${String(chunk).trim()}`)
   })
   child.stderr?.on('data', (chunk: unknown) => {
     logger.error(`local OCR worker stderr: ${String(chunk).trim()}`)
   })
+  child.on('message', (raw: unknown) => {
+    workerDispatch?.(raw as WorkerOutgoingMessage)
+  })
+  child.on('exit', (code: number) => {
+    logger.info(`local OCR worker exited (code ${code})`)
+    worker = null
+    const notify = workerExited
+    workerDispatch = null
+    workerExited = null
+    notify?.()
+  })
+  worker = child
+  return child
+}
+
+/**
+ * 整本 PDF 逐页 OCR。入口先查模型就绪（避免起子进程后才发现没模型）；解析队列
+ * 串行化（并发调用排队，不互踩）；被打断交缓存（与视觉路径同语义）。
+ */
+export async function runLocalOcr(
+  filePath: string,
+  options: LocalOcrOptions = {},
+  signal?: AbortSignal
+): Promise<string> {
+  if (!isPaddleModelReady()) {
+    throw new Error('local OCR model is not downloaded (设置 → 文档处理 → LocalPaddle → 下载模型)')
+  }
+  // 解析队列：同一时刻至多一个 run 在 worker 上（并发调用排队不互踩）。
+  return parseQueue.add(() => runOnWorker(filePath, options, signal))
+}
+
+/** 模块级解析队列（串行化跨调用；空闲时同步起步保持"调用即 fork"的旧语义，忙碌才排队）。 */
+const parseQueue: { add<T>(task: () => Promise<T>): Promise<T> } = (() => {
+  let pending: Promise<unknown> | null = null
+  return {
+    add<T>(task: () => Promise<T>): Promise<T> {
+      if (pending === null) {
+        const next = task()
+        pending = next
+          .catch(() => undefined)
+          .finally(() => {
+            pending = null
+          })
+        return next
+      }
+      const next = pending.then(task, task)
+      pending = next
+        .catch(() => undefined)
+        .finally(() => {
+          pending = null
+        })
+      return next
+    }
+  }
+})()
+
+async function runOnWorker(
+  filePath: string,
+  options: LocalOcrOptions,
+  signal: AbortSignal | undefined
+): Promise<string> {
+  const rawConcurrency = options.concurrency ?? DEFAULT_LOCAL_OCR_CONCURRENCY
+  const concurrency = Math.min(
+    MAX_LOCAL_OCR_CONCURRENCY,
+    Math.max(1, Number.isFinite(rawConcurrency) ? Math.floor(rawConcurrency) : DEFAULT_LOCAL_OCR_CONCURRENCY)
+  )
+  const child = acquireWorker()
+
+  // 内部中断链：外部 signal（预算/用户中止）→ abort 在途等待 + 发 cancel 给 worker。
+  const controller = new AbortController()
 
   return new Promise<string>((resolve, reject) => {
     const pages = new Map<number, string>()
-    let lastPage = 0
+    const inflight = new Set<Promise<void>>()
+    let totalPagesSeen = 0
     let settled = false
-    let onAbort: (() => void) | null = null
 
     const finish = (fn: () => void): void => {
       if (settled) return
       settled = true
       if (onAbort !== null) signal?.removeEventListener('abort', onAbort)
-      if (activeProcess === child) activeProcess = null
-      child.kill()
+      if (workerDispatch === dispatch) workerDispatch = null
+      if (workerExited === notifyExit) workerExited = null
+      controller.abort()
       fn()
     }
 
@@ -130,37 +212,90 @@ export async function runLocalOcr(filePath: string, signal?: AbortSignal): Promi
         .map(([, text]) => text)
         .join('\n\n')
 
-    child.on('message', (raw: unknown) => {
+    /** 结算前排空在途页（信用窗下 worker 跑在消费前面，done/exit 时页可能还在途）。 */
+    const drainInflight = (): Promise<void> => Promise.allSettled([...inflight]).then(() => undefined)
+
+    /** 打断交缓存：已完成页按序交回 + 截断说明；零完成报错。 */
+    const onInterrupted = (): void => {
+      void drainInflight().then(() => {
+        const pagesDone = pages.size
+        finish(() => {
+          if (pagesDone > 0) {
+            const note = `[Local OCR interrupted at page ${pagesDone} of ${totalPagesSeen} — time budget exhausted or operation cancelled; the text above covers completed pages only.]`
+            resolve(`${assemble()}\n\n${note}`)
+          } else {
+            reject(signal?.reason ?? new Error('local OCR aborted'))
+          }
+        })
+      })
+    }
+
+    const dispatch = (message: WorkerOutgoingMessage): void => {
       if (settled) return
-      const message = raw as WorkerOutgoingMessage
       if (message.type === 'log') {
         logger.info(message.message)
       } else if (message.type === 'page') {
-        lastPage = Math.max(lastPage, message.page)
-        if (message.text.length > 0) pages.set(message.page, message.text)
-        logger.info(`local OCR: page ${message.page}/${message.totalPages}`)
+        totalPagesSeen = message.totalPages
+        void consumePage(message)
       } else if (message.type === 'done') {
-        if (lastPage === 0) {
-          finish(() => reject(new Error('local OCR produced no text — pages may be blank or unreadable')))
-        } else {
-          finish(() => resolve(assemble()))
-        }
+        void drainInflight().then(() => {
+          if (settled) return
+          if (pages.size === 0) {
+            finish(() => reject(new Error('local OCR produced no text — pages may be blank or unreadable')))
+          } else {
+            finish(() => resolve(assemble()))
+          }
+        })
+      } else if (message.type === 'cancelled') {
+        // cancel 的收口（onInterrupted 已 settle 时为 no-op）——防御性容错。
+        void drainInflight().then(() => {
+          if (!settled) finish(() => reject(new Error('local OCR cancelled')))
+        })
       } else if (message.type === 'error') {
         finish(() => reject(new Error(message.message)))
       }
-    })
-    child.on('exit', (code: number) => {
-      if (!settled) finish(() => reject(new Error(`local OCR worker exited unexpectedly (code ${code})`)))
-    })
-
-    if (signal !== undefined) {
-      onAbort = (): void => finish(() => reject(signal?.reason ?? new Error('local OCR aborted')))
-      signal.addEventListener('abort', onAbort, { once: true })
     }
 
+    const notifyExit = (): void => {
+      void drainInflight().then(() => {
+        if (!settled) finish(() => reject(new Error('local OCR worker exited unexpectedly')))
+      })
+    }
+
+    const consumePage = (message: WorkerPageMessage): Promise<void> => {
+      const task = (async () => {
+        // 识别结果不经临时文件直入 map；空页（光栅化不出）贡献空文本不拖垮整本。
+        if (message.text.length > 0) pages.set(message.page, message.text)
+        logger.info(`local OCR: page ${message.page}/${message.totalPages}`)
+      })()
+      inflight.add(task)
+      void task.catch(() => undefined).finally(() => inflight.delete(task))
+      // 本地页无网络等待：消费即结算，回一信让 worker 继续光栅化下一页。
+      if (!settled) child.postMessage({ type: 'next' })
+      return task
+    }
+
+    const onAbort = (): void => {
+      child.postMessage({ type: 'cancel' })
+      onInterrupted()
+    }
+
+    workerDispatch = dispatch
+    workerExited = notifyExit
+
+    if (signal !== undefined) {
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) onAbort()
+    }
+    // 已中止（零完成拒绝已结算）：不再向 worker 投递任务（cancel 先于 job 会把
+    // cancelled 重置回去，job 就漏跑了）。
+    if (settled) return
+
     child.postMessage({
+      type: 'job',
       pdfPath: filePath,
       scale: RENDER_SCALE,
+      window: concurrency,
       modelPaths: paddleModelPaths()
     })
   })

@@ -26,10 +26,9 @@ export const name = 'tool-knowledge-search'
 export const inject = ['tools']
 
 const DESCRIPTION =
-  'Search the user connected knowledge bases for relevant document fragments. Use this when the question ' +
-  "likely depends on the user's own documents or notes. Craft a focused natural-language query; results " +
-  'come back as numbered fragments with their source. Cite them inline as [n] when you use them. If nothing ' +
-  'relevant is returned, say so instead of inventing content.'
+  "Search the user's knowledge bases for document fragments. Use it when the question depends on the user's " +
+  'own documents or notes. Send a focused query. Results come back as numbered fragments with sources; cite ' +
+  'them inline as [n]. If nothing is relevant, say so.'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(
@@ -40,7 +39,7 @@ export function apply(ctx: Context): void {
         query: {
           type: 'string',
           required: true,
-          description: 'The search query against the knowledge bases. Rephrase and retry if the first results are weak.'
+          description: 'The search query. Rephrase and retry if the first results are weak.'
         }
       },
       output: {

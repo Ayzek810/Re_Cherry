@@ -37,11 +37,10 @@ export const name = 'tool-describe-images'
 export const inject = ['tools', 'imageDescriber', 'llm', 'attachments']
 
 const DESCRIPTION =
-  'Transcribe one attached image into plain text, by routing it through a vision-capable describer model. ' +
-  'Use this whenever image references appear in the conversation (they look like ' +
-  '"[image omitted ...; attachment sha256:xxxxxxxx]") and you need their actual visual content: text in the ' +
-  'image, icons, layout, positions. Pass the attachment reference exactly as shown beside the omitted image ' +
-  '(the sha256:... part). The output is transcription and visible structure only — it does not interpret or translate.'
+  'Transcribe one attached image into text through a vision model. Use it when an image reference looks like ' +
+  '"[image omitted ...; attachment sha256:xxxxxxxx]" and you need its content: text, icons, layout. Pass the ' +
+  'attachment reference (the sha256:... part) exactly as shown. The output is a transcription only; it does ' +
+  'not interpret.'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(
@@ -52,8 +51,7 @@ export function apply(ctx: Context): void {
         attachment: {
           type: 'string',
           required: true,
-          description:
-            'The attachment reference of the image to describe — the "sha256:xxxxxxxx" value shown beside the omitted image placeholder.'
+          description: 'The attachment reference of the image — the "sha256:xxxxxxxx" value beside the omitted image.'
         }
       },
       output: {

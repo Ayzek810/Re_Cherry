@@ -72,6 +72,11 @@ Mandatory after: deleting/renaming/moving files, import/export surface changes, 
 - zh-CN + en-US only; all user-visible strings through i18next. Feature namespaces stay top-level (nested keys are invisible to the keys gate). Missing-key fallback uses `defaultValue` — `t('k') || 'fallback'` never fires because i18next returns the key itself.
 - Never prune i18n keys, barrels or side-effect imports without the six-form enumeration (see static-check section).
 
+**Text style (ASD-STE100, 2026-09-28 user ruling)**
+- **Tool-injection texts follow ASD-STE100 absolutely**: tool `description`s, parameter descriptions and context-snapshot sections. They are injected every turn and billed per token — short sentences, active voice, one instruction per sentence; no implementation self-praise ("handled in-process", "no external tools"), no provider/config lists the runtime resolves anyway, nothing the context snapshot already carries.
+- In-app UI description texts follow ASD-STE100 as much as the wording allows.
+- Document/file names in context lists are **quoted** (names contain spaces and mixed scripts; an unquoted name with a trailing extension marker got mis-transcribed on the first tool call — the quoting bug of 2026-09-28). Never append redundant extension markers to a name that already ends with its extension.
+
 **Gates & testing**
 - A new gate/guard is not proven until a reverse-control probe turned it red: plant a break, watch the specific check fail by name, remove it, confirm clean `git diff`.
 - State each green's scope: typecheck / lint chain / static suite / build cover different things; lint runs no tests; static suite runs no types.

@@ -36,11 +36,11 @@ export const name = 'tool-web-search'
 export const inject = ['tools']
 
 const DESCRIPTION =
-  'Search the public web for current information. Use this whenever the conversation needs facts that may ' +
-  'have changed after your training data ends, or explicit web sources are requested: news, prices, release ' +
-  'notes, documentation updates, weather, scores. Craft a focused keyword query (proper nouns, version ' +
-  'numbers, exact phrases work best). Results come back as numbered entries with title, URL and a content ' +
-  'excerpt; cite them inline as [n] when you use them. Repeat calls with refined queries are allowed.'
+  'Search the public web for current information. Use it when the conversation needs facts that may have ' +
+  'changed after your training data ends, or when the user asks for web sources: news, prices, release ' +
+  'notes, documentation updates, weather, scores. Send a focused keyword query; proper nouns and version ' +
+  'numbers work best. Results come back as numbered entries with title, URL and an excerpt; cite them ' +
+  'inline as [n]. Search again with refined terms if the results are poor.'
 
 export function apply(ctx: Context): void {
   ctx.tools.register(
@@ -55,8 +55,7 @@ export function apply(ctx: Context): void {
         },
         count: {
           type: 'number',
-          description:
-            'Maximum number of results to return. Omit to use the user-configured value; values beyond it are clamped down to it.'
+          description: 'Maximum number of results. Omit to use the user-configured value; higher values are clamped to it.'
         }
       },
       output: {

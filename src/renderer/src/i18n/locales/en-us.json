@@ -3712,9 +3712,10 @@
       "preprocess": {
         "local_paddle": {
           "cancel": "Cancel Download",
+          "concurrency": "Concurrent Pages",
           "download": "Download Model",
           "error_prefix": "Download failed",
-          "help": "Local OCR (PP-OCRv6, ~140 MB): when enabled, scanned PDFs are recognized locally during chat reading and knowledge base ingestion — no network or API key required",
+          "help": "Local OCR (PP-OCRv6, ~140 MB): when enabled, scanned PDFs are recognized locally during chat reading and knowledge base ingestion — no network or API key required. Higher concurrency increases throughput (recognition is CPU-bound; too high makes pages contend for cores)",
           "model_title": "Local Model",
           "not_downloaded": "Model not downloaded (~140 MB, runs fully on this device)",
           "ready": "Model ready — recognition runs fully on this device",

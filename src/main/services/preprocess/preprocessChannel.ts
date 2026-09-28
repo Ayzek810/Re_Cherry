@@ -49,8 +49,10 @@ export interface PreprocessProviderConfig {
   model?: string
   /** vision-model 条目（v0.4.4）：用户选定的视觉模型引用（provider + model 两个 id）。 */
   visionModel?: { provider: string; model: string }
-  /** vision-model 条目的页级并发数（1..20；缺省走主进程默认 8）。 */
+  /** vision-model 条目的页级并发数（1..40；缺省走主进程默认 8）。 */
   visionConcurrency?: number
+  /** local-paddle 条目的页级并发数（1..20；缺省走主进程默认 5）。 */
+  localConcurrency?: number
 }
 
 export interface ParsePdfOptions {
@@ -162,8 +164,17 @@ export async function parsePdfWithProvider(
   }
   try {
     switch (config.id) {
-      case 'local-paddle':
-        return await parsePdfWithLocalPaddle(filePath, controller.signal)
+      case 'local-paddle': {
+        const localConcurrency =
+          typeof config.localConcurrency === 'number' && config.localConcurrency >= 1
+            ? config.localConcurrency
+            : undefined
+        return await parsePdfWithLocalPaddle(
+          filePath,
+          localConcurrency === undefined ? {} : { concurrency: localConcurrency },
+          controller.signal
+        )
+      }
       case 'vision-model': {
         // 未选模型在本条如实报错（不静默降级到别家；§7.18 裁决同款语义）。
         const visionModel = config.visionModel

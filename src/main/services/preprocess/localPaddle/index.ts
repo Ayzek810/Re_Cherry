@@ -8,15 +8,17 @@
  * 通道执行缝走 parsePdf（preprocessChannel 路由），下载生命周期走 getStatus/
  * download/cancel/remove（IPC 薄转发 + 渲染层 useLocalPaddle）。
  */
+import type { LocalOcrOptions } from './localOcr'
 import { runLocalOcr } from './localOcr'
 import type { LocalPaddleStatus } from './modelStore'
 import { localPaddleModelStore } from './modelStore'
 
+export type { LocalOcrOptions } from './localOcr'
 export type { LocalPaddleStatus } from './modelStore'
 
 /** 文档处理通道执行缝：整本 PDF 本机 OCR（模型未下载在入口如实报可行动错误）。 */
-export function parsePdf(filePath: string, signal?: AbortSignal): Promise<string> {
-  return runLocalOcr(filePath, signal)
+export function parsePdf(filePath: string, options: LocalOcrOptions = {}, signal?: AbortSignal): Promise<string> {
+  return runLocalOcr(filePath, options, signal)
 }
 
 /** 渲染层模型下载卡片的状态（进度由渲染层轮询 getStatus）。 */

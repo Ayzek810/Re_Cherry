@@ -18,8 +18,15 @@ import { useDispatch } from 'react-redux'
 
 export { defaultPreprocessProviders } from '@renderer/config/preprocessProviders'
 
-/** apiHost/apiKey/model/visionModel/visionConcurrency 是"会同步进知识库内嵌副本"的配置面。 */
-const SYNC_FIELDS: Array<keyof PreprocessProvider> = ['apiHost', 'apiKey', 'model', 'visionModel', 'visionConcurrency']
+/** apiHost/apiKey/model/visionModel/visionConcurrency/localConcurrency 是"会同步进知识库内嵌副本"的配置面。 */
+const SYNC_FIELDS: Array<keyof PreprocessProvider> = [
+  'apiHost',
+  'apiKey',
+  'model',
+  'visionModel',
+  'visionConcurrency',
+  'localConcurrency'
+]
 
 export const usePreprocessProviders = () => {
   const dispatch = useAppDispatch()

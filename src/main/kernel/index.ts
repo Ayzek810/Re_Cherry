@@ -393,6 +393,7 @@ function registerKernelIpc(): void {
         model?: unknown
         visionModel?: unknown
         visionConcurrency?: unknown
+        localConcurrency?: unknown
       }
       const rawVision = entry.visionModel as { provider?: unknown; model?: unknown } | undefined
       const visionModel =
@@ -402,22 +403,19 @@ function registerKernelIpc(): void {
         rawVision.model.length > 0
           ? { provider: rawVision.provider, model: rawVision.model }
           : undefined
-      // vision-model 页级并发数：整数 1..20 之外（含缺省）不投影，主进程走缺省 8。
-      const rawConcurrency = entry.visionConcurrency
-      const visionConcurrency =
-        typeof rawConcurrency === 'number' &&
-        Number.isInteger(rawConcurrency) &&
-        rawConcurrency >= 1 &&
-        rawConcurrency <= 20
-          ? rawConcurrency
-          : undefined
+      // 页级并发数收敛：vision 整数 1..40、local 整数 1..20，越界（含缺省）不投影，走主进程缺省。
+      const clampConcurrency = (value: unknown, max: number): number | undefined =>
+        typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= max ? value : undefined
+      const visionConcurrency = clampConcurrency(entry.visionConcurrency, 40)
+      const localConcurrency = clampConcurrency(entry.localConcurrency, 20)
       return {
         id: entry.id,
         ...(typeof entry.apiKey === 'string' ? { apiKey: entry.apiKey } : {}),
         ...(typeof entry.apiHost === 'string' ? { apiHost: entry.apiHost } : {}),
         ...(typeof entry.model === 'string' ? { model: entry.model } : {}),
         ...(visionModel === undefined ? {} : { visionModel }),
-        ...(visionConcurrency === undefined ? {} : { visionConcurrency })
+        ...(visionConcurrency === undefined ? {} : { visionConcurrency }),
+        ...(localConcurrency === undefined ? {} : { localConcurrency })
       }
     })
     preprocessChannel.setConfig(configs)

@@ -1,53 +1,50 @@
 /**
  * LocalPaddle OCR utility process 入口（v0.3.2 性能事故修复，2026-09-22；
- * v0.4.4 自 services/localModel/ocrWorker.ts 原样收编——实证代码不动语义，
- * 仅归属与文件名并入文档处理通道）。
+ * v0.4.4 自 services/localModel/ocrWorker.ts 收编；v0.4.4-1 常驻化 + 页级并发）。
  *
- * 事故：一切 PDF → OCR 的路由下，1436 页 PDF 在主进程逐页推理 ≈ 数小时，
- * 主线程被独占 → 窗口整体冻结（真机实锤：dev 日志 `local OCR: page 1/1436`
- * 起步每页 5~25s + 当晚两次 `Renderer process killed`）。
+ * 事故背景：一切 PDF → OCR 的路由下，1436 页 PDF 在主进程逐页推理 ≈ 数小时，
+ * 主线程被独占 → 窗口整体冻结（真机实锤）。
  *
- * 本进程承接全套重活：pdf-parse 逐页光栅化 → sharp 预处理 → ppu-paddle-ocr
- * 推理。主进程（localOcr.ts）只做编排与终止——OCR 结果一字不变。
+ * 本进程承接全套重活：pdf-parse 逐页光栅化 → sharp 预处理 → ppu-paddle-ocr 推理。
+ * 主进程（localOcr.ts）只做编排——OCR 结果一字不变。
+ *
+ * **v0.4.4-1 常驻 + 并发（用户裁定）**：
+ * - **常驻**：本进程由主进程跨解析复用（热模型跨本保留，省 ~15s/本的权重冷加载）；
+ *   5 分钟无消息自退（exit 0），主进程对空闲退出静默接管、下次解析重 fork。
+ * - **页级并发**：信用窗（job.window = 并发数，发一页扣一信、主进程结算一页回一信
+ *   {type:'next'}）；页任务（光栅化/sharp/识别）并发执行，在途页图 ≤ window。
+ *   识别侧并发安全：ORT `session.run` 线程安全（同会话并发 run 合法）。
+ * - **取消**：{type:'cancel'} 按代号停止页循环（在途 ONNX 推理不可中断，当前页
+ *   跑完即停），进程不退出——热模型留给下一次解析。
  *
  * **为什么是 utilityProcess 而不是 worker_threads**：本机实测 worker_threads
- * 里加载 onnxruntime/sharp 原生模块 → 整进程 0xC0000005 访问违例（与 vitest
- * threads 池同类的机器级事实，判据同源）；utilityProcess 是独立 Node 子进程
- * （Electron 托管），原生崩溃被隔离在子进程内，正是"崩溃隔离"的落地形态。
+ * 里加载 onnxruntime/sharp 原生模块 → 整进程 0xC0000005（机器级事实）；
+ * utilityProcess 原生崩溃被隔离，正是"崩溃隔离"的落地形态。
  *
- * **parentPort 的获取途径（2026-09-22 验收轮真机实锤，判据级）**：utility
- * 进程里 `require('electron')` 运行时只有 `{ net, systemPreferences }`（真实
- * electron 宿主探针实证）——d.ts 里的 `const parentPort` 模块导出在 utility
- * 宿主**不存在**（类型撒谎，tsgo 不设防）；正解是 `process.parentPort`
- * （d.ts Process 增强："A Electron.ParentPort property if this is a
- * UtilityProcess"）。曾用模块导出形态 → 消息处理器从未注册 → worker 静默
- * 空转 → 主进程报 "worker exited unexpectedly"。本文件直接访问
- * process.parentPort（utility 宿主必在；若在非 utility 宿主被 require 会在
- * 顶层抛错退出——fail-loud 优于静默空转）。
+ * **parentPort 的获取途径（2026-09-22 真机实锤，判据级）**：utility 宿主里
+ * d.ts 的模块导出 parentPort 不存在（类型撒谎），正解是 `process.parentPort`。
  *
  * 纪律（违反即事故）：本文件对 electron 的使用**仅限 process.parentPort**；
  * 禁止 @logger（winston 双进程写同一日志文件会互锁），日志一律经 postMessage
- * 交主进程落盘；模型路径由主进程经消息传入（utility 进程里 app.getPath 不可靠
- * 的形态不依赖）。编译产物 out/main/localOcrWorker.js（electron.vite.config
- * 多入口）。
+ * 交主进程落盘；模型路径由主进程经消息传入。编译产物 out/main/localOcrWorker.js。
  *
- * 安装版运行时依赖（v0.4.4 实证）：本进程动态 import 的 sharp / ppu-paddle-ocr
- * / ppu-ocv / onnxruntime-node 必须进包且原生件解包——见 electron-builder.yml
- * asarUnpack + package.json optionalDependencies + scripts/after-pack.js 断言
- * （v0.4.3 及之前 @img/sharp-win32-x64 被收集器静默丢弃，安装版 OCR 必死）。
+ * 安装版运行时依赖（v0.4.4 实证）：sharp / ppu-paddle-ocr / ppu-ocv /
+ * onnxruntime-node 必须进包且原生件解包——electron-builder.yml asarUnpack +
+ * optionalDependencies + scripts/after-pack.js 断言守门。
  */
-import { readFile, rm, writeFile } from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 
-import type { PDFParse } from 'pdf-parse'
-
-/** 主进程下发的任务（postMessage 触发 run，全部数据不可从子进程侧自取）。 */
+/** 主进程下发的任务（全部数据不可从子进程侧自取）。 */
 interface OcrWorkerJob {
+  type: 'job'
   pdfPath: string
   scale: number
+  /** 信用窗初始额度（= 主进程页级并发数）。 */
+  window: number
   modelPaths: { detection: string; recognition: string; charactersDictionary: string }
 }
+
+type WorkerIncoming = OcrWorkerJob | { type: 'cancel' } | { type: 'next' }
 
 interface PaddleOcrInstance {
   initialize(): Promise<void>
@@ -59,6 +56,7 @@ type WorkerMessage =
   | { type: 'log'; message: string }
   | { type: 'page'; page: number; totalPages: number; text: string }
   | { type: 'done'; pagesDone: number; totalPages: number }
+  | { type: 'cancelled'; pagesDone: number }
   | { type: 'error'; message: string }
 
 const parentPort = process.parentPort
@@ -67,8 +65,6 @@ const log = (message: string): void => post({ type: 'log', message })
 
 /** ppu-paddle-ocr 的结构化最小面（类类型导出形态不在 fork 控制内，按用法收窄）。 */
 let cachedService: Promise<PaddleOcrInstance> | null = null
-/** 串行闸：识别请求依次执行（单个失败不堵塞后续）。 */
-let queue: Promise<unknown> = Promise.resolve()
 
 function loadService(modelPaths: OcrWorkerJob['modelPaths']): Promise<PaddleOcrInstance> {
   if (cachedService === null) {
@@ -95,17 +91,11 @@ function loadService(modelPaths: OcrWorkerJob['modelPaths']): Promise<PaddleOcrI
   return cachedService
 }
 
-/** 识别一张图片（本机路径）。模型就绪性由主进程在派发前检查。 */
-async function recognizeImage(imagePath: string, modelPaths: OcrWorkerJob['modelPaths']): Promise<string> {
-  const task = queue.then(async () => {
-    const service = await loadService(modelPaths)
-    const buffer = await readFile(imagePath)
-    const bytes = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
-    const result = await service.recognize(bytes)
-    return result.text
-  })
-  queue = task.catch(() => undefined)
-  return task
+/** 识别一张图（ArrayBuffer 直入，不经临时文件）。并发安全：ORT session.run 线程安全。 */
+async function recognizeImage(imageBytes: ArrayBuffer, modelPaths: OcrWorkerJob['modelPaths']): Promise<string> {
+  const service = await loadService(modelPaths)
+  const result = await service.recognize(imageBytes)
+  return result.text
 }
 
 /** sharp 预处理（灰度/对比拉伸/锐化）：扫描件质量参差，预处理显著影响识别率。 */
@@ -114,58 +104,104 @@ async function preprocessImage(buffer: Buffer): Promise<Buffer> {
   return sharp(buffer).grayscale().normalize().sharpen().png({ quality: 100 }).toBuffer()
 }
 
-async function recognizePage(
-  parser: PDFParse,
-  pageNumber: number,
-  scale: number,
-  modelPaths: OcrWorkerJob['modelPaths']
-): Promise<string> {
-  const screenshot = await parser.getScreenshot({
-    partial: [pageNumber],
-    scale,
-    imageBuffer: true,
-    imageDataUrl: false
+/** 信用窗：发一页扣一信，主进程结算一页（{type:'next'}）回一信。 */
+let credits = 0
+let waiter: (() => void) | null = null
+const acquireCredit = (): Promise<void> => {
+  if (credits > 0) {
+    credits -= 1
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => {
+    waiter = () => {
+      credits -= 1
+      waiter = null
+      resolve()
+    }
   })
-  const rendered = screenshot.pages[0]?.data
-  if (!rendered) {
-    // 光栅化不出的页贡献空文本，不拖垮整本（与上游同语义）。
-    return ''
-  }
-  const imagePath = path.join(os.tmpdir(), `rec-ocr-${process.pid}-${pageNumber}.png`)
-  await writeFile(imagePath, await preprocessImage(Buffer.from(rendered)))
-  try {
-    const text = await recognizeImage(imagePath, modelPaths)
-    return text.trim()
-  } finally {
-    await rm(imagePath, { force: true })
-  }
 }
+
+/** 当前 run 的取消态：cancel 只作用于在跑的这代（编排层串行队列保证同一时刻至多一个 run）。 */
+let cancelled = false
 
 async function run(job: OcrWorkerJob): Promise<void> {
   const { CanvasFactory } = await import('pdf-parse/worker')
   const { PDFParse } = await import('pdf-parse')
   const parser = new PDFParse({ data: new Uint8Array(await readFile(job.pdfPath)), CanvasFactory })
+  const inflight = new Set<Promise<void>>()
+  let pagesDone = 0
   try {
-    const totalPages = (await parser.getText()).total
-    // 整本逐页（无页数预算：用户 2026-09-22 第二轮裁决，停止线全删）。
-    let pagesDone = 0
-    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
-      const pageText = await recognizePage(parser, pageNumber, job.scale, job.modelPaths)
-      pagesDone = pageNumber
-      post({ type: 'page', page: pageNumber, totalPages, text: pageText })
+    // 页数走 getInfo（零提取）——getText 会把整本文本层白白提取一遍。
+    credits = Math.max(1, Math.floor(job.window))
+    const { total } = await parser.getInfo()
+    for (let pageNumber = 1; pageNumber <= total; pageNumber++) {
+      if (cancelled) break
+      await acquireCredit()
+      if (cancelled) break
+      const task = (async () => {
+        const screenshot = await parser.getScreenshot({
+          partial: [pageNumber],
+          scale: job.scale,
+          imageBuffer: true,
+          imageDataUrl: false
+        })
+        const rendered = screenshot.pages[0]?.data
+        let text = ''
+        if (rendered) {
+          // ArrayBuffer 直入识别（不落临时文件）；单页失败照旧上抛 → 废整本（用户裁定）。
+          const pre = await preprocessImage(Buffer.from(rendered))
+          const bytes = pre.buffer.slice(pre.byteOffset, pre.byteOffset + pre.byteLength) as ArrayBuffer
+          text = (await recognizeImage(bytes, job.modelPaths)).trim()
+        }
+        if (cancelled) return
+        pagesDone = Math.max(pagesDone, pageNumber)
+        post({ type: 'page', page: pageNumber, totalPages: total, text })
+      })()
+      inflight.add(task)
+      void task.catch(() => undefined).finally(() => inflight.delete(task))
     }
-    post({ type: 'done', pagesDone, totalPages })
+    await Promise.allSettled([...inflight])
+    if (cancelled) {
+      post({ type: 'cancelled', pagesDone })
+    } else {
+      post({ type: 'done', pagesDone, totalPages: total })
+    }
   } finally {
     await parser.destroy().catch(() => undefined)
   }
 }
 
+/** 空闲自退：任何消息重置计时；5 分钟无消息 exit(0)——主进程静默接管。 */
+const IDLE_EXIT_MS = 5 * 60 * 1000
+let idleTimer: NodeJS.Timeout | null = null
+function armIdleExit(): void {
+  if (idleTimer !== null) clearTimeout(idleTimer)
+  idleTimer = setTimeout(() => {
+    log('local OCR worker idle exit')
+    process.exit(0)
+  }, IDLE_EXIT_MS)
+}
+armIdleExit()
+
 parentPort?.on('message', (messageEvent) => {
+  armIdleExit()
   // 消息信封（真实 electron 宿主探针实证）：worker 侧 process.parentPort 的
   // 'message' 收到 MessageEvent、载荷在 .data；主进程侧 UtilityProcess 的
-  // 'message' 才是直接值。scratch 垫片（child_process IPC）两侧都是直接值，
-  // 曾掩盖过此差异。
-  const job = (messageEvent as { data: unknown }).data as OcrWorkerJob
+  // 'message' 才是直接值。
+  const payload = (messageEvent as { data: unknown }).data as WorkerIncoming
+  if (typeof payload !== 'object' || payload === null) return
+  if (payload.type === 'next') {
+    credits += 1
+    waiter?.()
+    return
+  }
+  if (payload.type === 'cancel') {
+    cancelled = true
+    return
+  }
+  // 新任务：重置取消态（编排层串行队列保证上一代已收口）。
+  cancelled = false
+  const job = payload
   void run(job).catch((error: unknown) => {
     post({ type: 'error', message: String((error as Error)?.message ?? error) })
   })

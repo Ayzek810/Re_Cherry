@@ -8,7 +8,6 @@ import { EventEmitter } from 'node:events'
 import { utilityProcess } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { localOcrWorkerPath } from '../../localPaddle/localOcr'
 import { runVisionDocumentParse, visionWorkerPath } from '../visionParse'
 
 /** 逐页模型调用 mock（真 HTTP 不在单元面；行为实证见 tools/scratch-verify probe G）。 */
@@ -133,7 +132,10 @@ describe('runVisionDocumentParse（utilityProcess 编排）', () => {
   it('done 早于模型返回到达（信用窗下 worker 跑在消费前面）：排空在途后交全量结果', async () => {
     const deferred: Array<(value: string) => void> = []
     vi.mocked(lightVisionDocument).mockImplementation(
-      () => new Promise<string>((resolve) => { deferred.push(resolve) })
+      () =>
+        new Promise<string>((resolve) => {
+          deferred.push(resolve)
+        })
     )
     const { promise, child } = startParse('C:/books/scan.pdf')
     emit(child, { type: 'page', page: 1, totalPages: 2, mediaType: 'image/png', data: 'UE5H' })
@@ -230,6 +232,5 @@ describe('runVisionDocumentParse（utilityProcess 编排）', () => {
 describe('visionWorkerPath（产物路径锚定）', () => {
   it('锚定 app 根的 out/main/visionWorker.js（与 localOcr 同判据，不随 chunk 位置漂移）', () => {
     expect(visionWorkerPath()).toBe('/mock/appRoot/out/main/visionWorker.js')
-    expect(visionWorkerPath()).not.toBe(localOcrWorkerPath())
   })
 })

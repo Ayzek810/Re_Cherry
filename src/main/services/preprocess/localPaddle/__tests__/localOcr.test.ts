@@ -1,24 +1,19 @@
 /**
- * LocalPaddle OCR 编排测试（v0.4.4 收编自 services/localModel 的 pdfOcr.test.ts，
- * 被测缝改名 runLocalOcr，utility 产物名 localOcrWorker.js，语义逐例保持）。
+ * LocalPaddle OCR 编排测试（v0.4.4-1 常驻 worker + 页级并发 + 打断交缓存语义）：
+ * - 常驻：worker 句柄跨解析/跨测试复用（FakeChild 模块级共享），结束不 kill；
+ *   断言用 forkCount 增量而非 children 数组（旧世界是"每次解析必 fork"）；
+ * - 信用窗：job 带 window，页消息即时回信；
+ * - terminate：kill 常驻 worker 并等 exit（删模型前置）；
+ * - 打断交缓存：abort → 发 cancel → 已完成页 + 截断说明；零完成拒绝；
+ * - 崩溃：解析中 exit 如实拒绝，下一次解析重 fork。
  */
 import { EventEmitter } from 'node:events'
 
 import { utilityProcess } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { localOcrWorkerPath, runLocalOcr, terminateActiveOcrProcess } from '../localOcr'
+import { runLocalOcr, terminateActiveOcrProcess } from '../localOcr'
 
-const children: FakeChild[] = []
-
-class FakeChild extends EventEmitter {
-  postMessage = vi.fn()
-  kill = vi.fn()
-}
-
-// tests/main.setup.ts 全局 mock 了 electron（含 utilityProcess.fork: vi.fn() 无实现）。
-// 此处静态 import 同一 mock，beforeEach 装行为——每个 FakeChild 自带独立
-// postMessage/kill vi.fn，跨用例无串扰，无需 clearAllMocks。
 vi.mock('@main/services/preprocess/localPaddle/modelStore', () => ({
   isPaddleModelReady: vi.fn(() => true),
   paddleModelPaths: vi.fn(() => ({
@@ -28,148 +23,167 @@ vi.mock('@main/services/preprocess/localPaddle/modelStore', () => ({
   }))
 }))
 
-// 编排层的 worker 产物存在性预检走 node:fs.existsSync——setup 的 mock 无默认
-// 行为，这里默认 true（产物在），缺产物用例单独翻 false。
+/** 编排层的 worker 产物存在性预检——默认产物在。 */
 vi.mock('node:fs', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   const mock = { ...actual, existsSync: vi.fn(() => true) }
   return { ...mock, default: mock }
 })
 
-/** EventEmitter 原生 emit（event, ...args）——child.on('message', fn) 的 fn 收到的是 payload。 */
-const emit = (child: FakeChild, message: unknown): void =>
-  (child as unknown as { emit: (event: 'message', payload: unknown) => void }).emit('message', message)
+/** 常驻 worker 的当前 FakeChild（跨解析/跨测试复用——常驻语义本体）。 */
+let currentChild: FakeChild | null = null
+const children: FakeChild[] = []
 
-/** 把 setup 全局 mock 的 utilityProcess.fork 换成推 FakeChild 的实现（同步、无竞态）。 */
+class FakeChild extends EventEmitter {
+  postMessage = vi.fn()
+  kill = vi.fn()
+}
+
 function installFork(): void {
   vi.mocked(utilityProcess.fork).mockImplementation((() => {
     const child = new FakeChild()
     children.push(child)
+    currentChild = child
     return child
   }) as unknown as typeof utilityProcess.fork)
 }
 
-/**
- * 启动一次 OCR 并同步取回 promise 与子进程。runLocalOcr 静态链路（模型检查、
- * fork、postMessage）完全同步，调用返回时 FakeChild 已就位——无需任何 flush。
- *
- * 关键陷阱（本文件曾因此 9/10 假死 20 秒）：绝不能把 OCR promise 从 async
- * 辅助函数 return 出来再由用例 await——await 会递归同化内层 thenable，等于
- * 直接等 OCR 本身结束，喂页/abort 代码永远执行不到。
- */
-function startOcr(filePath: string, signal?: AbortSignal): { promise: Promise<string>; child: FakeChild } {
-  const promise = runLocalOcr(filePath, signal)
-  const child = children[children.length - 1]
+const forkCount = (): number => vi.mocked(utilityProcess.fork).mock.calls.length
+
+/** EventEmitter 原生 emit——child.on('message'/'exit') 的回调同步收到载荷。 */
+const emit = (child: FakeChild, message: unknown): void =>
+  (child as unknown as { emit: (event: 'message', payload: unknown) => void }).emit('message', message)
+const emitExit = (child: FakeChild, code: number): void =>
+  (child as unknown as { emit: (event: string, code: number) => void }).emit('exit', code)
+
+/** 本地页消费是同步的（map.set + 回信），发页消息即可断言。 */
+function feedPage(child: FakeChild, page: number, totalPages: number, text = `第${page}页`): void {
+  emit(child, { type: 'page', page, totalPages, text })
+}
+
+function startParse(
+  filePath: string,
+  options?: { concurrency?: number },
+  signal?: AbortSignal
+): { promise: Promise<string>; child: FakeChild } {
+  const promise = runLocalOcr(filePath, options ?? {}, signal)
+  const child = currentChild
   expect(child).toBeDefined()
-  return { promise, child }
+  return { promise, child: child as FakeChild }
 }
 
-/** 派发若干页 + done 的便捷序列。 */
-function feedPages(child: FakeChild, pages: string[], totalPages: number): void {
-  pages.forEach((text, index) => {
-    emit(child, { type: 'page', page: index + 1, totalPages, text })
-  })
-  emit(child, { type: 'done', pagesDone: pages.length, totalPages })
-}
+beforeEach(() => {
+  installFork()
+})
 
-describe('runLocalOcr（utilityProcess 编排）', () => {
-  beforeEach(() => {
-    children.length = 0
-    installFork()
-  })
-
-  it('happy path：页文本按序拼接，结束即 kill', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    // 无页数预算（用户 2026-09-22 第二轮裁决：停止线全删）——job 不带 maxPages。
-    expect(child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ pdfPath: 'C:/books/a.pdf', scale: 3 }))
-    expect(child.postMessage).toHaveBeenCalledWith(expect.not.objectContaining({ maxPages: expect.anything() }))
-    // stdio 'pipe'（2026-09-22 验收事故长期改进）：worker stderr 必须收进主进程
-    // 日志——默认 inherit 在安装版里等于丢弃崩溃栈。
+describe('runLocalOcr（常驻 worker 编排）', () => {
+  it('happy path：job 带 window（缺省 5）、页文本按序拼装、结束不 kill（热模型保留）', async () => {
+    const forks = forkCount()
+    const { promise, child } = startParse('C:/books/a.pdf')
     expect(vi.mocked(utilityProcess.fork)).toHaveBeenCalledWith(
       expect.stringContaining('localOcrWorker.js'),
       [],
       expect.objectContaining({ serviceName: 'localOcrWorker', stdio: 'pipe' })
     )
-    feedPages(child, ['第一页', '第二页'], 2)
+    expect(child.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'job', pdfPath: 'C:/books/a.pdf', scale: 3, window: 5 })
+    )
+    feedPage(child, 1, 2, '第一页')
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'next' })
+    feedPage(child, 2, 2, '第二页')
+    emit(child, { type: 'done', pagesDone: 2, totalPages: 2 })
     await expect(promise).resolves.toBe('第一页\n\n第二页')
-    expect(child.kill).toHaveBeenCalledTimes(1)
+    // 常驻语义：解析结束不 kill（与 v0.4.4 前"结束即 kill"相反）
+    expect(child.kill).not.toHaveBeenCalled()
+    expect(forkCount()).toBe(forks + 1)
   })
 
-  it('整本跑完：done(pagesDone=totalPages) 无截断说明（大书也全量）', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    feedPages(child, ['首页文本'], 1)
-    await expect(promise).resolves.toBe('首页文本')
-  })
-
-  it('abort：立即拒绝并终止子进程', async () => {
-    const controller = new AbortController()
-    const { promise, child } = startOcr('C:/books/a.pdf', controller.signal)
-    controller.abort()
-    await expect(promise).rejects.toThrow()
-    expect(child.kill).toHaveBeenCalledTimes(1)
-  })
-
-  it('子进程报 error 消息：如实上抛', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    emit(child, { type: 'error', message: '模型加载失败' })
-    await expect(promise).rejects.toThrow('模型加载失败')
-  })
-
-  it('子进程意外退出：报错而非悬挂', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    ;(child as unknown as { emit: (event: string, code: number) => void }).emit('exit', 1)
-    await expect(promise).rejects.toThrow('exited unexpectedly')
-  })
-
-  it('worker stdout/stderr 有流时接日志，无流（FakeChild）不炸', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    feedPages(child, ['页'], 1)
+  it('并发透传：options.concurrency 进 job.window', async () => {
+    const { promise, child } = startParse('C:/books/a.pdf', { concurrency: 12 })
+    expect(child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'job', window: 12 }))
+    // 结算解析，不堵串行队列（后续测试的解析要过这条队）
+    feedPage(child, 1, 1, '页')
+    emit(child, { type: 'done', pagesDone: 1, totalPages: 1 })
     await expect(promise).resolves.toBe('页')
   })
 
-  it('模型未下载：不起子进程直接报可行动错误', async () => {
-    const modelStore = await import('@main/services/preprocess/localPaddle/modelStore')
-    vi.mocked(modelStore.isPaddleModelReady).mockReturnValueOnce(false)
-    await expect(runLocalOcr('C:/books/a.pdf')).rejects.toThrow('model is not downloaded')
-    expect(children).toHaveLength(0)
+  it('复用：第二次解析不重新 fork（热模型），消息路由到当前解析', async () => {
+    const first = startParse('C:/books/a.pdf')
+    const forks = forkCount()
+    feedPage(first.child, 1, 1, 'A 页')
+    emit(first.child, { type: 'done', pagesDone: 1, totalPages: 1 })
+    await expect(first.promise).resolves.toBe('A 页')
+
+    const second = startParse('C:/books/b.pdf')
+    expect(forkCount()).toBe(forks) // 常驻：不重 fork
+    expect(second.child).toBe(first.child)
+    expect(second.child.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'job', pdfPath: 'C:/books/b.pdf' })
+    )
+    feedPage(second.child, 1, 1, 'B 页')
+    emit(second.child, { type: 'done', pagesDone: 1, totalPages: 1 })
+    await expect(second.promise).resolves.toBe('B 页')
   })
 
-  it('worker 产物缺失：不起子进程直接报构建缺口错误（fail-loud 不留 stderr 猜谜）', async () => {
-    const fs = await import('node:fs')
-    vi.mocked(fs.existsSync).mockReturnValueOnce(false)
-    await expect(runLocalOcr('C:/books/a.pdf')).rejects.toThrow('worker bundle is missing')
-    expect(children).toHaveLength(0)
+  it('打断交缓存（用户裁定）：abort 发 cancel，已完成页 + 截断说明交回，零完成拒绝', async () => {
+    const controller = new AbortController()
+    const { promise, child } = startParse('C:/books/a.pdf', undefined, controller.signal)
+    feedPage(child, 1, 3, '已完成页')
+    controller.abort(new Error('time budget'))
+    await expect(promise).resolves.toBe(
+      '已完成页\n\n[Local OCR interrupted at page 1 of 3 — time budget exhausted or operation cancelled; the text above covers completed pages only.]'
+    )
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'cancel' })
+    expect(child.kill).not.toHaveBeenCalled() // 常驻：取消不杀进程
+  })
+
+  it('打断时零完成页：无缓存可交，照旧拒绝', async () => {
+    const controller = new AbortController()
+    const { promise } = startParse('C:/books/a.pdf', undefined, controller.signal)
+    controller.abort(new Error('user cancelled'))
+    await expect(promise).rejects.toThrow('user cancelled')
+  })
+
+  it('空页贡献空文本；worker 报 error 照旧整本拒绝', async () => {
+    const { promise, child } = startParse('C:/books/a.pdf')
+    feedPage(child, 1, 2, '')
+    emit(child, { type: 'error', message: '识别失败' })
+    await expect(promise).rejects.toThrow('识别失败')
+  })
+
+  it('解析中途 worker 崩溃：如实拒绝；下一次解析自动重 fork', async () => {
+    const first = startParse('C:/books/a.pdf')
+    const forks = forkCount()
+    emitExit(first.child, 1)
+    await expect(first.promise).rejects.toThrow('exited unexpectedly')
+
+    const second = startParse('C:/books/b.pdf')
+    expect(forkCount()).toBe(forks + 1) // 崩溃后重 fork
+    expect(second.child).not.toBe(first.child)
+    feedPage(second.child, 1, 1, '恢复页')
+    emit(second.child, { type: 'done', pagesDone: 1, totalPages: 1 })
+    await expect(second.promise).resolves.toBe('恢复页')
   })
 })
 
-describe('localOcrWorkerPath（产物路径锚定）', () => {
-  it('锚定 app 根的 out/main/localOcrWorker.js——不随编排层 chunk 位置漂移（2026-09-28 真机回归）', () => {
-    expect(localOcrWorkerPath()).toBe('/mock/appRoot/out/main/localOcrWorker.js')
-  })
-})
-
-describe('terminateActiveOcrProcess（模型删除前置）', () => {
-  beforeEach(() => {
-    children.length = 0
-    installFork()
-  })
-
-  it('有活进程：先 kill，等真正退出才返回；被终止的 OCR 调用侧如实报错不悬挂', async () => {
-    const { promise, child } = startOcr('C:/books/a.pdf')
-    void promise.catch(() => undefined) // terminate 触发的 exit 会让该 promise 拒绝；不悬空
+describe('terminateActiveOcrProcess（删模型前置）', () => {
+  it('kill 常驻 worker 并等真正退出；被终止解析侧如实报错', async () => {
+    const { promise, child } = startParse('C:/books/a.pdf')
+    feedPage(child, 1, 2, '部分')
     let returned = false
     const terminatePromise = terminateActiveOcrProcess().then(() => {
       returned = true
     })
     expect(child.kill).toHaveBeenCalledTimes(1)
-    expect(returned).toBe(false) // 未收到 exit 事件前不返回（Windows 句柄未释放）
-    ;(child as unknown as { emit: (event: string, code: number) => void }).emit('exit', 0)
+    expect(returned).toBe(false) // 未收到 exit 前不返回（Windows 句柄未释放）
+    emitExit(child, 0)
     await terminatePromise
-    await expect(promise).rejects.toThrow('exited unexpectedly')
+    expect(returned).toBe(true)
+    await expect(promise).rejects.toThrow() // 被 terminate 的解析如实报错不悬挂
   })
 
-  it('无活进程：直接返回，无 kill', async () => {
+  it('无 worker：直接返回', async () => {
     await terminateActiveOcrProcess()
-    expect(children).toHaveLength(0)
+    expect(currentChild === null || children.includes(currentChild)).toBe(true)
   })
 })

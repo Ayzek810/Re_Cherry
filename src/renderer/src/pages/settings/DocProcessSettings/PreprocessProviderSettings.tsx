@@ -169,8 +169,11 @@ const ProviderName = styled.span`
 /** LocalPaddle 模型下载卡片（v0.4.4 收编自 CS_V2 LocalModelRequirement 形态裁剪：
  * 状态机 not_downloaded/downloading/ready/error/unsupported，进度轮询自 useLocalPaddle）。 */
 const LocalPaddleModelPanel: FC = () => {
+  const { provider, updateProvider } = usePreprocessProvider('local-paddle')
   const { status, download, cancel, remove } = useLocalPaddle()
   const { t } = useTranslation()
+  // 页级并发（用户裁定：缺省 5、上限 20——实测 CPU 跑不满，串行循环三段互相空转）
+  const concurrency = provider?.localConcurrency
 
   return (
     <>
@@ -219,6 +222,18 @@ const LocalPaddleModelPanel: FC = () => {
           <SettingHelpText>{t('settings.tool.preprocess.local_paddle.unsupported')}</SettingHelpText>
         </SettingHelpTextRow>
       )}
+      <SettingSubtitle className="mt-[10px] mb-[10px]">
+        {t('settings.tool.preprocess.local_paddle.concurrency')}
+      </SettingSubtitle>
+      <Slider
+        defaultValue={concurrency ?? 5}
+        style={{ width: '100%' }}
+        min={1}
+        max={20}
+        step={1}
+        marks={{ 1: '1', 5: '5', 10: '10', 20: '20' }}
+        onChangeComplete={(next) => updateProvider({ localConcurrency: next })}
+      />
       <SettingHelpTextRow className="!flex-col">
         <SettingHelpText>{t('settings.tool.preprocess.local_paddle.help')}</SettingHelpText>
       </SettingHelpTextRow>
@@ -275,9 +290,9 @@ const VisionModelPanel: FC = () => {
         defaultValue={concurrency ?? 8}
         style={{ width: '100%' }}
         min={1}
-        max={20}
+        max={40}
         step={1}
-        marks={{ 1: '1', 8: '8', 12: '12', 20: '20' }}
+        marks={{ 1: '1', 8: '8', 12: '12', 20: '20', 40: '40' }}
         onChangeComplete={(next) => updateProvider({ visionConcurrency: next })}
       />
       <SettingHelpTextRow className="!flex-col">
