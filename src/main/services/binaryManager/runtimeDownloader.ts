@@ -15,9 +15,10 @@ import StreamZip from 'node-stream-zip'
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { cacheRoot, nodeRuntimeDir, pythonRuntimeDir } from '@main/services/deepSeekHarness/paths'
+import type { InstallProgressStep } from '@shared/types/installProgress'
 
-import { type DownloadProgress, downloadFromAnySource } from './downloadFile'
 import { replaceDirectory } from './atomicSwap'
+import { type DownloadProgress, downloadFromAnySource } from './downloadFile'
 
 const logger = loggerService.withContext('RuntimeDownloader')
 
@@ -100,6 +101,12 @@ function pythonArchiveName(): string {
 export interface RuntimeDownloadOptions {
   /** 字节进度（安装进度条的数据源）；缺省只写日志。 */
   onProgress?: (progress: DownloadProgress) => void
+  /**
+   * 阶段切换（v0.4.5-1）：下载完成、开始解压时上报 `extract`。
+   * 为什么需要：解压 node 的上万文件 / CPython 的 tar 要几十秒，而下载比例此时停在 100%
+   * ——不换阶段的话进度条会**冻在 100%**，看着像装完了其实没有（三家工具都有这个阶段）。
+   */
+  onStep?: (step: InstallProgressStep) => void
 }
 
 async function downloadArchive(
@@ -231,6 +238,7 @@ export async function ensureNodeRuntime(options: RuntimeDownloadOptions = {}): P
   const archivePath = await downloadArchive(fileName, bases, options)
   const tempDir = `${dir}.tmp-${Date.now()}`
   try {
+    options.onStep?.('extract')
     await extractZip(archivePath, tempDir)
     await flattenIntoTarget(tempDir, dir, `node-v${NODE_VERSION}-`)
     await fsp.writeFile(path.join(dir, RUNTIME_VERSION_MARKER), NODE_VERSION, 'utf-8')
@@ -264,6 +272,7 @@ export async function ensurePythonRuntime(options: RuntimeDownloadOptions = {}):
   const archivePath = await downloadArchive(fileName, PYTHON_DIST_BASES, options)
   const tempDir = `${dir}.tmp-${Date.now()}`
   try {
+    options.onStep?.('extract')
     await extractTarGz(archivePath, tempDir)
     // install_only 布局：所有条目在顶层 `python/` 目录下（三平台同构，与 node 的
     // node-v{v}-* 前缀层同类）——批次2 规格误写"无包裹层"，真机安装必败（真机事故，

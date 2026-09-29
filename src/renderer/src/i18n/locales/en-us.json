@@ -670,6 +670,7 @@
     "install_progress": {
       "deploy": "Deploying web assets…",
       "deps": "Installing Python dependencies…",
+      "extract": "Extracting the runtime…",
       "front": "Building the front end…",
       "install": "Installing the CLI…",
       "market": "Installing plugin market…",

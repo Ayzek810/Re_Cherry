@@ -408,3 +408,46 @@ export const GatewayIcon: FC<{ width?: number; height?: number; className?: stri
   height,
   className
 }) => <RadioTower width={width ?? 16} height={height ?? 16} className={className} />
+
+// fork 缝（v0.4.5-1，原创）：进度条作为**本页标准 UI 元素**（与 Button/Tooltip/Alert 同档）。
+// 为什么要进本表：进度此前是 VersionStatusCard 里的私有 markup，谁要展示进度都得复制一遍
+// 那串 div 与 ARIA 属性——这正是"只有某一家有进度条"的结构性原因。规则集中在本件：
+// - `value`（0..100）有值 → 确定性进度条；缺省 → 不确定态（脉冲）——**两者都不许假**；
+// - 两种形态都带 `role="progressbar"` 与可读标签；确定态附 aria-valuenow；
+// - 宽度变化走 motion-safe 过渡，尊重减少动效偏好。
+export interface CherryProgressProps {
+  /** 0..100；缺省为不确定态。 */
+  value?: number
+  /** 无障碍标签 / 主文案。 */
+  label: string
+  /** 次要事实（语言无关的补充数字）。 */
+  detail?: string
+  className?: string
+}
+
+export const Progress: FC<CherryProgressProps> = ({ value, label, detail, className }) => {
+  const percent =
+    typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : null
+  return (
+    <div className={className}>
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={label}
+        {...(percent === null ? {} : { 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': percent })}>
+        {percent === null ? (
+          <div className="h-full w-1/3 rounded-full bg-foreground/50 motion-safe:animate-pulse" />
+        ) : (
+          <div
+            className="h-full rounded-full bg-foreground/60 motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out"
+            style={{ width: `${percent}%` }}
+          />
+        )}
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {label}
+        {detail ? <span className="ml-1 font-mono">{detail}</span> : null}
+      </p>
+    </div>
+  )
+}

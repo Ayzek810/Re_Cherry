@@ -7,6 +7,7 @@ import type { FileChangeEvent, WebviewKeyEvent } from '@shared/config/types'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 import type { ExternalAppInfo } from '@shared/externalApp/types'
 import { IpcChannel } from '@shared/IpcChannel'
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 import type { Notification } from '@types'
 import type {
   AddMemoryOptions,
@@ -120,16 +121,11 @@ const api = {
           ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_Changed, listener)
         }
       },
-      // v0.3.4-2：安装步骤进度订阅（载荷 {tool, step}，step 为 i18n 键尾）。
-      // v0.4.5-1：detail 为语言无关的补充事实（下载字节数），fraction 为可测阶段的确定性
-      // 比例（0..1）——渲染层据此画真进度条，否则画不确定态。
-      onInstallProgress: (
-        callback: (payload: { tool: string; step: string; detail?: string; fraction?: number }) => void
-      ): (() => void) => {
-        const listener = (
-          _event: Electron.IpcRendererEvent,
-          payload: { tool: string; step: string; detail?: string; fraction?: number }
-        ) => callback(payload)
+      // v0.3.4-2：安装步骤进度订阅。v0.4.5-1：载荷形状与步骤词汇取自
+      // @shared/types/installProgress（主进程广播、本桥、渲染层同一份契约——步骤名写错是
+      // 编译错误，新工具/新步骤不会悄悄漏展示）。
+      onInstallProgress: (callback: (payload: InstallProgressPayload) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, payload: InstallProgressPayload) => callback(payload)
         ipcRenderer.on(IpcChannel.CodeCli_Binary_InstallProgress, listener)
         return () => {
           ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_InstallProgress, listener)

@@ -3,9 +3,11 @@ import { type FC, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useMinapps } from '@renderer/hooks/useMinapps'
+import type { InstallProgressStep } from '@shared/types/installProgress'
 
 import { BinaryInstallFailureRow, BinaryInstallingHint } from './BinaryInstallErrorDialog'
 import { CliIcon } from './CliIcon'
+import { InstallProgress } from './InstallProgress'
 import { Button, Tooltip } from './shadcn'
 
 import type { VersionStatus } from '../types'
@@ -45,8 +47,8 @@ interface VersionStatusCardProps {
   onShowError?: () => void
   /** v0.3.4-2：首探窗口（快照未返回）——安装按钮显示「检查中」而非可点击态。 */
   snapshotsLoading?: boolean
-  /** v0.3.4-2：安装步骤进度（i18n 键尾；当前工具安装中时由主进程广播）。 */
-  installProgressStep?: string
+  /** v0.3.4-2：安装步骤进度（共享词汇表的步骤名；当前工具安装中时由主进程广播）。 */
+  installProgressStep?: InstallProgressStep
   /** v0.4.5-1：进度补充事实（下载字节数等，语言无关），与原步骤名同行展示。 */
   installProgressDetail?: string
   /** v0.4.5-1：可测阶段的确定性比例（0..1）。有值画真进度条，无值画不确定态。 */
@@ -115,12 +117,6 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
   // fork 缝①（续）：同上——'conflict'/'unknown' 臂不保留。
   const cleanlyInstalled = isInstalled && status.applicationStatus !== 'broken'
   const launchUnavailable = !running && !canLaunch
-  // 确定性进度：只有主进程给出 fraction 的阶段才有（目前是下载）。下限 2% 让"刚起步"可见，
-  // 上限 100 防浮点越界；四舍五入到整数百分比，与 detail 里的百分比同源同值。
-  const progressPercent =
-    typeof installProgressFraction === 'number' && Number.isFinite(installProgressFraction)
-      ? Math.max(2, Math.min(100, Math.round(installProgressFraction * 100)))
-      : null
 
   const launchButton = (
     <Button
@@ -349,34 +345,15 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
       </div>
 
       {installing && <BinaryInstallingHint />}
-      {/* v0.3.4-2：安装进度条。v0.4.5-1（用户反馈"进度条不反映真实下载进度"）：可测阶段
-          （下载）用主进程给的 fraction 画**真条**；不可测阶段（npm/pip/vite 执行）不编造
-          比例，保持不确定态——宁可显示"不确定"，也不显示假进度。进度条按 step 分片：
-          阶段一变即重置，避免把上一阶段的百分比带到下一阶段。 */}
+      {/* 安装进度：标准元素 InstallProgress（见该件注释——三个工具、任何界面共用同一件，
+          不是本卡的私有 markup）。步骤词汇与比例契约在 @shared/types/installProgress。 */}
       {installing && installProgressStep && (
-        <div className="mt-2">
-          <div
-            className="h-1 w-full overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-label={t(`code.install_progress.${installProgressStep}`)}
-            {...(progressPercent === null
-              ? {}
-              : { 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': progressPercent })}>
-            {progressPercent === null ? (
-              <div className="h-full w-1/3 rounded-full bg-foreground/50 motion-safe:animate-pulse" />
-            ) : (
-              <div
-                key={installProgressStep}
-                className="h-full rounded-full bg-foreground/60 motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out"
-                style={{ width: `${progressPercent}%` }}
-              />
-            )}
-          </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {t(`code.install_progress.${installProgressStep}`)}
-            {installProgressDetail ? <span className="ml-1 font-mono">{installProgressDetail}</span> : null}
-          </p>
-        </div>
+        <InstallProgress
+          className="mt-2"
+          step={installProgressStep}
+          {...(installProgressDetail ? { detail: installProgressDetail } : {})}
+          {...(installProgressFraction !== undefined ? { fraction: installProgressFraction } : {})}
+        />
       )}
       {installError && !busy && onShowError && (
         <BinaryInstallFailureRow error={installError} onShowError={onShowError} />

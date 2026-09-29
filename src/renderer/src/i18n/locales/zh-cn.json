@@ -670,6 +670,7 @@
     "install_progress": {
       "deploy": "正在部署界面资源…",
       "deps": "正在安装 Python 依赖…",
+      "extract": "正在解压运行时…",
       "front": "正在构建前端…",
       "install": "正在安装 CLI…",
       "market": "正在安装插件市场…",

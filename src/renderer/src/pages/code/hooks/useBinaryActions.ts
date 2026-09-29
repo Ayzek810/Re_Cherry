@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { loggerService } from '@logger'
 import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
 import type { CodeCli } from '@shared/types/codeCli'
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 
 import { withDetail } from '../utils/errorDetail'
 
@@ -31,15 +32,9 @@ export function useBinaryActions() {
   const [installingTools, setInstallingTools] = useState<Set<string>>(() => new Set())
   const [upgradingTools, setUpgradingTools] = useState<Set<string>>(() => new Set())
   // v0.3.4-2（用户裁决）：安装步骤进度——主进程每完成一个阶段广播一次，进度条渲染步名。
-  // v0.4.5-1：detail 是下载字节进度（语言无关）、fraction 是进度条本体的确定性比例
-  // （只有可测阶段才有；无值即不确定态），否则大档案下载期间用户无法分辨"在下载 / 卡住 /
-  // 死了"。
-  const [installProgress, setInstallProgress] = useState<{
-    tool: string
-    step: string
-    detail?: string
-    fraction?: number
-  } | null>(null)
+  // v0.4.5-1：载荷形状与步骤词汇来自 @shared/types/installProgress（主进程、preload 桥、
+  // 渲染层同一份契约）；detail 是下载字节进度、fraction 是进度条本体的确定性比例。
+  const [installProgress, setInstallProgress] = useState<InstallProgressPayload | null>(null)
   useEffect(() => {
     const unsubscribe = window.api.codeCli.binary.onInstallProgress((payload) => setInstallProgress(payload))
     return unsubscribe

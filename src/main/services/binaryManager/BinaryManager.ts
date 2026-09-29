@@ -48,6 +48,7 @@ import {
   seedUserConfig
 } from './sourceInstaller'
 import { IpcChannel } from '@shared/IpcChannel'
+import type { InstallProgressStep } from '@shared/types/installProgress'
 import { redactSecretText } from '@shared/utils/redaction'
 
 import { type BinaryToolName, type BinaryToolPreset, BINARY_TOOL_PRESETS } from './presets'
@@ -438,7 +439,7 @@ export class BinaryManager {
   /** dsh（npm 型）：受管 node → npm install --prefix → 版本标记 → bundle 装配（dshmarket + PPT）。 */
   private async installNpmTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
     this.broadcastInstallProgress(plan.name, 'runtime')
-    const runtime = await ensureNodeRuntime({ onProgress: this.downloadProgressReporter(plan.name, 'runtime') })
+    const runtime = await ensureNodeRuntime(this.progressCallbacks(plan, 'runtime'))
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
     // PATH 首位钉受管 node（npm shim 再启 node 时取它）；缓存钉 CodeMate 子树。
@@ -548,9 +549,7 @@ export class BinaryManager {
   /** hermes（pipx 型 → venv 等价）：受管 CPython → python -m venv → venv pip install。 */
   private async installVenvTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
     this.broadcastInstallProgress(plan.name, 'runtime')
-    const { pythonBin } = await ensurePythonRuntime({
-      onProgress: this.downloadProgressReporter(plan.name, 'runtime')
-    })
+    const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, 'runtime'))
     // 路径用变量名与本类其余处一致，便于对照（venv 的受管布局见 managedBinaryPath）。
     const dir = toolDir(plan.name)
     // v0.4.5-1：改走 buildInPlace——旧实现在建 venv 之前就把整个工具目录删了，pip 阶段一失败
@@ -627,12 +626,8 @@ export class BinaryManager {
     // v0.4.5-1：两个运行时**串行**下载。原先并行是为了快，但两个各 ~30MB 的档案同时上报
     // 字节进度，进度条会在两条曲线之间来回跳（"真实进度"变成噪声）；串行的总字节数不变，
     // 换来的是一个单调可信的条。
-    const { pythonBin } = await ensurePythonRuntime({
-      onProgress: this.downloadProgressReporter(plan.name, 'runtime')
-    })
-    const nodeRuntime = await ensureNodeRuntime({
-      onProgress: this.downloadProgressReporter(plan.name, 'runtime')
-    })
+    const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, 'runtime'))
+    const nodeRuntime = await ensureNodeRuntime(this.progressCallbacks(plan, 'runtime'))
 
     this.broadcastInstallProgress(plan.name, 'source')
     // 先钉 SHA 再按 SHA 取 zip：分支在两次请求之间被推进也不会装到"另一半"。
@@ -652,6 +647,8 @@ export class BinaryManager {
     await fsp.mkdir(dir, { recursive: true })
     const sourceDir = sourceTreeDir(plan.name)
     try {
+      // 下载到 100% 之后还要解压——不换阶段的话条会冻在 100%（三家工具同款形态）。
+      this.broadcastInstallProgress(plan.name, 'extract')
       // v0.4.5-1（O8）：把钉住的 SHA 一起交下去——归档顶层目录名必须是 <Repo>-<sha>，
       // 这样"从镜像/代理取回的东西"也能被证伪（对不上即拒绝，见 selectSourceTreeEntry）。
       await extractSourceTree(archivePath, sourceDir, sourceRepoName(plan), sha)
@@ -916,7 +913,7 @@ export class BinaryManager {
    * （npm/pip/vite 的执行）不编造比例，保持不确定态——**宁可显示"不确定"，不显示假进度**。 */
   private broadcastInstallProgress(
     tool: BinaryToolName,
-    step: string,
+    step: InstallProgressStep,
     options: { detail?: string; fraction?: number } = {}
   ): void {
     try {
@@ -943,7 +940,10 @@ export class BinaryManager {
    * 放那里是为了可单测；此处只负责 I/O（广播）与"一个 throttle 实例 = 一个阶段"的约定：
    * 调用方按阶段建各自的 reporter，阶段一变就换实例，比例随之从头开始。
    */
-  private downloadProgressReporter(tool: BinaryToolName, step: string): (progress: DownloadProgress) => void {
+  private downloadProgressReporter(
+    tool: BinaryToolName,
+    step: InstallProgressStep
+  ): (progress: DownloadProgress) => void {
     const throttle = createProgressThrottle()
     return (progress) => {
       const update = selectProgressUpdate(throttle, progress)
@@ -952,6 +952,23 @@ export class BinaryManager {
         detail: update.detail,
         ...(update.fraction !== undefined ? { fraction: update.fraction } : {})
       })
+    }
+  }
+
+  /**
+   * 下载器的进度回调组（字节比例 + 阶段切换）。成一个方法是为了让"下载 → 解压"这条链在
+   * 三个工具、两种运行时上完全同形：比例按 `step` 上报，阶段切换（解压）由下载器触发。
+   */
+  private progressCallbacks(
+    plan: ToolPlan,
+    step: InstallProgressStep
+  ): {
+    onProgress: (progress: DownloadProgress) => void
+    onStep: (next: InstallProgressStep) => void
+  } {
+    return {
+      onProgress: this.downloadProgressReporter(plan.name, step),
+      onStep: (next) => this.broadcastInstallProgress(plan.name, next)
     }
   }
 
