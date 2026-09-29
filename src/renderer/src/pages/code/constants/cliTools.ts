@@ -65,5 +65,9 @@ export const CLI_TOOL_PROVIDER_MAP: Record<CodeCli, (providers: Provider[]) => P
         (hasAnthropic(p) || hasOpenAILike(p))
     ),
   // hermes 谓词逐字（叶子见上方 fork 缝）。
-  [CodeCli.HERMES]: (providers) => providers.filter((p) => hasAnthropic(p) || hasOpenAILike(p))
+  [CodeCli.HERMES]: (providers) => providers.filter((p) => hasAnthropic(p) || hasOpenAILike(p)),
+  // v0.4.5：paper-agent 不吃 Cherry 供应商——模型供应商与检索密钥在它自己的 Web UI 系统
+  // 设置页里配（落 home/paper-agent/config/model.json），因此恒返回空集；页面对它不渲染
+  // 供应商区（见 CodeCliContentPanel 的 paper-agent 分支）。
+  [CodeCli.PAPER_AGENT]: () => []
 }

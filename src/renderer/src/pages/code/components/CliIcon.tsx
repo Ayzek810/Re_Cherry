@@ -6,6 +6,7 @@
 // CLI_TOOLS 裁到 2 项；OPTICAL_VIEWBOXES 随 SVG 源裁剪移除（位图/lucide 图标无 viewBox 面）。
 
 import type { ComponentType, FC, SVGProps } from 'react'
+import { ScrollText } from 'lucide-react'
 
 import DeepSeekLogo from '@renderer/assets/images/providers/deepseek.png'
 import NousresearchIcon from '@renderer/components/Icons/NousresearchIcon'
@@ -24,10 +25,15 @@ const HermesIcon: IconComponent = ({ size = 28, className }) => (
   <NousresearchIcon width={size} height={size} className={className} />
 )
 
+// v0.4.5：paper-agent 上游无品牌图标资产（仓库内只有社群二维码位图）——先用语义化
+// lucide 字形顶上；将来有品牌 SVG 时替换本组件即可（消费面只认 IconComponent 签名）。
+const PaperAgentIcon: IconComponent = ({ size = 28, className }) => <ScrollText size={size} className={className} />
+
 /** `label` is an i18n key; resolve it with `t()` before rendering. */
 export const CLI_TOOLS = [
   { value: CodeCli.DEEPSEEK_HARNESS, label: 'code.cli_tools.deepseek_harness', icon: DeepSeekHarnessIcon },
-  { value: CodeCli.HERMES, label: 'code.cli_tools.hermes', icon: HermesIcon }
+  { value: CodeCli.HERMES, label: 'code.cli_tools.hermes', icon: HermesIcon },
+  { value: CodeCli.PAPER_AGENT, label: 'code.cli_tools.paper_agent', icon: PaperAgentIcon }
 ] as const satisfies ReadonlyArray<{ value: CodeCli; label: string; icon: IconComponent }>
 
 type SvgIcon = ComponentType<SVGProps<SVGSVGElement>>

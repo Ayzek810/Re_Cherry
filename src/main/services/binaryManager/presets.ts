@@ -7,7 +7,10 @@
 import { CODE_CLI_TOOL_PRESETS, type CodeCliToolPreset } from '@shared/data/presets/codeCliTools'
 
 /** fork 安装器消费的字段子集（对 shared CodeCliToolPreset 的只读收窄视图，零数据复制）。 */
-export type BinaryToolPreset = Pick<CodeCliToolPreset, 'id' | 'executable' | 'packageName' | 'install' | 'requiredPeer'>
+export type BinaryToolPreset = Pick<
+  CodeCliToolPreset,
+  'id' | 'executable' | 'packageName' | 'install' | 'requiredPeer' | 'repo' | 'branch'
+>
 
 /** shared 预设的安装器视图（同一数组对象，仅类型收窄）。 */
 export const BINARY_TOOL_PRESETS: readonly BinaryToolPreset[] = CODE_CLI_TOOL_PRESETS

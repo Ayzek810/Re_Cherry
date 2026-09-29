@@ -26,6 +26,15 @@ export function hermesHome(): string {
   return path.join(codeMateRoot(), 'home', 'hermes')
 }
 
+/**
+ * v0.4.5：受管工具的通用用户态根 `home/<tool>`（dsh/hermes 的既有两处等价于此命名）。
+ * 卸载不删（dsh home 先例）——源码型工具的用户态（config/data/logs/前端产物）钉在此，
+ * 与 tools/<tool> 的代码树分离，升级整树替换源码也不碰用户数据。
+ */
+export function codeMateToolHome(tool: string): string {
+  return path.join(codeMateRoot(), 'home', tool)
+}
+
 /** 受管 CLI 工具的安装根（批次2 安装器使用）。 */
 export function codeMateToolsRoot(): string {
   return path.join(codeMateRoot(), 'tools')

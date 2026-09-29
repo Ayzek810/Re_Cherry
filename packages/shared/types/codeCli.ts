@@ -3,8 +3,11 @@
 
 export enum CodeCli {
   // fork 缝：内置项按用户裁决裁剪为 deepseek-harness + hermes 两项（原 14 项）。
+  // v0.4.5：paper-agent 并入同一工具列表（fork 自有增量，非 V2 移植）——源码分发，
+  // 非 npm/PyPI 注册表包，install:'source'。
   DEEPSEEK_HARNESS = 'deepseek-harness',
-  HERMES = 'hermes'
+  HERMES = 'hermes',
+  PAPER_AGENT = 'paper-agent'
 }
 
 export const DEEPSEEK_HARNESS_AGENT_PRESETS = ['inherit', 'standard', 'code', 'minimal'] as const

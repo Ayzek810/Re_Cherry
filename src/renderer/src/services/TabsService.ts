@@ -138,7 +138,9 @@ class TabsService {
         ? codeCli.deepseekHarness.stop()
         : appId === 'code-mate-hermes'
           ? codeCli.hermesDashboard.stop()
-          : undefined
+          : appId === 'code-mate-paper-agent'
+            ? codeCli.paperAgent.stop()
+            : undefined
     if (!stop) return
     logger.info(`code-mate: stopping ${appId} because its tab was closed`)
     void stop.catch((error) => logger.warn(`Failed to stop code-mate tool ${appId} on tab close`, error as Error))

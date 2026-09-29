@@ -22,6 +22,7 @@ import { appMenuService } from './services/AppMenuService'
 import { configManager } from './services/ConfigManager'
 import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
 import { hermesDashboardService } from './services/hermes/HermesDashboardService'
+import { paperAgentService } from './services/paperAgent/PaperAgentService'
 import { nodeTraceService } from './services/NodeTraceService'
 import {
   CHERRY_STUDIO_PROTOCOL,
@@ -274,6 +275,12 @@ if (!app.requestSingleInstanceLock()) {
     } catch {
       /* 未启动 */
     }
+    // v0.4.5：paper-agent（源码型受管 Web UI）同款同步杀树。
+    try {
+      paperAgentService.killSync()
+    } catch {
+      /* 未启动 */
+    }
     try {
       disposePdfExtractWorker()
     } catch {
@@ -300,6 +307,12 @@ if (!app.requestSingleInstanceLock()) {
       await hermesDashboardService.stop()
     } catch (error) {
       logger.warn('Error stopping Hermes Dashboard:', error as Error)
+    }
+    // v0.4.5：paper-agent 同款（POSIX detached 下不主动停会残留进程组）。
+    try {
+      await paperAgentService.stop()
+    } catch (error) {
+      logger.warn('Error stopping Paper-Agent:', error as Error)
     }
     try {
       const { apiGatewayService } = await import('./features/apiGateway/ApiGatewayService')

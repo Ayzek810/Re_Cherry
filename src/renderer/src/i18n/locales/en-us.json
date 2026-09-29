@@ -597,6 +597,9 @@
     "apply_failed": "Failed to write CLI config to the system file",
     "checking": "Checking…",
     "clear_config_failed": "Failed to clear the CLI config. Your credentials may still be in the tool's config files.",
+    "check_updates": "Check for updates",
+    "check_updates_failed": "Failed to check for updates",
+    "check_updates_latest": "Already up to date",
     "cli_config": {
       "format_failed": "Format failed. Check the file syntax.",
       "title": "CLI Config File",
@@ -605,7 +608,8 @@
     },
     "cli_tools": {
       "deepseek_harness": "DeepSeek Harness",
-      "hermes": "Hermes Agent"
+      "hermes": "Hermes Agent",
+      "paper_agent": "Paper-Agent"
     },
     "configure": "Configure",
     "deepseek_harness": {
@@ -661,11 +665,15 @@
     },
     "install": "Install",
     "install_progress": {
+      "deploy": "Deploying web assets…",
+      "deps": "Installing Python dependencies…",
+      "front": "Building the front end…",
       "install": "Installing the CLI…",
       "market": "Installing plugin market…",
       "pip": "Installing packages…",
       "ppt": "Installing presentation plugin…",
       "runtime": "Downloading runtime…",
+      "source": "Downloading source…",
       "toolchain": "Preparing plugin toolchain…",
       "venv": "Creating Python environment…"
     },
@@ -692,6 +700,16 @@
     "own_login": {
       "title": "{{toolName}} Official"
     },
+    "paper_agent": {
+      "error": {
+        "cancelled": "Paper-Agent web UI startup was cancelled",
+        "not_installed": "Paper-Agent is not installed. Install it on this page.",
+        "open_failed": "Failed to open the Paper-Agent web UI",
+        "startup_failed": "Failed to start the Paper-Agent web UI",
+        "stop_failed": "Failed to stop the Paper-Agent web UI"
+      },
+      "hint": "This tool does not use the app's model providers. Open its own web UI settings page first, then configure model providers and search keys there."
+    },
     "providerless_hint": "This tool authenticates through its own login flow — just pick a working directory and launch it. Run the tool once to sign in.",
     "search_provider_placeholder": "Search providers…",
     "select_folder": "Select Folder",
@@ -701,6 +719,7 @@
     "stop": "Stop",
     "tool_parameters": "Parameter Settings",
     "up_to_date": "Up to date",
+    "update_found": "Version {{version}} is available",
     "upgrade": "Upgrade",
     "upgrade_success": "Upgrade successful",
     "working_directory": "Working Directory"

@@ -305,6 +305,13 @@ export enum IpcChannel {
   CodeCli_HermesDashboard_Status = 'code-cli:hermes-dashboard:status',
   /** 立即拉当前状态（批次4a；载荷同 Status）。 */
   CodeCli_HermesDashboard_GetStatus = 'code-cli:hermes-dashboard:get-status',
+  /** v0.4.5：Paper-Agent（源码型受管工具）Web UI 生命周期。 */
+  CodeCli_PaperAgent_Start = 'code-cli:paper-agent:start',
+  CodeCli_PaperAgent_Stop = 'code-cli:paper-agent:stop',
+  /** 主 → 渲染状态广播（同 DeepseekHarness_Status 语义）。 */
+  CodeCli_PaperAgent_Status = 'code-cli:paper-agent:status',
+  /** 立即拉当前状态（载荷同 Status）。 */
+  CodeCli_PaperAgent_GetStatus = 'code-cli:paper-agent:get-status',
   /** hermes 配置文件读写（target 枚举 = 写白名单，渲染层永不传路径）。 */
   CodeCli_ReadConfig = 'code-cli:read-config',
   CodeCli_WriteConfig = 'code-cli:write-config',
@@ -313,6 +320,8 @@ export enum IpcChannel {
   CodeCli_Binary_Remove = 'code-cli:binary:remove',
   CodeCli_Binary_Snapshots = 'code-cli:binary:snapshots',
   CodeCli_Binary_LatestVersions = 'code-cli:binary:latest-versions',
+  /** v0.4.5：手动检查更新（强制重探快照 + 现查最新版本；source 型走 GitHub HEAD SHA 对比）。 */
+  CodeCli_Binary_CheckUpdates = 'code-cli:binary:check-updates',
   /** 安装/卸载/快照变化广播（无载荷，消费者重拉快照）。 */
   CodeCli_Binary_Changed = 'code-cli:binary:changed',
   /** 安装步骤进度广播（载荷 {tool, step}，step 为 i18n 键尾）。 */

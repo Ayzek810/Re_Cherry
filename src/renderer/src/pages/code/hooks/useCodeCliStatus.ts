@@ -64,6 +64,16 @@ export function useHermesDashboardStatus(): ManagedToolStatusState {
   )
 }
 
+/** v0.4.5：Paper-Agent 状态（同 Hermes Dashboard 的订阅缝形状）。 */
+export function usePaperAgentStatus(): ManagedToolStatusState {
+  const { paperAgent } = window.api.codeCli
+  return useManagedToolStatusState(
+    () => paperAgent.getStatus(),
+    (cb) => paperAgent.onStatus((status) => cb(status)),
+    STOPPED
+  )
+}
+
 /** 统一网关运行态（V2 useApiGateway 的 running 面的 fork 对位）。 */
 export function useApiGatewayStatus(): ApiGatewayStatusState {
   const [state, setState] = useState<ApiGatewayStatusState>(GATEWAY_IDLE)

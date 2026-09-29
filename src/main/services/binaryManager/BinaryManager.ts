@@ -19,12 +19,21 @@ import { probeBinary, probeSystemPath } from '@main/services/codeCli/resolveBina
 import {
   cacheRoot,
   codeMateRuntimeRoot,
+  codeMateToolHome,
   codeMateToolsRoot,
   deepSeekHarnessHome
 } from '@main/services/deepSeekHarness/paths'
 import { crossPlatformSpawn } from '@main/utils/processRunner'
 import { withPathPrepend } from '@main/utils/shellEnv'
 import { removeTreeWithRetry } from './removeTree'
+import {
+  deployFrontDist,
+  downloadSourceZip,
+  extractSourceTree,
+  parsePyprojectDependencies,
+  resolveHeadSha,
+  seedUserConfig
+} from './sourceInstaller'
 import { IpcChannel } from '@shared/IpcChannel'
 import { redactSecretText } from '@shared/utils/redaction'
 
@@ -84,6 +93,11 @@ export type BinaryOperationResult = { success: true } | { success: false; messag
 
 export type BinaryRemoveResult = { removed: boolean; message?: string }
 
+/** v0.4.5：手动检查更新的结论（渲染层按钮的结果反馈与版本卡注入面）。 */
+export type BinaryCheckUpdatesResult =
+  | { success: true; current?: string; latest?: string; canUpgrade: boolean }
+  | { success: false; message: string }
+
 // ---------------------------------------------------------------------------
 // 工具计划：shared 预设 → fork 安装后端（install: 'npm' → npm --prefix；'pipx' → venv）
 // ---------------------------------------------------------------------------
@@ -91,8 +105,8 @@ export type BinaryRemoveResult = { removed: boolean; message?: string }
 interface ToolPlan {
   name: string
   preset: BinaryToolPreset
-  kind: 'npm' | 'venv'
-  /** 1:1 运行时映射（node↔dsh、python↔hermes；fork 缝：写死，V2 由 mise 统一管理）。 */
+  kind: 'npm' | 'venv' | 'source'
+  /** 1:1 运行时映射（node↔dsh、python↔hermes/paper-agent；fork 缝：写死，V2 由 mise 统一管理）。 */
   runtime: 'node' | 'python'
 }
 
@@ -102,6 +116,9 @@ function toToolPlan(preset: BinaryToolPreset): ToolPlan | undefined {
       return { name: preset.executable, preset, kind: 'npm', runtime: 'node' }
     case 'pipx':
       return { name: preset.executable, preset, kind: 'venv', runtime: 'python' }
+    // v0.4.5：源码型（GitHub 树 + venv 依赖 + 前端构建），运行时同为受管 CPython。
+    case 'source':
+      return { name: preset.executable, preset, kind: 'source', runtime: 'python' }
     default:
       logger.warn(`Managed installer does not support backend "${preset.install}" for tool ${preset.executable}`)
       return undefined
@@ -125,6 +142,28 @@ function toolDir(name: string): string {
   return path.join(codeMateToolsRoot(), name)
 }
 
+/** 源码型工具的源码树落点（升级整树替换；用户态不在此，见 codeMateToolHome）。 */
+function sourceTreeDir(name: string): string {
+  return path.join(toolDir(name), 'src')
+}
+
+/** 源码型工具的 venv 落点（跨升级保留，依赖变更由 pip 增量解析）。 */
+function sourceVenvDir(name: string): string {
+  return path.join(toolDir(name), 'venv')
+}
+
+function sourceVenvPython(name: string): string {
+  return isWin
+    ? path.join(sourceVenvDir(name), 'Scripts', 'python.exe')
+    : path.join(sourceVenvDir(name), 'bin', 'python3')
+}
+
+/** codeload zip 的顶层包裹目录名（GitHub 固定为 `<RepoName>-<sha>`）。 */
+function sourceRepoName(plan: ToolPlan): string {
+  const slug = plan.preset.repo ?? plan.preset.packageName
+  return slug.split('/')[1] ?? plan.name
+}
+
 /** 受管可执行文件的落点（resolveBinary.ts 的受管探测映射与本函数保持一致）。 */
 function managedBinaryPath(plan: ToolPlan): string {
   if (plan.kind === 'npm') {
@@ -135,6 +174,10 @@ function managedBinaryPath(plan: ToolPlan): string {
       '.bin',
       isWin ? `${plan.preset.executable}.cmd` : plan.preset.executable
     )
+  }
+  if (plan.kind === 'source') {
+    // 源码型：受管"可执行物" = 该工具 venv 的解释器（快照探针与版本标记的存在性判据）。
+    return sourceVenvPython(plan.name)
   }
   // venv 型：Windows 在 Scripts/，Unix 在 bin/。
   return isWin
@@ -275,6 +318,13 @@ export class BinaryManager {
       if (plan.kind === 'npm' && plan.preset.requiredPeer) {
         application = this.hasRequiredRuntimeDependencies(plan.name, managedPath) ? 'applied' : 'broken'
       }
+      // v0.4.5 源码型：版本标记（安装时记录的 commit SHA）与用户态部署产物（FastAPI 以
+      // cwd 相对路径伺服 home/<tool>/front/dist）缺一即"装了但跑不起来"——安装被中断的
+      // 典型形态。
+      if (plan.kind === 'source') {
+        const deployed = await pathExists(path.join(codeMateToolHome(plan.name), 'front', 'dist', 'index.html'))
+        if (!version || !deployed) application = 'broken'
+      }
       const probe = await probeBinary(managedPath)
       if (!probe.runnable) application = 'broken'
       return {
@@ -286,6 +336,11 @@ export class BinaryManager {
           ...((version ?? probe.version) ? { version: version ?? probe.version } : {})
         }
       }
+    }
+    // v0.4.5 源码型无 PATH 可执行物（其入口恒为受管 venv 解释器）——不探系统 PATH，
+    // 免得路径上恰好有个同名异物被当成"已装（系统）"。
+    if (plan.kind === 'source') {
+      return { name: plan.name, application: 'absent', availability: { source: 'none' } }
     }
     const systemPath = await probeSystemPath(plan.preset.executable)
     if (systemPath) {
@@ -344,7 +399,8 @@ export class BinaryManager {
     return this.operationMutex.runExclusive(async () => {
       try {
         if (plan.kind === 'npm') await this.installNpmTool(plan)
-        else await this.installVenvTool(plan)
+        else if (plan.kind === 'venv') await this.installVenvTool(plan)
+        else await this.installSourceTool(plan)
         // v0.3.4-2：成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
         // 不再闪回安装前旧态。
         await this.refreshSnapshotCache().catch((error) =>
@@ -511,20 +567,135 @@ export class BinaryManager {
     await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), version, 'utf-8')
   }
 
+  /**
+   * v0.4.5 源码型（paper-agent）：GitHub 源码树 → 受管 CPython venv 装依赖 → 受管 node
+   * 构建前端 → 用户态播种 + 产物部署 → 写 commit SHA 标记。
+   *
+   * 升级语义 = 再装一次：源码树整目录替换（纯上游代码，无用户态混入），venv 保留（pip
+   * 增量解析依赖变更），用户态在 home/<tool> 全程不受影响。"装的恒是该分支当前 HEAD"
+   * 沿用 fork 既有的 name-only 安装语义（不做 SHA 钉定）。
+   */
+  private async installSourceTool(plan: ToolPlan): Promise<void> {
+    const { repo, branch } = plan.preset
+    if (!repo || !branch) {
+      throw new Error(`Source tool "${plan.name}" has no repo/branch configured`)
+    }
+    this.broadcastInstallProgress(plan.name, 'runtime')
+    const [{ pythonBin }, nodeRuntime] = await Promise.all([ensurePythonRuntime(), ensureNodeRuntime()])
+
+    this.broadcastInstallProgress(plan.name, 'source')
+    // 先钉 SHA 再按 SHA 取 zip：分支在两次请求之间被推进也不会装到"另一半"。
+    const sha = await resolveHeadSha(repo, branch)
+    const archivePath = await downloadSourceZip(repo, sha, cacheRoot())
+    const dir = toolDir(plan.name)
+    await fsp.mkdir(dir, { recursive: true })
+    const sourceDir = sourceTreeDir(plan.name)
+    try {
+      await extractSourceTree(archivePath, sourceDir, sourceRepoName(plan))
+    } finally {
+      await fsp.rm(archivePath, { force: true }).catch(() => undefined)
+    }
+
+    const venvPython = sourceVenvPython(plan.name)
+    if (!(await pathExists(venvPython))) {
+      this.broadcastInstallProgress(plan.name, 'venv')
+      await removeTreeWithRetry(sourceVenvDir(plan.name))
+      await this.runCommand(pythonBin, ['-m', 'venv', sourceVenvDir(plan.name)], {
+        env: { ...process.env },
+        label: `python -m venv ${plan.name}`
+      })
+      if (!(await pathExists(venvPython))) {
+        throw new Error(
+          `venv created but ${venvPython} is missing; ${sourceVenvDir(plan.name)} contains: ${await listDirForDiagnostics(sourceVenvDir(plan.name))}`
+        )
+      }
+    }
+
+    this.broadcastInstallProgress(plan.name, 'deps')
+    const pyprojectPath = path.join(sourceDir, 'pyproject.toml')
+    const dependencies = parsePyprojectDependencies(await fsp.readFile(pyprojectPath, 'utf-8'))
+    if (dependencies.length === 0) {
+      // 上游布局变了就显式失败——装个空 venv 只会在启动时炸成难懂的 ImportError。
+      throw new Error(`No dependencies found in ${pyprojectPath}; the upstream project layout may have changed`)
+    }
+    await this.runCommand(
+      venvPython,
+      [
+        '-m',
+        'pip',
+        'install',
+        '--cache-dir',
+        path.join(cacheRoot(), 'pip'),
+        '--index-url',
+        PYPI_OFFICIAL_INDEX,
+        '--extra-index-url',
+        PYPI_TSINGHUA_INDEX,
+        ...dependencies
+      ],
+      { env: { ...process.env }, label: `pip install ${plan.name} dependencies` }
+    )
+
+    this.broadcastInstallProgress(plan.name, 'front')
+    const pathSep = isWin ? ';' : ':'
+    const nodeBinDir = isWin ? nodeRuntime.dir : path.join(nodeRuntime.dir, 'bin')
+    const frontEnv = withPathPrepend(process.env, [nodeBinDir], pathSep)
+    frontEnv.npm_config_cache = path.join(cacheRoot(), 'npm')
+    frontEnv.npm_config_registry = NPM_REGISTRY_MIRROR
+    const frontDir = path.join(sourceDir, 'front')
+    await this.runCommand(nodeRuntime.npmBin, ['install', '--prefix', frontDir], {
+      env: frontEnv,
+      label: `npm install ${plan.name} front`
+    })
+    // 直接跑 vite build（跳过上游 `npm run build` 里的 vue-tsc 类型检查——那是开发卫生，
+    // 不是安装关键路径；vite 自身仍会捕获导入/语法错误）。
+    const viteBin = path.join(frontDir, 'node_modules', '.bin', isWin ? 'vite.cmd' : 'vite')
+    if (!(await pathExists(viteBin))) {
+      throw new Error(`vite is missing after npm install: ${viteBin}`)
+    }
+    await this.runCommand(viteBin, ['build'], {
+      env: frontEnv,
+      cwd: frontDir,
+      label: `vite build ${plan.name}`,
+      timeoutMs: 5 * 60_000
+    })
+
+    this.broadcastInstallProgress(plan.name, 'deploy')
+    const home = codeMateToolHome(plan.name)
+    await seedUserConfig(sourceDir, home)
+    await deployFrontDist(sourceDir, home)
+
+    // 版本标记 = 短 SHA（展示与更新对比都以它为准；完整 SHA 只用于下载 URL）。
+    await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), sha.slice(0, 8), 'utf-8')
+  }
+
+  /** 该类运行时是否仍被别的已装工具需要（v0.4.5：paper-agent 与 hermes 共享 CPython）。 */
+  private async isRuntimeStillNeeded(runtime: 'node' | 'python', removing: string): Promise<boolean> {
+    for (const [name, candidate] of TOOL_PLANS) {
+      if (name === removing || candidate.runtime !== runtime) continue
+      if (await pathExists(toolDir(name))) return true
+    }
+    return false
+  }
+
   /** 卸载（mutex 串行）：删工具目录 + 整个同类运行时根（node↔dsh、python↔hermes）。
    * 批次5 真机事故修复：taskkill 后原生 .node 的 DLL 锁异步释放，立即 rm 撞 EPERM
    * （sharp-win32-x64.node 实证）——改逐项遍历删除 + 重试退避（removeTree.ts）。
    * v0.3.4-2：运行时改为删 kind 根（runtime/node 整目录）——NODE_VERSION 跨版本升级
-   * 后旧版本目录不再残留，portable"卸载=零残留"在版本演进下仍成立。 */
+   * 后旧版本目录不再残留，portable"卸载=零残留"在版本演进下仍成立。
+   * v0.4.5：paper-agent 与 hermes 共享受管 CPython——运行时根改为"该类运行时已无任何
+   * 已装工具时才删"（此前 1:1 映射会把对方的解释器一起删掉）；工具目录删除失败时
+   * 不删运行时（fail-closed）。用户态 home/<tool> 不删（dsh home 先例）。 */
   async removeTool(name: BinaryToolName): Promise<BinaryRemoveResult> {
     const plan = TOOL_PLANS.get(name)
     if (!plan) return { removed: false, message: `Unknown managed tool: ${name}` }
     return this.operationMutex.runExclusive(async () => {
       try {
         const toolGone = await removeTreeWithRetry(toolDir(plan.name))
-        // fork 缝：运行时 1:1 映射写死（node↔dsh、python↔hermes；V2 由 mise 统一 prune）。
         const runtimeKindRoot = path.join(codeMateRuntimeRoot(), plan.runtime)
-        const runtimeGone = await removeTreeWithRetry(runtimeKindRoot)
+        const runtimeGone =
+          toolGone && !(await this.isRuntimeStillNeeded(plan.runtime, plan.name))
+            ? await removeTreeWithRetry(runtimeKindRoot)
+            : toolGone
         if (!toolGone || !runtimeGone) {
           const locked = !toolGone ? toolDir(plan.name) : runtimeKindRoot
           const message = `Some files are still in use (locked by a running process or antivirus). Close the tool and retry in a moment. Locked: ${locked}`
@@ -549,7 +720,51 @@ export class BinaryManager {
   /** 最新版本（尽力而为，失败返回空对象不抛）：dsh 走受管 npm view；hermes 走 PyPI JSON API。 */
   async getLatestVersions(): Promise<Record<BinaryToolName, string | undefined>> {
     const [dsh, hermes] = await Promise.all([this.latestNpmVersion('dsh'), this.latestPypiVersion('hermes')])
-    return { dsh, hermes }
+    // v0.4.5（用户裁决）：paper-agent 纯手动检查——本通道由渲染层在页面挂载时自动调用，
+    // 恒不触 GitHub（匿名 API 限流也不该被页面挂载烧掉）。它的最新版本只由 checkUpdates
+    // 显式拉取。
+    return { dsh, hermes, 'paper-agent': undefined }
+  }
+
+  /**
+   * v0.4.5：手动"检查更新"。与 getLatestVersions 的区别是**强制重探**——绕过快照 15s
+   * 冷却与 stale-while-revalidate，并立刻广播变化，让版本卡的当前版本与结论同一时刻。
+   *
+   * 每个工具的最新版本来源：npm 型 = `npm view <pkg>@next`；venv 型 = PyPI JSON；
+   * source 型 = GitHub 分支 HEAD 的短 SHA（上游无 tag/release，pyproject 版本号恒定）。
+   */
+  async checkUpdates(name: BinaryToolName): Promise<BinaryCheckUpdatesResult> {
+    const plan = TOOL_PLANS.get(name)
+    if (!plan) return { success: false, message: `Unknown managed tool: ${name}` }
+    try {
+      const snapshots = await this.refreshSnapshotCache()
+      this.broadcastChanged()
+      const availability = snapshots[name]?.availability
+      const current = availability?.source === 'managed' ? availability.version : undefined
+      let latest: string | undefined
+      if (plan.kind === 'npm') latest = await this.latestNpmVersion(name)
+      else if (plan.kind === 'venv') latest = await this.latestPypiVersion(name)
+      else {
+        const { repo, branch } = plan.preset
+        if (!repo || !branch) {
+          return { success: false, message: `Source tool "${name}" has no repo/branch configured` }
+        }
+        latest = (await resolveHeadSha(repo, branch)).slice(0, 8)
+      }
+      return {
+        success: true,
+        ...(current ? { current } : {}),
+        ...(latest ? { latest } : {}),
+        // 升级的前提是"装着一个版本"：未安装时 latest 只是"可装的最新版"，不是"可升级"。
+        // 判据是不等（非语义版本串——SHA、预发布串——上这正是"有变化"的诚实含义，与渲染层
+        // isNewerVersion 的非语义回退一致）。
+        canUpgrade: !!latest && !!current && latest !== current
+      }
+    } catch (error) {
+      const message = redactSecretText(this.errorMessage(error))
+      logger.warn(`Failed to check updates for managed tool ${name}`, { error: message })
+      return { success: false, message }
+    }
   }
 
   private async latestNpmVersion(name: string): Promise<string | undefined> {
@@ -620,12 +835,15 @@ export class BinaryManager {
   private runCommand(
     executable: string,
     args: string[],
-    options: { env: NodeJS.ProcessEnv; label: string; timeoutMs?: number }
+    options: { env: NodeJS.ProcessEnv; label: string; timeoutMs?: number; cwd?: string }
   ): Promise<string> {
     const timeoutMs = options.timeoutMs ?? INSTALL_TIMEOUT_MS
     return new Promise((resolve, reject) => {
       // crossPlatformSpawn（cross-spawn）负责 Windows .cmd 的 cmd.exe 转发与逐参引号。
-      const child = crossPlatformSpawn(executable, args, { env: options.env })
+      const child = crossPlatformSpawn(executable, args, {
+        env: options.env,
+        ...(options.cwd ? { cwd: options.cwd } : {})
+      })
       let stdout = ''
       let stderr = ''
       const appendTail = (current: string, chunk: Buffer) => `${current}${chunk.toString()}`.slice(-OUTPUT_TAIL_LIMIT)

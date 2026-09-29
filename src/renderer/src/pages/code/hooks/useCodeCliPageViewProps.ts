@@ -30,8 +30,10 @@ import { useCurrentCliConfigConnection } from './useCurrentCliConfigConnection'
 import { useDeepSeekHarnessController } from './useDeepSeekHarnessController'
 import { useHermesDashboardController } from './useHermesDashboardController'
 import { useLaunchDialogController } from './useLaunchDialogController'
+import { usePaperAgentController } from './usePaperAgentController'
 import { useRemoveCliToolDialog } from './useRemoveCliToolDialog'
 import { useSortedSupportedProviders } from './useSortedSupportedProviders'
+import { useToolUpdateCheck } from './useToolUpdateCheck'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useCodeCliPageViewProps.ts
 //（2026-09-24，v0.3.4-1 批次4b）。缝点八处，装配数据流（summaries/prependedProviders/sorted
@@ -188,6 +190,9 @@ export function useCodeCliPageViewProps(
   })
 
   const { statuses, resolved } = useCliVersionStatuses(CLI_TOOL_IDS)
+  // v0.4.5：手动检查更新 + paper-agent 生命周期控制器（版本状态合并需要前者，故先于此声明）。
+  const updateCheck = useToolUpdateCheck()
+  const paperAgent = usePaperAgentController(selectedCliTool)
   // fork 缝②（续）：无 GEMINI_CLI 可见性过滤与选种重定向（fork 工具集恒显 2 项）；statuses 的
   // resolved 标志随重定向 effect 一并裁掉。
   // v0.3.4-2（用户裁决）：resolved 不再裁掉——首探窗口（3-5s）期间版本卡要显示"检查中"
@@ -202,21 +207,36 @@ export function useCodeCliPageViewProps(
   const isOwnLoginSelected = selectedProvider?.id === CLI_OWN_LOGIN_PROVIDER_ID
   const isDeepSeekHarnessTool = selectedCliTool === CodeCli.DEEPSEEK_HARNESS
   const isHermesDashboardTool = selectedCliTool === CodeCli.HERMES
+  const isPaperAgentTool = selectedCliTool === CodeCli.PAPER_AGENT
   const activeMeta = activeTool ? toMeta(activeTool) : null
   const toolName = activeMeta?.label ?? ''
   // Local busy Sets give instant feedback; snapshot operations cover mutations
   // initiated in another window or before this page mounted.
   // fork 缝⑤（续）：fork 快照无 operation 面，快照侧不补装态。
   const mergedInstallingTools = useMemo(() => new Set<string>(installingTools), [installingTools])
-  const versionStatus: VersionStatus = statuses[selectedCliTool] ?? {
+  const snapshotVersionStatus: VersionStatus = statuses[selectedCliTool] ?? {
     installed: false,
     source: 'none',
     canUpgrade: false
   }
-  const canLaunch = isHermesDashboardTool
+  // v0.4.5：手动检查更新的结论注入（只看选中工具）。结论带"它当时比对的当前版本"——装/
+  // 升级后当前版本变了，旧结论自动不适用，回落到快照真值（无需清除广播，也无竞态）。
+  const manualCheck = updateCheck.results[CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable]
+  const manualCheckApplies = manualCheck && manualCheck.forVersion === snapshotVersionStatus.current
+  const versionStatus: VersionStatus =
+    manualCheck && manualCheckApplies
+      ? {
+          ...snapshotVersionStatus,
+          canUpgrade: manualCheck.canUpgrade,
+          ...(manualCheck.latest ? { latest: manualCheck.latest } : {})
+        }
+      : snapshotVersionStatus
+  const canLaunch = isPaperAgentTool
     ? versionStatus.installed
-    : (isProviderlessTool || isOwnLoginSelected || !!enabledProvider) &&
-      (!isDeepSeekHarnessTool || !!enabledProviderConfig?.modelId)
+    : isHermesDashboardTool
+      ? versionStatus.installed
+      : (isProviderlessTool || isOwnLoginSelected || !!enabledProvider) &&
+        (!isDeepSeekHarnessTool || !!enabledProviderConfig?.modelId)
   // fork 缝⑤（续）：无 operation 失败面 → 无 install error 对话框来源；保留 undefined 形状。
   const installError: string | undefined = undefined
   // The synthetic own-login entry is always available, so nudge to "select a provider" only when a
@@ -273,11 +293,16 @@ export function useCodeCliPageViewProps(
     isDeepSeekHarnessTool && (deepSeekHarness.running || deepSeekHarness.starting || deepSeekHarness.stopping)
   const hermesDashboardActionsDisabled =
     isHermesDashboardTool && (hermesDashboard.running || hermesDashboard.starting || hermesDashboard.stopping)
-  const providerActionsDisabled = deepSeekHarnessActionsDisabled || hermesDashboardActionsDisabled
+  // v0.4.5：paper-agent 同款——运行/启动/停止窗口内不放开变更类动作（卸载、配置编辑）。
+  const paperAgentActionsDisabled =
+    isPaperAgentTool && (paperAgent.running || paperAgent.starting || paperAgent.stopping)
+  const providerActionsDisabled =
+    deepSeekHarnessActionsDisabled || hermesDashboardActionsDisabled || paperAgentActionsDisabled
   const handleRemove = useCallback(
     async (toolId: CodeCli) => {
       if (toolId === CodeCli.DEEPSEEK_HARNESS && !(await deepSeekHarness.onStop())) return
       if (toolId === CodeCli.HERMES && !(await hermesDashboard.onStop())) return
+      if (toolId === CodeCli.PAPER_AGENT && !(await paperAgent.onStop())) return
       const success = await remove(toolId)
       if (success && currentProviderId) {
         if (toolId !== CodeCli.DEEPSEEK_HARNESS) {
@@ -292,7 +317,16 @@ export function useCodeCliPageViewProps(
         setCurrentCliConfigConnection(null)
       }
     },
-    [deepSeekHarness, hermesDashboard, remove, currentProviderId, setCurrentProvider, setCurrentCliConfigConnection, t]
+    [
+      deepSeekHarness,
+      hermesDashboard,
+      paperAgent,
+      remove,
+      currentProviderId,
+      setCurrentProvider,
+      setCurrentCliConfigConnection,
+      t
+    ]
   )
   const removeDialog = useRemoveCliToolDialog({ toolName, remove: handleRemove })
 
@@ -320,9 +354,11 @@ export function useCodeCliPageViewProps(
               deepSeekHarness.launching ||
               deepSeekHarness.starting ||
               hermesDashboard.launching ||
-              hermesDashboard.starting,
-            running: deepSeekHarness.running || hermesDashboard.running,
-            stopping: deepSeekHarness.stopping || hermesDashboard.stopping,
+              hermesDashboard.starting ||
+              paperAgent.launching ||
+              paperAgent.starting,
+            running: deepSeekHarness.running || hermesDashboard.running || paperAgent.running,
+            stopping: deepSeekHarness.stopping || hermesDashboard.stopping || paperAgent.stopping,
             upgradeDisabled: providerActionsDisabled
           },
           installingTools: mergedInstallingTools,
@@ -333,6 +369,9 @@ export function useCodeCliPageViewProps(
             installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
               ? installProgress.step
               : undefined,
+          // v0.4.5：手动检查更新按钮（三个工具页共用）。
+          onCheckUpdates: () => void updateCheck.checkForUpdates(selectedCliTool),
+          checkingUpdates: updateCheck.checkingTools.has(CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable),
           providerState: {
             providerless: isProviderlessTool,
             showSelectionHint: showProviderSelectionHint
@@ -352,17 +391,30 @@ export function useCodeCliPageViewProps(
             versionStatus.applicationStatus === 'applied' || versionStatus.applicationStatus === 'broken'
               ? () => removeDialog.requestRemove(selectedCliTool)
               : undefined,
+          // v0.4.5：paper-agent 无供应商/模型选择面——启动即拉起受管 uvicorn；dsh/hermes 走
+          // 各自控制器，其余（无此集）走启动对话框。
           onLaunch: () =>
-            isHermesDashboardTool
-              ? void hermesDashboard.onLaunch()
-              : defaultGatewayProvider && !defaultGatewayConfig
-                ? configPanel.onToggleCurrent(defaultGatewayProvider)
-                : isDeepSeekHarnessTool
-                  ? void deepSeekHarness.onLaunch()
-                  : launchDialog.openLaunchDialog(),
-          onStop: () => (isDeepSeekHarnessTool ? void deepSeekHarness.onStop() : void hermesDashboard.onStop()),
+            isPaperAgentTool
+              ? void paperAgent.onLaunch()
+              : isHermesDashboardTool
+                ? void hermesDashboard.onLaunch()
+                : defaultGatewayProvider && !defaultGatewayConfig
+                  ? configPanel.onToggleCurrent(defaultGatewayProvider)
+                  : isDeepSeekHarnessTool
+                    ? void deepSeekHarness.onLaunch()
+                    : launchDialog.openLaunchDialog(),
+          onStop: () =>
+            isPaperAgentTool
+              ? void paperAgent.onStop()
+              : isDeepSeekHarnessTool
+                ? void deepSeekHarness.onStop()
+                : void hermesDashboard.onStop(),
           onOpenDashboard: () =>
-            isDeepSeekHarnessTool ? void deepSeekHarness.onOpenWebUi() : void hermesDashboard.onOpenDashboard(),
+            isPaperAgentTool
+              ? void paperAgent.onOpenWebUi()
+              : isDeepSeekHarnessTool
+                ? void deepSeekHarness.onOpenWebUi()
+                : void hermesDashboard.onOpenDashboard(),
           onConfigure: configPanel.openConfigurePanel,
           onToggleCurrent: configPanel.onToggleCurrent,
           onReorder: handleReorder

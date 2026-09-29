@@ -39,6 +39,7 @@ import { knowledgeService } from './services/knowledge/KnowledgeService'
 import * as localPaddle from './services/preprocess/localPaddle'
 import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
+import { paperAgentService } from './services/paperAgent/PaperAgentService'
 import NotificationService from './services/NotificationService'
 import * as NutstoreService from './services/NutstoreService'
 import { providerKeyStore } from './services/ProviderKeyStore'
@@ -856,6 +857,36 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
   ipcMain.handle(IpcChannel.CodeCli_Binary_Snapshots, () => binaryManager.getToolSnapshots(['dsh', 'hermes']))
   ipcMain.handle(IpcChannel.CodeCli_Binary_LatestVersions, () => binaryManager.getLatestVersions())
+  // v0.4.5：手动检查更新（三个工具页共用；source 型只在此时触 GitHub——纯手动策略）。
+  ipcMain.handle(IpcChannel.CodeCli_Binary_CheckUpdates, (_, name: unknown) => {
+    return binaryManager.checkUpdates(parseBinaryToolName(name))
+  })
+
+  // v0.4.5：Paper-Agent（源码型受管工具）Web UI 生命周期。形状照 dsh/hermes 两处：
+  // start 直接透传 Result（含 reason 分态），stop 包 {success}，getStatus 供订阅初值。
+  ipcMain.handle(IpcChannel.CodeCli_PaperAgent_Start, async () => {
+    try {
+      return await paperAgentService.start()
+    } catch (error) {
+      return {
+        success: false as const,
+        reason: 'startup_failed' as const,
+        message: redactSecretText(error instanceof Error ? error.message : 'Failed to start Paper-Agent')
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_PaperAgent_Stop, async () => {
+    try {
+      await paperAgentService.stop()
+      return { success: true as const }
+    } catch (error) {
+      return {
+        success: false as const,
+        message: redactSecretText(error instanceof Error ? error.message : 'Failed to stop Paper-Agent')
+      }
+    }
+  })
+  ipcMain.handle(IpcChannel.CodeCli_PaperAgent_GetStatus, () => paperAgentService.getStatus())
 
   // 编码助手（v0.3.4-1 批次3）：统一网关生命周期 + 配置同步（非内核通道 → 本文件）。
   // 结果对象语义照 V2 @shared/types/apiGateway（ApiGatewayStatusResult /
@@ -987,7 +1018,8 @@ function parseCliConfigWriteInput(value: unknown): { cliTool: FileConfiguredCli;
   return { cliTool: CodeCli.HERMES, files: parsed }
 }
 
-// 批次2：binary install/remove 的工具名白名单（'dsh' | 'hermes'，来自 shared 预设表）。
+// 批次2：binary install/remove/check-updates 的工具名白名单（来自 shared 预设表：
+// 'dsh' | 'hermes' | 'paper-agent'，v0.4.5 起含源码型工具）。
 function parseBinaryToolName(value: unknown): BinaryToolName {
   if (!isBinaryToolName(value)) {
     throw new Error(`Invalid binary tool name: ${String(value)}`)

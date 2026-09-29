@@ -39,6 +39,9 @@ interface CodeCliContentPanelProps {
   snapshotsLoading?: boolean
   /** v0.3.4-2：安装步骤进度（i18n 键尾，来自主进程广播；仅当前工具安装中时有值）。 */
   installProgressStep?: string
+  /** v0.4.5：手动检查更新（三个工具页共用）。 */
+  onCheckUpdates?: () => void
+  checkingUpdates?: boolean
   providerState: {
     providerless: boolean
     showSelectionHint: boolean
@@ -78,6 +81,8 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   installError,
   snapshotsLoading,
   installProgressStep,
+  onCheckUpdates,
+  checkingUpdates,
   providerState,
   supportedProviders,
   providerConfigs,
@@ -98,6 +103,9 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   const { t } = useTranslation()
   const [providerSearch, setProviderSearch] = useState('')
   const [showInstallError, setShowInstallError] = useState(false)
+  // v0.4.5：paper-agent 不吃 Cherry 供应商——它的模型供应商与检索密钥由自身 Web UI 的
+  // 系统设置页配置（home/paper-agent/config/model.json），因此不渲染供应商区。
+  const isPaperAgent = selectedCliTool === CodeCli.PAPER_AGENT
 
   // Reset on tool switch: the dialog's controlled `open` goes false when
   // `installError` clears for the new tool, but Radix does not fire onOpenChange
@@ -130,6 +138,8 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
             upgradeDisabled={versionCard.upgradeDisabled}
             installError={installError}
             onShowError={() => setShowInstallError(true)}
+            onCheckUpdates={onCheckUpdates}
+            checkingUpdates={checkingUpdates}
             launchDisabledHint={
               providerState.showSelectionHint
                 ? t('code.select_provider_before_launch', { toolName: activeMeta.label })
@@ -147,7 +157,11 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
           onOpenChange={(open) => !open && setShowInstallError(false)}
         />
 
-        {providerState.providerless ? (
+        {isPaperAgent ? (
+          <div className="rounded-lg border border-border-subtle bg-accent/10 px-4 py-3 text-muted-foreground text-xs">
+            {t('code.paper_agent.hint')}
+          </div>
+        ) : providerState.providerless ? (
           <div className="rounded-lg border border-border-subtle bg-accent/10 px-4 py-3 text-muted-foreground text-xs">
             {t('code.providerless_hint')}
           </div>

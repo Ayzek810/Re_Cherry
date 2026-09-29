@@ -1,4 +1,4 @@
-import { ArrowUpCircle, Download, ExternalLink, Pin, PinOff, Play, Square, Trash2 } from 'lucide-react'
+import { ArrowUpCircle, Download, ExternalLink, Pin, PinOff, Play, RefreshCw, Square, Trash2 } from 'lucide-react'
 import { type FC, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -47,6 +47,10 @@ interface VersionStatusCardProps {
   snapshotsLoading?: boolean
   /** v0.3.4-2：安装步骤进度（i18n 键尾；当前工具安装中时由主进程广播）。 */
   installProgressStep?: string
+  /** v0.4.5：手动检查更新（强制重探快照 + 现查最新版本）。 */
+  onCheckUpdates?: () => void
+  /** v0.4.5：该工具正在检查更新（按钮旋转态）。 */
+  checkingUpdates?: boolean
 }
 
 export const VersionStatusCard: FC<VersionStatusCardProps> = ({
@@ -70,7 +74,9 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
   installError,
   onShowError,
   snapshotsLoading,
-  installProgressStep
+  installProgressStep,
+  onCheckUpdates,
+  checkingUpdates
 }) => {
   const { t } = useTranslation()
   const launchDisabledHintId = useId()
@@ -185,6 +191,23 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          {/* v0.4.5：手动检查更新——已装工具才可查（未装时安装键已展示最新版本）。 */}
+          {isInstalled && onCheckUpdates && (
+            <Tooltip content={t('code.check_updates')} placement="top" delay={300} sideOffset={6}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={onCheckUpdates}
+                disabled={busy || checkingUpdates}
+                aria-label={t('code.check_updates')}
+                title={t('code.check_updates')}
+                className="text-muted-foreground hover:text-foreground">
+                <RefreshCw className={checkingUpdates ? 'size-3.5 motion-safe:animate-spin' : 'size-3.5'} />
+              </Button>
+            </Tooltip>
+          )}
+
           {isInstalled && canUpgrade && (
             <Button
               type="button"

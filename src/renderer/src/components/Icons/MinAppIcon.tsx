@@ -1,5 +1,6 @@
 import { allMinApps } from '@renderer/config/minapps'
 import type { MinAppType } from '@renderer/types'
+import { ScrollText } from 'lucide-react'
 import type { FC } from 'react'
 
 import NousresearchIcon from './NousresearchIcon'
@@ -29,6 +30,11 @@ function CodeMateIcon({ app, size }: { app: MinAppType; size: number }) {
   }
   if (app.id === 'code-mate-hermes') {
     return <NousresearchIcon width={size} height={size} />
+  }
+  // v0.4.5：paper-agent 无品牌资产（上游仓库只有社群二维码位图）——与 CliIcon 同款
+  // lucide 字形，保持侧栏/启动台/管理页三处图标一致。
+  if (app.id === 'code-mate-paper-agent') {
+    return <ScrollText size={size} />
   }
   return null
 }

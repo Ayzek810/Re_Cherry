@@ -1,0 +1,231 @@
+// fork 缝（原创，v0.4.5）：源码型受管工具的获取原语——GitHub 源码树（codeload）下载、
+// 解压归位、pyproject 依赖解析、前端产物部署、用户态播种。
+// 设计来源：runtimeDownloader.ts 的下载/解压/重试模式（同盘 rename、.part 先写后改名、
+// EPERM/EBUSY 退避——杀软扫描窗口）。
+// 与注册表型工具（npm/PyPI）的差别：**无镜像等价物**——任意 GitHub 仓库没有 npmmirror
+// 对应物，单源直连；失败如实上抛（fail-closed，不做假成功）。
+// 编排（进度广播、运行时供给、命令执行）留在 BinaryManager.installSourceTool，本文件只
+// 提供网络/文件系统/解析原语，便于单测。
+
+import fsp from 'node:fs/promises'
+import path from 'node:path'
+
+import StreamZip from 'node-stream-zip'
+
+import { loggerService } from '@logger'
+
+import { removeTreeWithRetry } from './removeTree'
+
+const logger = loggerService.withContext('SourceInstaller')
+
+const DOWNLOAD_TIMEOUT_MS = 120_000
+const API_TIMEOUT_MS = 10_000
+const EXTRACT_TIMEOUT_MS = 120_000
+
+/** GitHub API 要求显式 User-Agent（缺省 UA 会被 403）。 */
+const GITHUB_API_HEADERS = {
+  Accept: 'application/vnd.github+json',
+  'User-Agent': 'Re_Cherry-CodeMate'
+} as const
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// ---------------------------------------------------------------------------
+// 上游版本事实：HEAD commit SHA
+// ---------------------------------------------------------------------------
+
+/**
+ * 解析分支 HEAD 的 commit SHA。这是源码型工具唯一的版本判据——上游
+ * Tswoen/Paper-Agent 无任何 tag/release，pyproject 版本号恒定 0.1.0。
+ */
+export async function resolveHeadSha(repo: string, branch: string): Promise<string> {
+  const response = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`, {
+    headers: GITHUB_API_HEADERS,
+    signal: AbortSignal.timeout(API_TIMEOUT_MS)
+  })
+  if (!response.ok) {
+    throw new Error(`GitHub API returned HTTP ${response.status} for ${repo}@${branch}`)
+  }
+  const payload = (await response.json()) as { sha?: unknown }
+  if (typeof payload.sha !== 'string' || !/^[0-9a-f]{40}$/.test(payload.sha)) {
+    throw new Error(`GitHub API did not return a commit SHA for ${repo}@${branch}`)
+  }
+  return payload.sha
+}
+
+// ---------------------------------------------------------------------------
+// 源码下载
+// ---------------------------------------------------------------------------
+
+/** 按 SHA 下载源码 zip（codeload：内容固定，避免"分支在检查后又被推进"的漂移）。 */
+export async function downloadSourceZip(repo: string, sha: string, cacheDir: string): Promise<string> {
+  const downloadsDir = path.join(cacheDir, 'downloads')
+  await fsp.mkdir(downloadsDir, { recursive: true })
+  const fileName = `${repo.replace('/', '-')}-${sha}.zip`
+  const destPath = path.join(downloadsDir, fileName)
+  const partPath = `${destPath}.part`
+  const url = `https://codeload.github.com/${repo}/zip/${sha}`
+  try {
+    logger.info(`Downloading source tree from ${url}`)
+    const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`)
+    }
+    await fsp.writeFile(partPath, Buffer.from(await response.arrayBuffer()))
+    await fsp.rename(partPath, destPath)
+    return destPath
+  } catch (error) {
+    await fsp.rm(partPath, { force: true }).catch(() => undefined)
+    throw new Error(`Failed to download ${url}: ${errorMessage(error)}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 解压 + 顶层前缀剥离
+// ---------------------------------------------------------------------------
+
+async function extractZip(archivePath: string, destDir: string): Promise<void> {
+  const zip = new StreamZip.async({ file: archivePath })
+  try {
+    await fsp.mkdir(destDir, { recursive: true })
+    await zip.extract(null, destDir)
+  } catch (error) {
+    throw new Error(`Failed to extract ${path.basename(archivePath)}: ${errorMessage(error)}`)
+  } finally {
+    await zip.close()
+  }
+}
+
+async function renameWithRetry(source: string, target: string): Promise<void> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await fsp.rename(source, target)
+      return
+    } catch (error) {
+      lastError = error
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw error
+      logger.warn(`Source tree rename attempt ${attempt}/5 failed (${code}), retrying`, { source, target })
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+/**
+ * 把 codeload zip 的源码树归位到 targetDir：zip 顶层是 `<RepoName>-<sha>/` 包裹层
+ * （GitHub 固定布局）→ 整体 rename；目标先删（重装/升级整树替换，源码树内无用户态）。
+ * codeload 解压上限保护：源码树远小于运行时档案，沿用 runtimeDownloader 的
+ * EXTRACT_TIMEOUT_MS 量级即可（node-stream-zip 无内建超时，此常量留作文档语义）。
+ */
+export async function extractSourceTree(archivePath: string, targetDir: string, repoName: string): Promise<void> {
+  void EXTRACT_TIMEOUT_MS
+  const tempDir = `${targetDir}.tmp-${Date.now()}`
+  try {
+    await extractZip(archivePath, tempDir)
+    const entries = await fsp.readdir(tempDir)
+    const inner = entries.find((entry) => entry.startsWith(repoName))
+    if (!inner || entries.length !== 1) {
+      throw new Error(
+        `Unexpected source archive layout: expected a single "${repoName}*" directory, got ${entries.join(', ') || '(empty)'}`
+      )
+    }
+    const removed = await removeTreeWithRetry(targetDir)
+    if (!removed) {
+      throw new Error(`Could not clear the previous source tree at ${targetDir} (files locked by a running process?)`)
+    }
+    await fsp.mkdir(path.dirname(targetDir), { recursive: true })
+    await renameWithRetry(path.join(tempDir, inner), targetDir)
+  } finally {
+    await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// pyproject 依赖解析
+// ---------------------------------------------------------------------------
+
+/**
+ * 从 pyproject.toml 提取 `[project] dependencies` 的规格串。
+ *
+ * 为什么不用 `pip install -e .`：上游 pyproject 无 `[build-system]`，且是 flat-layout
+ * 多顶层目录（src/ test/ front/），setuptools 自动发现会失败；而运行时 import 由
+ * uvicorn `--app-dir` 解析，**项目自身根本不需要可安装**——venv 只需要第三方依赖。
+ * 因此直接装依赖数组，避免打包发现这一整类失败。
+ *
+ * 解析面：只认 `[project]` 表内的 `dependencies`（同名键出现在 `[tool.*]` 等别的表里不是
+ * 运行时依赖——宁可不解析让调用方 fail-closed，也不装错东西）。上游每行一条带引号规格；
+ * 引号外的行不入表。解析不到任何依赖时调用方会显式报错（上游布局变了应当看得见，而不是
+ * 装个空 venv 然后在启动时才炸成 ImportError）。
+ */
+export function parsePyprojectDependencies(pyprojectText: string): string[] {
+  const projectSection = /^[ \t]*\[project\][ \t]*$/m.exec(pyprojectText)
+  if (!projectSection) return []
+  // 表作用域 = [project] 之后到下一个表头之前。
+  const rest = pyprojectText.slice(projectSection.index + projectSection[0].length)
+  const nextSection = /^[ \t]*\[/m.exec(rest)
+  const scope = nextSection ? rest.slice(0, nextSection.index) : rest
+  const match = /^[ \t]*dependencies[ \t]*=[ \t]*\[([\s\S]*?)\]/m.exec(scope)
+  if (!match) return []
+  const dependencies: string[] = []
+  for (const rawLine of match[1].split('\n')) {
+    const line = rawLine.replace(/#.*$/, '').trim().replace(/,$/, '').trim()
+    const quoted = /^(['"])(.+)\1$/.exec(line)
+    if (quoted) {
+      const spec = quoted[2].trim()
+      if (spec) dependencies.push(spec)
+    }
+  }
+  return dependencies
+}
+
+// ---------------------------------------------------------------------------
+// 用户态播种与前端产物部署
+// ---------------------------------------------------------------------------
+
+/**
+ * 用户态根（home）播种：system.yaml 缺省时从上游默认复制一份。model.json 不播种——
+ * 它由该工具 Web UI 的系统设置页写入（含密钥），首启为空是正常状态。
+ */
+export async function seedUserConfig(sourceDir: string, homeDir: string): Promise<void> {
+  const targetConfigDir = path.join(homeDir, 'config')
+  await fsp.mkdir(targetConfigDir, { recursive: true })
+  const targetSystemConfig = path.join(targetConfigDir, 'system.yaml')
+  try {
+    await fsp.access(targetSystemConfig)
+    return
+  } catch {
+    // 首装或用户删除了默认文件 → 播种上游默认值。
+  }
+  const sourceSystemConfig = path.join(sourceDir, 'config', 'system.yaml')
+  try {
+    await fsp.copyFile(sourceSystemConfig, targetSystemConfig)
+    logger.info(`Seeded default system.yaml into ${targetSystemConfig}`)
+  } catch (error) {
+    logger.warn('No upstream system.yaml to seed; the tool falls back to built-in defaults', {
+      error: errorMessage(error)
+    })
+  }
+}
+
+/**
+ * 把构建好的前端产物复制到用户态根（home/front/dist）——FastAPI 以 cwd 相对路径
+ * 伺服 `front/dist`（src/api/app.py `_mount_frontend`），而进程 cwd 是 home（用户态
+ * 与源码树分离的关键，见 PaperAgentService）。整目录替换，避免旧构建的陈旧资源残留。
+ */
+export async function deployFrontDist(sourceDir: string, homeDir: string): Promise<void> {
+  const sourceDist = path.join(sourceDir, 'front', 'dist')
+  const targetFrontDir = path.join(homeDir, 'front')
+  const targetDist = path.join(targetFrontDir, 'dist')
+  try {
+    await fsp.access(path.join(sourceDist, 'index.html'))
+  } catch {
+    throw new Error(`Front-end build produced no index.html at ${sourceDist}`)
+  }
+  await removeTreeWithRetry(targetDist)
+  await fsp.mkdir(targetFrontDir, { recursive: true })
+  await fsp.cp(sourceDist, targetDist, { recursive: true })
+}

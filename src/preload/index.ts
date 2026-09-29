@@ -90,12 +90,27 @@ const api = {
     },
     readConfig: (targets: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_ReadConfig, targets),
     writeConfig: (payload: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_WriteConfig, payload),
+    // v0.4.5：Paper-Agent（源码型受管工具）Web UI 生命周期（照 hermesDashboard 写法）。
+    paperAgent: {
+      start: () => ipcRenderer.invoke(IpcChannel.CodeCli_PaperAgent_Start),
+      stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_PaperAgent_Stop),
+      getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_PaperAgent_GetStatus),
+      onStatus: (callback: (status: unknown) => void): (() => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
+        ipcRenderer.on(IpcChannel.CodeCli_PaperAgent_Status, listener)
+        return () => {
+          ipcRenderer.removeListener(IpcChannel.CodeCli_PaperAgent_Status, listener)
+        }
+      }
+    },
     // 受管 CLI 安装器（批次2）：装卸/快照/最新版本 + 变化广播订阅（照 onStatus 写法）。
     binary: {
       install: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Install, name),
       remove: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Remove, name),
       snapshots: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Snapshots),
       latestVersions: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_LatestVersions),
+      // v0.4.5：手动检查更新（强制重探 + 现查最新版本；失败返回 {success:false, message}）。
+      checkUpdates: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_CheckUpdates, name),
       onChanged: (callback: () => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent) => callback()
         ipcRenderer.on(IpcChannel.CodeCli_Binary_Changed, listener)
