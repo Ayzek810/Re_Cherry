@@ -495,9 +495,10 @@ function marketAddArgs(spec: string, registry: string): string[] {
     'add',
     '--workspace-root',
     `${MARKET_PACKAGE}@${spec}`,
-    `--registry=${registry}`,
-    // CI 环境下 pnpm 默认冻结锁文件，而这里要动的正是锁文件。
-    '--no-frozen-lockfile'
+    `--registry=${registry}`
+    // v0.4.5-1 真机事故：这里**不能**带 `--no-frozen-lockfile`——它是 `pnpm install` 的开关，
+    // `pnpm add` 不认（exit 2: unexpected argument）。`add` 本身就是"改锁文件"的操作，
+    // 在 CI 环境下也不需要放行参数。只有下面的 `plugin install` 那条要显式放行。
   ]
 }
 

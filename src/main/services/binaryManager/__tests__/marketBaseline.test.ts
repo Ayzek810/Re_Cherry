@@ -275,6 +275,31 @@ describe('installMarketBundleWith', () => {
     expect((workspace.readManifest().dependencies as Record<string, string>)[MARKET_PACKAGE]).toBe(MARKET_INSTALL_SPEC)
   })
 
+  it('passes each pnpm subcommand only the flags it accepts', async () => {
+    // 真机事故（2026-09-29）：`--no-frozen-lockfile` 是 `pnpm install` 的开关，`pnpm add` 不认
+    // ——带上它 add 直接 exit 2（unexpected argument），市场因此一直装不上。这条用例把"参数
+    // 与子命令匹配"钉住：install 需要显式放行（CI 下默认冻结），add 一个 frozen 开关都不能有。
+    const workspace = new FakeWorkspace()
+    const calls: string[][] = []
+    const runner: MarketCommandRunner = async (args) => {
+      calls.push([...args])
+      if (args.includes('install')) {
+        workspace.manifest({ name: 'dsh-profile-web', dependencies: {}, dsh: { profile: { bundles: [] } } })
+        return ''
+      }
+      workspace.installMarket('1.66.5')
+      return ''
+    }
+
+    await installMarketBundleWith({ dshHome: DSH_HOME, io: workspace.io, runner })
+    const installCall = calls.find((args) => args.includes('install'))
+    const addCall = calls.find((args) => args.includes('add'))
+    expect(installCall).toContain('--no-frozen-lockfile')
+    expect(addCall).toBeDefined()
+    expect(addCall).not.toContain('--no-frozen-lockfile')
+    expect(addCall).not.toContain('--frozen-lockfile')
+  })
+
   it('restores the previous manifest when the add fails', async () => {
     const workspace = new FakeWorkspace()
     workspace.manifest({ name: 'dsh-profile-web', dependencies: {}, dsh: { profile: { bundles: [] } } })
