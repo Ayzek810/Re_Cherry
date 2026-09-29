@@ -51,6 +51,19 @@ async function extractPdf(buffer: Buffer, source: string): Promise<string> {
   }
 }
 
+/**
+ * PDF 抽取的可插拔缝（v0.4.4-2，§7.20 挂账清偿）：应用 boot 时由
+ * pdfExtractBridge 注入「utilityProcess 抽取」实现——pdf.js 不再占用主进程
+ * 事件循环（§7.20「直读 PDF 卡窗口」实锤），且抽取可被暂停信号中断（kill worker）。
+ * 未注入（vitest / 兜底）时走进程内 pdf-parse，行为与 v0.4.4-1 一致。
+ */
+type PdfExtractorOverride = (filePath: string, source: string, signal?: AbortSignal) => Promise<string>
+let pdfExtractorOverride: PdfExtractorOverride | undefined
+
+export function setPdfExtractorOverride(impl: PdfExtractorOverride | undefined): void {
+  pdfExtractorOverride = impl
+}
+
 let markdownConverter: TurndownService | undefined
 
 /** HTML → Markdown（turndown + GFM 表格插件；进程内纯 JS，Node 侧经 domino
@@ -310,13 +323,21 @@ async function extractLegacyDoc(filePath: string): Promise<string> {
   return document.getBody()
 }
 
-/** 按文件扩展名/类型抽取文本。 */
-export async function extractFromFile(filePath: string): Promise<ExtractedContent> {
+/** 按文件扩展名/类型抽取文本。signal 仅作用于可中断的分支（PDF worker 抽取）。 */
+export async function extractFromFile(
+  filePath: string,
+  options?: { signal?: AbortSignal }
+): Promise<ExtractedContent> {
   const extension = path.extname(filePath).toLowerCase()
   const source = path.basename(filePath)
   let text = ''
   if (extension === '.pdf') {
-    text = await extractPdf(await readFile(filePath), source)
+    if (pdfExtractorOverride !== undefined) {
+      // worker 抽取：worker 自己读文件（大 PDF 不经主进程缓冲中转）。
+      text = await pdfExtractorOverride(filePath, source, options?.signal)
+    } else {
+      text = await extractPdf(await readFile(filePath), source)
+    }
   } else if (extension === '.doc') {
     // 旧版二进制 .doc：officeparser/MarkItDown 均明确不支持（真机实锤报错），走 word-extractor。
     text = await extractLegacyDoc(filePath)

@@ -38,16 +38,17 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        // 三入口：index = 主进程；localOcrWorker = LocalPaddle OCR utility 子进程；
-        // visionWorker = 视觉模型文档处理的光栅化子进程（v0.4.4 文档处理通道两条
-        // 本机腿，均收编在 preprocess/ 下）。
+        // 四入口：index = 主进程；localOcrWorker = LocalPaddle OCR utility 子进程；
+        // visionWorker = 视觉模型文档处理的光栅化子进程；pdfExtractWorker =
+        // PDF 文本层抽取子进程（§7.20 挂账清偿：pdf.js 不再占用主进程事件循环）。
         // 多入口下 rollup 不允许 inlineDynamicImports——内部动态导入按 chunk 拆分
         // 到 out/main/，electron-builder files "**/*" 全量打包，无 §4.16 闭包缺口；
         // 外部依赖照旧 externalize，不产生额外 chunk）。
         input: {
           index: resolve('src/main/index.ts'),
           localOcrWorker: resolve('src/main/services/preprocess/localPaddle/localOcrWorker.ts'),
-          visionWorker: resolve('src/main/services/preprocess/vision/visionWorker.ts')
+          visionWorker: resolve('src/main/services/preprocess/vision/visionWorker.ts'),
+          pdfExtractWorker: resolve('src/main/services/knowledge/pdfExtractWorker.ts')
         },
         external: ['bufferutil', 'utf-8-validate', 'electron', ...Object.keys(pkg.dependencies)],
         output: {

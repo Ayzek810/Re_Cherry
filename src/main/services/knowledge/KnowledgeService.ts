@@ -199,14 +199,19 @@ export class KnowledgeService {
    * 200k 上限删除，"已读不截断"）。
    * 不走条目处理 FIFO——聊天读文件是交互路径（模型在等结果），不排在批量摄取后面。
    */
-  async readTurnDocument(topicId: string, nameOrPath: string): Promise<{ name: string; text: string }> {
+  async readTurnDocument(
+    topicId: string,
+    nameOrPath: string,
+    signal?: AbortSignal
+  ): Promise<{ name: string; text: string }> {
     const documents = this.getTurnDocuments(topicId)
     const document = documents?.find((doc) => doc.name === nameOrPath || doc.path === nameOrPath)
     if (document === undefined) {
       throw notAttachedError(nameOrPath, documents)
     }
     const ext = path.extname(document.path).toLowerCase()
-    const text = (await extractFromFile(document.path)).text
+    // signal（暂停/中止）仅作用于可中断分支（PDF → worker 抽取，kill 即取消）。
+    const text = (await extractFromFile(document.path, { signal })).text
     if (text.trim().length === 0) {
       logger.info(`document: "${document.name}" produced no extractable text (empty or scanned)`)
       return { name: document.name, text: NO_EXTRACTABLE_TEXT_NOTE }

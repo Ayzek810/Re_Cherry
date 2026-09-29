@@ -61,7 +61,7 @@ describe('readTurnDocument（2026-09-22 用户第二轮裁决：直读为中心�
 
     const result = await svc.readTurnDocument('topic-read', 'book.pdf')
 
-    expect(extractFromFile).toHaveBeenCalledWith('C:/books/book.pdf')
+    expect(extractFromFile).toHaveBeenCalledWith('C:/books/book.pdf', { signal: undefined })
     expect(parsePdfWithProvider).not.toHaveBeenCalled()
     expect(result).toEqual({ name: 'book.pdf', text: '文本层正文' })
   })

@@ -153,19 +153,19 @@ describe('preprocessChannel 注册表（配置投影 + 每轮登记）', () => {
 })
 
 describe('parsePdfWithProvider 路由与时间预算', () => {
-  it('local-paddle → 本地 OCR 编排（并发透传 + signal）', async () => {
+  it('local-paddle → 本地 OCR 编排（并发/GPU 开关透传 + signal）', async () => {
     vi.mocked(parsePdfWithLocalPaddle).mockResolvedValue('本地 OCR 全文')
     const text = await parsePdfWithProvider({ id: 'local-paddle', localConcurrency: 5 }, 'C:/books/scan.pdf')
     expect(parsePdfWithLocalPaddle).toHaveBeenCalledTimes(1)
     expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][0]).toBe('C:/books/scan.pdf')
-    expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][1]).toEqual({ concurrency: 5 })
+    expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][1]).toEqual({ concurrency: 5, gpuAcceleration: true })
     expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][2]).toBeInstanceOf(AbortSignal)
     expect(text).toBe('本地 OCR 全文')
 
-    // 未配置并发：不透传（主进程走缺省 5）
+    // 未配置并发：不透传（主进程走缺省 5）；GPU 开关恒投影（缺省 true）
     vi.mocked(parsePdfWithLocalPaddle).mockClear()
     await parsePdfWithProvider({ id: 'local-paddle' }, 'C:/books/a.pdf')
-    expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][1]).toEqual({})
+    expect(vi.mocked(parsePdfWithLocalPaddle).mock.calls[0][1]).toEqual({ gpuAcceleration: true })
   })
 
   it('vision-model → 视觉文档解析编排（visionModel/并发透传 + signal；未选模型明错）', async () => {

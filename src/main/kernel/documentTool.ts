@@ -65,7 +65,7 @@ export function apply(ctx: Context): void {
         if (topicId === undefined) {
           throw new Error('read_document: no active conversation turn')
         }
-        const result = await knowledgeService.readTurnDocument(topicId, documentName)
+        const result = await knowledgeService.readTurnDocument(topicId, documentName, exec.signal)
         logger.info(`read_document: "${documentName}" -> ${result.text.length} chars`)
         return { document: result.name, text: result.text }
       }

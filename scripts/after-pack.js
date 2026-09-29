@@ -45,6 +45,11 @@ exports.default = async function (context) {
     if (!entries.some((p) => p.endsWith('/out/main/localOcrWorker.js'))) {
       throw new Error('after-pack: out/main/localOcrWorker.js missing from app.asar (electron.vite ocrWorker entry)')
     }
+    if (!entries.some((p) => p.endsWith('/out/main/pdfExtractWorker.js'))) {
+      throw new Error(
+        'after-pack: out/main/pdfExtractWorker.js missing from app.asar (electron.vite pdfExtractWorker entry)'
+      )
+    }
   } else if (platform === 'darwin' || platform === 'linux') {
     // darwin/linux：同缺口同修（跨平台交付开启前必须各自真机验证，此处只保证收集不缺包）。
     const arch = context.arch === 'arm64' || process.arch === 'arm64' ? 'arm64' : 'x64'
