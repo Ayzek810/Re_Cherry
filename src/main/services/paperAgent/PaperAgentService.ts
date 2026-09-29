@@ -19,7 +19,12 @@ import { BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
-import { codeMateToolHome, codeMateToolsRoot } from '@main/services/deepSeekHarness/paths'
+import {
+  sourceTreeDir as managedSourceTreeDir,
+  sourceVenvPython as managedSourceVenvPython,
+  toolDir as managedToolDir
+} from '@main/services/binaryManager/layout'
+import { codeMateToolHome } from '@main/services/deepSeekHarness/paths'
 import { crossPlatformSpawn, terminateProcessTree, waitForProcessExit } from '@main/utils/processRunner'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ManagedToolStatus, ManagedToolStatusState } from '@shared/types/managedTool'
@@ -50,15 +55,16 @@ class PaperAgentStartError extends Error {
   }
 }
 
-/** 受管布局（与 binaryManager/BinaryManager.ts 的 source* 路径函数保持一致）。 */
+/** 受管布局（v0.4.5-1：取自 binaryManager/layout.ts 单点——本服务此前各自维护一份
+ * toolDir/venvPython/sourceTreeDir，与安装器、解析器三处并列，正是会漂移的那种清单）。 */
 function toolDir(): string {
-  return path.join(codeMateToolsRoot(), TOOL_NAME)
+  return managedToolDir(TOOL_NAME)
 }
 function sourceTreeDir(): string {
-  return path.join(toolDir(), 'src')
+  return managedSourceTreeDir(TOOL_NAME)
 }
 function venvPython(): string {
-  return isWin ? path.join(toolDir(), 'venv', 'Scripts', 'python.exe') : path.join(toolDir(), 'venv', 'bin', 'python3')
+  return managedSourceVenvPython(TOOL_NAME)
 }
 function userHome(): string {
   return codeMateToolHome(TOOL_NAME)
@@ -161,9 +167,11 @@ class PaperAgentService {
           return { success: false as const, reason: 'cancelled' as const, message: 'Paper-Agent startup was cancelled' }
         }
         // 幂等：已在运行 → 直接给当前 URL（不重启进程）。
+        // v0.4.5-1（O4）：这里总是重播一次状态——幂等成功不产生状态变化（也就不会自动广播），
+        // 而渲染层可能错过过更早的更新。原写法先取 transitionBefore 再立刻比较，条件恒真
+        // （复制自 stop() 的形状，那里跨 await 才有意义），是死条件而非判断。
         if (this.child && this.status === 'running' && this.url) {
-          const transitionBefore = this.statusTransitionId
-          if (this.statusTransitionId === transitionBefore) this.setStatus('running', { force: true })
+          this.setStatus('running', { force: true })
           return { success: true as const, url: this.url }
         }
         if (this.child) await this.stopOwnedProcessLocked()

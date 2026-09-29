@@ -16,12 +16,14 @@ import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { cacheRoot, nodeRuntimeDir, pythonRuntimeDir } from '@main/services/deepSeekHarness/paths'
 
+import { type DownloadProgress, downloadFromAnySource } from './downloadFile'
+import { replaceDirectory } from './atomicSwap'
+
 const logger = loggerService.withContext('RuntimeDownloader')
 
 const execFileAsync = promisify(execFile)
 
-/** 单源下载超时；两个源按序尝试，总预算 = 2×该值。 */
-const DOWNLOAD_TIMEOUT_MS = 120_000
+/** 解压预算（下载预算已由 downloadFile 的空闲/总时长上限接管）。 */
 const EXTRACT_TIMEOUT_MS = 120_000
 
 // 顶部可调：真实存在的 node 发行版与 python-build-standalone tag/版本。
@@ -92,35 +94,30 @@ function pythonArchiveName(): string {
 }
 
 // ---------------------------------------------------------------------------
-// 下载（fetch + .part 先写后改名 + 双源降级）
+// 下载（v0.4.5-1：统一走 downloadFile 原语——流式落盘 + 空闲超时 + 断点续传 + 源内重试）
 // ---------------------------------------------------------------------------
 
-async function downloadArchive(fileName: string, bases: readonly string[]): Promise<string> {
+export interface RuntimeDownloadOptions {
+  /** 字节进度（安装进度条的数据源）；缺省只写日志。 */
+  onProgress?: (progress: DownloadProgress) => void
+}
+
+async function downloadArchive(
+  fileName: string,
+  bases: readonly string[],
+  options: RuntimeDownloadOptions
+): Promise<string> {
   const downloadsDir = path.join(cacheRoot(), 'downloads')
   await fsp.mkdir(downloadsDir, { recursive: true })
   const destPath = path.join(downloadsDir, fileName)
-  const partPath = `${destPath}.part`
-  const failures: string[] = []
-  for (const base of bases) {
-    const url = `${base}${fileName}`
-    try {
-      logger.info(`Downloading managed runtime from ${url}`)
-      const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`)
-      }
-      await fsp.writeFile(partPath, Buffer.from(await response.arrayBuffer()))
-      await fsp.rename(partPath, destPath)
-      return destPath
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      // ASCII 箭头：→ 会被 GBK 控制台啃成乱码（真机日志取证）。
-      failures.push(`${base} -> ${message}`)
-      logger.warn('Runtime download failed, falling back to the next source', { url, error: message })
-      await fsp.rm(partPath, { force: true }).catch(() => undefined)
-    }
-  }
-  throw new Error(`Failed to download ${fileName}:\n${failures.join('\n')}`)
+  // 双源：主源（官方）/备用源（npmmirror），源内各自续传与重试。
+  const urls = bases.map((base) => `${base}${fileName}`)
+  logger.info(`Downloading managed runtime: ${urls.join(' | ')}`)
+  const result = await downloadFromAnySource(urls, destPath, {
+    label: `Download ${fileName}`,
+    ...(options.onProgress ? { onProgress: options.onProgress } : {})
+  })
+  return result.path
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +151,9 @@ async function extractZip(archivePath: string, destDir: string): Promise<void> {
 
 /**
  * 把解压产物归位到 targetDir：node 系档案带 `node-v{v}-*` 前缀层 → 内层目录整体
- * rename；python install_only 无包裹层 → 临时目录整体 rename。rename 前清掉目标
- * （半成品重装），临时目录与目标同盘故 rename 恒可用。
+ * rename；python install_only 无包裹层 → 临时目录整体 rename。
+ * v0.4.5-1：改走原子替换（atomicSwap）——旧运行时目录先留作备份，切换失败时放回去，
+ * 不再"先删旧的再改名"（那形态下改名一失败，运行时目录就半删了）。
  */
 async function flattenIntoTarget(tempDir: string, targetDir: string, innerPrefix: string | undefined): Promise<void> {
   let source = tempDir
@@ -169,28 +167,12 @@ async function flattenIntoTarget(tempDir: string, targetDir: string, innerPrefix
     }
     source = path.join(tempDir, inner)
   }
-  await fsp.rm(targetDir, { recursive: true, force: true })
-  await fsp.mkdir(path.dirname(targetDir), { recursive: true })
-  // v0.3.4-2 真机事故：解压数千文件后 Windows 立即 rename 撞杀软扫描窗口
-  // （EPERM，与 removeTool 的 sharp.node 同类）——重试退避到扫描结束。
-  let lastError: unknown
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    try {
-      await fsp.rename(source, targetDir)
-      await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-      return
-    } catch (error) {
-      lastError = error
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw error
-      logger.warn(`Runtime rename attempt ${attempt}/5 failed (${code}), retrying`, {
-        source,
-        targetDir
-      })
-      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
-    }
+  const replaced = await replaceDirectory(source, targetDir)
+  if (!replaced) {
+    throw new Error(
+      `Could not replace the managed runtime at ${targetDir} (files locked by a running process?); the previous runtime was kept`
+    )
   }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError))
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +219,7 @@ async function listDirForDiagnostics(dir: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /** 受管 node 运行时（dsh 的 npm 需要）；已装且版本匹配 → 直接返回（幂等）。 */
-export async function ensureNodeRuntime(): Promise<NodeRuntime> {
+export async function ensureNodeRuntime(options: RuntimeDownloadOptions = {}): Promise<NodeRuntime> {
   const dir = nodeRuntimeDir(NODE_VERSION)
   const nodeBin = isWin ? path.join(dir, 'node.exe') : path.join(dir, 'bin', 'node')
   const npmBin = isWin ? path.join(dir, 'npm.cmd') : path.join(dir, 'bin', 'npm')
@@ -246,7 +228,7 @@ export async function ensureNodeRuntime(): Promise<NodeRuntime> {
   const fileName = nodeArchiveName()
   // 版本目录段：node dist 布局 /dist/v{版本}/<文件名>（官方与 npmmirror 同构）。
   const bases = NODE_DIST_BASES.map((base) => `${base}v${NODE_VERSION}/`)
-  const archivePath = await downloadArchive(fileName, bases)
+  const archivePath = await downloadArchive(fileName, bases, options)
   const tempDir = `${dir}.tmp-${Date.now()}`
   try {
     await extractZip(archivePath, tempDir)
@@ -273,13 +255,13 @@ export async function isNodeRuntimeInstalled(): Promise<boolean> {
 }
 
 /** 受管 CPython 运行时（hermes 的 venv 需要）；已装且版本匹配 → 直接返回（幂等）。 */
-export async function ensurePythonRuntime(): Promise<{ pythonBin: string }> {
+export async function ensurePythonRuntime(options: RuntimeDownloadOptions = {}): Promise<{ pythonBin: string }> {
   const dir = pythonRuntimeDir(PYTHON_VERSION)
   const pythonBin = isWin ? path.join(dir, 'python.exe') : path.join(dir, 'bin', 'python3')
   if (await isRuntimeReady(dir, PYTHON_VERSION, [pythonBin])) return { pythonBin }
 
   const fileName = pythonArchiveName()
-  const archivePath = await downloadArchive(fileName, PYTHON_DIST_BASES)
+  const archivePath = await downloadArchive(fileName, PYTHON_DIST_BASES, options)
   const tempDir = `${dir}.tmp-${Date.now()}`
   try {
     await extractTarGz(archivePath, tempDir)

@@ -20,12 +20,25 @@ import {
   cacheRoot,
   codeMateRuntimeRoot,
   codeMateToolHome,
-  codeMateToolsRoot,
   deepSeekHarnessHome
 } from '@main/services/deepSeekHarness/paths'
-import { crossPlatformSpawn } from '@main/utils/processRunner'
 import { withPathPrepend } from '@main/utils/shellEnv'
+import { judgeManagedApplication } from './applicationStatus'
+import { buildInPlace } from './atomicSwap'
+import { createProgressThrottle, type DownloadProgress, selectProgressUpdate } from './downloadFile'
+import {
+  managedBinaryPathFor,
+  type ManagedToolKind,
+  managedToolKind,
+  sourceTreeDir,
+  sourceVenvDir,
+  sourceVenvPython,
+  toolDir
+} from './layout'
+import { installMarketBundle, nodeMarketIo, readProfileBundleVersion } from './marketBaseline'
+import { NPM_REGISTRY_MIRROR } from './registry'
 import { removeTreeWithRetry } from './removeTree'
+import { DEFAULT_COMMAND_TIMEOUT_MS, runBoundedCommand } from './runCommand'
 import {
   deployFrontDist,
   downloadSourceZip,
@@ -47,16 +60,14 @@ const SNAPSHOT_CACHE_FILENAME = 'snapshot-cache.json'
 const SNAPSHOT_REFRESH_COOLDOWN_MS = 15_000
 
 // V2 快照/操作超时预算的等价裁剪：安装是分钟级（V2 MISE_INSTALL_TIMEOUT_MS 同量级），
-// 查询是秒级。
-const INSTALL_TIMEOUT_MS = 15 * 60_000
+// 查询是秒级。命令超时预算已抽到 runCommand（市场通道共用同一个默认值）。
 const NPM_VIEW_TIMEOUT_MS = 15_000
 const PYPI_TIMEOUT_MS = 10_000
-const OUTPUT_TAIL_LIMIT = 16 * 1024
 
 // fork 缝：registry 固定走 npmmirror（V2 走用户代理/区域策略 + mise 内部解析；portable
 // 安装器为可预期行为写死镜像）。pip 源 official 在前、清华镜像在后（pip 按序尝试）——
 // 与 V2 的清华镜像策略对应（V2 另有腾讯镜像背书，fork 裁为单镜像）。
-const NPM_REGISTRY_MIRROR = 'https://registry.npmmirror.com'
+// v0.4.5-1：镜像/备用源常量已单点到 registry.ts（市场通道共用同一份，见该件注释）。
 // v0.3.4-2（用户裁决）：dsh 通道锚 npm 的 `next` dist-tag——社区的当前代际发在 next
 // （0.1.7-rc.2），`latest` 停在 0.1.5-rc.3 不动；锚 latest 就永远收不到新一代（真机
 // 取证：用户对比社区桌面壳发现"已经到 0.17 而这里还是 0.15 且没有推送更新"）。
@@ -64,8 +75,16 @@ const NPM_REGISTRY_MIRROR = 'https://registry.npmmirror.com'
 const DSH_NPM_DIST_TAG = 'next'
 const PYPI_OFFICIAL_INDEX = 'https://pypi.org/simple'
 const PYPI_TSINGHUA_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
+/**
+ * PyPI **JSON API** 的双源（与上面的 simple 索引两源一一对应）。bandersnatch 系镜像同样
+ * 伺服 `/pypi/<name>/json`，故"版本查询"与"安装抓包"可以用同一对源，不会一半通一半不通。
+ */
+const PYPI_JSON_BASES = ['https://pypi.org/pypi', 'https://pypi.tuna.tsinghua.edu.cn/pypi'] as const
 
 const TOOL_VERSION_MARKER = '.codemate-version'
+
+/** 失败原因在快照里保留的字符数（够看到 pnpm/npm 的关键几行，又不至于把缓存写肿）。 */
+const INSTALL_FAILURE_DETAIL_LIMIT = 600
 
 // v0.3.4-2（用户裁决）：通道版本可见化——主进程启动即打一行安装通道，日志里一眼
 // 可辨运行中的代码是否加载了本次改动（真机取证：dev 未重启时 npm 日志显示旧 spec，
@@ -87,15 +106,29 @@ export type BinaryToolSnapshot = {
   name: string
   application: BinaryApplicationStatus
   availability: BinaryAvailability
+  /**
+   * v0.4.5-1：该工具**最近一次**安装/升级失败的原始原因（已 redactSecretText 清洗）。
+   * 主进程持有并随快照下发/落盘，故渲染层的失败行刷新页面后依然在——此前失败原因只活在
+   * 一次 toast 里，用户回头再看就没了。
+   */
+  lastFailure?: string
 }
 
 export type BinaryOperationResult = { success: true } | { success: false; message: string }
 
 export type BinaryRemoveResult = { removed: boolean; message?: string }
 
-/** v0.4.5：手动检查更新的结论（渲染层按钮的结果反馈与版本卡注入面）。 */
+/** v0.4.5：手动检查更新的结论（渲染层按钮的结果反馈与版本卡注入面）。
+ * v0.4.5-1（O1）：加 `source` 分态——只有受管安装才谈得上"本应用可升级"。 */
 export type BinaryCheckUpdatesResult =
-  | { success: true; current?: string; latest?: string; canUpgrade: boolean }
+  | {
+      success: true
+      /** 解析到的安装来源；非 managed 时 latest/current 无意义（不查、也不比）。 */
+      source: BinaryAvailability['source']
+      current?: string
+      latest?: string
+      canUpgrade: boolean
+    }
   | { success: false; message: string }
 
 // ---------------------------------------------------------------------------
@@ -105,24 +138,19 @@ export type BinaryCheckUpdatesResult =
 interface ToolPlan {
   name: string
   preset: BinaryToolPreset
-  kind: 'npm' | 'venv' | 'source'
+  kind: ManagedToolKind
   /** 1:1 运行时映射（node↔dsh、python↔hermes/paper-agent；fork 缝：写死，V2 由 mise 统一管理）。 */
   runtime: 'node' | 'python'
 }
 
 function toToolPlan(preset: BinaryToolPreset): ToolPlan | undefined {
-  switch (preset.install) {
-    case 'npm':
-      return { name: preset.executable, preset, kind: 'npm', runtime: 'node' }
-    case 'pipx':
-      return { name: preset.executable, preset, kind: 'venv', runtime: 'python' }
-    // v0.4.5：源码型（GitHub 树 + venv 依赖 + 前端构建），运行时同为受管 CPython。
-    case 'source':
-      return { name: preset.executable, preset, kind: 'source', runtime: 'python' }
-    default:
-      logger.warn(`Managed installer does not support backend "${preset.install}" for tool ${preset.executable}`)
-      return undefined
+  const kind = managedToolKind(preset)
+  if (!kind) {
+    logger.warn(`Managed installer does not support backend "${preset.install}" for tool ${preset.executable}`)
+    return undefined
   }
+  // 源码型（'source'：GitHub 树 + venv 依赖 + 前端构建）与 venv 型同为受管 CPython。
+  return { name: preset.executable, preset, kind, runtime: kind === 'npm' ? 'node' : 'python' }
 }
 
 const TOOL_PLANS: ReadonlyMap<string, ToolPlan> = new Map(
@@ -138,51 +166,21 @@ const REQUIRED_PEERS: ReadonlyMap<string, { host: string; peer: string }> = new 
   )
 )
 
-function toolDir(name: string): string {
-  return path.join(codeMateToolsRoot(), name)
-}
-
-/** 源码型工具的源码树落点（升级整树替换；用户态不在此，见 codeMateToolHome）。 */
-function sourceTreeDir(name: string): string {
-  return path.join(toolDir(name), 'src')
-}
-
-/** 源码型工具的 venv 落点（跨升级保留，依赖变更由 pip 增量解析）。 */
-function sourceVenvDir(name: string): string {
-  return path.join(toolDir(name), 'venv')
-}
-
-function sourceVenvPython(name: string): string {
-  return isWin
-    ? path.join(sourceVenvDir(name), 'Scripts', 'python.exe')
-    : path.join(sourceVenvDir(name), 'bin', 'python3')
-}
-
 /** codeload zip 的顶层包裹目录名（GitHub 固定为 `<RepoName>-<sha>`）。 */
 function sourceRepoName(plan: ToolPlan): string {
   const slug = plan.preset.repo ?? plan.preset.packageName
   return slug.split('/')[1] ?? plan.name
 }
 
-/** 受管可执行文件的落点（resolveBinary.ts 的受管探测映射与本函数保持一致）。 */
+/**
+ * 受管可执行文件的落点（v0.4.5-1：布局知识单点到 layout.ts，resolveBinary 与
+ * PaperAgentService 共用同一份）。此处的 throw 只在"预设表出现无布局的后端"时可达——
+ * 那是安装器自己的配置错误，应当响亮失败而不是猜路径。
+ */
 function managedBinaryPath(plan: ToolPlan): string {
-  if (plan.kind === 'npm') {
-    // npm 型：bin shim 在 node_modules/.bin（Windows 为 .cmd）。
-    return path.join(
-      toolDir(plan.name),
-      'node_modules',
-      '.bin',
-      isWin ? `${plan.preset.executable}.cmd` : plan.preset.executable
-    )
-  }
-  if (plan.kind === 'source') {
-    // 源码型：受管"可执行物" = 该工具 venv 的解释器（快照探针与版本标记的存在性判据）。
-    return sourceVenvPython(plan.name)
-  }
-  // venv 型：Windows 在 Scripts/，Unix 在 bin/。
-  return isWin
-    ? path.join(toolDir(plan.name), 'Scripts', `${plan.preset.executable}.exe`)
-    : path.join(toolDir(plan.name), 'bin', plan.preset.executable)
+  const target = managedBinaryPathFor(plan.name)
+  if (!target) throw new Error(`No managed layout is registered for tool "${plan.name}"`)
+  return target
 }
 
 async function pathExists(target: string): Promise<boolean> {
@@ -231,6 +229,12 @@ export class BinaryManager {
   private readonly operationMutex = new Mutex()
   private snapshotCache: { data: Record<string, BinaryToolSnapshot>; at: number } | null = null
   private snapshotProbeInFlight: Promise<void> | null = null
+  /**
+   * v0.4.5-1：每个工具最近一次的安装失败原因（executable → 已清洗的消息）。
+   * 生命周期与工具状态同档：开始新一次尝试时清除、失败时写入、卸载成功时清除。随快照落盘，
+   * 故"上次为什么失败"在重启后仍可读。
+   */
+  private readonly installFailures = new Map<string, string>()
 
   /**
    * 主计算的工具快照（V2 getToolSnapshots 形状：application 与 availability 是两个独立
@@ -312,21 +316,23 @@ export class BinaryManager {
     const managedPath = managedBinaryPath(plan)
     if (await pathExists(managedPath)) {
       const version = await readToolVersionMarker(plan.name)
-      // broken 判定：requiredPeer 校验失败（npm 型）、或 --version 探针失败（批次5：
-      // 装了但跑不起来——peer 缺失/损坏/版本过旧）。broken 也算"装了"（V2 语义）。
-      let application: BinaryApplicationStatus = 'applied'
-      if (plan.kind === 'npm' && plan.preset.requiredPeer) {
-        application = this.hasRequiredRuntimeDependencies(plan.name, managedPath) ? 'applied' : 'broken'
-      }
-      // v0.4.5 源码型：版本标记（安装时记录的 commit SHA）与用户态部署产物（FastAPI 以
-      // cwd 相对路径伺服 home/<tool>/front/dist）缺一即"装了但跑不起来"——安装被中断的
-      // 典型形态。
-      if (plan.kind === 'source') {
-        const deployed = await pathExists(path.join(codeMateToolHome(plan.name), 'front', 'dist', 'index.html'))
-        if (!version || !deployed) application = 'broken'
-      }
+      // v0.4.5-1：判定抽到 applicationStatus.ts（纯函数 + 单测）。最要紧的一条是**版本标记
+      // 缺失 ⇒ broken**——安装器把它写在最后，"核心换新、市场没换"的半成品此前被判 applied
+      // 且显示"最新版本"（真机反馈：升级成功但插件市场不可用，还没有重试入口）。
       const probe = await probeBinary(managedPath)
-      if (!probe.runnable) application = 'broken'
+      const application = judgeManagedApplication({
+        kind: plan.kind,
+        hasVersionMarker: !!version,
+        probeRunnable: probe.runnable,
+        ...(plan.kind === 'npm' && plan.preset.requiredPeer
+          ? { requiredPeerSatisfied: this.hasRequiredRuntimeDependencies(plan.name, managedPath) }
+          : {}),
+        ...(plan.kind === 'source'
+          ? {
+              frontDeployed: await pathExists(path.join(codeMateToolHome(plan.name), 'front', 'dist', 'index.html'))
+            }
+          : {})
+      })
       return {
         name: plan.name,
         application,
@@ -334,7 +340,8 @@ export class BinaryManager {
           source: 'managed',
           path: managedPath,
           ...((version ?? probe.version) ? { version: version ?? probe.version } : {})
-        }
+        },
+        ...(this.installFailures.get(plan.name) ? { lastFailure: this.installFailures.get(plan.name) } : {})
       }
     }
     // v0.4.5 源码型无 PATH 可执行物（其入口恒为受管 venv 解释器）——不探系统 PATH，
@@ -392,15 +399,23 @@ export class BinaryManager {
     }
   }
 
-  /** 安装（mutex 串行）。message 经 redactSecretText 清洗。 */
-  installTool(name: BinaryToolName): Promise<BinaryOperationResult> {
+  /**
+   * 安装（mutex 串行）。message 经 redactSecretText 清洗。
+   *
+   * `targetVersion`（v0.4.5-1）来自渲染层"检查更新"的结论：检查到 A 就装 A。此前这个入参
+   * 被渲染层 `void` 掉，装的恒是"点按钮那一刻的通道最新版"（`@next` 这类漂移 tag 下就是
+   * "报 A 装 B"）。npm/venv 型按精确版本下 spec；源码型见 installSourceTool 的说明。
+   */
+  installTool(name: BinaryToolName, targetVersion?: string): Promise<BinaryOperationResult> {
     const plan = TOOL_PLANS.get(name)
     if (!plan) return Promise.resolve({ success: false, message: `Unknown managed tool: ${name}` })
     return this.operationMutex.runExclusive(async () => {
+      // 新一次尝试开始：清掉上一次的失败记忆（失败行只在"上次失败且当前不在忙"时出现）。
+      this.installFailures.delete(name)
       try {
-        if (plan.kind === 'npm') await this.installNpmTool(plan)
-        else if (plan.kind === 'venv') await this.installVenvTool(plan)
-        else await this.installSourceTool(plan)
+        if (plan.kind === 'npm') await this.installNpmTool(plan, targetVersion)
+        else if (plan.kind === 'venv') await this.installVenvTool(plan, targetVersion)
+        else await this.installSourceTool(plan, targetVersion)
         // v0.3.4-2：成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
         // 不再闪回安装前旧态。
         await this.refreshSnapshotCache().catch((error) =>
@@ -410,6 +425,9 @@ export class BinaryManager {
       } catch (error) {
         const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
         logger.warn(`Failed to install managed tool ${name}`, { error: message })
+        // v0.4.5-1：把原因留在主进程（随快照下发/落盘）——渲染层的失败行据此持久显示，
+        // 不再"刷新一下就没原因了"。截断避免把整段 pnpm 输出写进快照缓存。
+        this.installFailures.set(name, message.slice(0, INSTALL_FAILURE_DETAIL_LIMIT))
         return { success: false as const, message }
       } finally {
         this.broadcastChanged()
@@ -418,9 +436,9 @@ export class BinaryManager {
   }
 
   /** dsh（npm 型）：受管 node → npm install --prefix → 版本标记 → bundle 装配（dshmarket + PPT）。 */
-  private async installNpmTool(plan: ToolPlan): Promise<void> {
+  private async installNpmTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
     this.broadcastInstallProgress(plan.name, 'runtime')
-    const runtime = await ensureNodeRuntime()
+    const runtime = await ensureNodeRuntime({ onProgress: this.downloadProgressReporter(plan.name, 'runtime') })
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
     // PATH 首位钉受管 node（npm shim 再启 node 时取它）；缓存钉 CodeMate 子树。
@@ -435,14 +453,16 @@ export class BinaryManager {
     // 继承此 env → pnpm 子进程的 store 落点受控，卸载=删子树仍成立）。
     env.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
     this.broadcastInstallProgress(plan.name, 'install')
-    await this.runCommand(
-      runtime.npmBin,
-      ['install', '--prefix', dir, `${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`],
-      {
-        env,
-        label: `npm install ${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`
-      }
-    )
+    // v0.4.5-1（O2）：带了检查到的版本就钉精确版——"报 A 装 B"正是通道 tag 漂移下的常态。
+    // 不设静默回退：装到与用户要求不同的版本，等于把刚修掉的问题换个地方放回去；精确版若
+    // 已从 registry 撤下，就如实失败（失败原因现在会持久显示，用户可再点一次检查更新）。
+    const npmSpec = targetVersion
+      ? `${plan.preset.packageName}@${targetVersion}`
+      : `${plan.preset.packageName}@${DSH_NPM_DIST_TAG}`
+    await this.runCommand(runtime.npmBin, ['install', '--prefix', dir, npmSpec], {
+      env,
+      label: `npm install ${npmSpec}`
+    })
 
     const managedPath = managedBinaryPath(plan)
     if (!(await pathExists(managedPath))) {
@@ -454,6 +474,9 @@ export class BinaryManager {
     // v0.3.4-2：bundle 装配——dshmarket（插件市场）+ PPT（社区预构建 tgz）。
     // 全走 dsh 自带的 `plugin add` 命令（官方 bundle 安装通道：pnpm add 到 profile 树
     // + reconcilePlugins 自动把声明 dsh.bundle 的依赖加进 dsh.profile.bundles）。
+    // v0.4.5-1：市场那一条已改走受管市场通道（见 marketBaseline.ts）——裸 `add dshmarket`
+    // 没有版本契约、没有 --workspace-root、没有装后核验，核心升级后市场停旧版就是这个
+    // 缺口造成的（真机反馈"新版本的插件市场不可用"）。
     //
     // 两次真机事故的命门都在这条链的环境上：
     // ① DSH_HOME 必须显式传入——runPlugin 内 resolveProfileDir → resolveDshHome() 读
@@ -481,6 +504,9 @@ export class BinaryManager {
     // v0.3.4-2 真机事故（首装无市场）：首次安装时 profile 尚不存在（harness 首次启动才
     // 创建）——不 mkdir 则 .npmrc 写入 ENOENT → bundle 装配链整体中断，dsh 能启动但
     // 没有市场；卸载不删 home 树 → 首次启动建好 profile 后重装才有。真机现象完全吻合。
+    // v0.4.5-1 更正：pnpm ≥10 已不从 .npmrc 读链接器/registry 设置（harness 自己的
+    // initProfile 写的是 pnpm-workspace.yaml）——本行对 npm 通道与旧 pnpm 仍有意义，
+    // 真正生效的是各条命令的 --registry 与 marketBaseline 的命令环境。
     await fsp.mkdir(webProfileDir, { recursive: true })
     await fsp.writeFile(
       path.join(webProfileDir, '.npmrc'),
@@ -488,12 +514,8 @@ export class BinaryManager {
       'utf-8'
     )
     this.broadcastInstallProgress(plan.name, 'market')
-    await this.runCommand(
-      runtime.nodeBin,
-      [binJs, 'plugin', '--profile', 'web', 'add', 'dshmarket', ...pnpmRegistryArgs],
-      { env: bundleEnv, label: 'dsh plugin add dshmarket', timeoutMs: 300_000 }
-    )
-    logger.info('dshmarket bundle installed')
+    const market = await installMarketBundle()
+    logger.info(`dshmarket bundle installed (${market.version ?? 'version unreadable'})`)
 
     // v0.3.4-2 真机修正：PPT 从 registry 装 `dsh-ppt@latest`（0.4.5，官方 DSH 演示文稿
     // 插件——技能+工具形态，声明 dsh.bundle ✓）。弃用社区 tgz（0.1.1-rc.2-desktop 旧
@@ -507,7 +529,15 @@ export class BinaryManager {
       [binJs, 'plugin', '--profile', 'web', 'add', 'dsh-ppt@latest', ...pnpmRegistryArgs],
       { env: bundleEnv, label: 'dsh plugin add dsh-ppt', timeoutMs: 300_000 }
     )
-    logger.info('dsh-ppt bundle installed')
+    // v0.4.5-1：pnpm 退出 0 ≠ 插件生效（社区版同款纪律）。PPT bundle 也核验一次——市场
+    // 那条有基线兜底，这条至少留下"装没装上"的事实，缺失即安装失败上抛。
+    const pptVersion = await readProfileBundleVersion(nodeMarketIo, webProfileDir, 'dsh-ppt')
+    if (!pptVersion) {
+      throw new Error(
+        `dsh plugin add dsh-ppt reported success, but ${path.join(webProfileDir, 'node_modules', 'dsh-ppt')} is not installed`
+      )
+    }
+    logger.info(`dsh-ppt bundle installed (${pptVersion})`)
 
     const version = await readNpmPackageVersion(
       path.join(dir, 'node_modules', ...plan.preset.packageName.split('/'), 'package.json')
@@ -516,55 +546,68 @@ export class BinaryManager {
   }
 
   /** hermes（pipx 型 → venv 等价）：受管 CPython → python -m venv → venv pip install。 */
-  private async installVenvTool(plan: ToolPlan): Promise<void> {
+  private async installVenvTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
     this.broadcastInstallProgress(plan.name, 'runtime')
-    const { pythonBin } = await ensurePythonRuntime()
-    const dir = toolDir(plan.name)
-    await fsp.rm(dir, { recursive: true, force: true })
-    this.broadcastInstallProgress(plan.name, 'venv')
-    await this.runCommand(pythonBin, ['-m', 'venv', dir], {
-      env: { ...process.env },
-      label: `python -m venv ${plan.name}`
+    const { pythonBin } = await ensurePythonRuntime({
+      onProgress: this.downloadProgressReporter(plan.name, 'runtime')
     })
-    const venvPython = isWin ? path.join(dir, 'Scripts', 'python.exe') : path.join(dir, 'bin', 'python3')
-    if (!(await pathExists(venvPython))) {
-      throw new Error(`venv created but ${venvPython} is missing; ${dir} contains: ${await listDirForDiagnostics(dir)}`)
-    }
-    // fork 缝：extras 数据（pipxExtras:['web']）留在 shared 预设，venv 规格按用户裁决写死
-    // 为 <packageName>[web]；official 源在前、清华镜像在后（pip 按序尝试）。
-    const pipSpec = `${plan.preset.packageName}[web]`
-    this.broadcastInstallProgress(plan.name, 'pip')
-    await this.runCommand(
-      venvPython,
-      [
-        '-m',
-        'pip',
-        'install',
-        '--cache-dir',
-        path.join(cacheRoot(), 'pip'),
-        '--index-url',
-        PYPI_OFFICIAL_INDEX,
-        '--extra-index-url',
-        PYPI_TSINGHUA_INDEX,
-        pipSpec
-      ],
-      { env: { ...process.env }, label: `pip install ${pipSpec}` }
-    )
-    // 版本标记：pip show 解析 Version 行；解析失败留空。
-    let version = ''
-    try {
-      version = parsePipShowVersion(
-        await this.runCommand(venvPython, ['-m', 'pip', 'show', plan.preset.packageName], {
-          env: { ...process.env },
-          label: `pip show ${plan.preset.packageName}`
-        })
-      )
-    } catch (error) {
-      logger.warn(`Failed to resolve installed version of ${plan.preset.packageName}`, {
-        error: this.errorMessage(error)
+    // 路径用变量名与本类其余处一致，便于对照（venv 的受管布局见 managedBinaryPath）。
+    const dir = toolDir(plan.name)
+    // v0.4.5-1：改走 buildInPlace——旧实现在建 venv 之前就把整个工具目录删了，pip 阶段一失败
+    // 用户手上就只剩残骸（没有旧安装可退）。venv 必须在最终路径上生成（launcher/脚本把绝对
+    // 路径写死），故不能走 staging 改名。
+    await buildInPlace(dir, async (target) => {
+      this.broadcastInstallProgress(plan.name, 'venv')
+      await this.runCommand(pythonBin, ['-m', 'venv', target], {
+        env: { ...process.env },
+        label: `python -m venv ${plan.name}`
       })
-    }
-    await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), version, 'utf-8')
+      const builtPython = isWin ? path.join(target, 'Scripts', 'python.exe') : path.join(target, 'bin', 'python3')
+      if (!(await pathExists(builtPython))) {
+        throw new Error(
+          `venv created but ${builtPython} is missing; ${target} contains: ${await listDirForDiagnostics(target)}`
+        )
+      }
+      // fork 缝：extras 数据（pipxExtras:['web']）留在 shared 预设，venv 规格按用户裁决写死
+      // 为 <packageName>[web]；official 源在前、清华镜像在后（pip 按序尝试）。
+      // v0.4.5-1（O2）：带了检查到的版本就钉 `==<版本>`（PyPI 上"报 A 装 B"同样可能——
+      // 检查走 JSON API、安装走 pip 解析，两者跨源跨时刻）。
+      const pipSpec = targetVersion
+        ? `${plan.preset.packageName}[web]==${targetVersion}`
+        : `${plan.preset.packageName}[web]`
+      this.broadcastInstallProgress(plan.name, 'pip')
+      await this.runCommand(
+        builtPython,
+        [
+          '-m',
+          'pip',
+          'install',
+          '--cache-dir',
+          path.join(cacheRoot(), 'pip'),
+          '--index-url',
+          PYPI_OFFICIAL_INDEX,
+          '--extra-index-url',
+          PYPI_TSINGHUA_INDEX,
+          pipSpec
+        ],
+        { env: { ...process.env }, label: `pip install ${pipSpec}` }
+      )
+      // 版本标记：pip show 解析 Version 行；解析失败留空。
+      let version = ''
+      try {
+        version = parsePipShowVersion(
+          await this.runCommand(builtPython, ['-m', 'pip', 'show', plan.preset.packageName], {
+            env: { ...process.env },
+            label: `pip show ${plan.preset.packageName}`
+          })
+        )
+      } catch (error) {
+        logger.warn(`Failed to resolve installed version of ${plan.preset.packageName}`, {
+          error: this.errorMessage(error)
+        })
+      }
+      await fsp.writeFile(path.join(target, TOOL_VERSION_MARKER), version, 'utf-8')
+    })
   }
 
   /**
@@ -575,18 +618,36 @@ export class BinaryManager {
    * 增量解析依赖变更），用户态在 home/<tool> 全程不受影响。"装的恒是该分支当前 HEAD"
    * 沿用 fork 既有的 name-only 安装语义（不做 SHA 钉定）。
    */
-  private async installSourceTool(plan: ToolPlan): Promise<void> {
+  private async installSourceTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
     const { repo, branch } = plan.preset
     if (!repo || !branch) {
       throw new Error(`Source tool "${plan.name}" has no repo/branch configured`)
     }
     this.broadcastInstallProgress(plan.name, 'runtime')
-    const [{ pythonBin }, nodeRuntime] = await Promise.all([ensurePythonRuntime(), ensureNodeRuntime()])
+    // v0.4.5-1：两个运行时**串行**下载。原先并行是为了快，但两个各 ~30MB 的档案同时上报
+    // 字节进度，进度条会在两条曲线之间来回跳（"真实进度"变成噪声）；串行的总字节数不变，
+    // 换来的是一个单调可信的条。
+    const { pythonBin } = await ensurePythonRuntime({
+      onProgress: this.downloadProgressReporter(plan.name, 'runtime')
+    })
+    const nodeRuntime = await ensureNodeRuntime({
+      onProgress: this.downloadProgressReporter(plan.name, 'runtime')
+    })
 
     this.broadcastInstallProgress(plan.name, 'source')
     // 先钉 SHA 再按 SHA 取 zip：分支在两次请求之间被推进也不会装到"另一半"。
     const sha = await resolveHeadSha(repo, branch)
-    const archivePath = await downloadSourceZip(repo, sha, cacheRoot())
+    // v0.4.5-1（O2）：源码型**无法**按渲染层给的短 SHA 钉定——codeload 要完整 40 位 SHA，
+    // 而版本卡展示的是 8 位短 SHA。这里如实记录"装的是分支当前 HEAD、而非检查时那一个提交"，
+    // 卡片会在安装后按实际 SHA 自校正（marker 写的是真 SHA）。
+    if (targetVersion && !sha.startsWith(targetVersion)) {
+      logger.warn(
+        `Source tool ${plan.name}: installing ${sha.slice(0, 8)} while the checked commit was ${targetVersion} (the branch moved)`
+      )
+    }
+    const archivePath = await downloadSourceZip(repo, sha, cacheRoot(), {
+      onProgress: this.downloadProgressReporter(plan.name, 'source')
+    })
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
     const sourceDir = sourceTreeDir(plan.name)
@@ -599,16 +660,20 @@ export class BinaryManager {
     const venvPython = sourceVenvPython(plan.name)
     if (!(await pathExists(venvPython))) {
       this.broadcastInstallProgress(plan.name, 'venv')
-      await removeTreeWithRetry(sourceVenvDir(plan.name))
-      await this.runCommand(pythonBin, ['-m', 'venv', sourceVenvDir(plan.name)], {
-        env: { ...process.env },
-        label: `python -m venv ${plan.name}`
+      // v0.4.5-1：venv 用 buildInPlace（在最终路径上生成 + 失败回滚），不再"先删 venv 再建"。
+      const venvDir = sourceVenvDir(plan.name)
+      await buildInPlace(venvDir, async (target) => {
+        await this.runCommand(pythonBin, ['-m', 'venv', target], {
+          env: { ...process.env },
+          label: `python -m venv ${plan.name}`
+        })
+        const built = sourceVenvPython(plan.name)
+        if (!(await pathExists(built))) {
+          throw new Error(
+            `venv created but ${built} is missing; ${target} contains: ${await listDirForDiagnostics(target)}`
+          )
+        }
       })
-      if (!(await pathExists(venvPython))) {
-        throw new Error(
-          `venv created but ${venvPython} is missing; ${sourceVenvDir(plan.name)} contains: ${await listDirForDiagnostics(sourceVenvDir(plan.name))}`
-        )
-      }
     }
 
     this.broadcastInstallProgress(plan.name, 'deps')
@@ -703,6 +768,8 @@ export class BinaryManager {
           return { removed: false, message: redactSecretText(message) }
         }
         // v0.3.4-2：同安装——卸载后强制重探，广播命中的是已移除状态。
+        // v0.4.5-1：工具没了，它的失败记忆也没意义。
+        this.installFailures.delete(name)
         await this.refreshSnapshotCache().catch((error) =>
           logger.warn('Post-remove snapshot refresh failed', error as Error)
         )
@@ -740,7 +807,14 @@ export class BinaryManager {
       const snapshots = await this.refreshSnapshotCache()
       this.broadcastChanged()
       const availability = snapshots[name]?.availability
-      const current = availability?.source === 'managed' ? availability.version : undefined
+      // v0.4.5-1（O1）：**非受管安装不谈"版本"**。系统来源（PATH 上的同名工具）本应用既
+      // 不知道它是什么版本、也升不了它；旧实现在这种情况下 current 恒为 undefined →
+      // canUpgrade:false → 渲染层弹"已是最新版本"，那是对用户的假陈述。这里直接给出来源，
+      // 由渲染层说人话（"该系统安装不受本应用管理"）。
+      if (availability?.source !== 'managed') {
+        return { success: true, source: availability?.source ?? 'none', canUpgrade: false }
+      }
+      const current = availability.version
       let latest: string | undefined
       if (plan.kind === 'npm') latest = await this.latestNpmVersion(name)
       else if (plan.kind === 'venv') latest = await this.latestPypiVersion(name)
@@ -753,6 +827,7 @@ export class BinaryManager {
       }
       return {
         success: true,
+        source: 'managed',
         ...(current ? { current } : {}),
         ...(latest ? { latest } : {}),
         // 升级的前提是"装着一个版本"：未安装时 latest 只是"可装的最新版"，不是"可升级"。
@@ -790,20 +865,32 @@ export class BinaryManager {
     }
   }
 
+  /**
+   * 最新版本查询（PyPI JSON API）。**双源**：pypi.org 在前、清华镜像在后——与安装期
+   * `pip install --index-url pypi.org --extra-index-url tsinghua` 的策略对齐。
+   * v0.4.5-1 修的是"两半不同源"：安装能退到镜像，而版本查询只有 pypi.org——墙内它不可达时
+   * 检查更新就静默无结论（用户看到的是"没有新版本"）。
+   */
   private async latestPypiVersion(name: string): Promise<string | undefined> {
     const plan = TOOL_PLANS.get(name)
     if (!plan || plan.kind !== 'venv') return undefined
-    try {
-      const response = await fetch(`https://pypi.org/pypi/${plan.preset.packageName}/json`, {
-        signal: AbortSignal.timeout(PYPI_TIMEOUT_MS)
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const payload = (await response.json()) as { info?: { version?: unknown } }
-      return typeof payload.info?.version === 'string' ? payload.info.version : undefined
-    } catch (error) {
-      logger.warn(`Failed to query latest version of ${plan.preset.packageName}`, { error: this.errorMessage(error) })
-      return undefined
+    const failures: string[] = []
+    for (const base of PYPI_JSON_BASES) {
+      try {
+        const response = await fetch(`${base}/${plan.preset.packageName}/json`, {
+          signal: AbortSignal.timeout(PYPI_TIMEOUT_MS)
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const payload = (await response.json()) as { info?: { version?: unknown } }
+        if (typeof payload.info?.version === 'string') return payload.info.version
+        throw new Error('the response carried no info.version')
+      } catch (error) {
+        // ASCII 箭头：→ 会被 GBK 控制台啃成乱码（真机日志取证）。
+        failures.push(`${base} -> ${this.errorMessage(error)}`)
+      }
     }
+    logger.warn(`Failed to query latest version of ${plan.preset.packageName}`, { failures })
+    return undefined
   }
 
   /** V2 broadcastAvailabilityChanged 的 fork 等价：无载荷全窗广播，消费者重拉快照。 */
@@ -819,12 +906,27 @@ export class BinaryManager {
   }
 
   /** v0.3.4-2（用户裁决）：安装步骤进度广播——渲染层进度条的数据源。step 为 i18n 键尾
-   * （code.install_progress.<step>），由渲染层翻译。 */
-  private broadcastInstallProgress(tool: BinaryToolName, step: string): void {
+   * （code.install_progress.<step>），由渲染层翻译；detail 为语言无关的补充事实（下载字节
+   * 数），fraction 为**进度条本体的确定性比例**（0..1，只有可测的阶段才有）。
+   *
+   * v0.4.5-1（用户反馈"进度条不反映真实下载进度"）：旧载荷只有步骤名，渲染层只能画一个
+   * 匀速脉冲的假条。可测的阶段（下载）带上 fraction，渲染层画真条；不可测的阶段
+   * （npm/pip/vite 的执行）不编造比例，保持不确定态——**宁可显示"不确定"，不显示假进度**。 */
+  private broadcastInstallProgress(
+    tool: BinaryToolName,
+    step: string,
+    options: { detail?: string; fraction?: number } = {}
+  ): void {
     try {
+      const { detail, fraction } = options
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
-          window.webContents.send(IpcChannel.CodeCli_Binary_InstallProgress, { tool, step })
+          window.webContents.send(IpcChannel.CodeCli_Binary_InstallProgress, {
+            tool,
+            step,
+            ...(detail ? { detail } : {}),
+            ...(typeof fraction === 'number' && Number.isFinite(fraction) ? { fraction } : {})
+          })
         }
       }
     } catch (error) {
@@ -832,41 +934,34 @@ export class BinaryManager {
     }
   }
 
+  /**
+   * 下载字节进度 → 进度条（detail 文本 + fraction 比例）。
+   *
+   * 判定逻辑（节流 / 完成必报 / 单调）是 downloadFile.ts 的纯函数 `selectProgressUpdate`——
+   * 放那里是为了可单测；此处只负责 I/O（广播）与"一个 throttle 实例 = 一个阶段"的约定：
+   * 调用方按阶段建各自的 reporter，阶段一变就换实例，比例随之从头开始。
+   */
+  private downloadProgressReporter(tool: BinaryToolName, step: string): (progress: DownloadProgress) => void {
+    const throttle = createProgressThrottle()
+    return (progress) => {
+      const update = selectProgressUpdate(throttle, progress)
+      if (!update) return
+      this.broadcastInstallProgress(tool, step, {
+        detail: update.detail,
+        ...(update.fraction !== undefined ? { fraction: update.fraction } : {})
+      })
+    }
+  }
+
+  /** v0.4.5-1：命令执行原语抽到 runCommand.ts（市场通道共用），此处保留同一入口名。 */
   private runCommand(
     executable: string,
     args: string[],
     options: { env: NodeJS.ProcessEnv; label: string; timeoutMs?: number; cwd?: string }
   ): Promise<string> {
-    const timeoutMs = options.timeoutMs ?? INSTALL_TIMEOUT_MS
-    return new Promise((resolve, reject) => {
-      // crossPlatformSpawn（cross-spawn）负责 Windows .cmd 的 cmd.exe 转发与逐参引号。
-      const child = crossPlatformSpawn(executable, args, {
-        env: options.env,
-        ...(options.cwd ? { cwd: options.cwd } : {})
-      })
-      let stdout = ''
-      let stderr = ''
-      const appendTail = (current: string, chunk: Buffer) => `${current}${chunk.toString()}`.slice(-OUTPUT_TAIL_LIMIT)
-      child.stdout?.on('data', (chunk: Buffer) => {
-        stdout = appendTail(stdout, chunk)
-      })
-      child.stderr?.on('data', (chunk: Buffer) => {
-        stderr = appendTail(stderr, chunk)
-      })
-      const timeout = setTimeout(() => {
-        child.kill()
-        reject(new Error(`${options.label} timed out after ${timeoutMs}ms`))
-      }, timeoutMs)
-      child.once('error', (error) => {
-        clearTimeout(timeout)
-        reject(new Error(`${options.label} failed to start: ${error.message}`))
-      })
-      child.once('close', (code) => {
-        clearTimeout(timeout)
-        if (code === 0) return resolve(stdout)
-        const output = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n')
-        reject(new Error(`${options.label} exited with code ${code}${output ? `\n${output}` : ''}`))
-      })
+    return runBoundedCommand(executable, args, {
+      ...options,
+      timeoutMs: options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS
     })
   }
 

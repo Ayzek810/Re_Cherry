@@ -42,6 +42,8 @@ import {
 } from './config'
 import type { KernelModelInput } from '@main/kernel/providers'
 import { cacheRoot, codeMateToolsRoot, deepSeekHarnessHome, deepSeekHarnessWorkspace, nodeRuntimeDir } from './paths'
+import { ensureMarketBaseline, marketUsableWithoutBaseline } from '../binaryManager/marketBaseline'
+import { NPM_REGISTRY_MIRROR } from '../binaryManager/registry'
 import { NODE_VERSION } from '../binaryManager/runtimeDownloader'
 import { startGatewayForCodeMate } from './gatewayRuntime'
 
@@ -57,9 +59,9 @@ const DIAGNOSTIC_LIMIT = 2000
 const GATEWAY_ROUTE = 'cherry-studio-codemate-gateway'
 const GATEWAY_CREDENTIAL_REF = 'CHERRY_STUDIO_CODEMATE_GATEWAY_API_KEY'
 const MANAGED_CREDENTIAL_ENV = /^CHERRY_STUDIO_CODEMATE_(?:[A-F0-9]{12}|GATEWAY)_API_KEY$/i
-// v0.3.4-2：与 BinaryManager 的 NPM_REGISTRY_MIRROR 同值（registry 钉 npmmirror，
-// harness 内 dshmarket 的 pnpm/npm 子进程继承）。
-const NPM_REGISTRY_MIRROR = 'https://registry.npmmirror.com'
+// v0.3.4-2：registry 钉 npmmirror，harness 内 dshmarket 的 pnpm/npm 子进程继承。
+// v0.4.5-1：常量单点到 binaryManager/registry.ts（原为"与 BinaryManager 同值"的复制件，
+// 复制件正是会漂移的那种东西——一处改了另一处不改，市场抓包与版本解析就走两个源）。
 
 /** fork 缝②：KernelModelInput.input 是 string[]（内核已卫生化），此处收窄为投影形状。 */
 function toModelProjection(model: KernelModelInput): DeepSeekHarnessModelProjection {
@@ -196,6 +198,13 @@ class DeepSeekHarnessService {
           if (startupAbortController.signal.aborted) {
             throw new Error('DeepSeek Harness startup was cancelled')
           }
+          // v0.4.5-1：启动前对齐插件市场基线。dshmarket 不是官方包（只是 profile 里的一个
+          // 普通依赖），核心升级后它不会跟着走——旧版市场与本代核心不兼容正是"插件市场
+          // 不可用"的根因（真机反馈）。此处 Harness 已停，是唯一能安全替换共享树包的时机。
+          await this.establishMarketBaseline()
+          if (startupAbortController.signal.aborted) {
+            throw new Error('DeepSeek Harness startup was cancelled')
+          }
           const synced = await this.syncConfig(input)
           const projection = synced.projection
           receipt = synced.receipt
@@ -256,6 +265,41 @@ class DeepSeekHarnessService {
       // A no-op stop (already stopped) still confirms the terminal state to the renderer.
       if (this.statusTransitionId === transitionBefore) this.setStatus('stopped', { force: true })
     })
+  }
+
+  /**
+   * v0.4.5-1：启动前的市场基线维护（社区版 dsh-desktop `ensureMarketBaseline` +
+   * `marketUsableWithoutBaseline` 的取舍逐条对位）。
+   *
+   * 快路径是两三次文件读（未声明市场 / 版本已达标 → 直接返回）。需要修复时它会改写
+   * profile manifest、撤 `.install-complete`、跑一次 `dsh plugin install` 并读回实际版本；
+   * **失败不阻断启动**——网络受限下装修复失败是常态，只要现有市场还能加载就保留它，
+   * 未完成的标记留给下次启动重试。只有"市场缺失/不可读/仍是链接形态"才让启动失败，
+   * 因为那种 profile 起来也是没有市场的坏状态（失败原因随启动失败一起给用户看）。
+   */
+  private async establishMarketBaseline(): Promise<void> {
+    try {
+      const outcome = await ensureMarketBaseline()
+      if (outcome.repaired) {
+        logger.info(`code-mate: dshmarket baseline established at ${outcome.version ?? 'unknown'}`)
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      let marketUsable = false
+      try {
+        marketUsable = await marketUsableWithoutBaseline()
+      } catch (inspectError) {
+        // 探不动的市场按不可用处理（fail-closed 到启动失败），但要留下为什么探不动。
+        logger.warn('code-mate: could not inspect the installed dshmarket', inspectError as Error)
+      }
+      if (marketUsable) {
+        logger.warn(
+          `code-mate: dshmarket baseline deferred, keeping the installed market: ${sanitizeDiagnostic(reason)}`
+        )
+        return
+      }
+      throw new Error(`dshmarket baseline could not be established: ${sanitizeDiagnostic(reason)}`)
+    }
   }
 
   private async rollbackLaunchConfig(receipt: DeepSeekHarnessConfigReceipt): Promise<void> {

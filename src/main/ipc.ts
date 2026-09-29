@@ -26,7 +26,7 @@ import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
 import BackupManager from './services/BackupManager'
 import { binaryManager } from './services/binaryManager/BinaryManager'
-import { isBinaryToolName, type BinaryToolName } from './services/binaryManager/presets'
+import { isBinaryToolName, BINARY_TOOL_NAMES, type BinaryToolName } from './services/binaryManager/presets'
 import { readCliConfigFiles, writeCliConfigFiles } from './services/codeCli/configWriter'
 import { configManager } from './services/ConfigManager'
 import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
@@ -849,13 +849,15 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   // 编码助手（v0.3.4-1 批次2）：portable 受管 CLI 安装器（装卸/快照/最新版本）。
   // 结果对象语义（{success}|{removed}）在 BinaryManager 内部完成清洗与日志；入参走
   // 白名单（parseBinaryToolName，见文件尾 parseCliConfig* 同款手写断言风格）。
-  ipcMain.handle(IpcChannel.CodeCli_Binary_Install, (_, name: unknown) => {
-    return binaryManager.installTool(parseBinaryToolName(name))
+  ipcMain.handle(IpcChannel.CodeCli_Binary_Install, (_, name: unknown, targetVersion: unknown) => {
+    return binaryManager.installTool(parseBinaryToolName(name), parseInstallTargetVersion(targetVersion))
   })
   ipcMain.handle(IpcChannel.CodeCli_Binary_Remove, (_, name: unknown) => {
     return binaryManager.removeTool(parseBinaryToolName(name))
   })
-  ipcMain.handle(IpcChannel.CodeCli_Binary_Snapshots, () => binaryManager.getToolSnapshots(['dsh', 'hermes']))
+  // v0.4.5-1：入参改用预设表（原为硬编码 ['dsh','hermes']——v0.4.5 加入 paper-agent 后这份
+  // 字面量就已过期，只因 getToolSnapshots 当前忽略入参才没暴露成真 bug）。
+  ipcMain.handle(IpcChannel.CodeCli_Binary_Snapshots, () => binaryManager.getToolSnapshots(BINARY_TOOL_NAMES))
   ipcMain.handle(IpcChannel.CodeCli_Binary_LatestVersions, () => binaryManager.getLatestVersions())
   // v0.4.5：手动检查更新（三个工具页共用；source 型只在此时触 GitHub——纯手动策略）。
   ipcMain.handle(IpcChannel.CodeCli_Binary_CheckUpdates, (_, name: unknown) => {
@@ -1023,6 +1025,19 @@ function parseCliConfigWriteInput(value: unknown): { cliTool: FileConfiguredCli;
 function parseBinaryToolName(value: unknown): BinaryToolName {
   if (!isBinaryToolName(value)) {
     throw new Error(`Invalid binary tool name: ${String(value)}`)
+  }
+  return value
+}
+
+/**
+ * v0.4.5-1：安装目标版本（可选）——渲染层从"检查更新"结论里带过来，主进程据此钉 spec。
+ * 只做形状与长度校验：它是 registry 版本串或短 SHA，不是路径/命令（不进 shell 拼接，
+ * 由 cross-spawn 逐参传递）。
+ */
+function parseInstallTargetVersion(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value !== 'string' || value.length > 64 || /[\s/\\]/.test(value)) {
+    throw new Error(`Invalid binary target version: ${String(value)}`)
   }
   return value
 }

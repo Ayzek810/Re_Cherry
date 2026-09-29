@@ -105,7 +105,9 @@ const api = {
     },
     // 受管 CLI 安装器（批次2）：装卸/快照/最新版本 + 变化广播订阅（照 onStatus 写法）。
     binary: {
-      install: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Install, name),
+      // v0.4.5-1：targetVersion 来自"检查更新"的结论——检查到 A 就装 A（主进程订 spec）。
+      install: (name: string, targetVersion?: string) =>
+        ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Install, name, targetVersion),
       remove: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Remove, name),
       snapshots: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Snapshots),
       latestVersions: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_LatestVersions),
@@ -119,9 +121,15 @@ const api = {
         }
       },
       // v0.3.4-2：安装步骤进度订阅（载荷 {tool, step}，step 为 i18n 键尾）。
-      onInstallProgress: (callback: (payload: { tool: string; step: string }) => void): (() => void) => {
-        const listener = (_event: Electron.IpcRendererEvent, payload: { tool: string; step: string }) =>
-          callback(payload)
+      // v0.4.5-1：detail 为语言无关的补充事实（下载字节数），fraction 为可测阶段的确定性
+      // 比例（0..1）——渲染层据此画真进度条，否则画不确定态。
+      onInstallProgress: (
+        callback: (payload: { tool: string; step: string; detail?: string; fraction?: number }) => void
+      ): (() => void) => {
+        const listener = (
+          _event: Electron.IpcRendererEvent,
+          payload: { tool: string; step: string; detail?: string; fraction?: number }
+        ) => callback(payload)
         ipcRenderer.on(IpcChannel.CodeCli_Binary_InstallProgress, listener)
         return () => {
           ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_InstallProgress, listener)

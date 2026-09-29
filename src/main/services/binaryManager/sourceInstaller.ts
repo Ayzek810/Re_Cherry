@@ -14,13 +14,22 @@ import StreamZip from 'node-stream-zip'
 
 import { loggerService } from '@logger'
 
-import { removeTreeWithRetry } from './removeTree'
+import { replaceDirectory } from './atomicSwap'
+import { type DownloadProgress, downloadFile } from './downloadFile'
 
 const logger = loggerService.withContext('SourceInstaller')
 
-const DOWNLOAD_TIMEOUT_MS = 120_000
 const API_TIMEOUT_MS = 10_000
 const EXTRACT_TIMEOUT_MS = 120_000
+/** GitHub API 的源内尝试次数（匿名限流是确定性拒绝，不在此列）。 */
+const API_ATTEMPTS = 3
+/**
+ * SHA 解析结果的短缓存。匿名 GitHub API 只有 60 次/时/IP，而这一条路径会被"检查更新"按钮
+ * 反复触发——同一个分支在缓存窗口内重复点按不该重复烧配额。窗口取 60s：跨窗口才可能看到
+ * 上游新提交，而检查更新本来就是"现在看一眼"的语义。
+ */
+const HEAD_SHA_TTL_MS = 60_000
+const headShaCache = new Map<string, { sha: string; at: number }>()
 
 /** GitHub API 要求显式 User-Agent（缺省 UA 会被 403）。 */
 const GITHUB_API_HEADERS = {
@@ -32,6 +41,9 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** 终态失败：重试没有意义（限流/权限），直接给用户可读原因。 */
+class TerminalApiError extends Error {}
+
 // ---------------------------------------------------------------------------
 // 上游版本事实：HEAD commit SHA
 // ---------------------------------------------------------------------------
@@ -39,47 +51,76 @@ function errorMessage(error: unknown): string {
 /**
  * 解析分支 HEAD 的 commit SHA。这是源码型工具唯一的版本判据——上游
  * Tswoen/Paper-Agent 无任何 tag/release，pyproject 版本号恒定 0.1.0。
+ *
+ * v0.4.5-1：加了源内重试与限流可言明失败。匿名 GitHub API 是 60 次/时/IP——共享出口下
+ * "查不到 SHA"是常态而非异常，旧实现一次失败就把整个安装判死，且原因是英文哑弹。
  */
 export async function resolveHeadSha(repo: string, branch: string): Promise<string> {
-  const response = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`, {
-    headers: GITHUB_API_HEADERS,
-    signal: AbortSignal.timeout(API_TIMEOUT_MS)
-  })
-  if (!response.ok) {
-    throw new Error(`GitHub API returned HTTP ${response.status} for ${repo}@${branch}`)
+  const cacheKey = `${repo}@${branch}`
+  const cached = headShaCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < HEAD_SHA_TTL_MS) return cached.sha
+
+  const failures: string[] = []
+  for (let attempt = 1; attempt <= API_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`, {
+        headers: GITHUB_API_HEADERS,
+        signal: AbortSignal.timeout(API_TIMEOUT_MS)
+      })
+      if (response.status === 403 || response.status === 429) {
+        const remaining = response.headers.get('x-ratelimit-remaining')
+        throw new TerminalApiError(
+          `GitHub API refused the request for ${repo}@${branch} (HTTP ${response.status}` +
+            `${remaining !== null ? `, remaining quota ${remaining}` : ''}). ` +
+            'Anonymous access allows 60 requests per hour per IP address; retry later or from another network.'
+        )
+      }
+      if (!response.ok) {
+        throw new Error(`GitHub API returned HTTP ${response.status} for ${repo}@${branch}`)
+      }
+      const payload = (await response.json()) as { sha?: unknown }
+      if (typeof payload.sha !== 'string' || !/^[0-9a-f]{40}$/.test(payload.sha)) {
+        throw new Error(`GitHub API did not return a commit SHA for ${repo}@${branch}`)
+      }
+      headShaCache.set(cacheKey, { sha: payload.sha, at: Date.now() })
+      return payload.sha
+    } catch (error) {
+      if (error instanceof TerminalApiError) throw error
+      failures.push(`attempt ${attempt}/${API_ATTEMPTS}: ${errorMessage(error)}`)
+      if (attempt < API_ATTEMPTS) {
+        logger.warn(`Failed to resolve ${repo}@${branch}, retrying`, { error: errorMessage(error) })
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt))
+      }
+    }
   }
-  const payload = (await response.json()) as { sha?: unknown }
-  if (typeof payload.sha !== 'string' || !/^[0-9a-f]{40}$/.test(payload.sha)) {
-    throw new Error(`GitHub API did not return a commit SHA for ${repo}@${branch}`)
-  }
-  return payload.sha
+  throw new Error(`Could not resolve ${repo}@${branch}: ${failures.join('; ')}`)
 }
 
 // ---------------------------------------------------------------------------
 // 源码下载
 // ---------------------------------------------------------------------------
 
-/** 按 SHA 下载源码 zip（codeload：内容固定，避免"分支在检查后又被推进"的漂移）。 */
-export async function downloadSourceZip(repo: string, sha: string, cacheDir: string): Promise<string> {
+/**
+ * 按 SHA 下载源码 zip（codeload：内容固定，避免"分支在检查后又被推进"的漂移）。
+ * v0.4.5-1：走 downloadFile 原语（流式落盘 + 空闲超时 + 断点续传 + 源内重试）——旧实现
+ * 对这类第三方/自建网络路径没有重试，抖动一次就整个安装失败。
+ */
+export async function downloadSourceZip(
+  repo: string,
+  sha: string,
+  cacheDir: string,
+  options: { onProgress?: (progress: DownloadProgress) => void } = {}
+): Promise<string> {
   const downloadsDir = path.join(cacheDir, 'downloads')
   await fsp.mkdir(downloadsDir, { recursive: true })
-  const fileName = `${repo.replace('/', '-')}-${sha}.zip`
-  const destPath = path.join(downloadsDir, fileName)
-  const partPath = `${destPath}.part`
+  const destPath = path.join(downloadsDir, `${repo.replace('/', '-')}-${sha}.zip`)
   const url = `https://codeload.github.com/${repo}/zip/${sha}`
-  try {
-    logger.info(`Downloading source tree from ${url}`)
-    const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) })
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`)
-    }
-    await fsp.writeFile(partPath, Buffer.from(await response.arrayBuffer()))
-    await fsp.rename(partPath, destPath)
-    return destPath
-  } catch (error) {
-    await fsp.rm(partPath, { force: true }).catch(() => undefined)
-    throw new Error(`Failed to download ${url}: ${errorMessage(error)}`)
-  }
+  logger.info(`Downloading source tree from ${url}`)
+  const result = await downloadFile(url, destPath, {
+    label: `Download ${repo}@${sha.slice(0, 8)}`,
+    ...(options.onProgress ? { onProgress: options.onProgress } : {})
+  })
+  return result.path
 }
 
 // ---------------------------------------------------------------------------
@@ -98,28 +139,12 @@ async function extractZip(archivePath: string, destDir: string): Promise<void> {
   }
 }
 
-async function renameWithRetry(source: string, target: string): Promise<void> {
-  let lastError: unknown
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    try {
-      await fsp.rename(source, target)
-      return
-    } catch (error) {
-      lastError = error
-      const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES') throw error
-      logger.warn(`Source tree rename attempt ${attempt}/5 failed (${code}), retrying`, { source, target })
-      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError))
-}
-
 /**
  * 把 codeload zip 的源码树归位到 targetDir：zip 顶层是 `<RepoName>-<sha>/` 包裹层
- * （GitHub 固定布局）→ 整体 rename；目标先删（重装/升级整树替换，源码树内无用户态）。
- * codeload 解压上限保护：源码树远小于运行时档案，沿用 runtimeDownloader 的
- * EXTRACT_TIMEOUT_MS 量级即可（node-stream-zip 无内建超时，此常量留作文档语义）。
+ * （GitHub 固定布局）→ 整体 rename。
+ *
+ * v0.4.5-1：改走原子替换——旧源码树先留作备份，切换失败就放回去。旧实现是"先删旧树再
+ * 改名"，删成功、改名失败（Windows 杀软/占用）就是"源码树没了、工具也起不来"。
  */
 export async function extractSourceTree(archivePath: string, targetDir: string, repoName: string): Promise<void> {
   void EXTRACT_TIMEOUT_MS
@@ -133,12 +158,12 @@ export async function extractSourceTree(archivePath: string, targetDir: string, 
         `Unexpected source archive layout: expected a single "${repoName}*" directory, got ${entries.join(', ') || '(empty)'}`
       )
     }
-    const removed = await removeTreeWithRetry(targetDir)
-    if (!removed) {
-      throw new Error(`Could not clear the previous source tree at ${targetDir} (files locked by a running process?)`)
+    const replaced = await replaceDirectory(path.join(tempDir, inner), targetDir)
+    if (!replaced) {
+      throw new Error(
+        `Could not replace the source tree at ${targetDir} (files locked by a running process?); the previous tree was kept`
+      )
     }
-    await fsp.mkdir(path.dirname(targetDir), { recursive: true })
-    await renameWithRetry(path.join(tempDir, inner), targetDir)
   } finally {
     await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
   }
@@ -214,7 +239,11 @@ export async function seedUserConfig(sourceDir: string, homeDir: string): Promis
 /**
  * 把构建好的前端产物复制到用户态根（home/front/dist）——FastAPI 以 cwd 相对路径
  * 伺服 `front/dist`（src/api/app.py `_mount_frontend`），而进程 cwd 是 home（用户态
- * 与源码树分离的关键，见 PaperAgentService）。整目录替换，避免旧构建的陈旧资源残留。
+ * 与源码树分离的关键，见 PaperAgentService）。
+ *
+ * v0.4.5-1：改走"复制到 staging → 原子替换"。旧实现是"先删 dist 再 cp"，且**丢弃了删除
+ * 结果**：删不掉（被杀软/进程占用）时 cp 会覆盖到旧产物之上，新旧 chunk 混杂，而快照仍判
+ * applied——用户看到的是"升级成功了但界面还是旧的"。
  */
 export async function deployFrontDist(sourceDir: string, homeDir: string): Promise<void> {
   const sourceDist = path.join(sourceDir, 'front', 'dist')
@@ -225,7 +254,17 @@ export async function deployFrontDist(sourceDir: string, homeDir: string): Promi
   } catch {
     throw new Error(`Front-end build produced no index.html at ${sourceDist}`)
   }
-  await removeTreeWithRetry(targetDist)
+  const stagingDist = path.join(targetFrontDir, `dist.new-${Date.now()}`)
   await fsp.mkdir(targetFrontDir, { recursive: true })
-  await fsp.cp(sourceDist, targetDist, { recursive: true })
+  try {
+    await fsp.cp(sourceDist, stagingDist, { recursive: true })
+    const replaced = await replaceDirectory(stagingDist, targetDist)
+    if (!replaced) {
+      throw new Error(
+        `Could not replace the deployed front-end at ${targetDist} (files locked by a running process?); the previous build was kept`
+      )
+    }
+  } finally {
+    await fsp.rm(stagingDist, { recursive: true, force: true }).catch(() => undefined)
+  }
 }

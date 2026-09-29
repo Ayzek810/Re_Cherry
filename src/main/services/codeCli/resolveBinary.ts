@@ -1,9 +1,8 @@
 // fork 缝：受管 CLI 二进制解析（2026-09-24，v0.3.4-1；批次2 升级；批次5 补能力探针）。
-// 解析顺序：CodeMate 受管目录（tools/ 子树）→ 系统 PATH（where/which）。受管探测在本文件
-// 内联（刻意不 import BinaryManager——依赖方向保持 resolveBinary（低层）← BinaryManager（高层）
-// 单向；BinaryManager 反向复用本文件的 probeSystemPath）。受管布局映射与 BinaryManager 的
-// managedBinaryPath 保持一致：executable 'dsh' → npm 型（node_modules/.bin），'hermes' →
-// venv 型（Scripts/bin）；其他 executable 不查受管。
+// 解析顺序：CodeMate 受管目录（tools/ 子树）→ 系统 PATH（where/which）。受管布局映射
+// v0.4.5-1 起由 binaryManager/layout.ts 提供（与安装器、PaperAgentService 同一份；此前
+// 本文件内联一份、靠注释与安装器"保持一致"，已漂移过一次）。依赖方向仍单向：
+// resolveBinary → layout（叶子），BinaryManager → 本文件。
 //
 // 批次5 真机事故加固：批次2 的探测是"PATH 命中即可用"——不验能否运行、不验版本，系统 PATH
 // 上的同名异物（旧版缺子命令、pipx 装的时候没带 [web] extras、损坏安装）照样被打上可用
@@ -23,7 +22,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
-import { codeMateToolsRoot } from '@main/services/deepSeekHarness/paths'
+import { managedBinaryPathFor } from '@main/services/binaryManager/layout'
 import { executeCommand } from '@main/utils/processRunner'
 
 const logger = loggerService.withContext('ResolveBinary')
@@ -62,18 +61,12 @@ export async function probeBinary(binPath: string): Promise<{ runnable: boolean;
   }
 }
 
-/** 受管布局映射：仅本 fork 的两个受管工具查受管目录，其余 executable 恒返回 undefined。 */
+/** 受管布局映射（v0.4.5-1：单点到 binaryManager/layout.ts——此前本文件内联一份并与
+ * BinaryManager.managedBinaryPath 靠注释"保持一致"，已经漂移过一次：paper-agent 加进
+ * 预设表后这里不认识它，任何走本解析器的通道都会把已安装的源码型工具判成未安装）。
+ * 未知工具返回 undefined → 调用方回落系统 PATH。 */
 function managedBinaryPath(executable: string): string | undefined {
-  const toolsRoot = codeMateToolsRoot()
-  if (executable === 'dsh') {
-    return path.join(toolsRoot, 'dsh', 'node_modules', '.bin', isWin ? 'dsh.cmd' : 'dsh')
-  }
-  if (executable === 'hermes') {
-    return isWin
-      ? path.join(toolsRoot, 'hermes', 'Scripts', 'hermes.exe')
-      : path.join(toolsRoot, 'hermes', 'bin', 'hermes')
-  }
-  return undefined
+  return managedBinaryPathFor(executable)
 }
 
 /** 解析受管 CLI 的可执行文件（受管优先，回退系统 PATH）；找不到返回 null（调用方给用户可见错误）。 */
