@@ -324,8 +324,8 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
- * 双源下载（主源失败即换备用源，源内各自走 {@link downloadFile} 的续传与重试）。
- * 用于运行时档案：nodejs.org → npmmirror、python-build-standalone → npmmirror。
+ * 多源下载（主源失败即换下一个源，源内各自走 {@link downloadFile} 的续传与重试）。
+ * 用于运行时档案与源码归档：node/python 走 npmmirror → 官方，源码走加速前缀 → codeload。
  */
 export async function downloadFromAnySource(
   urls: readonly string[],

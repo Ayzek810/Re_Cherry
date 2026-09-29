@@ -1,9 +1,9 @@
 import { allMinApps } from '@renderer/config/minapps'
 import type { MinAppType } from '@renderer/types'
-import { ScrollText } from 'lucide-react'
 import type { FC } from 'react'
 
 import NousresearchIcon from './NousresearchIcon'
+import PaperAgentIcon from './PaperAgentIcon'
 import DeepSeekLogo from '../../assets/images/providers/deepseek.png'
 
 interface Props {
@@ -14,8 +14,9 @@ interface Props {
 }
 
 // 批次5（CodeMate）：受管 Web UI 的磁贴图标 fallback——openSmartMinapp 未带 logo 的
-// code-mate 应用（dsh/hermes）在侧栏/启动台/固定区都需要一个图标。dsh 用 DeepSeek
-// provider 位图，hermes 用 Nousresearch SVG（fill=currentColor 主题自适应）。
+// code-mate 应用（dsh/hermes/paper-agent）在侧栏/启动台/固定区都需要一个图标。dsh 用 DeepSeek
+// provider 位图，hermes 用 Nousresearch SVG（fill=currentColor 主题自适应），paper-agent 用
+// 用户提供的位图（与 CliIcon 同一个组件，两处图标不会各自漂移）。
 function CodeMateIcon({ app, size }: { app: MinAppType; size: number }) {
   if (app.id === 'code-mate-deepseek-harness') {
     return (
@@ -31,10 +32,8 @@ function CodeMateIcon({ app, size }: { app: MinAppType; size: number }) {
   if (app.id === 'code-mate-hermes') {
     return <NousresearchIcon width={size} height={size} />
   }
-  // v0.4.5：paper-agent 无品牌资产（上游仓库只有社群二维码位图）——与 CliIcon 同款
-  // lucide 字形，保持侧栏/启动台/管理页三处图标一致。
   if (app.id === 'code-mate-paper-agent') {
-    return <ScrollText size={size} />
+    return <PaperAgentIcon size={size} className="select-none rounded-2xl" />
   }
   return null
 }

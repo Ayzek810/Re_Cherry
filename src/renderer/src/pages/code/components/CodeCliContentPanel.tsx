@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 
 import type { CliProviderConfig } from '@shared/types/codeCliState'
 import { CodeCli } from '@shared/types/codeCli'
-import type { InstallProgressStep } from '@shared/types/installProgress'
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 
 import type { CodeToolMeta, VersionStatus } from '../types'
 import { BinaryInstallErrorDialog } from './BinaryInstallErrorDialog'
@@ -38,12 +38,13 @@ interface CodeCliContentPanelProps {
   installError?: string
   /** v0.3.4-2：首探窗口（快照未返回）——版本卡显示「检查中」而非可点击的「安装」。 */
   snapshotsLoading?: boolean
-  /** v0.3.4-2：安装步骤进度（共享词汇表的步骤名，来自主进程广播；仅当前工具安装中时有值）。 */
-  installProgressStep?: InstallProgressStep
-  /** v0.4.5-1：进度补充事实（下载字节数等，语言无关）。 */
-  installProgressDetail?: string
-  /** v0.4.5-1：可测阶段的确定性比例（0..1）。有值画真进度条，无值画不确定态。 */
-  installProgressFraction?: number
+  /**
+   * 安装进度（共享契约 `InstallProgressPayload`，仅当前工具的安装中有值）。
+   *
+   * v0.4.5-1：原来是三个平行 prop（step/detail/fraction），加一个字段就要改三层——正是共享
+   * 词汇表要消掉的那种漂移。现在整份载荷透传：载荷加字段，这里不用动。
+   */
+  installProgress?: InstallProgressPayload
   /** v0.4.5：手动检查更新（三个工具页共用）。 */
   onCheckUpdates?: () => void
   checkingUpdates?: boolean
@@ -85,9 +86,7 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   upgradingTools,
   installError,
   snapshotsLoading,
-  installProgressStep,
-  installProgressDetail,
-  installProgressFraction,
+  installProgress,
   onCheckUpdates,
   checkingUpdates,
   providerState,
@@ -140,9 +139,7 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
             stopping={versionCard.stopping}
             isInstalling={installingTools.has(selectedCliTool)}
             isUpgrading={upgradingTools.has(selectedCliTool)}
-            installProgressStep={installProgressStep}
-            installProgressDetail={installProgressDetail}
-            installProgressFraction={installProgressFraction}
+            installProgress={installProgress}
             snapshotsLoading={snapshotsLoading}
             upgradeDisabled={versionCard.upgradeDisabled}
             installError={installError}

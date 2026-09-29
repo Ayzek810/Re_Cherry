@@ -4,7 +4,11 @@
 // 工具、设置页的依赖面板、小程序卡片……）都复用它，而不是各自复制 markup：
 // - 文案由共享词汇表 `InstallProgressStep` 决定（键固定 `code.install_progress.<step>`），
 //   步骤名写错是编译错误；
-// - 比例只在主进程给了 fraction 时画真条（下载阶段），其余阶段画不确定态——不编造百分比；
+// - **按阶段分段**（stage = 第 n 步 / 共 m 步）：已完成的段是事实，当前段里只有能算的才给
+//   比例。这条是"进度条正常工作"的判据本身——安装的多数时长花在 pip/npm/vite 这类没有诚实
+//   百分比的执行阶段，单条进度条在那几分钟里只能装死（真机反馈：hermes 与 paper-agent 的条
+//   不动，而 dsh 的下载段能动）；
+// - 段内比例只在主进程给了 fraction 时才画（下载字节数），其余画不确定态——不编造百分比；
 // - 阶段一变即重挂（key=step），所以条的宽度不会从上一阶段的 80% 缓动下来；
 // - 起步下限 2%：0% 时也看得见"条在那儿"。
 //
@@ -13,7 +17,7 @@
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { InstallProgressStep } from '@shared/types/installProgress'
+import type { InstallProgressStep, InstallStagePosition } from '@shared/types/installProgress'
 
 import { Progress } from './shadcn'
 
@@ -29,10 +33,12 @@ interface InstallProgressProps {
   detail?: string
   /** 0..1；缺省 = 本阶段不可测（不确定态）。 */
   fraction?: number
+  /** 本次安装在阶段序列里的位置（主进程给；缺省时退化为单条进度条）。 */
+  stage?: InstallStagePosition
   className?: string
 }
 
-export const InstallProgress: FC<InstallProgressProps> = ({ step, detail, fraction, className }) => {
+export const InstallProgress: FC<InstallProgressProps> = ({ step, detail, fraction, stage, className }) => {
   const { t } = useTranslation()
   const percent = progressPercentOf(fraction)
   return (
@@ -41,6 +47,7 @@ export const InstallProgress: FC<InstallProgressProps> = ({ step, detail, fracti
       key={step}
       className={className}
       value={percent}
+      {...(stage ? { segments: stage } : {})}
       label={t(`code.install_progress.${step}`)}
       {...(detail ? { detail } : {})}
     />

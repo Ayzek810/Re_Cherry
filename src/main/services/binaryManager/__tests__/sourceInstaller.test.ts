@@ -108,17 +108,29 @@ dev = [
 
 const SHA = 'a'.repeat(40)
 const OFFICIAL = `https://codeload.github.com/Tswoen/Paper-Agent/zip/${SHA}`
+const ACCELERATED = `https://ghfast.top/https://github.com/Tswoen/Paper-Agent/archive/${SHA}.zip`
 
-describe('源码归档来源（O8：可配置镜像）', () => {
-  it('defaults to the official host only (no mirror is trusted implicitly)', () => {
-    expect(sourceArchiveUrls('Tswoen/Paper-Agent', SHA, {})).toEqual([OFFICIAL])
+describe('源码归档来源（加速前缀 + 官方回退）', () => {
+  it('defaults to the built-in acceleration prefix with the official host as fallback', () => {
+    // 用户裁决（2026-09-29）：加速前缀 https://ghfast.top/https://github.com；
+    // 回退 = 官方 codeload（加速服务抖动/下线时安装不至于失败）。
+    expect(sourceArchiveUrls('Tswoen/Paper-Agent', SHA, {})).toEqual([ACCELERATED, OFFICIAL])
   })
 
-  it('keeps the official host first and appends configured mirror prefixes', () => {
+  it('composes a ghproxy-style prefix onto the full github archive URL', () => {
     const urls = sourceArchiveUrls('Tswoen/Paper-Agent', SHA, {
       RC_GITHUB_MIRROR: 'https://ghproxy.net/, https://ghfast.top'
     })
-    expect(urls).toEqual([OFFICIAL, `https://ghproxy.net/${OFFICIAL}`, `https://ghfast.top/${OFFICIAL}`])
+    expect(urls).toEqual([
+      `https://ghproxy.net/https://github.com/Tswoen/Paper-Agent/archive/${SHA}.zip`,
+      `https://ghfast.top/https://github.com/Tswoen/Paper-Agent/archive/${SHA}.zip`,
+      OFFICIAL
+    ])
+  })
+
+  it('lets RC_GITHUB_MIRROR=none turn acceleration off entirely', () => {
+    expect(sourceArchiveUrls('Tswoen/Paper-Agent', SHA, { RC_GITHUB_MIRROR: 'none' })).toEqual([OFFICIAL])
+    expect(sourceArchiveUrls('Tswoen/Paper-Agent', SHA, { RC_GITHUB_MIRROR: 'OFF' })).toEqual([OFFICIAL])
   })
 
   it('normalizes prefixes: trims, drops trailing slashes, dedupes, ignores non-http entries', () => {

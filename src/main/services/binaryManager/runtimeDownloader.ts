@@ -43,11 +43,25 @@ export const NODE_VERSION = '24.9.0'
 export const PYTHON_TAG = '20241016'
 export const PYTHON_VERSION = '3.12.7'
 
-/** node dist 双源（版本目录段在调用处拼入——base 不含版本段）。 */
-const NODE_DIST_BASES = ['https://nodejs.org/dist/', 'https://registry.npmmirror.com/-/binary/node/'] as const
+/**
+ * node dist 双源（版本目录段在调用处拼入——base 不含版本段）。
+ *
+ * v0.4.5-1（用户裁决 2026-09-29）：**npmmirror 提为第一顺位**。原顺序（官方在前）在墙内每次
+ * 都要先把官方源失败一遍才轮到镜像：python 那条本机实测官方源 `fetch failed` 花了 **29.6s**
+ * 才认输（见下），node 官方源则只是略慢（919ms vs 镜像 681ms）。两台源都实测伺服同一份文件
+ * （node：两边 total 均为 36 405 077 字节），所以顺序只影响"多久拿到"，不影响"拿到什么"。
+ * 官方源保留在第二位：墙外环境里它才是规范源。
+ */
+const NODE_DIST_BASES = ['https://registry.npmmirror.com/-/binary/node/', 'https://nodejs.org/dist/'] as const
+/**
+ * CPython（python-build-standalone）双源，顺序同 node：镜像在前、GitHub Releases 在后。
+ * 本机实测（2026-09-29，Range 探测）：
+ *   https://github.com/astral-sh/python-build-standalone/releases/download/20241016/<file>  FAIL 29574ms
+ *   https://registry.npmmirror.com/-/binary/python-build-standalone/20241016/<file>          206 38116958 字节 520ms
+ */
 const PYTHON_DIST_BASES = [
-  `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_TAG}/`,
-  `https://registry.npmmirror.com/-/binary/python-build-standalone/${PYTHON_TAG}/`
+  `https://registry.npmmirror.com/-/binary/python-build-standalone/${PYTHON_TAG}/`,
+  `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_TAG}/`
 ] as const
 
 const RUNTIME_VERSION_MARKER = '.codemate-runtime-version'
@@ -117,7 +131,7 @@ async function downloadArchive(
   const downloadsDir = path.join(cacheRoot(), 'downloads')
   await fsp.mkdir(downloadsDir, { recursive: true })
   const destPath = path.join(downloadsDir, fileName)
-  // 双源：主源（官方）/备用源（npmmirror），源内各自续传与重试。
+  // 双源：主源（npmmirror）/备用源（官方），源内各自续传与重试。
   const urls = bases.map((base) => `${base}${fileName}`)
   logger.info(`Downloading managed runtime: ${urls.join(' | ')}`)
   const result = await downloadFromAnySource(urls, destPath, {

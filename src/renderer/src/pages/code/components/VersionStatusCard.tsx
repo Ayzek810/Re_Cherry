@@ -3,7 +3,7 @@ import { type FC, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useMinapps } from '@renderer/hooks/useMinapps'
-import type { InstallProgressStep } from '@shared/types/installProgress'
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 
 import { BinaryInstallFailureRow, BinaryInstallingHint } from './BinaryInstallErrorDialog'
 import { CliIcon } from './CliIcon'
@@ -47,12 +47,12 @@ interface VersionStatusCardProps {
   onShowError?: () => void
   /** v0.3.4-2：首探窗口（快照未返回）——安装按钮显示「检查中」而非可点击态。 */
   snapshotsLoading?: boolean
-  /** v0.3.4-2：安装步骤进度（共享词汇表的步骤名；当前工具安装中时由主进程广播）。 */
-  installProgressStep?: InstallProgressStep
-  /** v0.4.5-1：进度补充事实（下载字节数等，语言无关），与原步骤名同行展示。 */
-  installProgressDetail?: string
-  /** v0.4.5-1：可测阶段的确定性比例（0..1）。有值画真进度条，无值画不确定态。 */
-  installProgressFraction?: number
+  /**
+   * 安装进度（共享契约 `InstallProgressPayload`；仅本工具安装中时有值）。
+   *
+   * v0.4.5-1：三个平行 prop 收成一份载荷——载荷加字段（如 stage）不必再改这一层。
+   */
+  installProgress?: InstallProgressPayload
   /** v0.4.5：手动检查更新（强制重探快照 + 现查最新版本）。 */
   onCheckUpdates?: () => void
   /** v0.4.5：该工具正在检查更新（按钮旋转态）。 */
@@ -80,9 +80,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
   installError,
   onShowError,
   snapshotsLoading,
-  installProgressStep,
-  installProgressDetail,
-  installProgressFraction,
+  installProgress,
   onCheckUpdates,
   checkingUpdates
 }) => {
@@ -347,12 +345,13 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
       {installing && <BinaryInstallingHint />}
       {/* 安装进度：标准元素 InstallProgress（见该件注释——三个工具、任何界面共用同一件，
           不是本卡的私有 markup）。步骤词汇与比例契约在 @shared/types/installProgress。 */}
-      {installing && installProgressStep && (
+      {installing && installProgress && (
         <InstallProgress
           className="mt-2"
-          step={installProgressStep}
-          {...(installProgressDetail ? { detail: installProgressDetail } : {})}
-          {...(installProgressFraction !== undefined ? { fraction: installProgressFraction } : {})}
+          step={installProgress.step}
+          {...(installProgress.detail ? { detail: installProgress.detail } : {})}
+          {...(installProgress.fraction !== undefined ? { fraction: installProgress.fraction } : {})}
+          {...(installProgress.stage ? { stage: installProgress.stage } : {})}
         />
       )}
       {installError && !busy && onShowError && (

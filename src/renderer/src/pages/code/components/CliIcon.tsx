@@ -3,13 +3,14 @@
 // dsh 用 fork 已有的 DeepSeek provider logo 资产（assets/images/providers/deepseek.png），
 // hermes 用批次5 从 V2 ui 包逐字搬运的 Nousresearch SVG（components/Icons/NousresearchIcon，
 // fill=currentColor 适配双主题——用户裁决"hermes 有自己的图标，不要通用图标"）。
-// CLI_TOOLS 裁到 2 项；OPTICAL_VIEWBOXES 随 SVG 源裁剪移除（位图/lucide 图标无 viewBox 面）。
+// paper-agent：用户 2026-09-29 提供位图 → components/Icons/PaperAgentIcon（此前是 lucide 占位）。
+// CLI_TOOLS 裁到 3 项；OPTICAL_VIEWBOXES 随 SVG 源裁剪移除（位图/lucide 图标无 viewBox 面）。
 
 import type { ComponentType, FC } from 'react'
-import { ScrollText } from 'lucide-react'
 
 import DeepSeekLogo from '@renderer/assets/images/providers/deepseek.png'
 import NousresearchIcon from '@renderer/components/Icons/NousresearchIcon'
+import PaperAgentIcon from '@renderer/components/Icons/PaperAgentIcon'
 import { cn } from '@renderer/utils/style'
 import { CodeCli } from '@shared/types/codeCli'
 
@@ -25,15 +26,15 @@ const HermesIcon: IconComponent = ({ size = 28, className }) => (
   <NousresearchIcon width={size} height={size} className={className} />
 )
 
-// v0.4.5：paper-agent 上游无品牌图标资产（仓库内只有社群二维码位图）——先用语义化
-// lucide 字形顶上；将来有品牌 SVG 时替换本组件即可（消费面只认 IconComponent 签名）。
-const PaperAgentIcon: IconComponent = ({ size = 28, className }) => <ScrollText size={size} className={className} />
+const PaperAgentToolIcon: IconComponent = ({ size = 28, className }) => (
+  <PaperAgentIcon size={size} className={className} />
+)
 
 /** `label` is an i18n key; resolve it with `t()` before rendering. */
 export const CLI_TOOLS = [
   { value: CodeCli.DEEPSEEK_HARNESS, label: 'code.cli_tools.deepseek_harness', icon: DeepSeekHarnessIcon },
   { value: CodeCli.HERMES, label: 'code.cli_tools.hermes', icon: HermesIcon },
-  { value: CodeCli.PAPER_AGENT, label: 'code.cli_tools.paper_agent', icon: PaperAgentIcon }
+  { value: CodeCli.PAPER_AGENT, label: 'code.cli_tools.paper_agent', icon: PaperAgentToolIcon }
 ] as const satisfies ReadonlyArray<{ value: CodeCli; label: string; icon: IconComponent }>
 
 // v0.4.5-1（O5）：图标表按**真实契约** IconComponent（size/className）存——原来存成

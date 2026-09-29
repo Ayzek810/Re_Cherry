@@ -36,6 +36,8 @@ import {
   toolDir
 } from './layout'
 import { installMarketBundle, nodeMarketIo, readProfileBundleVersion } from './marketBaseline'
+import { createPipProgress, feedPipProgress, formatPipProgress } from './pipProgress'
+import { PYPI_VERSION_SOURCES } from './pypiSources'
 import { NPM_REGISTRY_MIRROR } from './registry'
 import { removeTreeWithRetry } from './removeTree'
 import { DEFAULT_COMMAND_TIMEOUT_MS, runBoundedCommand } from './runCommand'
@@ -48,7 +50,8 @@ import {
   seedUserConfig
 } from './sourceInstaller'
 import { IpcChannel } from '@shared/IpcChannel'
-import type { InstallProgressStep } from '@shared/types/installProgress'
+import type { InstallProgressPayload, InstallProgressStep } from '@shared/types/installProgress'
+import { buildInstallProgressPayload, createStageTracker } from '@shared/types/installProgress'
 import { redactSecretText } from '@shared/utils/redaction'
 
 import { type BinaryToolName, type BinaryToolPreset, BINARY_TOOL_PRESETS } from './presets'
@@ -74,13 +77,29 @@ const PYPI_TIMEOUT_MS = 10_000
 // 取证：用户对比社区桌面壳发现"已经到 0.17 而这里还是 0.15 且没有推送更新"）。
 // 安装与更新检查共用此 tag，语义恒对齐。
 const DSH_NPM_DIST_TAG = 'next'
-const PYPI_OFFICIAL_INDEX = 'https://pypi.org/simple'
-const PYPI_TSINGHUA_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 /**
- * PyPI **JSON API** 的双源（与上面的 simple 索引两源一一对应）。bandersnatch 系镜像同样
- * 伺服 `/pypi/<name>/json`，故"版本查询"与"安装抓包"可以用同一对源，不会一半通一半不通。
+ * PyPI 的两台索引。**镜像在前**（用户裁决 2026-09-29："那肯定是镜像优先啊"）——与运行时档案
+ * （npmmirror 主 / 官方备）、源码归档（加速前缀主 / codeload 备）同一条策略：墙内先走镜像，
+ * 官方源留作回退。
+ *
+ * 实测（本机 2026-09-29）：旧顺序（pypi.org 主 + 清华 extra）解析 paper-agent 的依赖树跑了 3 分钟
+ * 仍未结束；pypi.org 在墙内既可能打不通（当日 app 内 `pypi.org/pypi -> fetch failed`）也可能
+ * 慢到让每个包的元数据请求都变成长尾。镜像在前把这段长尾去掉，官方源仍在 extra 位上兜底
+ * （镜像同步滞后的包照样装得上）。
  */
-const PYPI_JSON_BASES = ['https://pypi.org/pypi', 'https://pypi.tuna.tsinghua.edu.cn/pypi'] as const
+const PYPI_PRIMARY_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
+const PYPI_FALLBACK_INDEX = 'https://pypi.org/simple'
+
+/**
+ * pip 安装的时长预算（v0.4.5-1）：默认的 15 分钟**不足以**装完这两个工具的 Python 依赖。
+ *
+ * 真机取证（app-error.2026-09-29.log 18:12:15）：`pip install paper-agent dependencies timed
+ * out after 900000ms`——一次健康的依赖安装在 15 分钟被我们杀掉（`buildInPlace` 随即回滚，
+ * 用户失去整次安装）。pip 是"依赖树自己解析 + 逐个下载"的长活（几十到上百个包），
+ * 墙内镜像慢时分钟级到十几分钟是常态，不是异常；僵死的 pip 由 pip 自身的重试/socket 超时
+ * 兜底（它会打 WARNING 并最终非 0 退出），我们的总时长只该当最后一道保险。
+ */
+const PIP_INSTALL_TIMEOUT_MS = 45 * 60_000
 
 const TOOL_VERSION_MARKER = '.codemate-version'
 
@@ -124,6 +143,12 @@ export type BinaryToolSnapshot = {
 export type BinaryOperationResult = { success: true } | { success: false; message: string }
 
 export type BinaryRemoveResult = { removed: boolean; message?: string }
+
+/**
+ * 阶段进入器：一次安装进度广播。由 `stepper()` 产出——它负责把"第 n 步 / 共 m 步"补进载荷，
+ * 所以安装函数里所有进度上报都只剩"进哪一步 + 这次测到了什么"，不再各写一份广播参数。
+ */
+export type InstallProgressEnter = (step: InstallProgressStep, extra?: { detail?: string; fraction?: number }) => void
 
 /** v0.4.5：手动检查更新的结论（渲染层按钮的结果反馈与版本卡注入面）。
  * v0.4.5-1（O1）：加 `source` 分态——只有受管安装才谈得上"本应用可升级"。 */
@@ -467,8 +492,12 @@ export class BinaryManager {
 
   /** dsh（npm 型）：受管 node → npm install --prefix → 版本标记 → bundle 装配（dshmarket + PPT）。 */
   private async installNpmTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
-    this.broadcastInstallProgress(plan.name, 'runtime')
-    const runtime = await ensureNodeRuntime(this.progressCallbacks(plan, 'runtime'))
+    // 本次安装的阶段序列（等权分段，见 InstallStagePosition 注释）。runtime 段里的解压由下载器
+    // 触发 'extract'，故它也必须是序列里的一步——否则条会冻在 100% 等 npm 起步。
+    const pipeline: readonly InstallProgressStep[] = ['runtime', 'extract', 'install', 'toolchain', 'market', 'ppt']
+    const enter = this.stepper(plan, pipeline)
+    enter('runtime')
+    const runtime = await ensureNodeRuntime(this.progressCallbacks(plan, pipeline, 'runtime'))
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
     // PATH 首位钉受管 node（npm shim 再启 node 时取它）；缓存钉 CodeMate 子树。
@@ -482,7 +511,7 @@ export class BinaryManager {
     // 批次5：pnpm store 也钉进 CodeMate 子树（dshmarket 在 harness 内装插件时
     // 继承此 env → pnpm 子进程的 store 落点受控，卸载=删子树仍成立）。
     env.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
-    this.broadcastInstallProgress(plan.name, 'install')
+    enter('install')
     // v0.4.5-1（O2）：带了检查到的版本就钉精确版——"报 A 装 B"正是通道 tag 漂移下的常态。
     // 不设静默回退：装到与用户要求不同的版本，等于把刚修掉的问题换个地方放回去；精确版若
     // 已从 registry 撤下，就如实失败（失败原因现在会持久显示，用户可再点一次检查更新）。
@@ -517,7 +546,7 @@ export class BinaryManager {
     //    网络不佳时静默挂死。改用 npm 装进 dsh 安装树（npmmirror 钉死、shim 落
     //    node_modules/.bin——已在 PATH）。
     const binJs = path.join(dir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-    this.broadcastInstallProgress(plan.name, 'toolchain')
+    enter('toolchain')
     await this.runCommand(runtime.npmBin, ['install', '--prefix', dir, 'pnpm'], {
       env,
       label: 'npm install pnpm (bundle toolchain)'
@@ -543,7 +572,7 @@ export class BinaryManager {
       `registry=${NPM_REGISTRY_MIRROR}\nstore-dir=${path.join(cacheRoot(), 'pnpm-store')}\n`,
       'utf-8'
     )
-    this.broadcastInstallProgress(plan.name, 'market')
+    enter('market')
     // v0.4.5-1 真机回归修正：**插件 bundle 装不上不得让 dsh 装不上**。市场与 PPT 都是
     // bundle，不是工具本体；让它们的失败掀翻整个安装的后果是"标记不写 → 工具判 broken →
     // 用户既用不了也没法升级"（真机日志：dsh 0.2.0-rc.2 以 peer 不兼容拒收被钉死的
@@ -565,7 +594,7 @@ export class BinaryManager {
     // dsh-ppt@0.1.1-rc.2 在 registry 已被 0.4.5 取代 → ERR_PNPM_NO_MATCHING_VERSION，
     // 真机复现实证）。显式 @latest spec：file:/旧 spec 已存在时 `add <name>` 会被
     // "lockfile up to date" 短路（真机复现），带版本 spec 强制重解析。
-    this.broadcastInstallProgress(plan.name, 'ppt')
+    enter('ppt')
     try {
       await this.runCommand(
         runtime.nodeBin,
@@ -602,15 +631,19 @@ export class BinaryManager {
 
   /** hermes（pipx 型 → venv 等价）：受管 CPython → python -m venv → venv pip install。 */
   private async installVenvTool(plan: ToolPlan, targetVersion?: string): Promise<void> {
-    this.broadcastInstallProgress(plan.name, 'runtime')
-    const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, 'runtime'))
+    // 阶段序列：pip 阶段没有任何诚实的百分比（分母要等 pip 自己解析完才知道），所以它靠
+    // "上一段已完成 + 段内包数/字节数"表达进度（真机反馈"hermes 进度条不动"就在这一段）。
+    const pipeline: readonly InstallProgressStep[] = ['runtime', 'extract', 'venv', 'pip']
+    const enter = this.stepper(plan, pipeline)
+    enter('runtime')
+    const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, pipeline, 'runtime'))
     // 路径用变量名与本类其余处一致，便于对照（venv 的受管布局见 managedBinaryPath）。
     const dir = toolDir(plan.name)
     // v0.4.5-1：改走 buildInPlace——旧实现在建 venv 之前就把整个工具目录删了，pip 阶段一失败
     // 用户手上就只剩残骸（没有旧安装可退）。venv 必须在最终路径上生成（launcher/脚本把绝对
     // 路径写死），故不能走 staging 改名。
     await buildInPlace(dir, async (target) => {
-      this.broadcastInstallProgress(plan.name, 'venv')
+      enter('venv')
       await this.runCommand(pythonBin, ['-m', 'venv', target], {
         env: { ...process.env },
         label: `python -m venv ${plan.name}`
@@ -622,13 +655,13 @@ export class BinaryManager {
         )
       }
       // fork 缝：extras 数据（pipxExtras:['web']）留在 shared 预设，venv 规格按用户裁决写死
-      // 为 <packageName>[web]；official 源在前、清华镜像在后（pip 按序尝试）。
+      // 为 <packageName>[web]；索引顺序见 PYPI_PRIMARY_INDEX 注释（**镜像在前**）。
       // v0.4.5-1（O2）：带了检查到的版本就钉 `==<版本>`（PyPI 上"报 A 装 B"同样可能——
       // 检查走 JSON API、安装走 pip 解析，两者跨源跨时刻）。
       const pipSpec = targetVersion
         ? `${plan.preset.packageName}[web]==${targetVersion}`
         : `${plan.preset.packageName}[web]`
-      this.broadcastInstallProgress(plan.name, 'pip')
+      enter('pip')
       await this.runCommand(
         builtPython,
         [
@@ -638,13 +671,35 @@ export class BinaryManager {
           '--cache-dir',
           path.join(cacheRoot(), 'pip'),
           '--index-url',
-          PYPI_OFFICIAL_INDEX,
+          PYPI_PRIMARY_INDEX,
           '--extra-index-url',
-          PYPI_TSINGHUA_INDEX,
+          PYPI_FALLBACK_INDEX,
+          // v0.4.5-1：优先取 wheel。两台索引并存时，pip 可能选中"更新的 sdist"而不是"稍旧的
+          // wheel"，接着就地编译 C 扩展——那正是"卡很久"的最坏形态（几分钟到十几分钟），
+          // 而且编译失败还会整个安装失败。`--prefer-binary` 只改**偏好**：没有 wheel 时照旧退回
+          // sdist，不改变能装/不能装的结论。
+          '--prefer-binary',
+          // v0.4.5-1：`--progress-bar` 保持 pip 默认（非 TTY 下输出 collect/download 行，
+          // 由此处的行回调解析成"N 个包 · X MB"）。不传 --quiet：那会把唯一的事实源也吞掉。
           pipSpec
         ],
-        { env: { ...process.env }, label: `pip install ${pipSpec}` }
+        {
+          env: { ...process.env },
+          label: `pip install ${pipSpec}`,
+          timeoutMs: PIP_INSTALL_TIMEOUT_MS,
+          onOutputLine: this.pipProgressReporter(enter, 'pip')
+        }
       )
+      // v0.4.5-1：pip 退出 0 ≠ 命令能用。npm 型在装完后就核验受管可执行物，venv 型此前没有
+      // 这一步——pip 成功但 console script 没生成（上游改了 entry point / 装了不含脚本的
+      // wheel）时，标记照写、installTool 照样返回成功，渲染层弹"安装成功"，而快照探针同一时刻
+      // 判它 broken：用户看到的是互相矛盾的两句话。这里对齐 npm 型，先核验再写标记。
+      const launcher = managedBinaryPath(plan)
+      if (!(await pathExists(launcher))) {
+        throw new Error(
+          `pip install finished but ${launcher} is missing; ${target} contains: ${await listDirForDiagnostics(target)}`
+        )
+      }
       // 版本标记：pip show 解析 Version 行；解析失败留空。
       let version = ''
       try {
@@ -676,14 +731,30 @@ export class BinaryManager {
     if (!repo || !branch) {
       throw new Error(`Source tool "${plan.name}" has no repo/branch configured`)
     }
-    this.broadcastInstallProgress(plan.name, 'runtime')
+    // 阶段序列在**运行时**组出来：venv 只在第一次安装（或 venv 被清掉）时才建，所以它是不
+    // 定常驻的一段。序列必须与本次真会走的步骤一致——多算一段会让条走到不满，少算一段会让
+    // 最后一步越界（"第 9 步 / 共 8 步"）。这一步 fs 探测因此不能推迟到中段。
+    const needsVenv = !(await pathExists(sourceVenvPython(plan.name)))
+    const pipeline: readonly InstallProgressStep[] = [
+      'runtime',
+      'extract',
+      'source',
+      'unpack',
+      ...(needsVenv ? (['venv'] as const) : []),
+      'deps',
+      'front',
+      'build',
+      'deploy'
+    ]
+    const enter = this.stepper(plan, pipeline)
+    enter('runtime')
     // v0.4.5-1：两个运行时**串行**下载。原先并行是为了快，但两个各 ~30MB 的档案同时上报
     // 字节进度，进度条会在两条曲线之间来回跳（"真实进度"变成噪声）；串行的总字节数不变，
     // 换来的是一个单调可信的条。
-    const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, 'runtime'))
-    const nodeRuntime = await ensureNodeRuntime(this.progressCallbacks(plan, 'runtime'))
+    const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, pipeline, 'runtime'))
+    const nodeRuntime = await ensureNodeRuntime(this.progressCallbacks(plan, pipeline, 'runtime'))
 
-    this.broadcastInstallProgress(plan.name, 'source')
+    enter('source')
     // 先钉 SHA 再按 SHA 取 zip：分支在两次请求之间被推进也不会装到"另一半"。
     const sha = await resolveHeadSha(repo, branch)
     // v0.4.5-1（O2）：源码型**无法**按渲染层给的短 SHA 钉定——codeload 要完整 40 位 SHA，
@@ -695,14 +766,16 @@ export class BinaryManager {
       )
     }
     const archivePath = await downloadSourceZip(repo, sha, cacheRoot(), {
-      onProgress: this.downloadProgressReporter(plan.name, 'source')
+      onProgress: this.downloadProgressReporter(enter, 'source')
     })
     const dir = toolDir(plan.name)
     await fsp.mkdir(dir, { recursive: true })
     const sourceDir = sourceTreeDir(plan.name)
     try {
       // 下载到 100% 之后还要解压——不换阶段的话条会冻在 100%（三家工具同款形态）。
-      this.broadcastInstallProgress(plan.name, 'extract')
+      // 用 unpack 而不是 extract：extract 指的是运行时归档（在 runtime 段之后），源码树解压
+      // 排在 source 段之后，复用 extract 会让条倒着走一格。
+      enter('unpack')
       // v0.4.5-1（O8）：把钉住的 SHA 一起交下去——归档顶层目录名必须是 <Repo>-<sha>，
       // 这样"从镜像/代理取回的东西"也能被证伪（对不上即拒绝，见 selectSourceTreeEntry）。
       await extractSourceTree(archivePath, sourceDir, sourceRepoName(plan), sha)
@@ -711,8 +784,8 @@ export class BinaryManager {
     }
 
     const venvPython = sourceVenvPython(plan.name)
-    if (!(await pathExists(venvPython))) {
-      this.broadcastInstallProgress(plan.name, 'venv')
+    if (needsVenv) {
+      enter('venv')
       // v0.4.5-1：venv 用 buildInPlace（在最终路径上生成 + 失败回滚），不再"先删 venv 再建"。
       const venvDir = sourceVenvDir(plan.name)
       await buildInPlace(venvDir, async (target) => {
@@ -729,7 +802,7 @@ export class BinaryManager {
       })
     }
 
-    this.broadcastInstallProgress(plan.name, 'deps')
+    enter('deps')
     const pyprojectPath = path.join(sourceDir, 'pyproject.toml')
     const dependencies = parsePyprojectDependencies(await fsp.readFile(pyprojectPath, 'utf-8'))
     if (dependencies.length === 0) {
@@ -744,16 +817,25 @@ export class BinaryManager {
         'install',
         '--cache-dir',
         path.join(cacheRoot(), 'pip'),
+        // 镜像在前、官方兜底、优先 wheel —— 见 PYPI_PRIMARY_INDEX 注释（paper-agent 的依赖树
+        // 是这两个工具里最大的一棵：chromadb + langgraph 合计数百 MB，顺序与 wheel 偏好直接
+        // 决定这一段是几分钟还是十几分钟）。
         '--index-url',
-        PYPI_OFFICIAL_INDEX,
+        PYPI_PRIMARY_INDEX,
         '--extra-index-url',
-        PYPI_TSINGHUA_INDEX,
+        PYPI_FALLBACK_INDEX,
+        '--prefer-binary',
         ...dependencies
       ],
-      { env: { ...process.env }, label: `pip install ${plan.name} dependencies` }
+      {
+        env: { ...process.env },
+        label: `pip install ${plan.name} dependencies`,
+        timeoutMs: PIP_INSTALL_TIMEOUT_MS,
+        onOutputLine: this.pipProgressReporter(enter, 'deps')
+      }
     )
 
-    this.broadcastInstallProgress(plan.name, 'front')
+    enter('front')
     const pathSep = isWin ? ';' : ':'
     const nodeBinDir = isWin ? nodeRuntime.dir : path.join(nodeRuntime.dir, 'bin')
     const frontEnv = withPathPrepend(process.env, [nodeBinDir], pathSep)
@@ -770,6 +852,9 @@ export class BinaryManager {
     if (!(await pathExists(viteBin))) {
       throw new Error(`vite is missing after npm install: ${viteBin}`)
     }
+    // npm install 与 vite build 是两段独立的长活（各自的分钟级），合成一段的话条会在整段里
+    // 一动不动——分开后前一段完成即是可见的推进。
+    enter('build')
     await this.runCommand(viteBin, ['build'], {
       env: frontEnv,
       cwd: frontDir,
@@ -777,7 +862,7 @@ export class BinaryManager {
       timeoutMs: 5 * 60_000
     })
 
-    this.broadcastInstallProgress(plan.name, 'deploy')
+    enter('deploy')
     const home = codeMateToolHome(plan.name)
     await seedUserConfig(sourceDir, home)
     await deployFrontDist(sourceDir, home)
@@ -814,23 +899,34 @@ export class BinaryManager {
       return { removed: false, message: OPERATION_BUSY_MESSAGE }
     }
     try {
+      // v0.4.5-1（真机"卸载耗时过长"）：卸载耗时此前**没有任何日志**——用户说慢，日志里一条都
+      // 查不到，只能靠事后复刻基准测量（本次即如此）。删树 + 运行时 + 重探各记一次耗时，
+      // 下次这类反馈可以直接从日志读出是哪一段慢。
+      const startedAt = Date.now()
       const toolGone = await removeTreeWithRetry(toolDir(plan.name))
+      const toolMs = Date.now() - startedAt
       const runtimeKindRoot = path.join(codeMateRuntimeRoot(), plan.runtime)
+      const runtimeStart = Date.now()
       const runtimeGone =
         toolGone && !(await this.isRuntimeStillNeeded(plan.runtime, plan.name))
           ? await removeTreeWithRetry(runtimeKindRoot)
           : toolGone
+      const runtimeMs = Date.now() - runtimeStart
       if (!toolGone || !runtimeGone) {
         const locked = !toolGone ? toolDir(plan.name) : runtimeKindRoot
         const message = `Some files are still in use (locked by a running process or antivirus). Close the tool and retry in a moment. Locked: ${locked}`
-        logger.warn(`Failed to fully remove managed tool ${name}: ${message}`)
+        logger.warn(`Failed to fully remove managed tool ${name}: ${message}`, { toolMs, runtimeMs })
         return { removed: false, message: redactSecretText(message) }
       }
       // v0.3.4-2：同安装——卸载后强制重探，广播命中的是已移除状态。
       // v0.4.5-1：工具没了，它的失败记忆也没意义。
       this.installFailures.delete(name)
+      const refreshStart = Date.now()
       await this.refreshSnapshotCache().catch((error) =>
         logger.warn('Post-remove snapshot refresh failed', error as Error)
+      )
+      logger.info(
+        `Removed managed tool ${name} in ${Date.now() - startedAt}ms (tree ${toolMs}ms, runtime ${runtimeMs}ms, refresh ${Date.now() - refreshStart}ms)`
       )
       return { removed: true }
     } catch (error) {
@@ -843,9 +939,15 @@ export class BinaryManager {
     }
   }
 
-  /** 最新版本（尽力而为，失败返回空对象不抛）：dsh 走受管 npm view；hermes 走 PyPI JSON API。 */
+  /** 最新版本（尽力而为，失败即空值不抛）：dsh 走受管 npm view；hermes 走 PyPI 版本源。
+   * v0.4.5-1：查询通道本身改为"失败即抛"（见 latestNpmVersion），**这里**按场景容忍——本方法
+   * 由页面挂载自动调用，只用来展示"最新版"一行；用户点"检查更新"的那条路走 checkUpdates，
+   * 那里失败会如实返回错误而不是"已是最新"。 */
   async getLatestVersions(): Promise<Record<BinaryToolName, string | undefined>> {
-    const [dsh, hermes] = await Promise.all([this.latestNpmVersion('dsh'), this.latestPypiVersion('hermes')])
+    const [dsh, hermes] = await Promise.all([
+      this.latestNpmVersion('dsh').catch(() => undefined),
+      this.latestPypiVersion('hermes').catch(() => undefined)
+    ])
     // v0.4.5（用户裁决）：paper-agent 纯手动检查——本通道由渲染层在页面挂载时自动调用，
     // 恒不触 GitHub（匿名 API 限流也不该被页面挂载烧掉）。它的最新版本只由 checkUpdates
     // 显式拉取。
@@ -901,10 +1003,14 @@ export class BinaryManager {
     }
   }
 
-  private async latestNpmVersion(name: string): Promise<string | undefined> {
+  /**
+   * 最新版本查询（npm 通道 tag）。与 latestPypiVersion 同一条契约：**查不到就抛**——
+   * "查不到"不得冒充"已是最新"（见该方法的说明）。
+   */
+  private async latestNpmVersion(name: string): Promise<string> {
     const plan = TOOL_PLANS.get(name)
-    if (!plan || plan.kind !== 'npm') return undefined
-    if (!(await isNodeRuntimeInstalled())) return undefined
+    if (!plan || plan.kind !== 'npm') throw new Error(`Managed tool ${name} is not an npm-installed tool`)
+    if (!(await isNodeRuntimeInstalled())) throw new Error('the managed Node runtime is not installed')
     try {
       const runtime = await ensureNodeRuntime()
       // 通道与安装同锚（DSH_NPM_DIST_TAG）：查 next tag 的版本，与安装语义恒一致。
@@ -917,39 +1023,44 @@ export class BinaryManager {
           timeoutMs: NPM_VIEW_TIMEOUT_MS
         }
       )
-      return stdout.trim().split(/\r?\n/, 1)[0]?.trim() || undefined
+      const version = stdout.trim().split(/\r?\n/, 1)[0]?.trim()
+      if (!version) throw new Error('npm view returned an empty version')
+      return version
     } catch (error) {
       logger.warn(`Failed to query latest version of ${plan.preset.packageName}`, { error: this.errorMessage(error) })
-      return undefined
+      throw error instanceof Error ? error : new Error(this.errorMessage(error))
     }
   }
 
   /**
-   * 最新版本查询（PyPI JSON API）。**双源**：pypi.org 在前、清华镜像在后——与安装期
-   * `pip install --index-url pypi.org --extra-index-url tsinghua` 的策略对齐。
-   * v0.4.5-1 修的是"两半不同源"：安装能退到镜像，而版本查询只有 pypi.org——墙内它不可达时
-   * 检查更新就静默无结论（用户看到的是"没有新版本"）。
+   * 最新版本查询（PyPI）。源表与载荷解析在 pypiSources.ts（**每源各自的端点**——镜像不实现
+   * JSON API 这一事实写在那张表里，不再两源共用一个路径模板）。
+   *
+   * v0.4.5-1：查不到就**抛**，不返回 undefined。"查不到"与"最新版就是当前版"是两回事，
+   * 旧实现让后者冒充前者（渲染层据此弹"已是最新版本"）；调用方按场景决定是容忍（页面挂载时
+   * 的自动查询）还是如实报错（用户点"检查更新"）。
    */
-  private async latestPypiVersion(name: string): Promise<string | undefined> {
+  private async latestPypiVersion(name: string): Promise<string> {
     const plan = TOOL_PLANS.get(name)
-    if (!plan || plan.kind !== 'venv') return undefined
+    if (!plan || plan.kind !== 'venv') throw new Error(`Managed tool ${name} is not a PyPI-installed tool`)
     const failures: string[] = []
-    for (const base of PYPI_JSON_BASES) {
+    for (const source of PYPI_VERSION_SOURCES) {
       try {
-        const response = await fetch(`${base}/${plan.preset.packageName}/json`, {
+        const response = await fetch(source.url(plan.preset.packageName), {
+          ...(source.headers ? { headers: source.headers } : {}),
           signal: AbortSignal.timeout(PYPI_TIMEOUT_MS)
         })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const payload = (await response.json()) as { info?: { version?: unknown } }
-        if (typeof payload.info?.version === 'string') return payload.info.version
-        throw new Error('the response carried no info.version')
+        const version = source.read(await response.json())
+        if (version) return version
+        throw new Error('the response carried no readable version')
       } catch (error) {
         // ASCII 箭头：→ 会被 GBK 控制台啃成乱码（真机日志取证）。
-        failures.push(`${base} -> ${this.errorMessage(error)}`)
+        failures.push(`${source.label} -> ${this.errorMessage(error)}`)
       }
     }
     logger.warn(`Failed to query latest version of ${plan.preset.packageName}`, { failures })
-    return undefined
+    throw new Error(`no PyPI source returned a version (${failures.join('; ')})`)
   }
 
   /** V2 broadcastAvailabilityChanged 的 fork 等价：无载荷全窗广播，消费者重拉快照。 */
@@ -966,26 +1077,26 @@ export class BinaryManager {
 
   /** v0.3.4-2（用户裁决）：安装步骤进度广播——渲染层进度条的数据源。step 为 i18n 键尾
    * （code.install_progress.<step>），由渲染层翻译；detail 为语言无关的补充事实（下载字节
-   * 数），fraction 为**进度条本体的确定性比例**（0..1，只有可测的阶段才有）。
+   * 数），fraction 为**进度条本体的确定性比例**（0..1，只有可测的阶段才有）；stage 为本次
+   * 安装在阶段序列里的位置（进度条据此分段）。
    *
    * v0.4.5-1（用户反馈"进度条不反映真实下载进度"）：旧载荷只有步骤名，渲染层只能画一个
    * 匀速脉冲的假条。可测的阶段（下载）带上 fraction，渲染层画真条；不可测的阶段
-   * （npm/pip/vite 的执行）不编造比例，保持不确定态——**宁可显示"不确定"，不显示假进度**。 */
+   * （npm/pip/vite 的执行）不编造比例，保持不确定态——**宁可显示"不确定"，不显示假进度**。
+   *
+   * 载荷字段的类型取自共享契约（`Omit<InstallProgressPayload, 'tool' | 'step'>`）：契约加字段
+   * 时这里会跟着报错，不会出现"主进程发了、广播悄悄丢掉"——`{...spread}` 恰好会绕过对象字面量
+   * 的多余属性检查，v0.4.5-1 的 stage 就这样丢过一次（渲染层永远收不到 stage）。 */
   private broadcastInstallProgress(
     tool: BinaryToolName,
     step: InstallProgressStep,
-    options: { detail?: string; fraction?: number } = {}
+    options: Omit<InstallProgressPayload, 'tool' | 'step'> = {}
   ): void {
     try {
-      const { detail, fraction } = options
+      const payload = buildInstallProgressPayload(tool, step, options)
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
-          window.webContents.send(IpcChannel.CodeCli_Binary_InstallProgress, {
-            tool,
-            step,
-            ...(detail ? { detail } : {}),
-            ...(typeof fraction === 'number' && Number.isFinite(fraction) ? { fraction } : {})
-          })
+          window.webContents.send(IpcChannel.CodeCli_Binary_InstallProgress, payload)
         }
       }
     } catch (error) {
@@ -1001,14 +1112,14 @@ export class BinaryManager {
    * 调用方按阶段建各自的 reporter，阶段一变就换实例，比例随之从头开始。
    */
   private downloadProgressReporter(
-    tool: BinaryToolName,
+    enter: InstallProgressEnter,
     step: InstallProgressStep
   ): (progress: DownloadProgress) => void {
     const throttle = createProgressThrottle()
     return (progress) => {
       const update = selectProgressUpdate(throttle, progress)
       if (!update) return
-      this.broadcastInstallProgress(tool, step, {
+      enter(step, {
         detail: update.detail,
         ...(update.fraction !== undefined ? { fraction: update.fraction } : {})
       })
@@ -1021,14 +1132,61 @@ export class BinaryManager {
    */
   private progressCallbacks(
     plan: ToolPlan,
+    pipeline: readonly InstallProgressStep[],
     step: InstallProgressStep
   ): {
     onProgress: (progress: DownloadProgress) => void
     onStep: (next: InstallProgressStep) => void
   } {
+    const enter = this.stepper(plan, pipeline)
     return {
-      onProgress: this.downloadProgressReporter(plan.name, step),
-      onStep: (next) => this.broadcastInstallProgress(plan.name, next)
+      onProgress: this.downloadProgressReporter(enter, step),
+      onStep: (next) => enter(next)
+    }
+  }
+
+  /**
+   * 本次安装的阶段进入器（v0.4.5-1）：把"第几步 / 共几步"附在每次广播上。
+   *
+   * 阶段序列由各安装函数**在运行时**组出来（条件阶段如 paper-agent 的 venv 只有需要时才进
+   * 序列），所以 total 恒等于这次真会走的步数——不是猜的。步骤不在序列里时记一行日志并降级为
+   * "只报步骤名"（进度条落回不确定态），绝不编一个位置。
+   *
+   * 位置**单调不回退**（与下载比例的单调约定同源：走过的段不会没走过）。回退请求确实会出现
+   * ——同一个序列里可能有两次同类下载（paper-agent 的 CPython 与 node 各自"下载 + 解压"一轮），
+   * 第二次的步骤名指向前面已走过的段。此时让条停在已到达的最远段并记一行日志：步骤名照实
+   * 说"正在下载运行时…"（那是真的），条不倒着走（那也是真的），段内仍按字节填。
+   */
+  private stepper(plan: ToolPlan, pipeline: readonly InstallProgressStep[]): InstallProgressEnter {
+    const tracker = createStageTracker(pipeline)
+    let holdLogged = false
+    return (step, extra) => {
+      const { stage, held } = tracker(step)
+      if (!stage) {
+        logger.warn(`Install progress step "${step}" is not in the ${plan.kind} pipeline for ${plan.name}`)
+      } else if (held && !holdLogged) {
+        holdLogged = true
+        logger.info(`Install progress held at stage ${stage.index} while re-entering "${step}" for ${plan.name}`)
+      }
+      this.broadcastInstallProgress(plan.name, step, { ...extra, ...(stage ? { stage } : {}) })
+    }
+  }
+
+  /**
+   * pip 阶段的上报器：从 pip 输出里数"已处理 N 个包 / 已下载 X MB"——真实且单调的计数，
+   * **不编百分比**（分母要等 pip 自己解析完才知道）。按 ~700ms 节流。
+   */
+  private pipProgressReporter(enter: InstallProgressEnter, step: InstallProgressStep): (line: string) => void {
+    const progress = createPipProgress()
+    let lastReportedAt = 0
+    return (line) => {
+      feedPipProgress(progress, line)
+      const now = Date.now()
+      if (now - lastReportedAt < 700) return
+      const detail = formatPipProgress(progress)
+      if (!detail) return
+      lastReportedAt = now
+      enter(step, { detail })
     }
   }
 
@@ -1036,7 +1194,13 @@ export class BinaryManager {
   private runCommand(
     executable: string,
     args: string[],
-    options: { env: NodeJS.ProcessEnv; label: string; timeoutMs?: number; cwd?: string }
+    options: {
+      env: NodeJS.ProcessEnv
+      label: string
+      timeoutMs?: number
+      cwd?: string
+      onOutputLine?: (line: string) => void
+    }
   ): Promise<string> {
     return runBoundedCommand(executable, args, {
       ...options,

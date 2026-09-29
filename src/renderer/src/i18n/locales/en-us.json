@@ -668,10 +668,11 @@
     "install": "Install",
     "install_failed": "Installation failed",
     "install_progress": {
+      "build": "Compiling the front end…",
       "deploy": "Deploying web assets…",
       "deps": "Installing Python dependencies…",
       "extract": "Extracting the runtime…",
-      "front": "Building the front end…",
+      "front": "Installing front-end dependencies…",
       "install": "Installing the CLI…",
       "market": "Installing plugin market…",
       "pip": "Installing packages…",
@@ -679,6 +680,7 @@
       "runtime": "Downloading runtime…",
       "source": "Downloading source…",
       "toolchain": "Preparing plugin toolchain…",
+      "unpack": "Extracting the source tree…",
       "venv": "Creating Python environment…"
     },
     "install_success": "Installation successful",

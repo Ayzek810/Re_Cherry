@@ -11,8 +11,6 @@ import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { CodeCli } from '@shared/types/codeCli'
-import type { CliConfigTarget, CliConfigWriteFile, FileConfiguredCli } from '@shared/utils/cliConfig'
-import { CLI_CONFIG_TARGET_IDS } from '@shared/utils/cliConfig'
 import { extractPdfText } from '@shared/utils/pdf'
 import { redactSecretText } from '@shared/utils/redaction'
 import type { MCPServer, Notification, Shortcut, ThemeMode } from '@types'
@@ -28,6 +26,7 @@ import BackupManager from './services/BackupManager'
 import { binaryManager } from './services/binaryManager/BinaryManager'
 import { isBinaryToolName, BINARY_TOOL_NAMES, type BinaryToolName } from './services/binaryManager/presets'
 import { readCliConfigFiles, writeCliConfigFiles } from './services/codeCli/configWriter'
+import { parseCliConfigReadInput, parseCliConfigWriteInput } from './services/codeCli/configPayload'
 import { configManager } from './services/ConfigManager'
 import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
 import { ExportService } from './services/ExportService'
@@ -826,12 +825,15 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   // 批次4a：同 DeepseekHarness_GetStatus。
   ipcMain.handle(IpcChannel.CodeCli_HermesDashboard_GetStatus, () => hermesDashboardService.getStatus())
   // Non-ENOENT read errors propagate to the renderer's error model by design.
-  ipcMain.handle(IpcChannel.CodeCli_ReadConfig, async (_, targets: unknown) => {
-    return { files: await readCliConfigFiles(parseCliConfigTargets(targets)) }
+  // v0.4.5-1：读通道载荷是 `{ targets: [...] }`（V2 形状，渲染层 cliConfig/file.ts 同形）。
+  // 断言搬进 services/codeCli/configPayload.ts（可单测）——此前把它当裸数组断言，渲染层
+  // 按 V2 发对象，于是每次读配置都炸在这行，且被渲染层 catch 成"连接态 null"。
+  ipcMain.handle(IpcChannel.CodeCli_ReadConfig, async (_, payload: unknown) => {
+    return { files: await readCliConfigFiles(parseCliConfigReadInput(payload)) }
   })
   // fork 缝：V2 的写入互斥链是 handler → CodeCliService.writeConfigFiles →（cliTool==='hermes'）
   // HermesDashboardService.writeConfigFiles（operationMutex + 运行态判定）；fork 无 CodeCliService
-  // 壳，该分支原样内联在此。入参断言见文件尾 parseCliConfig*（V2 zod schema 的手写等价）。
+  // 壳，该分支原样内联在此。入参断言见 services/codeCli/configPayload.ts（V2 zod schema 的手写等价）。
   ipcMain.handle(IpcChannel.CodeCli_WriteConfig, async (_, payload: unknown) => {
     try {
       const { cliTool, files } = parseCliConfigWriteInput(payload)
@@ -973,52 +975,11 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
 }
 
-// fork 缝：V2 的 code_cli.read_config / write_config 入参由 zod schema 校验
-// （@shared/ipc/schemas/codeCli.ts）；fork 不引入 zod 路由层，以下手写断言为等价裁剪：
-// target 白名单 = CLI_CONFIG_TARGET_IDS（hermes 两项）、read 去重（首现保留，同 V2 的
-// z.transform）、write 内容上限 1MB 同 V2；V2 的 delete 臂（codex-auth）不随裁剪保留。
-const CLI_CONFIG_CONTENT_LIMIT = 1024 * 1024
-
-function parseCliConfigTargets(value: unknown): CliConfigTarget[] {
-  if (!Array.isArray(value)) {
-    throw new Error('Invalid code_cli.read_config input: targets must be an array')
-  }
-  const deduped = new Set<string>()
-  for (const target of value) {
-    if (typeof target !== 'string' || !CLI_CONFIG_TARGET_IDS.includes(target as CliConfigTarget)) {
-      throw new Error(`Invalid config target: ${String(target)}`)
-    }
-    deduped.add(target)
-  }
-  return [...deduped] as CliConfigTarget[]
-}
-
-function parseCliConfigWriteInput(value: unknown): { cliTool: FileConfiguredCli; files: CliConfigWriteFile[] } {
-  if (typeof value !== 'object' || value === null) {
-    throw new Error('Invalid code_cli.write_config input')
-  }
-  const { cliTool, files } = value as { cliTool: unknown; files: unknown }
-  if (cliTool !== CodeCli.HERMES) {
-    throw new Error(`Invalid cliTool: ${String(cliTool)}`)
-  }
-  if (!Array.isArray(files) || files.length === 0) {
-    throw new Error('Invalid code_cli.write_config input: files must be a non-empty array')
-  }
-  const parsed: CliConfigWriteFile[] = files.map((file) => {
-    if (typeof file !== 'object' || file === null) {
-      throw new Error('Invalid config file entry')
-    }
-    const { target, content } = file as { target: unknown; content: unknown }
-    if (typeof target !== 'string' || !CLI_CONFIG_TARGET_IDS.includes(target as CliConfigTarget)) {
-      throw new Error(`Invalid config target: ${String(target)}`)
-    }
-    if (typeof content !== 'string' || content.length > CLI_CONFIG_CONTENT_LIMIT) {
-      throw new Error(`Invalid config content for ${target}`)
-    }
-    return { target: target as CliConfigTarget, content }
-  })
-  return { cliTool: CodeCli.HERMES, files: parsed }
-}
+// fork 缝：code_cli 配置读写通道的入参断言已抽到 services/codeCli/configPayload.ts
+// （V2 zod schema 的手写等价：target 白名单 = CLI_CONFIG_TARGET_IDS、read 去重首现保留、
+// write 内容上限 1MB；V2 的 delete 臂 codex-auth 不随裁剪保留）。抽出的理由是**可单测**：
+// 载荷形状错配（渲染层发 `{ targets }`、主进程按裸数组断言）此前在类型检查、静态检查、全部
+// 单测下全绿，只在真机运行时报 `targets must be an array`，且被渲染层 catch 成"连接态 null"。
 
 // 批次2：binary install/remove/check-updates 的工具名白名单（来自 shared 预设表：
 // 'dsh' | 'hermes' | 'paper-agent'，v0.4.5 起含源码型工具）。

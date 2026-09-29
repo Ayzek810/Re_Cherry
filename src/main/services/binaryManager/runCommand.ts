@@ -19,6 +19,12 @@ export interface BoundedCommandOptions {
   label: string
   timeoutMs?: number
   cwd?: string
+  /**
+   * 逐行回调（v0.4.5-1）：给"只能从输出里读出进度"的阶段用（pip 的 `Collecting …` /
+   * `Downloading … (1.2 MB)`）。收到的总是**完整行**（内部处理跨 chunk 拼接）。
+   * 回调抛错不影响命令执行（进度是附属信息，不该拖垮安装）。
+   */
+  onOutputLine?: (line: string) => void
 }
 
 /** 执行一条受管命令；非 0 退出/启动失败/超时一律 reject（附尾部输出）。 */
@@ -32,6 +38,25 @@ export function runBoundedCommand(executable: string, args: string[], options: B
     let stdout = ''
     let stderr = ''
     let settled = false
+    // 两条流各留自己的半行缓冲：共用一个的话，stdout 的半行会被 stderr 的整行粘成假行。
+    const lineBuffers: Record<'stdout' | 'stderr', string> = { stdout: '', stderr: '' }
+    const emitLines = (stream: 'stdout' | 'stderr', text: string) => {
+      if (!options.onOutputLine) return
+      const lines = `${lineBuffers[stream]}${text}`.split(/\r?\n/)
+      lineBuffers[stream] = lines.pop() ?? ''
+      for (const line of lines) {
+        try {
+          options.onOutputLine(line)
+        } catch {
+          // 进度回调是附属信息：它出错不该影响命令本身，也不该刷屏（丢弃这一行即可）。
+        }
+      }
+    }
+    // 收尾补一行换行：最后一行没有换行符时（进程尾行）否则永远不会当作完整行上报。
+    const flushLines = () => {
+      emitLines('stdout', '\n')
+      emitLines('stderr', '\n')
+    }
     const settle = (finish: () => void) => {
       if (settled) return
       settled = true
@@ -41,9 +66,11 @@ export function runBoundedCommand(executable: string, args: string[], options: B
     const appendTail = (current: string, chunk: Buffer) => `${current}${chunk.toString()}`.slice(-OUTPUT_TAIL_LIMIT)
     child.stdout?.on('data', (chunk: Buffer) => {
       stdout = appendTail(stdout, chunk)
+      emitLines('stdout', chunk.toString())
     })
     child.stderr?.on('data', (chunk: Buffer) => {
       stderr = appendTail(stderr, chunk)
+      emitLines('stderr', chunk.toString())
     })
     const timeout = setTimeout(() => {
       child.kill()
@@ -53,6 +80,7 @@ export function runBoundedCommand(executable: string, args: string[], options: B
       settle(() => reject(new Error(`${options.label} failed to start: ${error.message}`)))
     })
     child.once('close', (code) => {
+      flushLines()
       settle(() => {
         if (code === 0) return resolve(stdout)
         const output = [stderr.trim(), stdout.trim()].filter(Boolean).join('\n')

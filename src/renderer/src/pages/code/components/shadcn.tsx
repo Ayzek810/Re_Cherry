@@ -28,6 +28,8 @@ import ForkCodeEditor from '@renderer/components/CodeEditor'
 import ForkScrollbar from '@renderer/components/Scrollbar'
 import { cn } from '@renderer/utils/style'
 
+import { overallPercent, segmentFills } from '../utils/progressSegments'
+
 // fork 缝：V2 `@cherrystudio/ui` Button → 原生 button + 变体/尺寸类（照 composer/ui.tsx 先例：
 // antd Button 的 CSS-in-JS 运行时注入会覆盖 V2 写在按钮上的尺寸/形状类）。相对先例补两点：
 // ref 直传（ConfigEditDialogBody 的取消钮自动聚焦 / ModelSelectorTrigger 用）、focus ring。
@@ -413,6 +415,9 @@ export const GatewayIcon: FC<{ width?: number; height?: number; className?: stri
 // 为什么要进本表：进度此前是 VersionStatusCard 里的私有 markup，谁要展示进度都得复制一遍
 // 那串 div 与 ARIA 属性——这正是"只有某一家有进度条"的结构性原因。规则集中在本件：
 // - `value`（0..100）有值 → 确定性进度条；缺省 → 不确定态（脉冲）——**两者都不许假**；
+// - `segments` 有值 → 多段形态：已完成的段满格（事实），当前段按 value 填或脉冲，未到的段留空。
+//   安装类长活的硬约束是"执行阶段（pip/npm/vite）没有诚实百分比"——单条进度条在那几分钟里
+//   只能装死；分段让"又走完一段"成为可见的推进，且不编造耗时比例；
 // - 两种形态都带 `role="progressbar"` 与可读标签；确定态附 aria-valuenow；
 // - 宽度变化走 motion-safe 过渡，尊重减少动效偏好。
 export interface CherryProgressProps {
@@ -422,28 +427,56 @@ export interface CherryProgressProps {
   label: string
   /** 次要事实（语言无关的补充数字）。 */
   detail?: string
+  /**
+   * 多段形态：总段数与当前段（index 从 1 起）。段与段的权重相等——这是**展示约定**，
+   * 不是对各阶段耗时的测量（各段实际时长差几十倍，条因此是"阶段级"而非"时间级"的诚实近似）。
+   */
+  segments?: { index: number; total: number }
   className?: string
 }
 
-export const Progress: FC<CherryProgressProps> = ({ value, label, detail, className }) => {
+/** 条内填充：确定态按宽度填，不确定态脉冲。 */
+const ProgressFill: FC<{ percent: number | null }> = ({ percent }) =>
+  percent === null ? (
+    <div className="h-full w-1/3 rounded-full bg-foreground/50 motion-safe:animate-pulse" />
+  ) : (
+    <div
+      className="h-full rounded-full bg-foreground/60 motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out"
+      style={{ width: `${percent}%` }}
+    />
+  )
+
+export const Progress: FC<CherryProgressProps> = ({ value, label, detail, segments, className }) => {
   const percent =
     typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : null
+  // 分段算术在 utils/progressSegments.ts（纯函数，单测钉住 1 起/钳制/整体百分比）。
+  const fills = segmentFills(segments, percent)
+  const overall = overallPercent(segments, percent)
   return (
     <div className={className}>
-      <div
-        className="h-1 w-full overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label={label}
-        {...(percent === null ? {} : { 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': percent })}>
-        {percent === null ? (
-          <div className="h-full w-1/3 rounded-full bg-foreground/50 motion-safe:animate-pulse" />
-        ) : (
-          <div
-            className="h-full rounded-full bg-foreground/60 motion-safe:transition-[width] motion-safe:duration-300 motion-safe:ease-out"
-            style={{ width: `${percent}%` }}
-          />
-        )}
-      </div>
+      {segments ? (
+        <div
+          className="flex w-full gap-1"
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={overall ?? 0}>
+          {fills.map((fill, i) => (
+            <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
+              <ProgressFill percent={fill} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div
+          className="h-1 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-label={label}
+          {...(percent === null ? {} : { 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': percent })}>
+          <ProgressFill percent={percent} />
+        </div>
+      )}
       <p className="mt-1 text-[11px] text-muted-foreground">
         {label}
         {detail ? <span className="ml-1 font-mono">{detail}</span> : null}

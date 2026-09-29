@@ -3,11 +3,12 @@
 // 设计来源：runtimeDownloader.ts 的下载/解压/重试模式（同盘 rename、.part 先写后改名、
 // EPERM/EBUSY 退避——杀软扫描窗口）。
 // 与注册表型工具（npm/PyPI）的差别：**无镜像等价物**——任意 GitHub 仓库没有 npmmirror
-// 对应物。v0.4.5-1（O8，用户裁决"可引"）：官方 codeload 之外支持**用户配置的镜像前缀**
-// （`RC_GITHUB_MIRROR`，官方恒第一顺位），并且镜像取回的内容要过"顶层目录名 = <Repo>-<完整
-// SHA>"校验——第三方代理因此无法把别的提交塞进来。默认不带任何镜像：这条链路下的是源码，
-// 随后会被编译并与其依赖树一起运行，信任面不该由一个内置常量替用户决定。
-// 失败如实上抛（fail-closed，不做假成功）。
+// 对应物，所以源码获取只可能走 GitHub 本身或**GitHub 加速前缀**。
+// v0.4.5-1：加速前缀内置（用户裁决 2026-09-29：`https://ghfast.top/https://github.com`），
+// 官方 codeload 作为回退保留；两种 URL 形态都做过实测，见 `DEFAULT_GITHUB_MIRROR` 的注释。
+// 取回的内容仍要过"顶层目录名 = <Repo>-<完整 SHA>"校验——它挡的是"代理给了别的提交/别的东西"，
+// 但**挡不住**"代理按正确目录名塞了改过的内容"：经第三方加速取源码，等于把该代理放进信任面，
+// 这一点由用户裁决接受，不由这里偷偷替用户决定。失败如实上抛（fail-closed，不做假成功）。
 // 编排（进度广播、运行时供给、命令执行）留在 BinaryManager.installSourceTool，本文件只
 // 提供网络/文件系统/解析原语，便于单测。
 
@@ -106,19 +107,28 @@ export async function resolveHeadSha(repo: string, branch: string): Promise<stri
 
 /** 官方源码归档主机（GitHub codeload：按 SHA 取，内容固定）。 */
 const CODELOAD_ORIGIN = 'https://codeload.github.com'
+/** github.com 归档路径的主机；加速前缀作用在**这条** URL 形态上（见下）。 */
+const GITHUB_ORIGIN = 'https://github.com'
+
 /**
- * 源码归档的**镜像前缀**环境变量（v0.4.5-1 / O8，用户裁决"可引"）。
+ * 内置的 GitHub 加速前缀（用户裁决 2026-09-29）。
  *
- * 为什么是 opt-in 而不是内置几个公共代理：这条链路下的是**源码**，随后被 `vite build` 编译、
- * 被 `pip install` 的依赖树一起运行——经第三方代理取源码等于把该代理放进信任面。运行时的
- * node/python 档案走 npmmirror 是既有裁决，源码不该被同一句话顺带覆盖。
- *
- * 用法：逗号或空白分隔的**前缀**（会拼在官方 URL 前面），例如
- *   RC_GITHUB_MIRROR="https://ghproxy.net/,https://ghfast.top/"
- * 官方主机恒为第一顺位，仅在它失败后才逐个尝试镜像；镜像取到的归档还要过下面的
- * "顶层目录名 = <Repo>-<完整 SHA>"校验（SHA 是我们自己钉的，代理换了内容就对不上）。
+ * 为什么拼在 github.com 归档路径上、而不是当前的 codeload 形态——**实测**（本机，2026-09-29）：
+ *   https://codeload.github.com/<repo>/zip/<sha>                       200 application/zip  1.2s
+ *   https://ghfast.top/https://codeload.github.com/<repo>/zip/<sha>    403 text/html（该前缀不吃 codeload 形态）
+ *   https://ghfast.top/https://github.com/<repo>/archive/<sha>.zip     200 application/zip  2.9–5.3s
+ *   https://github.com/<repo>/archive/<sha>.zip                        fetch failed（本机直连 github.com 不通）
+ * 所以前缀语义 = "github.com 之前的那一段"，与 ghfast 的公开用法一致；`<prefix>/<owner>/<repo>/
+ * archive/<sha>.zip` 就是可用形态。官方 codeload 作为回退保留（加速服务抖动/下线时安装不至于失败）。
+ */
+const DEFAULT_GITHUB_MIRROR = 'https://ghfast.top/https://github.com'
+/**
+ * 覆盖内置加速前缀的环境变量（逗号或空白分隔；`none`/`off` 表示**关闭加速**只用官方）。
+ * 例如 RC_GITHUB_MIRROR="https://ghproxy.net/" 走 ghproxy 系（"前缀 + 完整 URL"形态）。
  */
 const GITHUB_MIRROR_ENV = 'RC_GITHUB_MIRROR'
+/** 关闭加速的取值。 */
+const MIRROR_DISABLED = new Set(['none', 'off'])
 
 /** 解析镜像前缀（去空白、去尾部斜杠、去重、忽略非 http(s) 项）。 */
 export function parseGithubMirrorPrefixes(raw: string | undefined): string[] {
@@ -131,20 +141,40 @@ export function parseGithubMirrorPrefixes(raw: string | undefined): string[] {
 }
 
 /**
- * 源码归档的候选 URL（官方在前，配置的镜像在后）。镜像前缀拼在完整官方 URL 之前
- * （ghproxy 系代理的约定形态：`<prefix>/<原始 URL>`）。
+ * 生效的加速前缀：未设环境变量 → 内置（用户裁决）；设为 `none`/`off` → 关闭；否则用环境变量。
  */
-export function sourceArchiveUrls(repo: string, sha: string, env: NodeJS.ProcessEnv = process.env): string[] {
-  const official = `${CODELOAD_ORIGIN}/${repo}/zip/${sha}`
-  const mirrors = parseGithubMirrorPrefixes(env[GITHUB_MIRROR_ENV]).map((prefix) => `${prefix}/${official}`)
-  return [official, ...mirrors]
+export function githubMirrorPrefixes(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = env[GITHUB_MIRROR_ENV]?.trim()
+  if (!raw) return [DEFAULT_GITHUB_MIRROR]
+  if (MIRROR_DISABLED.has(raw.toLowerCase())) return []
+  return parseGithubMirrorPrefixes(raw)
 }
 
 /**
- * 按 SHA 下载源码 zip（codeload：内容固定，避免"分支在检查后又被推进"的漂移）。
+ * 一个前缀 → 一条加速 URL。两种前缀形态都支持，判据是"前缀里有没有 github.com 这个主机"：
+ * - ghfast 系（`https://ghfast.top/https://github.com`）→ 直接接 `<owner>/<repo>/archive/<sha>.zip`；
+ * - ghproxy 系（`https://ghproxy.net`）→ 接完整 URL（`<prefix>/https://github.com/...`）。
+ */
+export function acceleratedArchiveUrl(prefix: string, repo: string, sha: string): string {
+  const archivePath = `${repo}/archive/${sha}.zip`
+  return /github\.com(\/|$)/i.test(prefix) ? `${prefix}/${archivePath}` : `${prefix}/${GITHUB_ORIGIN}/${archivePath}`
+}
+
+/**
+ * 源码归档的候选 URL：加速前缀在前（用户要的就是"加速"，否则它只在失败时才生效），
+ * 官方 codeload 恒在最后一位当回退。顺序可按需用 `RC_GITHUB_MIRROR` 调整或关闭。
+ */
+export function sourceArchiveUrls(repo: string, sha: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const official = `${CODELOAD_ORIGIN}/${repo}/zip/${sha}`
+  const accelerated = githubMirrorPrefixes(env).map((prefix) => acceleratedArchiveUrl(prefix, repo, sha))
+  return [...accelerated, official]
+}
+
+/**
+ * 按 SHA 下载源码 zip（内容固定，避免"分支在检查后又被推进"的漂移）。
  * v0.4.5-1：走 downloadFile 原语（流式落盘 + 空闲超时 + 断点续传 + 源内重试）——旧实现
- * 对这类第三方/自建网络路径没有重试，抖动一次就整个安装失败；官方主机之外再补配置的镜像
- * （见 {@link sourceArchiveUrls}，默认只有官方）。
+ * 对这类第三方/自建网络路径没有重试，抖动一次就整个安装失败；候选源见
+ * {@link sourceArchiveUrls}（加速前缀在前、官方 codeload 回退在后）。
  */
 export async function downloadSourceZip(
   repo: string,

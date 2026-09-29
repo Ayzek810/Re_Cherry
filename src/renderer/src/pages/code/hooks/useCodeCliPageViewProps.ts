@@ -369,17 +369,10 @@ export function useCodeCliPageViewProps(
           upgradingTools,
           installError,
           snapshotsLoading,
-          installProgressStep:
-            installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
-              ? installProgress.step
-              : undefined,
-          installProgressDetail:
-            installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
-              ? installProgress.detail
-              : undefined,
-          installProgressFraction:
-            installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
-              ? installProgress.fraction
+          // 一次判据、一处求值：载荷属于当前选中工具才透传（此前同一谓词写了三遍）。
+          installProgress:
+            installProgress?.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
+              ? installProgress
               : undefined,
           // v0.4.5：手动检查更新按钮（三个工具页共用）。
           onCheckUpdates: () => void updateCheck.checkForUpdates(selectedCliTool),
