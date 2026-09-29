@@ -652,7 +652,9 @@ export class BinaryManager {
     await fsp.mkdir(dir, { recursive: true })
     const sourceDir = sourceTreeDir(plan.name)
     try {
-      await extractSourceTree(archivePath, sourceDir, sourceRepoName(plan))
+      // v0.4.5-1（O8）：把钉住的 SHA 一起交下去——归档顶层目录名必须是 <Repo>-<sha>，
+      // 这样"从镜像/代理取回的东西"也能被证伪（对不上即拒绝，见 selectSourceTreeEntry）。
+      await extractSourceTree(archivePath, sourceDir, sourceRepoName(plan), sha)
     } finally {
       await fsp.rm(archivePath, { force: true }).catch(() => undefined)
     }

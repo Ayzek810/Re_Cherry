@@ -1,14 +1,22 @@
 /**
- * v0.4.5 源码型安装器的依赖解析契约。
+ * v0.4.5 源码型安装器的依赖解析契约 + v0.4.5-1 源码获取契约。
  *
- * 为什么这条契约值得单测：安装器**不做** `pip install -e .`（上游无 [build-system] 且
- * flat-layout 多顶层目录，打包发现会失败），而是只装 pyproject 的 dependencies 数组。
- * 于是"解析不出依赖"必须被显式识别——否则会装出一个空 venv，把失败推迟到启动时的
- * ImportError（用户读不懂）。解析为空 ⇒ 调用方 fail-closed 抛错，绝不猜依赖。
+ * 为什么这两条契约值得单测：
+ * ① 依赖解析：安装器**不做** `pip install -e .`（上游无 [build-system] 且 flat-layout 多顶层
+ *    目录，打包发现会失败），而是只装 pyproject 的 dependencies 数组。于是"解析不出依赖"必须
+ *    被显式识别——否则会装出一个空 venv，把失败推迟到启动时的 ImportError（用户读不懂）。
+ *    解析为空 ⇒ 调用方 fail-closed 抛错，绝不猜依赖。
+ * ② 源码获取（O8）：官方 codeload 之外允许用户配置镜像前缀，而镜像取回的内容必须能被证伪
+ *    ——顶层目录名带我们钉的 SHA，对不上即拒绝（否则第三方代理可以把别的提交塞进构建链）。
  */
 import { describe, expect, it } from 'vitest'
 
-import { parsePyprojectDependencies } from '../sourceInstaller'
+import {
+  parseGithubMirrorPrefixes,
+  parsePyprojectDependencies,
+  selectSourceTreeEntry,
+  sourceArchiveUrls
+} from '../sourceInstaller'
 
 // 上游 Tswoen/Paper-Agent 的 pyproject.toml 形状（每行一条带引号规格）。
 const UPSTREAM_PYPROJECT = `[project]
@@ -95,5 +103,52 @@ dev = [
 ]
 `
     expect(parsePyprojectDependencies(text)).toEqual(['fastapi>=0.116.0'])
+  })
+})
+
+const SHA = 'a'.repeat(40)
+const OFFICIAL = `https://codeload.github.com/Tswoen/Paper-Agent/zip/${SHA}`
+
+describe('源码归档来源（O8：可配置镜像）', () => {
+  it('defaults to the official host only (no mirror is trusted implicitly)', () => {
+    expect(sourceArchiveUrls('Tswoen/Paper-Agent', SHA, {})).toEqual([OFFICIAL])
+  })
+
+  it('keeps the official host first and appends configured mirror prefixes', () => {
+    const urls = sourceArchiveUrls('Tswoen/Paper-Agent', SHA, {
+      RC_GITHUB_MIRROR: 'https://ghproxy.net/, https://ghfast.top'
+    })
+    expect(urls).toEqual([OFFICIAL, `https://ghproxy.net/${OFFICIAL}`, `https://ghfast.top/${OFFICIAL}`])
+  })
+
+  it('normalizes prefixes: trims, drops trailing slashes, dedupes, ignores non-http entries', () => {
+    expect(parseGithubMirrorPrefixes(' https://a.test/ , https://a.test , file:///tmp ,  ,ftp://x')).toEqual([
+      'https://a.test'
+    ])
+    expect(parseGithubMirrorPrefixes(undefined)).toEqual([])
+  })
+})
+
+describe('归档顶层目录校验（镜像取回的内容必须能被证伪）', () => {
+  it('accepts exactly <Repo>-<sha>', () => {
+    expect(selectSourceTreeEntry([`Paper-Agent-${SHA}`], 'Paper-Agent', SHA)).toBe(`Paper-Agent-${SHA}`)
+  })
+
+  it('rejects a different commit (a proxy served something else)', () => {
+    expect(() => selectSourceTreeEntry([`Paper-Agent-${'b'.repeat(40)}`], 'Paper-Agent', SHA)).toThrow(
+      /Unexpected source archive content/
+    )
+  })
+
+  it('rejects an unexpected number of top-level entries', () => {
+    expect(() => selectSourceTreeEntry([`Paper-Agent-${SHA}`, 'extra'], 'Paper-Agent', SHA)).toThrow(
+      /Unexpected source archive layout/
+    )
+    expect(() => selectSourceTreeEntry([], 'Paper-Agent', SHA)).toThrow(/Unexpected source archive layout/)
+  })
+
+  it('falls back to a prefix match when no SHA is pinned', () => {
+    expect(selectSourceTreeEntry(['Paper-Agent-main'], 'Paper-Agent')).toBe('Paper-Agent-main')
+    expect(() => selectSourceTreeEntry(['Other-main'], 'Paper-Agent')).toThrow(/Unexpected source archive content/)
   })
 })

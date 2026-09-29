@@ -3,7 +3,11 @@
 // 设计来源：runtimeDownloader.ts 的下载/解压/重试模式（同盘 rename、.part 先写后改名、
 // EPERM/EBUSY 退避——杀软扫描窗口）。
 // 与注册表型工具（npm/PyPI）的差别：**无镜像等价物**——任意 GitHub 仓库没有 npmmirror
-// 对应物，单源直连；失败如实上抛（fail-closed，不做假成功）。
+// 对应物。v0.4.5-1（O8，用户裁决"可引"）：官方 codeload 之外支持**用户配置的镜像前缀**
+// （`RC_GITHUB_MIRROR`，官方恒第一顺位），并且镜像取回的内容要过"顶层目录名 = <Repo>-<完整
+// SHA>"校验——第三方代理因此无法把别的提交塞进来。默认不带任何镜像：这条链路下的是源码，
+// 随后会被编译并与其依赖树一起运行，信任面不该由一个内置常量替用户决定。
+// 失败如实上抛（fail-closed，不做假成功）。
 // 编排（进度广播、运行时供给、命令执行）留在 BinaryManager.installSourceTool，本文件只
 // 提供网络/文件系统/解析原语，便于单测。
 
@@ -15,7 +19,7 @@ import StreamZip from 'node-stream-zip'
 import { loggerService } from '@logger'
 
 import { replaceDirectory } from './atomicSwap'
-import { type DownloadProgress, downloadFile } from './downloadFile'
+import { type DownloadProgress, downloadFromAnySource } from './downloadFile'
 
 const logger = loggerService.withContext('SourceInstaller')
 
@@ -100,10 +104,47 @@ export async function resolveHeadSha(repo: string, branch: string): Promise<stri
 // 源码下载
 // ---------------------------------------------------------------------------
 
+/** 官方源码归档主机（GitHub codeload：按 SHA 取，内容固定）。 */
+const CODELOAD_ORIGIN = 'https://codeload.github.com'
+/**
+ * 源码归档的**镜像前缀**环境变量（v0.4.5-1 / O8，用户裁决"可引"）。
+ *
+ * 为什么是 opt-in 而不是内置几个公共代理：这条链路下的是**源码**，随后被 `vite build` 编译、
+ * 被 `pip install` 的依赖树一起运行——经第三方代理取源码等于把该代理放进信任面。运行时的
+ * node/python 档案走 npmmirror 是既有裁决，源码不该被同一句话顺带覆盖。
+ *
+ * 用法：逗号或空白分隔的**前缀**（会拼在官方 URL 前面），例如
+ *   RC_GITHUB_MIRROR="https://ghproxy.net/,https://ghfast.top/"
+ * 官方主机恒为第一顺位，仅在它失败后才逐个尝试镜像；镜像取到的归档还要过下面的
+ * "顶层目录名 = <Repo>-<完整 SHA>"校验（SHA 是我们自己钉的，代理换了内容就对不上）。
+ */
+const GITHUB_MIRROR_ENV = 'RC_GITHUB_MIRROR'
+
+/** 解析镜像前缀（去空白、去尾部斜杠、去重、忽略非 http(s) 项）。 */
+export function parseGithubMirrorPrefixes(raw: string | undefined): string[] {
+  if (!raw) return []
+  const prefixes = raw
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim().replace(/\/+$/, ''))
+    .filter((entry) => /^https?:\/\/[^\s]+$/i.test(entry))
+  return [...new Set(prefixes)]
+}
+
+/**
+ * 源码归档的候选 URL（官方在前，配置的镜像在后）。镜像前缀拼在完整官方 URL 之前
+ * （ghproxy 系代理的约定形态：`<prefix>/<原始 URL>`）。
+ */
+export function sourceArchiveUrls(repo: string, sha: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const official = `${CODELOAD_ORIGIN}/${repo}/zip/${sha}`
+  const mirrors = parseGithubMirrorPrefixes(env[GITHUB_MIRROR_ENV]).map((prefix) => `${prefix}/${official}`)
+  return [official, ...mirrors]
+}
+
 /**
  * 按 SHA 下载源码 zip（codeload：内容固定，避免"分支在检查后又被推进"的漂移）。
  * v0.4.5-1：走 downloadFile 原语（流式落盘 + 空闲超时 + 断点续传 + 源内重试）——旧实现
- * 对这类第三方/自建网络路径没有重试，抖动一次就整个安装失败。
+ * 对这类第三方/自建网络路径没有重试，抖动一次就整个安装失败；官方主机之外再补配置的镜像
+ * （见 {@link sourceArchiveUrls}，默认只有官方）。
  */
 export async function downloadSourceZip(
   repo: string,
@@ -114,9 +155,9 @@ export async function downloadSourceZip(
   const downloadsDir = path.join(cacheDir, 'downloads')
   await fsp.mkdir(downloadsDir, { recursive: true })
   const destPath = path.join(downloadsDir, `${repo.replace('/', '-')}-${sha}.zip`)
-  const url = `https://codeload.github.com/${repo}/zip/${sha}`
-  logger.info(`Downloading source tree from ${url}`)
-  const result = await downloadFile(url, destPath, {
+  const urls = sourceArchiveUrls(repo, sha)
+  logger.info(`Downloading source tree from ${urls.join(' | ')}`)
+  const result = await downloadFromAnySource(urls, destPath, {
     label: `Download ${repo}@${sha.slice(0, 8)}`,
     ...(options.onProgress ? { onProgress: options.onProgress } : {})
   })
@@ -140,24 +181,46 @@ async function extractZip(archivePath: string, destDir: string): Promise<void> {
 }
 
 /**
+ * 归档解压后的顶层目录名：GitHub 固定为 `<RepoName>-<完整 SHA>`。
+ * @param sha - 期望的提交（我们钉的那个）。给了就必须精确匹配。
+ */
+export function selectSourceTreeEntry(entries: readonly string[], repoName: string, sha?: string): string {
+  if (entries.length !== 1) {
+    throw new Error(
+      `Unexpected source archive layout: expected a single "${repoName}" directory, got ${entries.join(', ') || '(empty)'}`
+    )
+  }
+  const [entry] = entries as [string]
+  const expected = sha ? `${repoName}-${sha}` : undefined
+  if (expected ? entry !== expected : !entry.startsWith(repoName)) {
+    // v0.4.5-1（O8）：镜像/代理取回的内容要能被证伪——顶层目录带着我们钉的 SHA，
+    // 对不上说明拿到的不是那一个提交（旧版、串档、或被代理换过内容），一律拒绝。
+    throw new Error(
+      `Unexpected source archive content: expected the directory "${expected ?? `${repoName}-<sha>`}", got "${entry}"`
+    )
+  }
+  return entry
+}
+
+/**
  * 把 codeload zip 的源码树归位到 targetDir：zip 顶层是 `<RepoName>-<sha>/` 包裹层
  * （GitHub 固定布局）→ 整体 rename。
  *
  * v0.4.5-1：改走原子替换——旧源码树先留作备份，切换失败就放回去。旧实现是"先删旧树再
  * 改名"，删成功、改名失败（Windows 杀软/占用）就是"源码树没了、工具也起不来"。
+ * 同时校验顶层目录名 = `<RepoName>-<sha>`（见 {@link selectSourceTreeEntry}）。
  */
-export async function extractSourceTree(archivePath: string, targetDir: string, repoName: string): Promise<void> {
+export async function extractSourceTree(
+  archivePath: string,
+  targetDir: string,
+  repoName: string,
+  expectedSha?: string
+): Promise<void> {
   void EXTRACT_TIMEOUT_MS
   const tempDir = `${targetDir}.tmp-${Date.now()}`
   try {
     await extractZip(archivePath, tempDir)
-    const entries = await fsp.readdir(tempDir)
-    const inner = entries.find((entry) => entry.startsWith(repoName))
-    if (!inner || entries.length !== 1) {
-      throw new Error(
-        `Unexpected source archive layout: expected a single "${repoName}*" directory, got ${entries.join(', ') || '(empty)'}`
-      )
-    }
+    const inner = selectSourceTreeEntry(await fsp.readdir(tempDir), repoName, expectedSha)
     const replaced = await replaceDirectory(path.join(tempDir, inner), targetDir)
     if (!replaced) {
       throw new Error(
