@@ -600,6 +600,8 @@
     "check_updates": "检查更新",
     "check_updates_failed": "检查更新失败",
     "check_updates_latest": "已是最新版本",
+    "check_updates_not_installed": "该工具尚未安装",
+    "check_updates_system": "这是系统安装的工具，不受本应用管理（请在系统侧自行升级）",
     "cli_config": {
       "format_failed": "格式化失败，请检查文件格式",
       "title": "CLI 配置文件",
@@ -664,6 +666,7 @@
       }
     },
     "install": "安装",
+    "install_failed": "安装失败",
     "install_progress": {
       "deploy": "正在部署界面资源…",
       "deps": "正在安装 Python 依赖…",

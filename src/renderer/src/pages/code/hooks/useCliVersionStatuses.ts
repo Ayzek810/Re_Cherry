@@ -31,6 +31,8 @@ const buildStatus = (snapshot: BinaryToolSnapshot | undefined, latest?: string):
     ...(view.installedVersion !== undefined ? { current: view.installedVersion } : {}),
     ...(view.source === 'managed' ? { latest } : {}),
     ...(view.systemPath !== undefined ? { systemPath: view.systemPath } : {}),
+    // v0.4.5-1（O7）：上次安装失败的原因随快照下发，版本卡据此显示持久的失败行。
+    ...(view.lastFailure !== undefined ? { lastFailure: view.lastFailure } : {}),
     canUpgrade: view.hasUpdate
   }
 }

@@ -221,8 +221,11 @@ export function useCodeCliPageViewProps(
   }
   // v0.4.5：手动检查更新的结论注入（只看选中工具）。结论带"它当时比对的当前版本"——装/
   // 升级后当前版本变了，旧结论自动不适用，回落到快照真值（无需清除广播，也无竞态）。
+  // v0.4.5-1（O1）：只注入 **managed** 结论——系统来源/未安装根本没有"当前版本"可比，
+  // 其结论不得覆盖版本卡（否则 canUpgrade:false 会把卡片压成"最新"）。
   const manualCheck = updateCheck.results[CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable]
-  const manualCheckApplies = manualCheck && manualCheck.forVersion === snapshotVersionStatus.current
+  const manualCheckApplies =
+    manualCheck && manualCheck.source === 'managed' && manualCheck.forVersion === snapshotVersionStatus.current
   const versionStatus: VersionStatus =
     manualCheck && manualCheckApplies
       ? {
@@ -237,8 +240,9 @@ export function useCodeCliPageViewProps(
       ? versionStatus.installed
       : (isProviderlessTool || isOwnLoginSelected || !!enabledProvider) &&
         (!isDeepSeekHarnessTool || !!enabledProviderConfig?.modelId)
-  // fork 缝⑤（续）：无 operation 失败面 → 无 install error 对话框来源；保留 undefined 形状。
-  const installError: string | undefined = undefined
+  // v0.4.5-1（O7）：失败原因来自主进程（快照的 lastFailure），不再是恒 undefined 的占位——
+  // 失败行/失败对话框因此真的会出现，并且刷新页面后仍在。
+  const installError: string | undefined = versionStatus.lastFailure
   // The synthetic own-login entry is always available, so nudge to "select a provider" only when a
   // real provider exists to select — otherwise own-login is the sole option and no nag is warranted.
   const hasRealSupportedProvider = supportedProviders.some((p) => p.id !== CLI_OWN_LOGIN_PROVIDER_ID)
@@ -368,6 +372,14 @@ export function useCodeCliPageViewProps(
           installProgressStep:
             installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
               ? installProgress.step
+              : undefined,
+          installProgressDetail:
+            installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
+              ? installProgress.detail
+              : undefined,
+          installProgressFraction:
+            installProgress && installProgress.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
+              ? installProgress.fraction
               : undefined,
           // v0.4.5：手动检查更新按钮（三个工具页共用）。
           onCheckUpdates: () => void updateCheck.checkForUpdates(selectedCliTool),

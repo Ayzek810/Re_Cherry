@@ -24,4 +24,9 @@ export interface VersionStatus {
   current?: string
   latest?: string
   canUpgrade: boolean
+  /**
+   * v0.4.5-1（O7）：主进程记录的上次安装/升级失败原因。版本卡的失败行据此持久显示
+   * （刷新/重启后仍在）——此前失败原因只活在一次 toast 里。
+   */
+  lastFailure?: string
 }

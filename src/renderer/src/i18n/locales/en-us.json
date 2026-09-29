@@ -600,6 +600,8 @@
     "check_updates": "Check for updates",
     "check_updates_failed": "Failed to check for updates",
     "check_updates_latest": "Already up to date",
+    "check_updates_not_installed": "This tool is not installed",
+    "check_updates_system": "This tool is a system install outside the app's management (upgrade it there)",
     "cli_config": {
       "format_failed": "Format failed. Check the file syntax.",
       "title": "CLI Config File",
@@ -664,6 +666,7 @@
       }
     },
     "install": "Install",
+    "install_failed": "Installation failed",
     "install_progress": {
       "deploy": "Deploying web assets…",
       "deps": "Installing Python dependencies…",

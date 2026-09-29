@@ -12,6 +12,11 @@ export interface BinaryToolSnapshot {
     | { source: 'managed'; path: string; version?: string }
     | { source: 'system'; path: string }
     | { source: 'none' }
+  /**
+   * v0.4.5-1（O7）：该工具最近一次安装/升级失败的原始原因，由主进程记录并随快照落盘。
+   * 版本卡的失败行据此持久显示——此前失败原因只活在一次 toast 里。
+   */
+  lastFailure?: string
 }
 
 /**
@@ -40,6 +45,8 @@ export interface InterpretedBinarySnapshot {
   applicationVersion?: string
   /** An exactly-applied tool has a newer managed version available. */
   hasUpdate: boolean
+  /** v0.4.5-1（O7）：主进程记录的上次安装失败原因（无失败时 undefined）。 */
+  lastFailure?: string
 }
 
 export interface InterpretBinarySnapshotOptions {
@@ -90,6 +97,7 @@ export function interpretBinarySnapshot(
     applicationVersion,
     // An update requires the exact recipe to be applied — never a
     // runnable-but-not-applied conflict or an external source.
-    hasUpdate: exactApplied && isNewerVersion(options.latest, applicationVersion)
+    hasUpdate: exactApplied && isNewerVersion(options.latest, applicationVersion),
+    ...(snapshot?.lastFailure ? { lastFailure: snapshot.lastFailure } : {})
   }
 }

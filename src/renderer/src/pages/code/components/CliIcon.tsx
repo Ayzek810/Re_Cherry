@@ -5,7 +5,7 @@
 // fill=currentColor 适配双主题——用户裁决"hermes 有自己的图标，不要通用图标"）。
 // CLI_TOOLS 裁到 2 项；OPTICAL_VIEWBOXES 随 SVG 源裁剪移除（位图/lucide 图标无 viewBox 面）。
 
-import type { ComponentType, FC, SVGProps } from 'react'
+import type { ComponentType, FC } from 'react'
 import { ScrollText } from 'lucide-react'
 
 import DeepSeekLogo from '@renderer/assets/images/providers/deepseek.png'
@@ -36,9 +36,10 @@ export const CLI_TOOLS = [
   { value: CodeCli.PAPER_AGENT, label: 'code.cli_tools.paper_agent', icon: PaperAgentIcon }
 ] as const satisfies ReadonlyArray<{ value: CodeCli; label: string; icon: IconComponent }>
 
-type SvgIcon = ComponentType<SVGProps<SVGSVGElement>>
-
-const CLI_ICONS: Record<string, SvgIcon> = Object.fromEntries(CLI_TOOLS.map((tool) => [tool.value, tool.icon]))
+// v0.4.5-1（O5）：图标表按**真实契约** IconComponent（size/className）存——原来存成
+// SvgIcon（SVGProps）并在渲染处传 width/height，而三个图标组件读的都是 `size`：dsh 的位图
+// 图标因此恒为默认 28px，传入的 size 完全失效（hermes 的 SVG 恰好也吃 width/height 才没露）。
+const CLI_ICONS: Record<string, IconComponent> = Object.fromEntries(CLI_TOOLS.map((tool) => [tool.value, tool.icon]))
 
 interface CliIconProps {
   id: string
@@ -61,5 +62,5 @@ export const CliIcon: FC<CliIconProps> = ({ id, size = 28, className }) => {
     )
   }
 
-  return <Icon width={size} height={size} className={className} />
+  return <Icon size={size} className={className} />
 }

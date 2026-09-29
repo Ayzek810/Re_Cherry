@@ -5,16 +5,19 @@ import { loggerService } from '@logger'
 import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
 import type { CodeCli } from '@shared/types/codeCli'
 
+import { withDetail } from '../utils/errorDetail'
+
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useBinaryActions.ts
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，busy 集合/成功 toast/失败只进日志（版本卡持久化
-// 失败行负责呈现）的语义逐字：
+//（2026-09-24，v0.3.4-1 批次4b）。缝点三处：
 // ① IPC 缝：`ipcApi.request('binary.install_tool', {name, targetVersion?})` → `window.api.
-//   codeCli.binary.install(name)`（fork 安装器无目标版本面——targetVersion 入参保形不消费，
-//   装的恒是最新版；`binary.remove_tool` → `window.api.codeCli.binary.remove(name)`）。
+//   codeCli.binary.install(name, targetVersion?)`；`binary.remove_tool` →
+//   `window.api.codeCli.binary.remove(name)`。v0.4.5-1（O2）：targetVersion 真的贯通到主进程
+//   并钉 spec（此前只是保形入参）。
 // ② 结果缝：fork 主进程不抛错，返回结果对象——install 为 {success, message?}（V2 成功无返回/
 //   失败靠 throw），remove 为 {removed, message?}（V2 为 {status:'cleanup_blocked'|…, message?}）。
 //   remove 的 fail-closed 分态统一收敛为 removed=false（无 blocked/definition-only 对比面）。
 // ③ toast 缝：`@renderer/services/toast` → fork `window.toast`；logger 缝：'@logger'。
+//   v0.4.5-1：失败不再只是日志——即时 toast（此处）+ 持久失败行（主进程 lastFailure 经快照）。
 
 const logger = loggerService.withContext('useBinaryActions')
 
@@ -28,7 +31,15 @@ export function useBinaryActions() {
   const [installingTools, setInstallingTools] = useState<Set<string>>(() => new Set())
   const [upgradingTools, setUpgradingTools] = useState<Set<string>>(() => new Set())
   // v0.3.4-2（用户裁决）：安装步骤进度——主进程每完成一个阶段广播一次，进度条渲染步名。
-  const [installProgress, setInstallProgress] = useState<{ tool: string; step: string } | null>(null)
+  // v0.4.5-1：detail 是下载字节进度（语言无关）、fraction 是进度条本体的确定性比例
+  // （只有可测阶段才有；无值即不确定态），否则大档案下载期间用户无法分辨"在下载 / 卡住 /
+  // 死了"。
+  const [installProgress, setInstallProgress] = useState<{
+    tool: string
+    step: string
+    detail?: string
+    fraction?: number
+  } | null>(null)
   useEffect(() => {
     const unsubscribe = window.api.codeCli.binary.onInstallProgress((payload) => setInstallProgress(payload))
     return unsubscribe
@@ -46,19 +57,27 @@ export function useBinaryActions() {
       messages: { successKey: string; logLabel: string },
       targetVersion?: string
     ) => {
-      // fork 缝①②（续）：targetVersion 入参保形不消费（fork 安装器无目标版本面）。
-      void targetVersion
+      // v0.4.5-1（O2）：targetVersion 真的传下去了——"检查到 A 却装了 B"是通道 tag 漂移下的
+      // 常态（此前这里 `void targetVersion`，入参只是保形）。
       try {
         setBusy((prev) => new Set(prev).add(toolId))
         // fork 缝①：V2 为 `await ipcApi.request('binary.install_tool', {name, …})`。
-        const result = (await window.api.codeCli.binary.install(CODE_CLI_TOOL_PRESET_MAP[toolId].executable)) as {
+        const result = (await window.api.codeCli.binary.install(
+          CODE_CLI_TOOL_PRESET_MAP[toolId].executable,
+          targetVersion
+        )) as {
           success: boolean
           message?: string
         }
         if (result.success) {
           window.toast.success(t(messages.successKey))
         } else {
+          // v0.4.5-1（真机反馈的静默失败）：主进程把失败原因（已 redactSecretText 清洗，
+          // 含 pnpm ERR_PNPM_* 与"市场基线装不上"这类结论）随结果返回，此前只写日志——
+          // 用户点安装看到的是"什么都没发生"。这里是即时信号；持久显示由主进程记录的
+          // lastFailure（随快照下发）经版本卡的失败行承担。
           logger.error(messages.logLabel, new Error(result.message ?? 'install failed'))
+          window.toast.error(withDetail(t('code.install_failed'), result.message))
         }
       } catch (error) {
         logger.error(messages.logLabel, error as Error)
@@ -68,6 +87,9 @@ export function useBinaryActions() {
           next.delete(toolId)
           return next
         })
+        // v0.4.5-1（O6）：本次尝试结束即清掉进度快照——否则切到别的工具再切回来，
+        // 会看到上一轮残留的步骤名（"正在构建前端…"）挂在一个没在安装的工具上。
+        setInstallProgress((prev) => (prev && prev.tool === CODE_CLI_TOOL_PRESET_MAP[toolId].executable ? null : prev))
       }
     },
     [t]

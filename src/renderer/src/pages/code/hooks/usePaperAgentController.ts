@@ -5,6 +5,7 @@ import { loggerService } from '@logger'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { CodeCli } from '@shared/types/codeCli'
 
+import { withDetail } from '../utils/errorDetail'
 import { usePaperAgentStatus } from './useCodeCliStatus'
 
 // v0.4.5（fork 原创）：Paper-Agent 受管 Web UI 控制器——照 useHermesDashboardController 同构
@@ -17,7 +18,6 @@ import { usePaperAgentStatus } from './useCodeCliStatus'
 // 的既有接线自动生效）。
 
 const logger = loggerService.withContext('usePaperAgentController')
-const ERROR_DETAIL_LIMIT = 200
 
 export const PAPER_AGENT_START_FAILURE_REASONS = ['not_installed', 'cancelled', 'startup_failed'] as const
 export type PaperAgentStartFailureReason = (typeof PAPER_AGENT_START_FAILURE_REASONS)[number]
@@ -26,11 +26,6 @@ const START_ERROR_KEYS: Record<PaperAgentStartFailureReason, string> = {
   cancelled: 'code.paper_agent.error.cancelled',
   not_installed: 'code.paper_agent.error.not_installed',
   startup_failed: 'code.paper_agent.error.startup_failed'
-}
-
-function withDetail(title: string, detail: string | undefined): string {
-  const trimmed = detail?.trim()
-  return trimmed ? `${title}: ${trimmed.slice(0, ERROR_DETAIL_LIMIT)}` : title
 }
 
 interface PaperAgentController {

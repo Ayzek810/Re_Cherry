@@ -39,6 +39,10 @@ interface CodeCliContentPanelProps {
   snapshotsLoading?: boolean
   /** v0.3.4-2：安装步骤进度（i18n 键尾，来自主进程广播；仅当前工具安装中时有值）。 */
   installProgressStep?: string
+  /** v0.4.5-1：进度补充事实（下载字节数等，语言无关）。 */
+  installProgressDetail?: string
+  /** v0.4.5-1：可测阶段的确定性比例（0..1）。有值画真进度条，无值画不确定态。 */
+  installProgressFraction?: number
   /** v0.4.5：手动检查更新（三个工具页共用）。 */
   onCheckUpdates?: () => void
   checkingUpdates?: boolean
@@ -81,6 +85,8 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   installError,
   snapshotsLoading,
   installProgressStep,
+  installProgressDetail,
+  installProgressFraction,
   onCheckUpdates,
   checkingUpdates,
   providerState,
@@ -134,6 +140,8 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
             isInstalling={installingTools.has(selectedCliTool)}
             isUpgrading={upgradingTools.has(selectedCliTool)}
             installProgressStep={installProgressStep}
+            installProgressDetail={installProgressDetail}
+            installProgressFraction={installProgressFraction}
             snapshotsLoading={snapshotsLoading}
             upgradeDisabled={versionCard.upgradeDisabled}
             installError={installError}

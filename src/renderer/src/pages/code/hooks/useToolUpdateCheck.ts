@@ -5,6 +5,8 @@ import { loggerService } from '@logger'
 import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
 import type { CodeCli } from '@shared/types/codeCli'
 
+import { withDetail } from '../utils/errorDetail'
+
 // v0.4.5（fork 原创）：手动"检查更新"。
 // 与挂载时自动查询（useCliVersionStatuses → latestVersions）的分工：
 // ① 自动通道只覆盖注册表型工具（npm/PyPI）的"最新版本"展示；paper-agent 不在其中——它的
@@ -14,13 +16,21 @@ import type { CodeCli } from '@shared/types/codeCli'
 // 结论按 executable 存表，由装配点（useCodeCliPageViewProps）注入到选中工具的 versionStatus。
 
 const logger = loggerService.withContext('useToolUpdateCheck')
-const ERROR_DETAIL_LIMIT = 200
 
 type CheckUpdatesResult =
-  | { success: true; current?: string; latest?: string; canUpgrade: boolean }
+  | {
+      success: true
+      /** v0.4.5-1（O1）：解析到的安装来源；只有 managed 才谈得上"本应用可升级"。 */
+      source: 'managed' | 'system' | 'none'
+      current?: string
+      latest?: string
+      canUpgrade: boolean
+    }
   | { success: false; message: string }
 
 export interface ToolUpdateCheckResult {
+  /** v0.4.5-1（O1）：结论的适用面——装配点只在 managed 时把它注入版本卡。 */
+  source: 'managed' | 'system' | 'none'
   latest?: string
   canUpgrade: boolean
   /**
@@ -36,11 +46,6 @@ export interface ToolUpdateCheckState {
   /** 最近一次手动检查的结论（executable → 结论）；未检查过的工具无键。 */
   results: Record<string, ToolUpdateCheckResult>
   checkForUpdates: (toolId: CodeCli) => Promise<void>
-}
-
-function withDetail(title: string, detail: string | undefined): string {
-  const trimmed = detail?.trim()
-  return trimmed ? `${title}: ${trimmed.slice(0, ERROR_DETAIL_LIMIT)}` : title
 }
 
 export function useToolUpdateCheck(): ToolUpdateCheckState {
@@ -66,12 +71,19 @@ export function useToolUpdateCheck(): ToolUpdateCheckState {
         setResults((prev) => ({
           ...prev,
           [executable]: {
+            source: result.source,
             latest: result.latest,
             canUpgrade: result.canUpgrade,
             ...(result.current ? { forVersion: result.current } : {})
           }
         }))
-        if (result.canUpgrade) {
+        // v0.4.5-1（O1）：非受管安装不说"版本"——系统来源的工具本应用既不知道它的版本也
+        // 升不了它，回一句"已是最新版本"是假陈述（这正是用户会照做的错误结论）。
+        if (result.source === 'system') {
+          window.toast.info(t('code.check_updates_system'))
+        } else if (result.source === 'none') {
+          window.toast.info(t('code.check_updates_not_installed'))
+        } else if (result.canUpgrade) {
           window.toast.success(t('code.update_found', { version: result.latest ?? '' }))
         } else {
           window.toast.success(t('code.check_updates_latest'))
