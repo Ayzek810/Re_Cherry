@@ -42,7 +42,7 @@ import {
 } from './config'
 import type { KernelModelInput } from '@main/kernel/providers'
 import { cacheRoot, codeMateToolsRoot, deepSeekHarnessHome, deepSeekHarnessWorkspace, nodeRuntimeDir } from './paths'
-import { ensureMarketBaseline, marketUsableWithoutBaseline } from '../binaryManager/marketBaseline'
+import { ensureMarketInstalled, isMarketUsable } from '../binaryManager/marketBaseline'
 import { NPM_REGISTRY_MIRROR } from '../binaryManager/registry'
 import { NODE_VERSION } from '../binaryManager/runtimeDownloader'
 import { startGatewayForCodeMate } from './gatewayRuntime'
@@ -201,7 +201,7 @@ class DeepSeekHarnessService {
           // v0.4.5-1：启动前对齐插件市场基线。dshmarket 不是官方包（只是 profile 里的一个
           // 普通依赖），核心升级后它不会跟着走——旧版市场与本代核心不兼容正是"插件市场
           // 不可用"的根因（真机反馈）。此处 Harness 已停，是唯一能安全替换共享树包的时机。
-          await this.establishMarketBaseline()
+          await this.ensureMarketBundle()
           if (startupAbortController.signal.aborted) {
             throw new Error('DeepSeek Harness startup was cancelled')
           }
@@ -268,37 +268,36 @@ class DeepSeekHarnessService {
   }
 
   /**
-   * v0.4.5-1：启动前的市场基线维护（社区版 dsh-desktop `ensureMarketBaseline` +
-   * `marketUsableWithoutBaseline` 的取舍逐条对位）。
+   * v0.4.5-1：启动前的市场补装（dshmarket 只是 profile 里的普通依赖，核心升级它不会跟着走；
+   * 缺失/不可读/链接残留/上次没修完时补一次）。
    *
-   * 快路径是两三次文件读（未声明市场 / 版本已达标 → 直接返回）。需要修复时它会改写
-   * profile manifest、撤 `.install-complete`、跑一次 `dsh plugin install` 并读回实际版本；
-   * **失败不阻断启动**——网络受限下装修复失败是常态，只要现有市场还能加载就保留它，
-   * 未完成的标记留给下次启动重试。只有"市场缺失/不可读/仍是链接形态"才让启动失败，
+   * 快路径是两三次文件读（未声明市场 / 已装且可读 → 直接返回）。需要补时装完会读回实际版本
+   * 核验；**失败不阻断启动**——受限网络或 dsh 拒收该版本都会失败，只要现有市场还能加载就
+   * 保留它，未完成的标记留给下次启动重试。只有"市场缺失/不可读/仍是链接形态"才让启动失败，
    * 因为那种 profile 起来也是没有市场的坏状态（失败原因随启动失败一起给用户看）。
    */
-  private async establishMarketBaseline(): Promise<void> {
+  private async ensureMarketBundle(): Promise<void> {
     try {
-      const outcome = await ensureMarketBaseline()
-      if (outcome.repaired) {
-        logger.info(`code-mate: dshmarket baseline established at ${outcome.version ?? 'unknown'}`)
+      const outcome = await ensureMarketInstalled()
+      if (outcome.installed) {
+        logger.info(`code-mate: dshmarket (re)installed at ${outcome.version ?? 'unknown'}`)
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       let marketUsable = false
       try {
-        marketUsable = await marketUsableWithoutBaseline()
+        marketUsable = await isMarketUsable()
       } catch (inspectError) {
         // 探不动的市场按不可用处理（fail-closed 到启动失败），但要留下为什么探不动。
         logger.warn('code-mate: could not inspect the installed dshmarket', inspectError as Error)
       }
       if (marketUsable) {
         logger.warn(
-          `code-mate: dshmarket baseline deferred, keeping the installed market: ${sanitizeDiagnostic(reason)}`
+          `code-mate: dshmarket install deferred, keeping the installed market: ${sanitizeDiagnostic(reason)}`
         )
         return
       }
-      throw new Error(`dshmarket baseline could not be established: ${sanitizeDiagnostic(reason)}`)
+      throw new Error(`dshmarket could not be installed: ${sanitizeDiagnostic(reason)}`)
     }
   }
 

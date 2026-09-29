@@ -1,31 +1,30 @@
 /**
- * v0.4.5-1 市场通道契约（社区版 dsh-desktop market-baseline 机制的 fork 对位）。
+ * v0.4.5-1 市场通道契约。
  *
- * 为什么这些断言值得存在：真机反馈"核心升级后插件市场不可用"的根因是市场版本从不被核验
- * 也不被修复。这里的每一条都对应一种真机上出现过的形态——旧版市场、半途完成的安装、
- * 装完但实际版本没动（pnpm 退出 0 的空转）、以及"用户删掉的市场不得复活"。
- * main 测试环境 mock 了 node:fs/node:path，故本件通过 MarketIo / MarketCommandRunner 端口
- * 驱动（真实实现的默认绑定在 marketBaseline.ts 底部，见 nodeMarketIo / managedMarketRunner）。
+ * 真机反馈："核心升级后插件市场不可用"——市场是 profile 里的普通依赖，核心升级它不会跟着走。
+ * 但**契约不是"版本必须 ≥ 某个数"**：真机日志（本人引入的回归）显示 dsh 0.2.0-rc.2 会以
+ * peer 不兼容**拒绝**被钉死的 dshmarket@1.45.1，钉死的结果是安装必失败、工具判 broken、
+ * 市场永远补不上。版本权威在 dsh，故这里的契约只有两条：**装着 + 版本可读**，加上"用户删掉
+ * 的市场不得复活"与"装不上不得说谎"。
+ *
+ * main 测试环境 mock 了 node:fs/node:path，故本件通过 MarketIo / MarketCommandRunner 端口驱动。
  */
 import path from 'node:path'
 
 import { describe, expect, it, vi } from 'vitest'
 
 import {
-  cleanVersionSpec,
-  compareSemver,
-  ensureMarketBaselineWith,
+  ensureMarketInstalledWith,
   installMarketBundleWith,
+  isMarketUsableWith,
+  isUsableMarketVersion,
   type MarketCommandRunner,
   type MarketEntryKind,
   type MarketIo,
+  MARKET_INSTALL_SPEC,
   MARKET_PACKAGE,
   marketPaths,
-  marketUsableWithoutBaselineWith,
-  meetsMarketBaseline,
-  RECOMMENDED_MARKET_VERSION,
-  selectMarketTargetVersion,
-  VERIFIED_MARKET_BASELINE
+  parseSemver
 } from '../marketBaseline'
 
 const DSH_HOME = '/mock/codemate/home/dsh'
@@ -80,7 +79,7 @@ class FakeWorkspace {
 
   installMarket(version: string): void {
     // 真实文件系统里 package.json 落盘必然伴随目录存在——假件要把这一层也建出来，
-    // 否则"目录存在性"判定（marketUsableWithoutBaseline）会失真。
+    // 否则"目录存在性"判定（isMarketUsable）会失真。
     this.dirs.add(path.join(this.paths.nodeModulesDir, MARKET_PACKAGE))
     this.files.set(this.marketPackageJson(), JSON.stringify({ name: MARKET_PACKAGE, version }))
   }
@@ -98,66 +97,39 @@ const declaredManifest = (spec: string): Record<string, unknown> => ({
   dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', MARKET_PACKAGE] } }
 })
 
-/** 模拟 pnpm：按 manifest 里钉定的版本落一个真实安装（成功路径）。 */
-function pnpmLikeRunner(workspace: FakeWorkspace): MarketCommandRunner {
+/** 模拟 dsh/pnpm：装到 `@latest` 对应的最新版（这里固定 1.52.0）。 */
+function pnpmLikeRunner(workspace: FakeWorkspace, version = '1.52.0'): MarketCommandRunner {
   return vi.fn(async () => {
-    const spec = (workspace.readManifest().dependencies as Record<string, string>)[MARKET_PACKAGE]
-    workspace.installMarket(cleanVersionSpec(spec))
+    workspace.installMarket(version)
     return ''
   }) as unknown as MarketCommandRunner
 }
 
-describe('semver 原语（社区版移植）', () => {
-  it('orders releases and prereleases', () => {
-    expect(compareSemver('1.45.1', '1.44.9')).toBe(1)
-    expect(compareSemver('1.45.1', '1.45.1')).toBe(0)
-    expect(compareSemver('1.45.1-rc.1', '1.45.1')).toBe(-1)
-    expect(compareSemver('1.45.2', '1.45.1')).toBe(1)
+describe('版本判据（只判可读，不判大小）', () => {
+  it('parses plain and prerelease semver', () => {
+    expect(parseSemver('1.45.1')?.minor).toBe(45)
+    expect(parseSemver('1.46.0-rc.2')?.prerelease).toEqual(['rc', 2])
   })
 
-  it('treats an unparseable version as lower than any release', () => {
-    expect(compareSemver('not-a-version', '1.0.0')).toBe(-1)
+  it('accepts any readable version — dsh owns compatibility, not this module', () => {
+    // 真机：dsh 0.2.0-rc.2 拒收 1.45.1，却接受它自己解析出来的版本。这里的判据不得对此表态。
+    expect(isUsableMarketVersion('1.45.1')).toBe(true)
+    expect(isUsableMarketVersion('1.52.0')).toBe(true)
+    expect(isUsableMarketVersion('2.0.0-next.1')).toBe(true)
   })
 
-  it('strips a range prefix when reading the declared version', () => {
-    expect(cleanVersionSpec('^1.45.1')).toBe('1.45.1')
-    expect(cleanVersionSpec('>=1.45.1')).toBe('1.45.1')
-  })
-})
-
-describe('meetsMarketBaseline', () => {
-  it('accepts the baseline and anything newer', () => {
-    expect(meetsMarketBaseline(VERIFIED_MARKET_BASELINE)).toBe(true)
-    expect(meetsMarketBaseline('1.52.0')).toBe(true)
-  })
-
-  it('rejects older, missing and unreadable versions', () => {
-    expect(meetsMarketBaseline('1.44.0')).toBe(false)
-    expect(meetsMarketBaseline(undefined)).toBe(false)
-    expect(meetsMarketBaseline('main')).toBe(false)
+  it('rejects missing or unreadable versions (half-installed)', () => {
+    expect(isUsableMarketVersion(undefined)).toBe(false)
+    expect(isUsableMarketVersion('main')).toBe(false)
   })
 })
 
-describe('selectMarketTargetVersion', () => {
-  it('falls back to the baseline when nothing else is known', () => {
-    expect(selectMarketTargetVersion({})).toBe(VERIFIED_MARKET_BASELINE)
-  })
-
-  it('never downgrades an installed version', () => {
-    expect(selectMarketTargetVersion({ declared: '^1.45.1', installed: '1.52.0' })).toBe('1.52.0')
-  })
-
-  it('uses the declared version when it is the highest (a half-finished install)', () => {
-    expect(selectMarketTargetVersion({ declared: '1.46.0', installed: '1.45.1' })).toBe('1.46.0')
-  })
-})
-
-describe('ensureMarketBaselineWith', () => {
+describe('ensureMarketInstalledWith', () => {
   it('does nothing when the profile has no manifest yet', async () => {
     const workspace = new FakeWorkspace()
     const runner = vi.fn() as unknown as MarketCommandRunner
-    await expect(ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })).resolves.toEqual({
-      repaired: false
+    await expect(ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })).resolves.toEqual({
+      installed: false
     })
     expect(runner).not.toHaveBeenCalled()
   })
@@ -167,76 +139,68 @@ describe('ensureMarketBaselineWith', () => {
     // 依赖还在、bundle 层已被移除 = 用户禁用/卸载了市场 → 不得复活。
     workspace.manifest({ dependencies: { [MARKET_PACKAGE]: '^1.45.1' }, dsh: { profile: { bundles: [] } } })
     const runner = vi.fn() as unknown as MarketCommandRunner
-    await expect(ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })).resolves.toEqual({
-      repaired: false
+    await expect(ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })).resolves.toEqual({
+      installed: false
     })
     expect(runner).not.toHaveBeenCalled()
   })
 
-  it('takes the fast path when the installed version already meets the baseline', async () => {
+  it('takes the fast path when a readable market is already installed', async () => {
     const workspace = new FakeWorkspace()
     workspace.manifest(declaredManifest('^1.45.1'))
     workspace.installMarket('1.45.1')
     const runner = vi.fn() as unknown as MarketCommandRunner
-    await expect(ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })).resolves.toEqual({
-      repaired: false,
+    await expect(ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })).resolves.toEqual({
+      installed: false,
       version: '1.45.1'
     })
     expect(runner).not.toHaveBeenCalled()
   })
 
-  it('repairs an install left below the baseline and verifies the active version', async () => {
-    const workspace = new FakeWorkspace()
-    workspace.manifest(declaredManifest('^1.44.0'))
-    workspace.installMarket('1.44.0')
-    const runner = pnpmLikeRunner(workspace)
-    const outcome = await ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })
-    expect(outcome).toEqual({ repaired: true, version: VERIFIED_MARKET_BASELINE })
-    expect(workspace.installedVersion()).toBe(VERIFIED_MARKET_BASELINE)
-    // 修复把 manifest 钉到精确目标（社区版 upgradeMarketInSharedTree 同款），并撤掉安装完成标记。
-    expect((workspace.readManifest().dependencies as Record<string, string>)[MARKET_PACKAGE]).toBe(
-      VERIFIED_MARKET_BASELINE
-    )
-    expect(workspace.files.has(path.join(workspace.paths.profileDir, '.install-complete'))).toBe(false)
-    expect(workspace.files.has(workspace.paths.pendingPath)).toBe(false)
-  })
-
-  it('finishes a half-installed newer version instead of downgrading it', async () => {
+  it('installs the market when it is missing, and verifies what landed', async () => {
     const workspace = new FakeWorkspace()
     workspace.manifest(declaredManifest('^1.45.1'))
-    workspace.installMarket('1.46.0')
-    // 上一次修复没跑完留下的标记：即使版本已达标也要再修一遍。
-    workspace.files.set(workspace.paths.pendingPath, '{"targetVersion":"1.46.0"}\n')
-    const runner = pnpmLikeRunner(workspace)
-    const outcome = await ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })
-    expect(outcome).toEqual({ repaired: true, version: '1.46.0' })
+    const calls: string[][] = []
+    const runner: MarketCommandRunner = async (args) => {
+      calls.push([...args])
+      workspace.installMarket('1.52.0')
+      return ''
+    }
+    const outcome = await ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })
+    expect(outcome).toEqual({ installed: true, version: '1.52.0' })
+    // 规格是 dist-tag，不是钉死的版本——钉版本会把 dsh 允许的组合判成坏（真机回归）。
+    expect(calls[0]).toContain(`${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC}`)
+    expect(calls[0]).toContain('--workspace-root')
+    // 待修标记在成功后清掉，安装完成指纹被撤（否则后续启动会跳过安装）。
+    expect(workspace.files.has(workspace.paths.pendingPath)).toBe(false)
+    expect(workspace.files.has(path.join(workspace.paths.profileDir, '.install-complete'))).toBe(false)
   })
 
-  it('rolls the manifest back and keeps the retry marker when the install fails', async () => {
+  it('reinstalls over a half-installed tree whose version is unreadable', async () => {
     const workspace = new FakeWorkspace()
-    workspace.manifest(declaredManifest('^1.44.0'))
-    workspace.installMarket('1.44.0')
-    const before = workspace.files.get(workspace.paths.manifestPath)
-    const runner = vi.fn(async () => {
-      throw new Error('pnpm install exited with code 1\nERR_PNPM_FETCH_404')
-    }) as unknown as MarketCommandRunner
-
-    await expect(ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })).rejects.toThrow(
-      /ERR_PNPM_FETCH_404/
-    )
-    expect(workspace.files.get(workspace.paths.manifestPath)).toBe(before)
-    // 待修标记留下 → 下次启动继续修（社区版同款：pnpm 可能在失败前就换过包）。
-    expect(workspace.files.has(workspace.paths.pendingPath)).toBe(true)
+    workspace.manifest(declaredManifest('^1.45.1'))
+    workspace.dirs.add(path.join(workspace.paths.nodeModulesDir, MARKET_PACKAGE))
+    workspace.files.set(workspace.marketPackageJson(), JSON.stringify({ name: MARKET_PACKAGE }))
+    const outcome = await ensureMarketInstalledWith({
+      dshHome: DSH_HOME,
+      io: workspace.io,
+      runner: pnpmLikeRunner(workspace)
+    })
+    expect(outcome).toEqual({ installed: true, version: '1.52.0' })
   })
 
-  it('fails when pnpm reports success but the active version did not move', async () => {
+  it('finishes a repair that a previous run left pending', async () => {
     const workspace = new FakeWorkspace()
-    workspace.manifest(declaredManifest('^1.44.0'))
-    workspace.installMarket('1.44.0')
-    const runner = vi.fn(async () => '') as unknown as MarketCommandRunner
-    await expect(ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })).rejects.toThrow(
-      /the active version is 1\.44\.0/
-    )
+    workspace.manifest(declaredManifest('^1.45.1'))
+    workspace.installMarket('1.45.1')
+    workspace.files.set(workspace.paths.pendingPath, '{"spec":"latest"}\n')
+    const outcome = await ensureMarketInstalledWith({
+      dshHome: DSH_HOME,
+      io: workspace.io,
+      runner: pnpmLikeRunner(workspace)
+    })
+    expect(outcome.installed).toBe(true)
+    expect(workspace.files.has(workspace.paths.pendingPath)).toBe(false)
   })
 
   it('repairs a market left as a .generations link (community-host residue)', async () => {
@@ -244,10 +208,38 @@ describe('ensureMarketBaselineWith', () => {
     workspace.manifest(declaredManifest('^1.45.1'))
     const marketDir = path.join(workspace.paths.nodeModulesDir, MARKET_PACKAGE)
     workspace.links.set(marketDir, path.join(DSH_HOME, '.generations/live/dshmarket+1.45.1/node_modules/dshmarket'))
-    const runner = pnpmLikeRunner(workspace)
-    const outcome = await ensureMarketBaselineWith({ dshHome: DSH_HOME, io: workspace.io, runner })
-    expect(outcome.repaired).toBe(true)
-    expect(workspace.installedVersion()).toBe(VERIFIED_MARKET_BASELINE)
+    const outcome = await ensureMarketInstalledWith({
+      dshHome: DSH_HOME,
+      io: workspace.io,
+      runner: pnpmLikeRunner(workspace)
+    })
+    expect(outcome.installed).toBe(true)
+    expect(workspace.installedVersion()).toBe('1.52.0')
+  })
+
+  it('rolls the manifest back and keeps the retry marker when the install fails', async () => {
+    const workspace = new FakeWorkspace()
+    workspace.manifest(declaredManifest('^1.44.0'))
+    const before = workspace.files.get(workspace.paths.manifestPath)
+    const runner = vi.fn(async () => {
+      throw new Error('dsh plugin add dshmarket@latest exited with code 1\nERR_PNPM_FETCH_404')
+    }) as unknown as MarketCommandRunner
+
+    await expect(ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })).rejects.toThrow(
+      /ERR_PNPM_FETCH_404/
+    )
+    expect(workspace.files.get(workspace.paths.manifestPath)).toBe(before)
+    // 待修标记留下 → 下次启动继续补（pnpm 可能在失败前就换过包）。
+    expect(workspace.files.has(workspace.paths.pendingPath)).toBe(true)
+  })
+
+  it('fails when the command reports success but nothing usable landed', async () => {
+    const workspace = new FakeWorkspace()
+    workspace.manifest(declaredManifest('^1.44.0'))
+    const runner = vi.fn(async () => '') as unknown as MarketCommandRunner
+    await expect(ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })).rejects.toThrow(
+      /the active version is missing/
+    )
   })
 })
 
@@ -262,8 +254,7 @@ describe('installMarketBundleWith', () => {
         workspace.manifest({ name: 'dsh-profile-web', dependencies: {}, dsh: { profile: { bundles: [] } } })
         return ''
       }
-      const spec = (args.find((arg) => arg.startsWith(`${MARKET_PACKAGE}@`)) ?? '').split('@')[1] ?? ''
-      workspace.installMarket(cleanVersionSpec(spec))
+      workspace.installMarket('1.52.0')
       return ''
     }
 
@@ -271,53 +262,42 @@ describe('installMarketBundleWith', () => {
     expect(calls[0]).toContain('install')
     const addCall = calls.find((args) => args.includes('add'))
     expect(addCall).toBeDefined()
-    // 社区版形状：显式规格 + --workspace-root（缺了它 pnpm 会把依赖写进错误的 manifest）。
     expect(addCall).toContain('--workspace-root')
-    expect(addCall).toContain(`${MARKET_PACKAGE}@${RECOMMENDED_MARKET_VERSION}`)
-    expect(result.version).toBe(VERIFIED_MARKET_BASELINE)
+    expect(addCall).toContain(`${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC}`)
+    expect(result.version).toBe('1.52.0')
+    // 声明先落：装失败时市场至少"被声明着"，启动前的补装才知道该装它。
+    expect((workspace.readManifest().dependencies as Record<string, string>)[MARKET_PACKAGE]).toBe(MARKET_INSTALL_SPEC)
   })
 
-  it('fails when the add reports success without a usable market', async () => {
+  it('restores the previous manifest when the add fails', async () => {
     const workspace = new FakeWorkspace()
     workspace.manifest({ name: 'dsh-profile-web', dependencies: {}, dsh: { profile: { bundles: [] } } })
-    const runner = vi.fn(async () => '') as unknown as MarketCommandRunner
+    const before = workspace.files.get(workspace.paths.manifestPath)
+    const runner = vi.fn(async () => {
+      throw new Error('dsh plugin add dshmarket@latest exited with code 1')
+    }) as unknown as MarketCommandRunner
     await expect(installMarketBundleWith({ dshHome: DSH_HOME, io: workspace.io, runner })).rejects.toThrow(
-      /requires >=1\.45\.1/
+      /exited with code 1/
     )
-  })
-
-  it('reinstalls at the installed version instead of downgrading it to the recommended range', async () => {
-    const workspace = new FakeWorkspace()
-    workspace.manifest(declaredManifest('^1.45.1'))
-    workspace.installMarket('1.52.0')
-    const calls: string[][] = []
-    const runner: MarketCommandRunner = async (args) => {
-      calls.push([...args])
-      const spec = (args.find((arg) => arg.startsWith(`${MARKET_PACKAGE}@`)) ?? '').split('@')[1] ?? ''
-      workspace.installMarket(cleanVersionSpec(spec))
-      return ''
-    }
-    const result = await installMarketBundleWith({ dshHome: DSH_HOME, io: workspace.io, runner })
-    expect(calls[0]).toContain(`${MARKET_PACKAGE}@1.52.0`)
-    expect(result.version).toBe('1.52.0')
+    expect(workspace.files.get(workspace.paths.manifestPath)).toBe(before)
   })
 })
 
-describe('marketUsableWithoutBaselineWith', () => {
+describe('isMarketUsableWith', () => {
   it('rejects a missing or link-shaped market and accepts a readable one', async () => {
     const workspace = new FakeWorkspace()
-    expect(await marketUsableWithoutBaselineWith(workspace.io, workspace.paths)).toBe(false)
+    expect(await isMarketUsableWith(workspace.io, workspace.paths)).toBe(false)
 
     const marketDir = path.join(workspace.paths.nodeModulesDir, MARKET_PACKAGE)
     workspace.links.set(marketDir, path.join(DSH_HOME, '.generations/live/dshmarket+1.45.1/node_modules/dshmarket'))
-    expect(await marketUsableWithoutBaselineWith(workspace.io, workspace.paths)).toBe(false)
+    expect(await isMarketUsableWith(workspace.io, workspace.paths)).toBe(false)
 
     workspace.links.delete(marketDir)
     workspace.installMarket('1.44.0')
-    // 低于基线但可读 → 启动不该被阻断（受限网络下修不动是常态）。
-    expect(await marketUsableWithoutBaselineWith(workspace.io, workspace.paths)).toBe(true)
+    // 低于某个"基线"但可读 → 启动不该因此被阻断（dsh 自己会判断兼容性）。
+    expect(await isMarketUsableWith(workspace.io, workspace.paths)).toBe(true)
 
     workspace.files.set(workspace.marketPackageJson(), JSON.stringify({ name: MARKET_PACKAGE }))
-    expect(await marketUsableWithoutBaselineWith(workspace.io, workspace.paths)).toBe(false)
+    expect(await isMarketUsableWith(workspace.io, workspace.paths)).toBe(false)
   })
 })

@@ -10,7 +10,7 @@ import { createRequire } from 'node:module'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
-import { Mutex } from 'async-mutex'
+import { Mutex, tryAcquire, type MutexInterface } from 'async-mutex'
 import { BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
@@ -86,6 +86,12 @@ const TOOL_VERSION_MARKER = '.codemate-version'
 
 /** 失败原因在快照里保留的字符数（够看到 pnpm/npm 的关键几行，又不至于把缓存写肿）。 */
 const INSTALL_FAILURE_DETAIL_LIMIT = 600
+
+/**
+ * 变更闸被占用时的用户可见消息（英文，与 removeTool 既有的 "Some files are still in use…"
+ * 同风格——主进程消息不参与 i18n，渲染层直接展示）。
+ */
+const OPERATION_BUSY_MESSAGE = 'Another install or removal is already running. Wait for it to finish, then retry.'
 
 // v0.3.4-2（用户裁决）：通道版本可见化——主进程启动即打一行安装通道，日志里一眼
 // 可辨运行中的代码是否加载了本次改动（真机取证：dev 未重启时 npm 日志显示旧 spec，
@@ -227,7 +233,16 @@ async function readNpmPackageVersion(packageJsonPath: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export class BinaryManager {
-  private readonly operationMutex = new Mutex()
+  /**
+   * 变更类操作（安装/卸载）的串行闸。
+   *
+   * v0.4.5-1 真机事故：原先用普通 mutex 的 `runExclusive` —— 一个长安装（paper-agent 的 pip
+   * 超时预算 15 分钟）会把**所有**工具的安装与卸载都堵在队列里，而渲染层只看到转圈：
+   * 整份主进程日志里连一条 remove 记录都没有（请求根本没进到方法体），用户看到的就是
+   * "卸载始终卸不掉"。改用 tryAcquire 包装：拿不到闸**立刻**拒绝，并如实告诉用户
+   * "有另一个安装/卸载在跑"，而不是无限排队。
+   */
+  private readonly operationGate = tryAcquire(new Mutex(), new Error(OPERATION_BUSY_MESSAGE))
   private snapshotCache: { data: Record<string, BinaryToolSnapshot>; at: number } | null = null
   private snapshotProbeInFlight: Promise<void> | null = null
   /**
@@ -236,6 +251,16 @@ export class BinaryManager {
    * 故"上次为什么失败"在重启后仍可读。
    */
   private readonly installFailures = new Map<string, string>()
+
+  /** 取变更闸；拿不到返回 undefined（调用方据此给出"有别的安装/卸载在跑"的明确结果）。 */
+  private async acquireOperationGate(): Promise<MutexInterface.Releaser | undefined> {
+    try {
+      return await this.operationGate.acquire()
+    } catch {
+      // tryAcquire 的唯一失败原因就是"已被占用"——错误文本即上面的自定义消息。
+      return undefined
+    }
+  }
 
   /**
    * 主计算的工具快照（V2 getToolSnapshots 形状：application 与 availability 是两个独立
@@ -306,6 +331,9 @@ export class BinaryManager {
   }
 
   private async writeSnapshotCacheFile(data: Record<string, BinaryToolSnapshot>): Promise<void> {
+    // v0.4.5-1 真机日志：首装时 cache 目录还不存在 → ENOENT，快照缓存永远写不下（每次启动
+    // 全量重探）。写入前把父目录建出来。
+    await fsp.mkdir(cacheRoot(), { recursive: true })
     await fsp.writeFile(
       path.join(cacheRoot(), SNAPSHOT_CACHE_FILENAME),
       JSON.stringify({ at: Date.now(), data }, null, 2),
@@ -401,39 +429,40 @@ export class BinaryManager {
   }
 
   /**
-   * 安装（mutex 串行）。message 经 redactSecretText 清洗。
+   * 安装（变更闸串行；被占用即拒绝，不排队）。message 经 redactSecretText 清洗。
    *
    * `targetVersion`（v0.4.5-1）来自渲染层"检查更新"的结论：检查到 A 就装 A。此前这个入参
    * 被渲染层 `void` 掉，装的恒是"点按钮那一刻的通道最新版"（`@next` 这类漂移 tag 下就是
    * "报 A 装 B"）。npm/venv 型按精确版本下 spec；源码型见 installSourceTool 的说明。
    */
-  installTool(name: BinaryToolName, targetVersion?: string): Promise<BinaryOperationResult> {
+  async installTool(name: BinaryToolName, targetVersion?: string): Promise<BinaryOperationResult> {
     const plan = TOOL_PLANS.get(name)
-    if (!plan) return Promise.resolve({ success: false, message: `Unknown managed tool: ${name}` })
-    return this.operationMutex.runExclusive(async () => {
-      // 新一次尝试开始：清掉上一次的失败记忆（失败行只在"上次失败且当前不在忙"时出现）。
-      this.installFailures.delete(name)
-      try {
-        if (plan.kind === 'npm') await this.installNpmTool(plan, targetVersion)
-        else if (plan.kind === 'venv') await this.installVenvTool(plan, targetVersion)
-        else await this.installSourceTool(plan, targetVersion)
-        // v0.3.4-2：成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
-        // 不再闪回安装前旧态。
-        await this.refreshSnapshotCache().catch((error) =>
-          logger.warn('Post-install snapshot refresh failed', error as Error)
-        )
-        return { success: true as const }
-      } catch (error) {
-        const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
-        logger.warn(`Failed to install managed tool ${name}`, { error: message })
-        // v0.4.5-1：把原因留在主进程（随快照下发/落盘）——渲染层的失败行据此持久显示，
-        // 不再"刷新一下就没原因了"。截断避免把整段 pnpm 输出写进快照缓存。
-        this.installFailures.set(name, message.slice(0, INSTALL_FAILURE_DETAIL_LIMIT))
-        return { success: false as const, message }
-      } finally {
-        this.broadcastChanged()
-      }
-    })
+    if (!plan) return { success: false, message: `Unknown managed tool: ${name}` }
+    const release = await this.acquireOperationGate()
+    if (!release) return { success: false, message: OPERATION_BUSY_MESSAGE }
+    // 新一次尝试开始：清掉上一次的失败记忆（失败行只在"上次失败且当前不在忙"时出现）。
+    this.installFailures.delete(name)
+    try {
+      if (plan.kind === 'npm') await this.installNpmTool(plan, targetVersion)
+      else if (plan.kind === 'venv') await this.installVenvTool(plan, targetVersion)
+      else await this.installSourceTool(plan, targetVersion)
+      // v0.3.4-2：成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
+      // 不再闪回安装前旧态。
+      await this.refreshSnapshotCache().catch((error) =>
+        logger.warn('Post-install snapshot refresh failed', error as Error)
+      )
+      return { success: true as const }
+    } catch (error) {
+      const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
+      logger.warn(`Failed to install managed tool ${name}`, { error: message })
+      // v0.4.5-1：把原因留在主进程（随快照下发/落盘）——渲染层的失败行据此持久显示，
+      // 不再"刷新一下就没原因了"。截断避免把整段 pnpm 输出写进快照缓存。
+      this.installFailures.set(name, message.slice(0, INSTALL_FAILURE_DETAIL_LIMIT))
+      return { success: false as const, message }
+    } finally {
+      release()
+      this.broadcastChanged()
+    }
   }
 
   /** dsh（npm 型）：受管 node → npm install --prefix → 版本标记 → bundle 装配（dshmarket + PPT）。 */
@@ -515,8 +544,20 @@ export class BinaryManager {
       'utf-8'
     )
     this.broadcastInstallProgress(plan.name, 'market')
-    const market = await installMarketBundle()
-    logger.info(`dshmarket bundle installed (${market.version ?? 'version unreadable'})`)
+    // v0.4.5-1 真机回归修正：**插件 bundle 装不上不得让 dsh 装不上**。市场与 PPT 都是
+    // bundle，不是工具本体；让它们的失败掀翻整个安装的后果是"标记不写 → 工具判 broken →
+    // 用户既用不了也没法升级"（真机日志：dsh 0.2.0-rc.2 以 peer 不兼容拒收被钉死的
+    // dshmarket@1.45.1）。失败改成**软失败**：记日志 + 记进快照的 lastFailure（渲染层会
+    // 持久显示"哪一步没装上"），声明留在 profile 里交给启动前的补装通道重试。
+    const bundleFailures: string[] = []
+    try {
+      const market = await installMarketBundle()
+      logger.info(`dshmarket bundle installed (${market.version ?? 'version unreadable'})`)
+    } catch (error) {
+      const message = this.errorMessage(error)
+      bundleFailures.push(`dshmarket: ${message}`)
+      logger.warn('dshmarket could not be installed; DeepSeek Harness itself is unaffected', { error: message })
+    }
 
     // v0.3.4-2 真机修正：PPT 从 registry 装 `dsh-ppt@latest`（0.4.5，官方 DSH 演示文稿
     // 插件——技能+工具形态，声明 dsh.bundle ✓）。弃用社区 tgz（0.1.1-rc.2-desktop 旧
@@ -525,20 +566,33 @@ export class BinaryManager {
     // 真机复现实证）。显式 @latest spec：file:/旧 spec 已存在时 `add <name>` 会被
     // "lockfile up to date" 短路（真机复现），带版本 spec 强制重解析。
     this.broadcastInstallProgress(plan.name, 'ppt')
-    await this.runCommand(
-      runtime.nodeBin,
-      [binJs, 'plugin', '--profile', 'web', 'add', 'dsh-ppt@latest', ...pnpmRegistryArgs],
-      { env: bundleEnv, label: 'dsh plugin add dsh-ppt', timeoutMs: 300_000 }
-    )
-    // v0.4.5-1：pnpm 退出 0 ≠ 插件生效（社区版同款纪律）。PPT bundle 也核验一次——市场
-    // 那条有基线兜底，这条至少留下"装没装上"的事实，缺失即安装失败上抛。
-    const pptVersion = await readProfileBundleVersion(nodeMarketIo, webProfileDir, 'dsh-ppt')
-    if (!pptVersion) {
-      throw new Error(
-        `dsh plugin add dsh-ppt reported success, but ${path.join(webProfileDir, 'node_modules', 'dsh-ppt')} is not installed`
+    try {
+      await this.runCommand(
+        runtime.nodeBin,
+        [binJs, 'plugin', '--profile', 'web', 'add', 'dsh-ppt@latest', ...pnpmRegistryArgs],
+        { env: bundleEnv, label: 'dsh plugin add dsh-ppt', timeoutMs: 300_000 }
+      )
+      // v0.4.5-1：pnpm 退出 0 ≠ 插件生效。核验"装没装上"——缺了就记软失败（同市场那条）。
+      const pptVersion = await readProfileBundleVersion(nodeMarketIo, webProfileDir, 'dsh-ppt')
+      if (!pptVersion) {
+        throw new Error(
+          `dsh plugin add dsh-ppt reported success, but ${path.join(webProfileDir, 'node_modules', 'dsh-ppt')} is not installed`
+        )
+      }
+      logger.info(`dsh-ppt bundle installed (${pptVersion})`)
+    } catch (error) {
+      const message = this.errorMessage(error)
+      bundleFailures.push(`dsh-ppt: ${message}`)
+      logger.warn('dsh-ppt could not be installed; DeepSeek Harness itself is unaffected', { error: message })
+    }
+    if (bundleFailures.length > 0) {
+      // 工具本体装好了（标记照写），但 bundle 那几步有失败——把它摆到用户看得见的地方：
+      // 快照的 lastFailure 会在版本卡上持久显示（刷新/重启后仍在）。
+      this.installFailures.set(
+        plan.name,
+        `bundle assembly incomplete:\n${bundleFailures.join('\n')}`.slice(0, INSTALL_FAILURE_DETAIL_LIMIT)
       )
     }
-    logger.info(`dsh-ppt bundle installed (${pptVersion})`)
 
     const version = await readNpmPackageVersion(
       path.join(dir, 'node_modules', ...plan.preset.packageName.split('/'), 'package.json')
@@ -741,46 +795,52 @@ export class BinaryManager {
     return false
   }
 
-  /** 卸载（mutex 串行）：删工具目录 + 整个同类运行时根（node↔dsh、python↔hermes）。
+  /** 卸载（变更闸串行；被占用即拒绝，不排队）：删工具目录 + 整个同类运行时根。
    * 批次5 真机事故修复：taskkill 后原生 .node 的 DLL 锁异步释放，立即 rm 撞 EPERM
    * （sharp-win32-x64.node 实证）——改逐项遍历删除 + 重试退避（removeTree.ts）。
    * v0.3.4-2：运行时改为删 kind 根（runtime/node 整目录）——NODE_VERSION 跨版本升级
    * 后旧版本目录不再残留，portable"卸载=零残留"在版本演进下仍成立。
    * v0.4.5：paper-agent 与 hermes 共享受管 CPython——运行时根改为"该类运行时已无任何
    * 已装工具时才删"（此前 1:1 映射会把对方的解释器一起删掉）；工具目录删除失败时
-   * 不删运行时（fail-closed）。用户态 home/<tool> 不删（dsh home 先例）。 */
+   * 不删运行时（fail-closed）。用户态 home/<tool> 不删（dsh home 先例）。
+   * v0.4.5-1 真机事故：见 operationGate 注释——被占用时**立即**返回可读原因，不再无限排队
+   *（"卸载始终卸不掉"且日志里一条记录都没有，就是这个排队造成的）。 */
   async removeTool(name: BinaryToolName): Promise<BinaryRemoveResult> {
     const plan = TOOL_PLANS.get(name)
     if (!plan) return { removed: false, message: `Unknown managed tool: ${name}` }
-    return this.operationMutex.runExclusive(async () => {
-      try {
-        const toolGone = await removeTreeWithRetry(toolDir(plan.name))
-        const runtimeKindRoot = path.join(codeMateRuntimeRoot(), plan.runtime)
-        const runtimeGone =
-          toolGone && !(await this.isRuntimeStillNeeded(plan.runtime, plan.name))
-            ? await removeTreeWithRetry(runtimeKindRoot)
-            : toolGone
-        if (!toolGone || !runtimeGone) {
-          const locked = !toolGone ? toolDir(plan.name) : runtimeKindRoot
-          const message = `Some files are still in use (locked by a running process or antivirus). Close the tool and retry in a moment. Locked: ${locked}`
-          logger.warn(`Failed to fully remove managed tool ${name}: ${message}`)
-          return { removed: false, message: redactSecretText(message) }
-        }
-        // v0.3.4-2：同安装——卸载后强制重探，广播命中的是已移除状态。
-        // v0.4.5-1：工具没了，它的失败记忆也没意义。
-        this.installFailures.delete(name)
-        await this.refreshSnapshotCache().catch((error) =>
-          logger.warn('Post-remove snapshot refresh failed', error as Error)
-        )
-        return { removed: true }
-      } catch (error) {
-        const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
-        logger.warn(`Failed to remove managed tool ${name}`, { error: message })
-        return { removed: false, message }
-      } finally {
-        this.broadcastChanged()
+    const release = await this.acquireOperationGate()
+    if (!release) {
+      logger.warn(`Refused to remove managed tool ${name}: another operation is running`)
+      return { removed: false, message: OPERATION_BUSY_MESSAGE }
+    }
+    try {
+      const toolGone = await removeTreeWithRetry(toolDir(plan.name))
+      const runtimeKindRoot = path.join(codeMateRuntimeRoot(), plan.runtime)
+      const runtimeGone =
+        toolGone && !(await this.isRuntimeStillNeeded(plan.runtime, plan.name))
+          ? await removeTreeWithRetry(runtimeKindRoot)
+          : toolGone
+      if (!toolGone || !runtimeGone) {
+        const locked = !toolGone ? toolDir(plan.name) : runtimeKindRoot
+        const message = `Some files are still in use (locked by a running process or antivirus). Close the tool and retry in a moment. Locked: ${locked}`
+        logger.warn(`Failed to fully remove managed tool ${name}: ${message}`)
+        return { removed: false, message: redactSecretText(message) }
       }
-    })
+      // v0.3.4-2：同安装——卸载后强制重探，广播命中的是已移除状态。
+      // v0.4.5-1：工具没了，它的失败记忆也没意义。
+      this.installFailures.delete(name)
+      await this.refreshSnapshotCache().catch((error) =>
+        logger.warn('Post-remove snapshot refresh failed', error as Error)
+      )
+      return { removed: true }
+    } catch (error) {
+      const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
+      logger.warn(`Failed to remove managed tool ${name}`, { error: message })
+      return { removed: false, message }
+    } finally {
+      release()
+      this.broadcastChanged()
+    }
   }
 
   /** 最新版本（尽力而为，失败返回空对象不抛）：dsh 走受管 npm view；hermes 走 PyPI JSON API。 */
