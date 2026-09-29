@@ -306,6 +306,8 @@ export async function syncPreprocessToKernel(
     visionConcurrency?: number
     /** local-paddle 条目的页级并发数（1..20；缺省走主进程默认 5）。 */
     localConcurrency?: number
+    /** local-paddle 条目的 GPU 加速开关（缺省开）。 */
+    gpuAcceleration?: boolean
   }>
 ): Promise<void> {
   try {

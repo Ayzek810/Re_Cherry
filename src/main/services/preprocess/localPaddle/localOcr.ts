@@ -40,6 +40,8 @@ export const MAX_LOCAL_OCR_CONCURRENCY = 20
 export interface LocalOcrOptions {
   /** 页级并发数（1..20）；缺省 = DEFAULT_LOCAL_OCR_CONCURRENCY。 */
   concurrency?: number
+  /** GPU 加速（DirectML/CoreML，失败自动回退 CPU）；缺省开。 */
+  gpuAcceleration?: boolean
 }
 
 interface WorkerPageMessage {
@@ -117,7 +119,10 @@ function acquireWorker(): UtilityProcessLike {
     logger.info(`local OCR worker stdout: ${String(chunk).trim()}`)
   })
   child.stderr?.on('data', (chunk: unknown) => {
-    logger.error(`local OCR worker stderr: ${String(chunk).trim()}`)
+    // stderr 降为 warn（v0.4.4-1）：ORT 的 EP 分配警告（DML 会话创建期的正常
+    // 告警）走 stderr，ERROR 面不该被它污染；真崩溃有 exit 事件 + 解析拒绝双
+    // 通道在 ERROR 面兜底，forensics 不受损。
+    logger.warn(`local OCR worker stderr: ${String(chunk).trim()}`)
   })
   child.on('message', (raw: unknown) => {
     workerDispatch?.(raw as WorkerOutgoingMessage)
@@ -296,6 +301,7 @@ async function runOnWorker(
       pdfPath: filePath,
       scale: RENDER_SCALE,
       window: concurrency,
+      gpu: options.gpuAcceleration !== false,
       modelPaths: paddleModelPaths()
     })
   })

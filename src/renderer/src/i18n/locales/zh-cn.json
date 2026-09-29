@@ -3713,9 +3713,10 @@
         "local_paddle": {
           "cancel": "取消下载",
           "concurrency": "并发页数",
+          "gpu_acceleration": "GPU 加速",
           "download": "下载模型",
           "error_prefix": "下载失败",
-          "help": "本地 OCR（PP-OCRv6，约 140 MB）：启用后扫描版 PDF 在聊天读取与知识库摄取时自动走本机识别，无需联网与密钥；并发页数提高吞吐（识别为 CPU 计算，过高会互相抢核）",
+          "help": "本地 OCR（PP-OCRv6，约 140 MB）：启用后扫描版 PDF 在聊天读取与知识库摄取时自动走本机识别，无需联网与密钥；GPU 加速走 DirectML（不可用时自动回退 CPU），并发页数提高吞吐（识别为 CPU 计算，过高会互相抢核）",
           "model_title": "本地模型",
           "not_downloaded": "模型未下载（约 140 MB，完全本地运行）",
           "ready": "模型已就绪，识别完全在本机运行",

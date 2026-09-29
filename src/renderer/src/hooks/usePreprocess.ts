@@ -25,7 +25,8 @@ const SYNC_FIELDS: Array<keyof PreprocessProvider> = [
   'model',
   'visionModel',
   'visionConcurrency',
-  'localConcurrency'
+  'localConcurrency',
+  'gpuAcceleration'
 ]
 
 export const usePreprocessProviders = () => {

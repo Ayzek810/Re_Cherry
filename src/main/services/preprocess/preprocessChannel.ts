@@ -53,6 +53,8 @@ export interface PreprocessProviderConfig {
   visionConcurrency?: number
   /** local-paddle 条目的页级并发数（1..20；缺省走主进程默认 5）。 */
   localConcurrency?: number
+  /** local-paddle 条目的 GPU 加速开关（缺省开）。 */
+  gpuAcceleration?: boolean
 }
 
 export interface ParsePdfOptions {
@@ -171,7 +173,10 @@ export async function parsePdfWithProvider(
             : undefined
         return await parsePdfWithLocalPaddle(
           filePath,
-          localConcurrency === undefined ? {} : { concurrency: localConcurrency },
+          {
+            ...(localConcurrency === undefined ? {} : { concurrency: localConcurrency }),
+            gpuAcceleration: config.gpuAcceleration !== false
+          },
           controller.signal
         )
       }

@@ -394,6 +394,7 @@ function registerKernelIpc(): void {
         visionModel?: unknown
         visionConcurrency?: unknown
         localConcurrency?: unknown
+        gpuAcceleration?: unknown
       }
       const rawVision = entry.visionModel as { provider?: unknown; model?: unknown } | undefined
       const visionModel =
@@ -408,6 +409,7 @@ function registerKernelIpc(): void {
         typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= max ? value : undefined
       const visionConcurrency = clampConcurrency(entry.visionConcurrency, 40)
       const localConcurrency = clampConcurrency(entry.localConcurrency, 20)
+      const gpuAcceleration = entry.gpuAcceleration === false ? false : true
       return {
         id: entry.id,
         ...(typeof entry.apiKey === 'string' ? { apiKey: entry.apiKey } : {}),
@@ -415,7 +417,8 @@ function registerKernelIpc(): void {
         ...(typeof entry.model === 'string' ? { model: entry.model } : {}),
         ...(visionModel === undefined ? {} : { visionModel }),
         ...(visionConcurrency === undefined ? {} : { visionConcurrency }),
-        ...(localConcurrency === undefined ? {} : { localConcurrency })
+        ...(localConcurrency === undefined ? {} : { localConcurrency }),
+        gpuAcceleration
       }
     })
     preprocessChannel.setConfig(configs)

@@ -165,6 +165,8 @@ export interface PreprocessProvider {
   visionConcurrency?: number
   /** 本地 OCR 的页级并发数（1 = 串行；缺省走主进程默认 5，上限 20）。 */
   localConcurrency?: number
+  /** 本地 OCR 的 GPU 加速开关（DirectML/CoreML，失败自动回退 CPU；缺省开）。 */
+  gpuAcceleration?: boolean
   options?: any
 }
 

@@ -63,7 +63,7 @@ function feedPage(child: FakeChild, page: number, totalPages: number, text = `�
 
 function startParse(
   filePath: string,
-  options?: { concurrency?: number },
+  options?: { concurrency?: number; gpuAcceleration?: boolean },
   signal?: AbortSignal
 ): { promise: Promise<string>; child: FakeChild } {
   const promise = runLocalOcr(filePath, options ?? {}, signal)
@@ -105,6 +105,20 @@ describe('runLocalOcr（常驻 worker 编排）', () => {
     feedPage(child, 1, 1, '页')
     emit(child, { type: 'done', pagesDone: 1, totalPages: 1 })
     await expect(promise).resolves.toBe('页')
+  })
+
+  it('GPU 开关：缺省 job.gpu=true；gpuAcceleration:false → job.gpu=false', async () => {
+    const first = startParse('C:/books/a.pdf')
+    expect(first.child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'job', gpu: true }))
+    feedPage(first.child, 1, 1, '页')
+    emit(first.child, { type: 'done', pagesDone: 1, totalPages: 1 })
+    await expect(first.promise).resolves.toBe('页')
+
+    const second = startParse('C:/books/b.pdf', { gpuAcceleration: false })
+    expect(second.child.postMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'job', gpu: false }))
+    feedPage(second.child, 1, 1, '页')
+    emit(second.child, { type: 'done', pagesDone: 1, totalPages: 1 })
+    await expect(second.promise).resolves.toBe('页')
   })
 
   it('复用：第二次解析不重新 fork（热模型），消息路由到当前解析', async () => {

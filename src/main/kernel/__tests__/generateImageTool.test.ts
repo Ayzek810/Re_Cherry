@@ -13,7 +13,8 @@ vi.mock('../lightLlmModalities', () => ({
   lightGenerateImage: (...args: unknown[]) => lightGenerateImageMock(...args)
 }))
 
-type ExecLike = { agent?: { session?: { id?: string } } }
+/** 真实 exec 含 exec.signal（暂停取消通道）；测试 exec 未设 = undefined。 */
+type ExecLike = { agent?: { session?: { id?: string } }; signal?: AbortSignal }
 
 async function loadTool() {
   return await import('../generateImageTool')

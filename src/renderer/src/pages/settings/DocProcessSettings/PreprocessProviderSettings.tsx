@@ -17,7 +17,7 @@ import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId, hasModel } from '@renderer/services/ModelService'
 import type { Model, PreprocessProvider } from '@renderer/types'
 import { formatApiKeys, hasObjectKey } from '@renderer/utils'
-import { Button, Divider, Flex, Input, Progress, Slider, Tooltip } from 'antd'
+import { Button, Divider, Flex, Input, Progress, Slider, Switch, Tooltip } from 'antd'
 import { find } from 'lodash'
 import { ExternalLink, List } from 'lucide-react'
 import type { FC } from 'react'
@@ -233,6 +233,13 @@ const LocalPaddleModelPanel: FC = () => {
         step={1}
         marks={{ 1: '1', 5: '5', 10: '10', 20: '20' }}
         onChangeComplete={(next) => updateProvider({ localConcurrency: next })}
+      />
+      <SettingSubtitle className="mt-[10px] mb-[10px]">
+        {t('settings.tool.preprocess.local_paddle.gpu_acceleration')}
+      </SettingSubtitle>
+      <Switch
+        checked={provider?.gpuAcceleration !== false}
+        onChange={(checked) => updateProvider({ gpuAcceleration: checked })}
       />
       <SettingHelpTextRow className="!flex-col">
         <SettingHelpText>{t('settings.tool.preprocess.local_paddle.help')}</SettingHelpText>

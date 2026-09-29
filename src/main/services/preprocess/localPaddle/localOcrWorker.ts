@@ -41,6 +41,8 @@ interface OcrWorkerJob {
   scale: number
   /** 信用窗初始额度（= 主进程页级并发数）。 */
   window: number
+  /** GPU 加速（DirectML/CoreML；false = 仅 CPU）。 */
+  gpu: boolean
   modelPaths: { detection: string; recognition: string; charactersDictionary: string }
 }
 
@@ -65,9 +67,20 @@ const log = (message: string): void => post({ type: 'log', message })
 
 /** ppu-paddle-ocr 的结构化最小面（类类型导出形态不在 fork 控制内，按用法收窄）。 */
 let cachedService: Promise<PaddleOcrInstance> | null = null
+/** 缓存会话的 GPU 开关态：面板切换后与缓存不一致 → 释放旧会话按新 EP 重建。 */
+let cachedGpu: boolean | null = null
 
-function loadService(modelPaths: OcrWorkerJob['modelPaths']): Promise<PaddleOcrInstance> {
+function loadService(modelPaths: OcrWorkerJob['modelPaths'], gpuEnabled: boolean): Promise<PaddleOcrInstance> {
+  if (cachedService !== null && cachedGpu !== gpuEnabled) {
+    const stale = cachedService
+    cachedService = null
+    void stale
+      .then((service) => service.destroy().catch(() => undefined))
+      .catch(() => undefined)
+    log(`GPU acceleration toggled to ${String(gpuEnabled)}; rebuilding OCR session`)
+  }
   if (cachedService === null) {
+    cachedGpu = gpuEnabled
     cachedService = (async () => {
       const { PaddleOcrService } = await import('ppu-paddle-ocr')
       const service = new PaddleOcrService({
@@ -76,10 +89,10 @@ function loadService(modelPaths: OcrWorkerJob['modelPaths']): Promise<PaddleOcrI
           recognition: modelPaths.recognition,
           charactersDictionary: modelPaths.charactersDictionary
         },
-        session: {}
+        session: gpuSessionOptions(gpuEnabled)
       })
       await service.initialize()
-      log('local OCR service initialized (cpu)')
+      log('local OCR service initialized')
       return service as unknown as PaddleOcrInstance
     })()
     cachedService.catch((error: unknown) => {
@@ -91,9 +104,41 @@ function loadService(modelPaths: OcrWorkerJob['modelPaths']): Promise<PaddleOcrI
   return cachedService
 }
 
+/**
+ * GPU 加速（v0.4.4-1 研究结论，真模型实测）：DirectML 上 det 25×/rec 8× 于 CPU
+ * （det 1078→42ms、rec 82→10ms），DirectML.dll 随 onnxruntime-node 自带且已被
+ * asarUnpack 解包到位；ppu 补丁版 createSessionWithFallback 在 DML 创建失败
+ * （无 DX12 GPU / 驱动问题）时**自动落回 CPU** 并触发 onSessionFallback（此处
+ * 转日志）。平台门控：win32 → dml；darwin → coreml；其余无自带 GPU EP → cpu。
+ * gpu=false（面板开关关闭）→ 仅 CPU。
+ */
+function gpuSessionOptions(gpuEnabled: boolean): {
+  executionProviders: string[]
+  onSessionFallback: (error: unknown) => void
+} {
+  const gpu: string[] =
+    gpuEnabled === false
+      ? []
+      : process.platform === 'win32'
+        ? ['dml']
+        : process.platform === 'darwin'
+          ? ['coreml']
+          : []
+  return {
+    executionProviders: [...gpu, 'cpu'],
+    onSessionFallback: (error: unknown) => {
+      log(`GPU execution provider failed (${String((error as Error)?.message ?? error)}); fell back to CPU`)
+    }
+  }
+}
+
 /** 识别一张图（ArrayBuffer 直入，不经临时文件）。并发安全：ORT session.run 线程安全。 */
-async function recognizeImage(imageBytes: ArrayBuffer, modelPaths: OcrWorkerJob['modelPaths']): Promise<string> {
-  const service = await loadService(modelPaths)
+async function recognizeImage(
+  imageBytes: ArrayBuffer,
+  modelPaths: OcrWorkerJob['modelPaths'],
+  gpuEnabled: boolean
+): Promise<string> {
+  const service = await loadService(modelPaths, gpuEnabled)
   const result = await service.recognize(imageBytes)
   return result.text
 }
@@ -151,7 +196,7 @@ async function run(job: OcrWorkerJob): Promise<void> {
           // ArrayBuffer 直入识别（不落临时文件）；单页失败照旧上抛 → 废整本（用户裁定）。
           const pre = await preprocessImage(Buffer.from(rendered))
           const bytes = pre.buffer.slice(pre.byteOffset, pre.byteOffset + pre.byteLength) as ArrayBuffer
-          text = (await recognizeImage(bytes, job.modelPaths)).trim()
+          text = (await recognizeImage(bytes, job.modelPaths, job.gpu)).trim()
         }
         if (cancelled) return
         pagesDone = Math.max(pagesDone, pageNumber)

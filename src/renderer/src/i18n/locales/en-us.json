@@ -3713,9 +3713,10 @@
         "local_paddle": {
           "cancel": "Cancel Download",
           "concurrency": "Concurrent Pages",
+          "gpu_acceleration": "GPU Acceleration",
           "download": "Download Model",
           "error_prefix": "Download failed",
-          "help": "Local OCR (PP-OCRv6, ~140 MB): when enabled, scanned PDFs are recognized locally during chat reading and knowledge base ingestion — no network or API key required. Higher concurrency increases throughput (recognition is CPU-bound; too high makes pages contend for cores)",
+          "help": "Local OCR (PP-OCRv6, ~140 MB): when enabled, scanned PDFs are recognized locally during chat reading and knowledge base ingestion — no network or API key required. GPU acceleration uses DirectML (falls back to CPU automatically when unavailable); higher concurrency increases throughput (recognition is CPU-bound; too high makes pages contend for cores)",
           "model_title": "Local Model",
           "not_downloaded": "Model not downloaded (~140 MB, runs fully on this device)",
           "ready": "Model ready — recognition runs fully on this device",

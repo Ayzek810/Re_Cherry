@@ -113,7 +113,8 @@ export async function runVisionDocumentParse(
     logger.info(`vision document worker stdout: ${String(chunk).trim()}`)
   })
   child.stderr?.on('data', (chunk: unknown) => {
-    logger.error(`vision document worker stderr: ${String(chunk).trim()}`)
+    // stderr 走 warn（与 localOcr 同判据）：库级警告不污染 ERROR 面。
+    logger.warn(`vision document worker stderr: ${String(chunk).trim()}`)
   })
 
   // 内部中断链：外部 signal（预算/用户中止）与 finish（单页失败）都汇聚到这里，

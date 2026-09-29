@@ -246,7 +246,8 @@ export function useAppInit() {
             ? undefined
             : { provider: provider.visionModel.provider, model: provider.visionModel.id },
         visionConcurrency: provider.visionConcurrency,
-        localConcurrency: provider.localConcurrency
+        localConcurrency: provider.localConcurrency,
+        gpuAcceleration: provider.gpuAcceleration
       }))
     )
   }, [preprocessProviders])
