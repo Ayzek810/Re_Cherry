@@ -11,17 +11,21 @@
 // ② 每次启动 Harness 前把"缺失/不可读/链接残留/上次没修完"的市场补上，失败回滚 manifest 并
 //    留下次重试的标记；补不上但现有市场还能用时**不阻断启动**。
 //
-// **为什么不学社区版钉死一个"已验证版本"**（v0.4.5-1 真机回归，本人引入）：社区版的
-// `VERIFIED_MARKET_BASELINE = '1.45.1'` 是为**他们那一代** harness 定的；而 dsh 自 0.2.x 起
-// 自己就做插件兼容校验。真机日志：
-//   dsh: installation rejected: Plugin dshmarket@1.45.1 is incompatible with dsh 0.2.0-rc.2:
-//   peerDependencies {"@deepseek-ai/dsh-settings":"^0.1.0-rc.7 || ..."}
-// 钉死的结果是：安装必失败、工具因此判 broken、市场永远补不上——把"我们不知道现在是哪一代"
-// 变成了硬故障。**版本权威在 dsh，不在这里的常量**：所以本件只装 `dshmarket@latest`（交给
-// dsh 的解析器与其自己的兼容闸），核验只要求"装着且版本可读"。
+// **为什么不学社区版钉死一个"已验证版本"**（v0.4.5-1 两次真机回归的教训）：
+// 社区版的 `VERIFIED_MARKET_BASELINE` 是**随代际 bump 的常量**——我参照的那份开发期快照
+// （2026-09-24）写的是 `1.45.1`，而社区当前（2026-09-29）已经改成 `1.65.1`。照着抄一份常量，
+// 就是在抄一个会过期的数字：本机 dsh 是 `0.2.0-rc.2`，而 `dshmarket@1.45.1` 只声明
+// `@deepseek-ai/dsh-settings ^0.1.x`，于是被 dsh 自己拒收：
+//   dsh: installation rejected: Plugin dshmarket@1.45.1 is incompatible with dsh 0.2.0-rc.2
+// 结果：安装必失败 → 工具判 broken → 市场永远补不上。
 //
-// 可测性：本件不 import electron，文件系统与命令执行都走端口注入（main 测试环境 mock 了
-// node:fs/node:path）；零参包装是本件对应用侧的默认绑定。
+// **版本权威在 dsh，选版依据是"已装 dsh 的 peer 要求"**：本件读 registry 的版本元数据，
+// 挑出**声明与该 dsh 版本兼容**的最高版本（社区版 `inferPluginRuntimeCompatibility` /
+// `selectCompatiblePluginUpgrade` 的选版逻辑对位），挑不出来才回退 dist-tag `latest`。
+// dsh 换代 → 挑出来的版本跟着换，不需要任何人回来改常量。
+//
+// 可测性：本件不 import electron，文件系统、命令执行、版本元数据都走端口注入（main 测试环境
+// mock 了 node:fs/node:path）；零参包装是本件对应用侧的默认绑定。
 
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -46,10 +50,14 @@ export const MARKET_PROFILE = 'web'
 /** 市场包名（社区版 `MARKET_PACKAGE` 对位）。 */
 export const MARKET_PACKAGE = 'dshmarket'
 /**
- * 安装规格：dist-tag `latest`，**不钉版本**——理由见文件头（dsh 0.2.x 自己校验插件 peer
- * 兼容性；钉死一个我们无法验证的版本会把安装变成硬故障）。
+ * 兜底安装规格（dist-tag）：**只在按兼容性挑不出具体版本时使用**（拿不到元数据 / 宿主版本未知 /
+ * 没有任何版本声明兼容）。正常情况下装的是 {@link selectCompatibleMarketVersion} 挑出的**精确
+ * 版本**——参见文件头：钉一个自造的基线常量会过期，钉一个"现场算出来的兼容版"不会。
  */
 export const MARKET_INSTALL_SPEC = 'latest'
+
+/** 版本元数据的查询预算（目录接口比单版本查询大，给宽一点）。 */
+const MARKET_METADATA_TIMEOUT_MS = 15_000
 
 /** 社区版成对的 [主源, 备用源]；两半（版本解析与抓包）必须同源。 */
 const MARKET_REGISTRIES = [NPM_REGISTRY_MIRROR, NPM_REGISTRY_FALLBACK] as const
@@ -67,7 +75,7 @@ autoInstallPeers: false
 `
 
 // ---------------------------------------------------------------------------
-// 版本判据（只判"可读"，不判大小）
+// 版本判据：可读性 + 按 dsh 兼容性选版
 // ---------------------------------------------------------------------------
 
 export interface SemverVersion {
@@ -88,12 +96,212 @@ export function parseSemver(input: string): SemverVersion | null {
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease }
 }
 
+/** 比较 semver：a>b → 1，a<b → -1（社区版 plugin-market-check 逐字移植）。 */
+export function compareSemver(aStr: string, bStr: string): number {
+  const a = parseSemver(aStr)
+  const b = parseSemver(bStr)
+  if (!a && !b) return aStr.localeCompare(bStr)
+  if (!a) return -1
+  if (!b) return 1
+
+  if (a.major !== b.major) return a.major > b.major ? 1 : -1
+  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1
+  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1
+
+  if (a.prerelease.length === 0 && b.prerelease.length > 0) return 1
+  if (a.prerelease.length > 0 && b.prerelease.length === 0) return -1
+  if (a.prerelease.length === 0 && b.prerelease.length === 0) return 0
+
+  const length = Math.max(a.prerelease.length, b.prerelease.length)
+  for (let index = 0; index < length; index += 1) {
+    const aPart = a.prerelease[index]
+    const bPart = b.prerelease[index]
+    if (aPart === undefined) return -1
+    if (bPart === undefined) return 1
+    if (aPart === bPart) continue
+    const aNumeric = typeof aPart === 'number'
+    const bNumeric = typeof bPart === 'number'
+    if (aNumeric && !bNumeric) return -1
+    if (!aNumeric && bNumeric) return 1
+    return aPart > bPart ? 1 : -1
+  }
+  return 0
+}
+
+/** 单个比较符（`^0.2.0-rc.1` / `>=1.0.0` / `~1.2` / `*` / 精确版）——社区版逐字移植。 */
+export function satisfiesComparator(versionStr: string, comparator: string): boolean {
+  const comp = comparator.trim()
+  if (!comp || comp === '*' || comp === 'x' || comp === 'X') return true
+
+  const v = parseSemver(versionStr)
+  if (!v) return false
+
+  if (comp.startsWith('^')) {
+    const target = comp.slice(1).trim()
+    const t = parseSemver(target)
+    if (!t) return false
+    // 预发布版本只满足"同一 major.minor.patch 且目标也是预发布"的范围。
+    if (v.prerelease.length > 0) {
+      if (t.prerelease.length === 0 || v.major !== t.major || v.minor !== t.minor || v.patch !== t.patch) {
+        return false
+      }
+    }
+    if (compareSemver(versionStr, target) < 0) return false
+    if (t.major > 0) return v.major === t.major
+    if (t.minor > 0) return v.major === 0 && v.minor === t.minor
+    return v.major === 0 && v.minor === 0 && v.patch === t.patch
+  }
+
+  if (comp.startsWith('~')) {
+    const target = comp.slice(1).trim()
+    const t = parseSemver(target)
+    if (!t) return false
+    if (v.prerelease.length > 0) {
+      if (t.prerelease.length === 0 || v.major !== t.major || v.minor !== t.minor || v.patch !== t.patch) {
+        return false
+      }
+    }
+    if (compareSemver(versionStr, target) < 0) return false
+    return v.major === t.major && v.minor === t.minor
+  }
+
+  if (comp.startsWith('>=')) return compareSemver(versionStr, comp.slice(2).trim()) >= 0
+  if (comp.startsWith('>')) return compareSemver(versionStr, comp.slice(1).trim()) > 0
+  if (comp.startsWith('<=')) return compareSemver(versionStr, comp.slice(2).trim()) <= 0
+  if (comp.startsWith('<')) return compareSemver(versionStr, comp.slice(1).trim()) < 0
+  if (comp.startsWith('=')) return compareSemver(versionStr, comp.slice(1).trim()) === 0
+  return compareSemver(versionStr, comp) === 0
+}
+
+/** 范围（`||` 分隔的备选，空格分隔的 AND）——社区版逐字移植。 */
+export function satisfiesRange(versionStr: string, range: string): boolean {
+  if (!range || range.trim() === '*' || range.trim() === '') return true
+  const alternatives = range
+    .split('||')
+    .map((alt) => alt.trim())
+    .filter(Boolean)
+  if (alternatives.length === 0) return true
+  return alternatives.some((alt) =>
+    alt
+      .split(/\s+/)
+      .filter(Boolean)
+      .every((part) => satisfiesComparator(versionStr, part))
+  )
+}
+
+/** registry packument 的最小消费面（只取选版需要的字段）。 */
+export interface MarketVersionManifest {
+  version: string
+  name?: string
+  deprecated?: string | boolean
+  peerDependencies?: Record<string, string>
+  engines?: Record<string, string>
+  dsh?: { minVersion?: string }
+}
+
+export interface MarketMetadata {
+  versions: Record<string, MarketVersionManifest>
+  latest: string
+}
+
 /**
- * 市场是否"可用"：装着、版本号可读即可。
+ * 该版本市场是否与本机 dsh 兼容——社区版 `inferPluginRuntimeCompatibility` 的逐条对位：
+ * ① `peerDependencies` 里 `@deepseek-ai/*`（cordis 除外）必须被当前 dsh 版本满足；
+ * ② `engines.dsh` 与 `dsh.minVersion` 声明也须满足（前者是范围、后者是下限）；
+ * ③ 依赖已废弃的 `@deepseek-ai/dsh-host-apiproxy` 一律判不兼容。
  *
- * 刻意**不比对任何下限**：dsh 自己会拒绝与它不兼容的插件版本（真机日志见文件头），
- * 我们再钉一个数只会把 dsh 允许的组合判成坏。缺版本号/不是 semver = 装坏了（半成品或串档）。
+ * 真机意义：dsh 0.2.0-rc.2 会**拒收**只声明 `@deepseek-ai/dsh-settings ^0.1.x` 的
+ * dshmarket（1.45.1 即如此）。这条判定让我们在安装之前就避开它，而不是等 dsh 报错。
  */
+export function inferMarketRuntimeCompatibility(
+  manifest: MarketVersionManifest,
+  dshVersion: string
+): { compatible: boolean; reason?: string } {
+  for (const [peer, range] of Object.entries(manifest.peerDependencies ?? {})) {
+    if (peer.startsWith('@deepseek-ai/') && peer !== '@deepseek-ai/cordis') {
+      if (range && !satisfiesRange(dshVersion, range)) {
+        return { compatible: false, reason: `declares peer ${peer} (${range})` }
+      }
+    }
+  }
+
+  const minVersion = manifest.dsh?.minVersion
+  const constraints = [manifest.engines?.dsh, minVersion ? `>=${minVersion}` : undefined]
+  for (const constraint of constraints) {
+    if (constraint && !satisfiesRange(dshVersion, constraint)) {
+      return { compatible: false, reason: `requires dsh ${constraint}` }
+    }
+  }
+
+  const dependencies = Object.keys(manifest.peerDependencies ?? {})
+  if (dependencies.includes('@deepseek-ai/dsh-host-apiproxy')) {
+    return { compatible: false, reason: 'depends on the removed @deepseek-ai/dsh-host-apiproxy' }
+  }
+
+  return { compatible: true }
+}
+
+/**
+ * 选一个可与本机 dsh 共存的市场版本：兼容、未废弃、取最高。
+ *
+ * **为什么不钉版本常量**：社区版会随代际 bump 它们的 `VERIFIED_MARKET_BASELINE`
+ * （2026-09-24 是 1.45.1，2026-09-29 已是 1.65.1），而 dshmarket 是第三方包、我们无法验证
+ * 某个常量是否还成立——照着抄一份常量，就是在抄一个会过期的数字（本次真机回归的成因）。
+ * 按**已装 dsh 的 peer 要求**现场挑版本则不会过期：dsh 换代 → 挑出来的版本跟着换。
+ *
+ * 预发布：dsh 自己是预发布（如 0.2.0-rc.2）时允许预发布候选；否则只认稳定版，退而求其次才用
+ * 预发布（避免把 rc 塞给稳定宿主）。
+ */
+export function selectCompatibleMarketVersion(
+  metadata: MarketMetadata,
+  dshVersion: string
+): { version: string; reason?: string } | undefined {
+  const candidates = Object.values(metadata.versions)
+    .filter((manifest) => !!parseSemver(manifest.version) && !manifest.deprecated)
+    .sort((left, right) => compareSemver(right.version, left.version))
+  const compatible = candidates.filter((manifest) => inferMarketRuntimeCompatibility(manifest, dshVersion).compatible)
+  if (compatible.length === 0) return undefined
+  const hostIsPrerelease = (parseSemver(dshVersion)?.prerelease.length ?? 0) > 0
+  const stable = compatible.find((manifest) => (parseSemver(manifest.version)?.prerelease.length ?? 1) === 0)
+  if (stable) return { version: stable.version }
+  if (!hostIsPrerelease) return undefined
+  return { version: compatible[0].version, reason: 'prerelease host; the newest compatible build is a prerelease' }
+}
+
+/** 市场版本元数据（两个 registry 依次尝试，全失败返回 undefined——由调用方回退 latest）。 */
+export async function fetchMarketMetadata(
+  fetchImpl: typeof fetch,
+  options: { registries?: readonly string[]; timeoutMs?: number } = {}
+): Promise<MarketMetadata | undefined> {
+  const registries = options.registries ?? MARKET_REGISTRIES
+  const timeoutMs = options.timeoutMs ?? MARKET_METADATA_TIMEOUT_MS
+  const failures: string[] = []
+  for (const registry of registries) {
+    try {
+      const response = await fetchImpl(`${registry}/${MARKET_PACKAGE}`, {
+        signal: AbortSignal.timeout(timeoutMs),
+        // 完整元数据才带 per-version 的 peerDependencies/engines（简版安装元数据没有）。
+        headers: { accept: 'application/json' }
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const payload = (await response.json()) as {
+        versions?: Record<string, MarketVersionManifest>
+        'dist-tags'?: { latest?: unknown }
+      }
+      const latest = payload['dist-tags']?.latest
+      if (typeof latest !== 'string' || !parseSemver(latest) || !payload.versions?.[latest]) {
+        throw new Error('invalid version metadata')
+      }
+      return { versions: payload.versions, latest }
+    } catch (error) {
+      failures.push(`${registry}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  logger.warn('Failed to read dshmarket metadata from every registry', { failures })
+  return undefined
+}
+
+/** 市场是否"可用"：装着、版本号可读即可（可用性不判大小——兼容性由上面的选版负责）。 */
 export function isUsableMarketVersion(version: string | undefined): boolean {
   return !!version && !!parseSemver(version)
 }
@@ -256,14 +464,14 @@ function declaresMarket(manifest: ProfileManifest): boolean {
 // 命令拼装
 // ---------------------------------------------------------------------------
 
-function marketAddArgs(registry: string): string[] {
+function marketAddArgs(spec: string, registry: string): string[] {
   return [
     'plugin',
     '--profile',
     MARKET_PROFILE,
     'add',
     '--workspace-root',
-    `${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC}`,
+    `${MARKET_PACKAGE}@${spec}`,
     `--registry=${registry}`,
     // CI 环境下 pnpm 默认冻结锁文件，而这里要动的正是锁文件。
     '--no-frozen-lockfile'
@@ -296,17 +504,45 @@ async function runWithRegistryFallback(
   }
 }
 
+/**
+ * 决定这次装哪个版本：按已装 dsh 的 peer 要求现场挑（见 {@link selectCompatibleMarketVersion}），
+ * 挑不出来才回退到 dist-tag `latest`——两种情况都如实记一行日志，便于真机排障。
+ */
+export async function resolveMarketSpec(options: MarketChannelOptions): Promise<{ spec: string; why: string }> {
+  if (!options.hostVersion) {
+    return { spec: MARKET_INSTALL_SPEC, why: 'the installed dsh version is unknown' }
+  }
+  const metadata = await fetchMarketMetadata(options.fetchImpl ?? fetch, {
+    ...(options.registries ? { registries: options.registries } : {})
+  })
+  if (!metadata) {
+    return { spec: MARKET_INSTALL_SPEC, why: 'registry metadata is unavailable' }
+  }
+  const picked = selectCompatibleMarketVersion(metadata, options.hostVersion)
+  if (!picked) {
+    return {
+      spec: MARKET_INSTALL_SPEC,
+      why: `no published version declares compatibility with dsh ${options.hostVersion}`
+    }
+  }
+  return {
+    spec: picked.version,
+    why: `highest version compatible with dsh ${options.hostVersion}${picked.reason ? ` (${picked.reason})` : ''}`
+  }
+}
+
 /** 跑一次"装市场"并核验可读；失败如实抛（调用方决定是阻断还是仅告警）。 */
 async function addMarketAndVerify(
   io: MarketIo,
   runner: MarketCommandRunner,
   paths: MarketPaths,
+  spec: string,
   note?: (line: string) => void
 ): Promise<string | undefined> {
   await runWithRegistryFallback(
     runner,
-    marketAddArgs,
-    (registry) => `dsh plugin add ${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC} (${registry})`,
+    (registry) => marketAddArgs(spec, registry),
+    (registry) => `dsh plugin add ${MARKET_PACKAGE}@${spec} (${registry})`,
     note
   )
   const version = await readProfileBundleVersion(io, paths.profileDir, MARKET_PACKAGE)
@@ -326,6 +562,15 @@ export interface MarketChannelOptions {
   dshHome: string
   io: MarketIo
   runner: MarketCommandRunner
+  /**
+   * 已装 dsh 的版本（决定装哪个市场版本）。缺省表示"拿不到"——此时回退 dist-tag。
+   * 由应用侧从 `tools/dsh/node_modules/@deepseek-ai/dsh/package.json` 读出。
+   */
+  hostVersion?: string
+  /** 版本元数据来源（单测注入）；缺省走两个 registry。 */
+  fetchImpl?: typeof fetch
+  /** 元数据 registry 顺序（单测注入）。 */
+  registries?: readonly string[]
   note?: (line: string) => void
 }
 
@@ -360,9 +605,11 @@ export async function installMarketBundleWith(options: MarketChannelOptions): Pr
   }
   if (!loaded) throw new Error(`dsh web profile manifest was not created at ${paths.manifestPath}`)
 
+  const { spec, why } = await resolveMarketSpec(options)
+  note?.(`[market] installing ${MARKET_PACKAGE}@${spec}: ${why}`)
   const declared: ProfileManifest = {
     ...loaded.manifest,
-    dependencies: { ...loaded.manifest.dependencies, [MARKET_PACKAGE]: MARKET_INSTALL_SPEC }
+    dependencies: { ...loaded.manifest.dependencies, [MARKET_PACKAGE]: spec }
   }
   const bundles = declared.dsh?.profile?.bundles ?? []
   declared.dsh = {
@@ -374,7 +621,7 @@ export async function installMarketBundleWith(options: MarketChannelOptions): Pr
   }
   await io.writeText(paths.manifestPath, `${JSON.stringify(declared, undefined, 2)}\n`)
   try {
-    const version = await addMarketAndVerify(io, runner, paths, note)
+    const version = await addMarketAndVerify(io, runner, paths, spec, note)
     return { installed: true, ...(version ? { version } : {}) }
   } catch (error) {
     // 声明留下（下次启动的修复据此接手）；pnpm 可能已改过 manifest，还原成进来时的样子。
@@ -405,19 +652,20 @@ export async function ensureMarketInstalledWith(options: MarketChannelOptions): 
     return { installed: false, ...(installed ? { version: installed } : {}) }
   }
 
+  const { spec, why } = await resolveMarketSpec(options)
   note?.(
     linked
-      ? `[market] ${MARKET_PACKAGE} ${installed ?? '(unknown)'} is a link; reinstalling into the shared tree`
-      : `[market] (re)installing ${MARKET_PACKAGE} ${installed ?? '(missing)'} as @${MARKET_INSTALL_SPEC}`
+      ? `[market] ${MARKET_PACKAGE} ${installed ?? '(unknown)'} is a link; reinstalling ${spec} into the shared tree (${why})`
+      : `[market] (re)installing ${MARKET_PACKAGE} ${installed ?? '(missing)'} as ${spec} (${why})`
   )
 
   await ensurePnpmWorkspaceSettings(io, paths.profileDir)
   await clearProfileInstallMarker(io, paths.profileDir)
   if (!pending) {
-    await io.writeText(paths.pendingPath, `${JSON.stringify({ spec: MARKET_INSTALL_SPEC, at: Date.now() })}\n`)
+    await io.writeText(paths.pendingPath, `${JSON.stringify({ spec, at: Date.now() })}\n`)
   }
   try {
-    const version = await addMarketAndVerify(io, runner, paths, note)
+    const version = await addMarketAndVerify(io, runner, paths, spec, note)
     await io.removeFile(paths.pendingPath)
     return { installed: true, ...(version ? { version } : {}) }
   } catch (error) {
@@ -446,6 +694,23 @@ export async function isMarketUsableWith(io: MarketIo, paths: MarketPaths): Prom
 /** 受管 dsh 的 CLI 入口（npm 型安装布局，与 BinaryManager.installNpmTool 一致）。 */
 function managedDshEntry(): string {
   return path.join(codeMateToolsRoot(), 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+}
+
+/**
+ * 已装 dsh 的版本——**选市场版本的依据**（市场的 peer 声明要对上它）。
+ * 读不出来就返回 undefined，调用方回退 dist-tag（宁可用 latest 让 dsh 自己把关，也不猜）。
+ */
+async function installedDshVersion(): Promise<string | undefined> {
+  try {
+    const raw = await fsp.readFile(
+      path.join(codeMateToolsRoot(), 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+      'utf-8'
+    )
+    const parsed = JSON.parse(raw) as { version?: unknown }
+    return typeof parsed.version === 'string' ? parsed.version : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function managedNodeBin(): string {
@@ -495,23 +760,25 @@ const managedMarketRunner: MarketCommandRunner = async (args, options) => {
   })
 }
 
-function defaultMarketOptions(): MarketChannelOptions {
+async function defaultMarketOptions(): Promise<MarketChannelOptions> {
+  const hostVersion = await installedDshVersion()
   return {
     dshHome: deepSeekHarnessHome(),
     io: nodeMarketIo,
     runner: managedMarketRunner,
+    ...(hostVersion ? { hostVersion } : {}),
     note: (line) => logger.info(line)
   }
 }
 
-/** 安装面入口（BinaryManager 调用）：把市场装进共享树并核验。 */
-export function installMarketBundle(): Promise<MarketInstallOutcome> {
-  return installMarketBundleWith(defaultMarketOptions())
+/** 安装面入口（BinaryManager 调用）：按已装 dsh 的兼容性挑版本、装进共享树并核验。 */
+export async function installMarketBundle(): Promise<MarketInstallOutcome> {
+  return installMarketBundleWith(await defaultMarketOptions())
 }
 
 /** 启动前入口（DeepSeekHarnessService 调用）：需要时才补装并核验。 */
-export function ensureMarketInstalled(): Promise<MarketInstallOutcome> {
-  return ensureMarketInstalledWith(defaultMarketOptions())
+export async function ensureMarketInstalled(): Promise<MarketInstallOutcome> {
+  return ensureMarketInstalledWith(await defaultMarketOptions())
 }
 
 /** 现有市场是否仍可加载（补装失败时的降级判据）。 */

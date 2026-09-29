@@ -15,6 +15,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   ensureMarketInstalledWith,
+  fetchMarketMetadata,
+  inferMarketRuntimeCompatibility,
   installMarketBundleWith,
   isMarketUsableWith,
   isUsableMarketVersion,
@@ -23,8 +25,11 @@ import {
   type MarketIo,
   MARKET_INSTALL_SPEC,
   MARKET_PACKAGE,
+  type MarketMetadata,
   marketPaths,
-  parseSemver
+  parseSemver,
+  satisfiesRange,
+  selectCompatibleMarketVersion
 } from '../marketBaseline'
 
 const DSH_HOME = '/mock/codemate/home/dsh'
@@ -280,6 +285,144 @@ describe('installMarketBundleWith', () => {
       /exited with code 1/
     )
     expect(workspace.files.get(workspace.paths.manifestPath)).toBe(before)
+  })
+})
+
+describe('按 dsh 兼容性选版（真机回归的正面修复）', () => {
+  // 真机事实（2026-09-29）：dsh 0.2.0-rc.2 拒收 dshmarket@1.45.1——后者只声明
+  // `@deepseek-ai/dsh-settings ^0.1.*`；1.66.5 的声明里多了 `|| ^0.2.0-rc.1`，才被接受。
+  const INCOMPATIBLE = {
+    peerDependencies: { '@deepseek-ai/dsh-settings': '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2' }
+  }
+  const COMPATIBLE = {
+    peerDependencies: {
+      '@deepseek-ai/dsh-settings': '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1'
+    }
+  }
+  const packument = (
+    versions: Record<string, { peerDependencies?: Record<string, string>; deprecated?: boolean }>,
+    latest: string
+  ): MarketMetadata => ({
+    latest,
+    versions: Object.fromEntries(
+      Object.entries(versions).map(([version, manifest]) => [version, { name: MARKET_PACKAGE, version, ...manifest }])
+    )
+  })
+  const fakeFetch = (payload: unknown): typeof fetch =>
+    (async () => ({ ok: true, status: 200, json: async () => payload })) as unknown as typeof fetch
+  /**
+   * registry 的**原始 packument 形状**（`dist-tags` 那层）——走 fetch 的用例必须用它：
+   * `fetchMarketMetadata` 消费的是 registry 的响应，不是本模块内的 MarketMetadata。
+   */
+  const registryPayload = (metadata: MarketMetadata): unknown => ({
+    'dist-tags': { latest: metadata.latest },
+    versions: metadata.versions
+  })
+
+  it('understands the peer ranges the registry actually publishes', () => {
+    expect(satisfiesRange('0.2.0-rc.2', '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2')).toBe(false)
+    expect(satisfiesRange('0.2.0-rc.2', '^0.1.0-rc.7 || ^0.2.0-rc.1')).toBe(true)
+    expect(satisfiesRange('0.2.0', '^0.2.0-rc.1')).toBe(true)
+  })
+
+  it('judges a candidate by the installed dsh, not by a hard-coded floor', () => {
+    expect(inferMarketRuntimeCompatibility({ version: '1.45.1', ...INCOMPATIBLE }, '0.2.0-rc.2')).toEqual({
+      compatible: false,
+      reason: expect.stringContaining('@deepseek-ai/dsh-settings')
+    })
+    expect(inferMarketRuntimeCompatibility({ version: '1.66.5', ...COMPATIBLE }, '0.2.0-rc.2').compatible).toBe(true)
+  })
+
+  it('takes the highest compatible version, skipping incompatible and deprecated ones', () => {
+    const metadata = packument(
+      {
+        '1.45.1': INCOMPATIBLE,
+        '1.66.5': COMPATIBLE,
+        '1.67.0': { ...COMPATIBLE, deprecated: true }
+      },
+      '1.67.0'
+    )
+    expect(selectCompatibleMarketVersion(metadata, '0.2.0-rc.2')).toEqual({ version: '1.66.5' })
+  })
+
+  it('returns nothing when no published version declares compatibility', () => {
+    const metadata = packument({ '1.45.1': INCOMPATIBLE }, '1.45.1')
+    expect(selectCompatibleMarketVersion(metadata, '0.2.0-rc.2')).toBeUndefined()
+  })
+
+  it('prefers a stable release over prereleases for a stable host', () => {
+    const metadata = packument({ '1.66.0-rc.1': COMPATIBLE, '1.65.0': COMPATIBLE }, '1.66.0-rc.1')
+    expect(selectCompatibleMarketVersion(metadata, '0.2.0')).toEqual({ version: '1.65.0' })
+  })
+
+  it('installs the compatible version — not the stale constant, not blindly latest', async () => {
+    const workspace = new FakeWorkspace()
+    workspace.manifest(declaredManifest('^1.45.1'))
+    const calls: string[][] = []
+    const runner: MarketCommandRunner = async (args) => {
+      calls.push([...args])
+      workspace.installMarket('1.66.5')
+      return ''
+    }
+    const outcome = await ensureMarketInstalledWith({
+      dshHome: DSH_HOME,
+      io: workspace.io,
+      runner,
+      hostVersion: '0.2.0-rc.2',
+      fetchImpl: fakeFetch(registryPayload(packument({ '1.45.1': INCOMPATIBLE, '1.66.5': COMPATIBLE }, '1.66.5')))
+    })
+    expect(calls[0]).toContain(`${MARKET_PACKAGE}@1.66.5`)
+    expect(outcome).toEqual({ installed: true, version: '1.66.5' })
+  })
+
+  it('falls back to the latest tag when no version is declared compatible', async () => {
+    const workspace = new FakeWorkspace()
+    workspace.manifest(declaredManifest('^1.45.1'))
+    const calls: string[][] = []
+    const runner: MarketCommandRunner = async (args) => {
+      calls.push([...args])
+      workspace.installMarket('1.45.1')
+      return ''
+    }
+    await ensureMarketInstalledWith({
+      dshHome: DSH_HOME,
+      io: workspace.io,
+      runner,
+      hostVersion: '0.2.0-rc.2',
+      fetchImpl: fakeFetch(registryPayload(packument({ '1.45.1': INCOMPATIBLE }, '1.45.1')))
+    })
+    expect(calls[0]).toContain(`${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC}`)
+  })
+
+  it('falls back to the latest tag when the host version is unknown', async () => {
+    const workspace = new FakeWorkspace()
+    workspace.manifest(declaredManifest('^1.45.1'))
+    const calls: string[][] = []
+    const runner: MarketCommandRunner = async (args) => {
+      calls.push([...args])
+      workspace.installMarket('1.66.5')
+      return ''
+    }
+    await ensureMarketInstalledWith({ dshHome: DSH_HOME, io: workspace.io, runner })
+    expect(calls[0]).toContain(`${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC}`)
+  })
+
+  it('tries the fallback registry when metadata cannot be read from the first one', async () => {
+    const calls: string[] = []
+    const fetchImpl = (async (url: string) => {
+      calls.push(String(url))
+      if (String(url).includes('npmmirror')) throw new Error('ECONNRESET')
+      return {
+        ok: true,
+        status: 200,
+        json: async () => registryPayload(packument({ '1.66.5': COMPATIBLE }, '1.66.5'))
+      }
+    }) as unknown as typeof fetch
+    const metadata = await fetchMarketMetadata(fetchImpl, {
+      registries: ['https://registry.npmmirror.com', 'https://registry.npmjs.org']
+    })
+    expect(calls).toHaveLength(2)
+    expect(metadata?.latest).toBe('1.66.5')
   })
 })
 
