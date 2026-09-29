@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   ensureMarketInstalledWith,
   fetchMarketMetadata,
+  type HostFacts,
   inferMarketRuntimeCompatibility,
   installMarketBundleWith,
   isMarketUsableWith,
@@ -291,14 +292,25 @@ describe('installMarketBundleWith', () => {
 describe('按 dsh 兼容性选版（真机回归的正面修复）', () => {
   // 真机事实（2026-09-29）：dsh 0.2.0-rc.2 拒收 dshmarket@1.45.1——后者只声明
   // `@deepseek-ai/dsh-settings ^0.1.*`；1.66.5 的声明里多了 `|| ^0.2.0-rc.1`，才被接受。
+  // 市场还声明 `@deepseek-ai/schemastery ^3.18.1`——**另一个包、另一条版本线**，必须拿本机
+  // schemastery 的已装版本去比（活探针实测：拿 dsh 版本去比会把正确的 1.66.5 误判为不兼容，
+  // 从而挑出一个远古版本）。
   const INCOMPATIBLE = {
     peerDependencies: { '@deepseek-ai/dsh-settings': '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2' }
   }
   const COMPATIBLE = {
     peerDependencies: {
-      '@deepseek-ai/dsh-settings': '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1'
+      '@deepseek-ai/dsh-settings': '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2 || ^0.2.0-rc.1',
+      '@deepseek-ai/schemastery': '^3.18.1'
     }
   }
+  /** 本机宿主事实（与真机一致：dsh 0.2.0-rc.2、dsh-settings 0.2.0-rc.2、schemastery 3.18.3）。 */
+  const host = (overrides: Partial<HostFacts> = {}): HostFacts => ({
+    dshVersion: '0.2.0-rc.2',
+    peerVersion: async (name) =>
+      name === '@deepseek-ai/schemastery' ? '3.18.3' : name === '@deepseek-ai/dsh-settings' ? '0.2.0-rc.2' : undefined,
+    ...overrides
+  })
   const packument = (
     versions: Record<string, { peerDependencies?: Record<string, string>; deprecated?: boolean }>,
     latest: string
@@ -322,18 +334,34 @@ describe('按 dsh 兼容性选版（真机回归的正面修复）', () => {
   it('understands the peer ranges the registry actually publishes', () => {
     expect(satisfiesRange('0.2.0-rc.2', '^0.1.0-rc.7 || ^0.1.1-rc.2 || ^0.1.2-alpha.2')).toBe(false)
     expect(satisfiesRange('0.2.0-rc.2', '^0.1.0-rc.7 || ^0.2.0-rc.1')).toBe(true)
+    expect(satisfiesRange('3.18.3', '^3.18.1')).toBe(true)
     expect(satisfiesRange('0.2.0', '^0.2.0-rc.1')).toBe(true)
   })
 
-  it('judges a candidate by the installed dsh, not by a hard-coded floor', () => {
-    expect(inferMarketRuntimeCompatibility({ version: '1.45.1', ...INCOMPATIBLE }, '0.2.0-rc.2')).toEqual({
+  it('judges each candidate against the installed version of THAT package', async () => {
+    expect(await inferMarketRuntimeCompatibility({ version: '1.45.1', ...INCOMPATIBLE }, host())).toEqual({
       compatible: false,
       reason: expect.stringContaining('@deepseek-ai/dsh-settings')
     })
-    expect(inferMarketRuntimeCompatibility({ version: '1.66.5', ...COMPATIBLE }, '0.2.0-rc.2').compatible).toBe(true)
+    expect((await inferMarketRuntimeCompatibility({ version: '1.66.5', ...COMPATIBLE }, host())).compatible).toBe(true)
   })
 
-  it('takes the highest compatible version, skipping incompatible and deprecated ones', () => {
+  it('ignores peers this host does not install (no evidence, not a veto)', async () => {
+    const manifest = {
+      version: '1.66.5',
+      peerDependencies: { '@deepseek-ai/some-future-package': '^9.0.0' }
+    }
+    expect((await inferMarketRuntimeCompatibility(manifest, host())).compatible).toBe(true)
+  })
+
+  it('honours engines.dsh against the installed dsh version', async () => {
+    expect(await inferMarketRuntimeCompatibility({ version: '1.66.5', engines: { dsh: '^0.3.0' } }, host())).toEqual({
+      compatible: false,
+      reason: expect.stringContaining('requires dsh')
+    })
+  })
+
+  it('takes the highest compatible version, skipping incompatible and deprecated ones', async () => {
     const metadata = packument(
       {
         '1.45.1': INCOMPATIBLE,
@@ -342,17 +370,19 @@ describe('按 dsh 兼容性选版（真机回归的正面修复）', () => {
       },
       '1.67.0'
     )
-    expect(selectCompatibleMarketVersion(metadata, '0.2.0-rc.2')).toEqual({ version: '1.66.5' })
+    expect(await selectCompatibleMarketVersion(metadata, host())).toEqual({ version: '1.66.5' })
   })
 
-  it('returns nothing when no published version declares compatibility', () => {
+  it('returns nothing when no published version declares compatibility', async () => {
     const metadata = packument({ '1.45.1': INCOMPATIBLE }, '1.45.1')
-    expect(selectCompatibleMarketVersion(metadata, '0.2.0-rc.2')).toBeUndefined()
+    expect(await selectCompatibleMarketVersion(metadata, host())).toBeUndefined()
   })
 
-  it('prefers a stable release over prereleases for a stable host', () => {
+  it('prefers a stable release over prereleases for a stable host', async () => {
     const metadata = packument({ '1.66.0-rc.1': COMPATIBLE, '1.65.0': COMPATIBLE }, '1.66.0-rc.1')
-    expect(selectCompatibleMarketVersion(metadata, '0.2.0')).toEqual({ version: '1.65.0' })
+    expect(await selectCompatibleMarketVersion(metadata, host({ dshVersion: '0.2.0' }))).toEqual({
+      version: '1.65.0'
+    })
   })
 
   it('installs the compatible version — not the stale constant, not blindly latest', async () => {
@@ -368,7 +398,7 @@ describe('按 dsh 兼容性选版（真机回归的正面修复）', () => {
       dshHome: DSH_HOME,
       io: workspace.io,
       runner,
-      hostVersion: '0.2.0-rc.2',
+      host: host(),
       fetchImpl: fakeFetch(registryPayload(packument({ '1.45.1': INCOMPATIBLE, '1.66.5': COMPATIBLE }, '1.66.5')))
     })
     expect(calls[0]).toContain(`${MARKET_PACKAGE}@1.66.5`)
@@ -388,13 +418,13 @@ describe('按 dsh 兼容性选版（真机回归的正面修复）', () => {
       dshHome: DSH_HOME,
       io: workspace.io,
       runner,
-      hostVersion: '0.2.0-rc.2',
+      host: host(),
       fetchImpl: fakeFetch(registryPayload(packument({ '1.45.1': INCOMPATIBLE }, '1.45.1')))
     })
     expect(calls[0]).toContain(`${MARKET_PACKAGE}@${MARKET_INSTALL_SPEC}`)
   })
 
-  it('falls back to the latest tag when the host version is unknown', async () => {
+  it('falls back to the latest tag when the host is unreadable', async () => {
     const workspace = new FakeWorkspace()
     workspace.manifest(declaredManifest('^1.45.1'))
     const calls: string[][] = []

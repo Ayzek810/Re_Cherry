@@ -204,38 +204,54 @@ export interface MarketMetadata {
   latest: string
 }
 
+/** 已装宿主的事实：判市场候选是否兼容的依据（v0.4.5-1；活探针纠正后）。 */
+export interface HostFacts {
+  /** 已装 dsh 的版本（只用于 `engines.dsh` / `dsh.minVersion`）。 */
+  dshVersion?: string
+  /**
+   * 某个宿主包在本机的已装版本（包名 → 版本）。
+   *
+   * **为什么必须逐包**：市场声明的 peer 是多个**各自版本线**的包——`@deepseek-ai/dsh-settings`
+   * 与 dsh 同代（0.2.0-rc.2），而 `@deepseek-ai/schemastery` 是 `^3.18.1`。社区版
+   * `inferPluginRuntimeCompatibility` 把**所有** `@deepseek-ai/*` peer 都拿去和"当前 dsh 版本"
+   * 比，于是把 `^3.18.1` 与 `0.2.0-rc.2` 相比 → 把正确的 1.66.5 判成不兼容（活探针实测：会挑出
+   * 1.11.3）。逐包对已装版本才是可用的判据。返回 undefined = 本机没装这个包 → 不作为不兼容的证据。
+   */
+  peerVersion: (packageName: string) => Promise<string | undefined>
+}
+
 /**
- * 该版本市场是否与本机 dsh 兼容——社区版 `inferPluginRuntimeCompatibility` 的逐条对位：
- * ① `peerDependencies` 里 `@deepseek-ai/*`（cordis 除外）必须被当前 dsh 版本满足；
- * ② `engines.dsh` 与 `dsh.minVersion` 声明也须满足（前者是范围、后者是下限）；
- * ③ 依赖已废弃的 `@deepseek-ai/dsh-host-apiproxy` 一律判不兼容。
+ * 该版本市场是否与本机 dsh 兼容：
+ * ① `peerDependencies` 里每个 `@deepseek-ai/*`（cordis 除外——由 harness 自身提供、版本线独立）
+ *    的声明范围必须被**该包在本机的已装版本**满足；
+ * ② `engines.dsh` 与 `dsh.minVersion` 声明须被已装 dsh 版本满足；
+ * ③ 依赖已移除的 `@deepseek-ai/dsh-host-apiproxy` 一律判不兼容。
  *
- * 真机意义：dsh 0.2.0-rc.2 会**拒收**只声明 `@deepseek-ai/dsh-settings ^0.1.x` 的
- * dshmarket（1.45.1 即如此）。这条判定让我们在安装之前就避开它，而不是等 dsh 报错。
+ * 真机意义：dsh 0.2.0-rc.2 会**拒收**只声明 `@deepseek-ai/dsh-settings ^0.1.x` 的 dshmarket
+ * （1.45.1 即如此）。这条判定让我们在安装之前就避开它，而不是等 dsh 报错。
  */
-export function inferMarketRuntimeCompatibility(
+export async function inferMarketRuntimeCompatibility(
   manifest: MarketVersionManifest,
-  dshVersion: string
-): { compatible: boolean; reason?: string } {
-  for (const [peer, range] of Object.entries(manifest.peerDependencies ?? {})) {
-    if (peer.startsWith('@deepseek-ai/') && peer !== '@deepseek-ai/cordis') {
-      if (range && !satisfiesRange(dshVersion, range)) {
-        return { compatible: false, reason: `declares peer ${peer} (${range})` }
-      }
+  host: HostFacts
+): Promise<{ compatible: boolean; reason?: string }> {
+  const peers = manifest.peerDependencies ?? {}
+  if ('@deepseek-ai/dsh-host-apiproxy' in peers) {
+    return { compatible: false, reason: 'depends on the removed @deepseek-ai/dsh-host-apiproxy' }
+  }
+
+  for (const [peer, range] of Object.entries(peers)) {
+    if (!peer.startsWith('@deepseek-ai/') || peer === '@deepseek-ai/cordis' || !range) continue
+    const installed = await host.peerVersion(peer)
+    if (installed && !satisfiesRange(installed, range)) {
+      return { compatible: false, reason: `declares peer ${peer} (${range}) but ${installed} is installed` }
     }
   }
 
   const minVersion = manifest.dsh?.minVersion
-  const constraints = [manifest.engines?.dsh, minVersion ? `>=${minVersion}` : undefined]
-  for (const constraint of constraints) {
-    if (constraint && !satisfiesRange(dshVersion, constraint)) {
-      return { compatible: false, reason: `requires dsh ${constraint}` }
+  for (const constraint of [manifest.engines?.dsh, minVersion ? `>=${minVersion}` : undefined]) {
+    if (constraint && host.dshVersion && !satisfiesRange(host.dshVersion, constraint)) {
+      return { compatible: false, reason: `requires dsh ${constraint} but ${host.dshVersion} is installed` }
     }
-  }
-
-  const dependencies = Object.keys(manifest.peerDependencies ?? {})
-  if (dependencies.includes('@deepseek-ai/dsh-host-apiproxy')) {
-    return { compatible: false, reason: 'depends on the removed @deepseek-ai/dsh-host-apiproxy' }
   }
 
   return { compatible: true }
@@ -252,20 +268,27 @@ export function inferMarketRuntimeCompatibility(
  * 预发布：dsh 自己是预发布（如 0.2.0-rc.2）时允许预发布候选；否则只认稳定版，退而求其次才用
  * 预发布（避免把 rc 塞给稳定宿主）。
  */
-export function selectCompatibleMarketVersion(
+export async function selectCompatibleMarketVersion(
   metadata: MarketMetadata,
-  dshVersion: string
-): { version: string; reason?: string } | undefined {
+  host: HostFacts
+): Promise<{ version: string; reason?: string } | undefined> {
   const candidates = Object.values(metadata.versions)
     .filter((manifest) => !!parseSemver(manifest.version) && !manifest.deprecated)
     .sort((left, right) => compareSemver(right.version, left.version))
-  const compatible = candidates.filter((manifest) => inferMarketRuntimeCompatibility(manifest, dshVersion).compatible)
-  if (compatible.length === 0) return undefined
-  const hostIsPrerelease = (parseSemver(dshVersion)?.prerelease.length ?? 0) > 0
-  const stable = compatible.find((manifest) => (parseSemver(manifest.version)?.prerelease.length ?? 1) === 0)
-  if (stable) return { version: stable.version }
-  if (!hostIsPrerelease) return undefined
-  return { version: compatible[0].version, reason: 'prerelease host; the newest compatible build is a prerelease' }
+
+  const hostIsPrerelease = (parseSemver(host.dshVersion ?? '')?.prerelease.length ?? 0) > 0
+  let prereleaseCandidate: { version: string; reason?: string } | undefined
+  for (const candidate of candidates) {
+    if (!(await inferMarketRuntimeCompatibility(candidate, host)).compatible) continue
+    if ((parseSemver(candidate.version)?.prerelease.length ?? 1) === 0) {
+      return { version: candidate.version }
+    }
+    prereleaseCandidate ??= {
+      version: candidate.version,
+      reason: 'prerelease host; the newest compatible build is a prerelease'
+    }
+  }
+  return hostIsPrerelease ? prereleaseCandidate : undefined
 }
 
 /** 市场版本元数据（两个 registry 依次尝试，全失败返回 undefined——由调用方回退 latest）。 */
@@ -509,8 +532,8 @@ async function runWithRegistryFallback(
  * 挑不出来才回退到 dist-tag `latest`——两种情况都如实记一行日志，便于真机排障。
  */
 export async function resolveMarketSpec(options: MarketChannelOptions): Promise<{ spec: string; why: string }> {
-  if (!options.hostVersion) {
-    return { spec: MARKET_INSTALL_SPEC, why: 'the installed dsh version is unknown' }
+  if (!options.host) {
+    return { spec: MARKET_INSTALL_SPEC, why: 'the installed dsh is unreadable' }
   }
   const metadata = await fetchMarketMetadata(options.fetchImpl ?? fetch, {
     ...(options.registries ? { registries: options.registries } : {})
@@ -518,16 +541,16 @@ export async function resolveMarketSpec(options: MarketChannelOptions): Promise<
   if (!metadata) {
     return { spec: MARKET_INSTALL_SPEC, why: 'registry metadata is unavailable' }
   }
-  const picked = selectCompatibleMarketVersion(metadata, options.hostVersion)
+  const picked = await selectCompatibleMarketVersion(metadata, options.host)
   if (!picked) {
     return {
       spec: MARKET_INSTALL_SPEC,
-      why: `no published version declares compatibility with dsh ${options.hostVersion}`
+      why: `no published version declares compatibility with the installed dsh (${options.host.dshVersion ?? 'unknown'})`
     }
   }
   return {
     spec: picked.version,
-    why: `highest version compatible with dsh ${options.hostVersion}${picked.reason ? ` (${picked.reason})` : ''}`
+    why: `highest version compatible with the installed dsh (${options.host.dshVersion ?? 'unknown'})${picked.reason ? ` — ${picked.reason}` : ''}`
   }
 }
 
@@ -563,10 +586,10 @@ export interface MarketChannelOptions {
   io: MarketIo
   runner: MarketCommandRunner
   /**
-   * 已装 dsh 的版本（决定装哪个市场版本）。缺省表示"拿不到"——此时回退 dist-tag。
-   * 由应用侧从 `tools/dsh/node_modules/@deepseek-ai/dsh/package.json` 读出。
+   * 已装宿主的事实（决定装哪个市场版本）。缺省表示"拿不到"——此时回退 dist-tag。
+   * 应用侧从 `tools/dsh/node_modules/` 读 dsh 与各宿主包的版本。
    */
-  hostVersion?: string
+  host?: HostFacts
   /** 版本元数据来源（单测注入）；缺省走两个 registry。 */
   fetchImpl?: typeof fetch
   /** 元数据 registry 顺序（单测注入）。 */
@@ -696,20 +719,34 @@ function managedDshEntry(): string {
   return path.join(codeMateToolsRoot(), 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
 }
 
-/**
- * 已装 dsh 的版本——**选市场版本的依据**（市场的 peer 声明要对上它）。
- * 读不出来就返回 undefined，调用方回退 dist-tag（宁可用 latest 让 dsh 自己把关，也不猜）。
- */
-async function installedDshVersion(): Promise<string | undefined> {
+/** 受管 dsh 安装树里某个包的已装版本（读不到返回 undefined）。 */
+async function installedPackageVersion(packageName: string): Promise<string | undefined> {
   try {
     const raw = await fsp.readFile(
-      path.join(codeMateToolsRoot(), 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+      path.join(codeMateToolsRoot(), 'dsh', 'node_modules', ...packageName.split('/'), 'package.json'),
       'utf-8'
     )
     const parsed = JSON.parse(raw) as { version?: unknown }
     return typeof parsed.version === 'string' ? parsed.version : undefined
   } catch {
     return undefined
+  }
+}
+
+/**
+ * 本机宿主事实——**选市场版本的依据**：dsh 自身的版本 + 各 `@deepseek-ai/*` 包在本机的
+ * 已装版本（市场的 peer 声明要对上它们）。带一层进程内缓存：一次选版会问同一个包好几次。
+ */
+async function installedHostFacts(): Promise<HostFacts | undefined> {
+  const dshVersion = await installedPackageVersion('@deepseek-ai/dsh')
+  if (!dshVersion) return undefined
+  const cache = new Map<string, string | undefined>()
+  return {
+    dshVersion,
+    peerVersion: async (packageName) => {
+      if (!cache.has(packageName)) cache.set(packageName, await installedPackageVersion(packageName))
+      return cache.get(packageName)
+    }
   }
 }
 
@@ -761,12 +798,12 @@ const managedMarketRunner: MarketCommandRunner = async (args, options) => {
 }
 
 async function defaultMarketOptions(): Promise<MarketChannelOptions> {
-  const hostVersion = await installedDshVersion()
+  const host = await installedHostFacts()
   return {
     dshHome: deepSeekHarnessHome(),
     io: nodeMarketIo,
     runner: managedMarketRunner,
-    ...(hostVersion ? { hostVersion } : {}),
+    ...(host ? { host } : {}),
     note: (line) => logger.info(line)
   }
 }
