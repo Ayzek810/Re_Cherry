@@ -68,6 +68,7 @@ coverage
 .vitest-cache
 vitest.config.*.timestamp-*
 .context/vitest-temp/
+.tmp-kernel-*-tests*
 
 # TypeScript incremental build
 .tsbuildinfo

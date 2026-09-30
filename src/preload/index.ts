@@ -266,6 +266,8 @@ const api = {
       webSearch?: { providerId: string }
       /** 聊天生图（批次5）：本轮 generate_image 工具的绘画模型（与 topics.TopicSendOptions 逐字段对齐）。 */
       generateImage?: { providerId: string; modelId: string }
+      /** 持久记忆（v0.4.6）：本轮 memory 工具的助手 id（与 topics.TopicSendOptions 逐字段对齐）。 */
+      memory?: { assistantId: string }
       /** 知识库检索（批次4）：本轮可检索库清单。 */
       knowledgeBases?: Array<{
         id: string

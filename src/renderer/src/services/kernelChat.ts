@@ -82,6 +82,14 @@ interface TurnState {
   mainText: string
   thinkingBlockId?: string
   thinkingText: string
+  /**
+   * 推理计时段（v0.4.6-1 修复"完成态归 0.1"）：startedAt = 首条 reasoning-delta；
+   * thinkingMillsec = 冻结值（推理结束瞬间——首条 text-delta / tool 块 / step 收尾/
+   * 回合收尾最早者——一次性落块，值 = 冻结时刻 − startedAt，与用户看到的跳动器同值；
+   * 正文流式时间不计入）。assistant/message 收尾后复位。
+   */
+  thinkingStartedAt?: number
+  thinkingMillsec?: number
   /** 本轮块序（消息 blocks 列表的权威；按事件顺序追加，assistant/message 时替换回当前 step 的流式块）。 */
   blockIds: string[]
   /** callId → 工具块（tool/result 按 callId 回填同一块）。 */
@@ -577,6 +585,20 @@ function syncMessageBlocks(topicId: string, state: TurnState): void {
   )
 }
 
+/**
+ * 推理结束瞬间冻结思考块（v0.4.6-1 修复"完成态归 0.1"）：status 置 SUCCESS +
+ * thinking_millsec 落块，跳动器当场停在推理结束那格——正文/工具阶段不计入思考时长。
+ * 冻结值 = 冻结时刻 − 推理起点（与跳动器同基同时钟）。幂等。
+ */
+function freezePendingThinking(state: TurnState): void {
+  if (state.thinkingBlockId === undefined || state.thinkingMillsec !== undefined) return
+  const startedAt = state.thinkingStartedAt
+  if (startedAt === undefined) return
+  const millsec = Math.max(0, Math.round(performance.now() - startedAt))
+  state.thinkingMillsec = millsec
+  flushBlockUpdate(state.thinkingBlockId, { status: MessageBlockStatus.SUCCESS, thinking_millsec: millsec })
+}
+
 function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
   const state = streams.get(topicId)
   if (state === undefined) return
@@ -587,10 +609,16 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
     state.mainText = ''
     state.thinkingBlockId = undefined
     state.thinkingText = ''
+    state.thinkingStartedAt = undefined
+    state.thinkingMillsec = undefined
   }
   state.currentStep = step
   switch (chunk.type) {
     case 'text-delta': {
+      // 首条正文 delta = 推理已结束：先冻结思考块（跳动器停在同值）。
+      // 必须无条件调用——startTurn 已建初始正文块，首 step 的正文 delta 不走下方建块分支
+      //（上一版把冻结藏在建块分支里，首 step 冻结从未执行，计数器一路走到回合收尾）。
+      freezePendingThinking(state)
       if (state.mainBlockId === undefined) {
         const mainBlock = createMainTextBlock(state.assistantMessageId, '', {
           status: MessageBlockStatus.STREAMING,
@@ -614,6 +642,7 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
     case 'reasoning-delta': {
       state.thinkingText += chunk.text
       if (state.thinkingBlockId === undefined) {
+        state.thinkingStartedAt = performance.now()
         const thinkingBlock = createThinkingBlock(state.assistantMessageId, '', {
           status: MessageBlockStatus.STREAMING
         })
@@ -642,7 +671,9 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
   }
 }
 
-/** 块内容更新走 rAF 合并，避免高频 delta 刷爆渲染。 */
+/** 块内容更新走 rAF 合并，避免高频 delta 刷爆渲染。
+ * 派发异常必须放行队列（v0.4.6-1：dispatch 抛错时旧实现不 delete，条目变僵尸——
+ * 该块后续所有 flush 永久合并进死条目，表现为"流几字停顿、收尾一次性全文"）。 */
 const blockFlushQueue = new Map<string, { timer: number; changes: Record<string, unknown> }>()
 function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void {
   const existing = blockFlushQueue.get(blockId)
@@ -654,9 +685,16 @@ function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void
   blockFlushQueue.set(blockId, entry)
   entry.timer = window.requestAnimationFrame(() => {
     const current = blockFlushQueue.get(blockId)
-    if (current !== undefined) {
+    if (current === undefined) return
+    blockFlushQueue.delete(blockId)
+    try {
       store.dispatch(updateOneBlock({ id: blockId, changes: current.changes as Partial<MessageBlock> }))
-      blockFlushQueue.delete(blockId)
+    } catch (error) {
+      // 取证钩子：渲染层 error 不落盘，升 warn（ forensic——静默失败被禁）。
+      logger.warn(
+        `kernelChat: block flush dispatch failed (blockId=${blockId}, changes=${Object.keys(current.changes).join(',')})`,
+        error instanceof Error ? error : new Error(String(error))
+      )
     }
   })
 }
@@ -682,6 +720,9 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
   // 最终说话块（tool-call 块由 tool/call 事件负责，不在这里产出，避免双卡）
   const finalBlockIds: string[] = []
   const finalBlocks: MessageBlock[] = []
+  // 纯推理 step（无正文/工具事件触发过冻结）在此补冻；已冻结则沿用冻结值。
+  freezePendingThinking(state)
+  const thinkingMillsec = state.thinkingMillsec
   for (const block of data.message.content) {
     if (block.type === 'text' && block.text !== undefined && block.text.length > 0) {
       const main = createMainTextBlock(state.assistantMessageId, block.text, {
@@ -697,7 +738,10 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
       finalBlocks.push(main)
       finalBlockIds.push(main.id)
     } else if (block.type === 'reasoning' && block.text !== undefined && block.text.length > 0) {
-      const thinking = createThinkingBlock(state.assistantMessageId, block.text, { status: MessageBlockStatus.SUCCESS })
+      const thinking = createThinkingBlock(state.assistantMessageId, block.text, {
+        status: MessageBlockStatus.SUCCESS,
+        ...(thinkingMillsec !== undefined ? { thinking_millsec: thinkingMillsec } : {})
+      })
       finalBlocks.push(thinking)
       finalBlockIds.push(thinking.id)
     }
@@ -716,9 +760,19 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
   if (finalBlocks.length > 0) {
     store.dispatch(upsertManyBlocks(finalBlocks))
   }
-  // 被替换的流式块标记终态（消息 blocks 已不含它们）
+  // 被替换的流式块标记终态（消息 blocks 已不含它们）；思考块保留冻结值
+  //（此前只置 SUCCESS 不写 thinking_millsec，完成态计时归 0.1——v0.4.6-1 修复）。
   for (const id of streamedIds) {
-    store.dispatch(updateOneBlock({ id, changes: { status: MessageBlockStatus.SUCCESS } }))
+    const isThinkingBlock = id === state.thinkingBlockId
+    store.dispatch(
+      updateOneBlock({
+        id,
+        changes: {
+          status: MessageBlockStatus.SUCCESS,
+          ...(isThinkingBlock && thinkingMillsec !== undefined ? { thinking_millsec: thinkingMillsec } : {})
+        }
+      })
+    )
   }
 
   // 累计 token 用量（每条 assistant/message 携带其 step 的用量，turn/end 时写入消息）
@@ -732,6 +786,8 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
   state.mainText = ''
   state.thinkingBlockId = undefined
   state.thinkingText = ''
+  state.thinkingStartedAt = undefined
+  state.thinkingMillsec = undefined
 
   syncMessageBlocks(topicId, state)
 }
@@ -740,6 +796,8 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
 function projectToolCall(topicId: string, event: Extract<SessionEvent, { type: 'tool/call' }>): void {
   const state = streams.get(topicId)
   if (state === undefined) return
+  // 推理结束转入工具调用：先冻结思考块（同正文分支语义）。
+  freezePendingThinking(state)
   let parsedArguments: Record<string, unknown> | undefined
   try {
     const parsed = JSON.parse(event.data.arguments) as unknown
@@ -998,7 +1056,8 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
     store.dispatch(upsertManyBlocks([turnErrorBlock]))
     syncMessageBlocks(topicId, state)
   }
-  // 只收尾仍处于流式/进行中的块（已终态的块保持其成功/失败原样）
+  // 只收尾仍处于流式/进行中的块（已终态的块保持其成功/失败原样）。
+  // 思考块内联盖上冻结时长（纯推理 step 被打断也不归 0.1）；状态仍按 settle 收尾。
   const settleStatus = failed
     ? MessageBlockStatus.ERROR
     : aborted
@@ -1011,7 +1070,19 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
       block !== undefined &&
       (block.status === MessageBlockStatus.STREAMING || block.status === MessageBlockStatus.PROCESSING)
     ) {
-      store.dispatch(updateOneBlock({ id: blockId, changes: { status: settleStatus } }))
+      const thinkingElapsed =
+        blockId === state.thinkingBlockId && state.thinkingStartedAt !== undefined
+          ? (state.thinkingMillsec ?? Math.max(0, Math.round(performance.now() - state.thinkingStartedAt)))
+          : undefined
+      store.dispatch(
+        updateOneBlock({
+          id: blockId,
+          changes: {
+            status: settleStatus,
+            ...(thinkingElapsed !== undefined ? { thinking_millsec: thinkingElapsed } : {})
+          }
+        })
+      )
     }
   }
   const updates: Partial<Message> = {

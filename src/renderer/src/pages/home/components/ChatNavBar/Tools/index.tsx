@@ -14,6 +14,7 @@ import { styled } from 'styled-components'
 
 import BranchGraphButton from './BranchGraphButton'
 import SettingsButton from './SettingsButton'
+import TaskPanelButton from './TaskPanelButton'
 
 interface ToolsProps {
   assistant?: Assistant
@@ -36,6 +37,7 @@ const Tools = ({ assistant, activeTopic, setActiveTopic }: ToolsProps) => {
   return (
     <HStack alignItems="center" gap={8}>
       <BranchGraphButton assistant={assistant} topic={activeTopic} onSwitchTopic={setActiveTopic} />
+      <TaskPanelButton topic={activeTopic} />
       <SettingsButton assistant={assistant} />
       {isTopNavbar && (
         <Tooltip title={t('navbar.expand')} mouseEnterDelay={0.8}>

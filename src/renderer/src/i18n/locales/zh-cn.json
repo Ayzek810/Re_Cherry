@@ -2382,11 +2382,26 @@
           "fsSearch": {
             "name": "文件搜索（glob / grep）"
           },
+          "goal": {
+            "name": "持久目标（goal）"
+          },
           "jobs": {
             "name": "后台作业（jobs）"
           },
+          "memory": {
+            "name": "持久记忆（memory）"
+          },
           "pwsh": {
             "name": "命令行（pwsh）"
+          },
+          "saveAttachment": {
+            "name": "附件入库（save_attachment）"
+          },
+          "todo": {
+            "name": "任务清单（todo_write）"
+          },
+          "trash": {
+            "name": "回收站删除（move_to_trash）"
           }
         },
         "placeholder": "完整的逐工具管理将在后续版本提供",
@@ -3892,6 +3907,28 @@
     "close_others": "关闭其他标签页",
     "pin": "固定标签页",
     "unpin": "取消固定"
+  },
+  "tasks": {
+    "goal": {
+      "blockedReason": "受阻原因",
+      "empty": "当前话题没有持久目标；模型可通过 goal 工具创建",
+      "phase": {
+        "active": "进行中",
+        "blocked": "受阻",
+        "complete": "已完成",
+        "paused": "已暂停"
+      },
+      "rounds": "轮次 {{rounds}} / 上限 {{max}}",
+      "title": "持久目标"
+    },
+    "source": "折叠自内核会话日志，随对话实时更新",
+    "title": "任务面板",
+    "todos": {
+      "empty": "没有任务；模型可通过 todo_write 工具创建",
+      "in_progress": "进行中",
+      "pending": "待办",
+      "title": "任务清单"
+    }
   },
   "title": {
     "apps": "小程序",

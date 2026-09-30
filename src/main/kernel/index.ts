@@ -7,6 +7,8 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import * as fsObservationPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
+import GoalService from '@deepseek-ai/dsh-goal'
+import * as goalRoundDriver from '@deepseek-ai/dsh-goal-round-driver'
 import LocalJobRegistry from '@deepseek-ai/dsh-jobs-local'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as piAiPlugin from '@deepseek-ai/dsh-llm-pi-ai'
@@ -56,6 +58,7 @@ import { KnowledgeKernelService } from './knowledgeKernelService'
 // fork 缝：流式补全真取消（Dsh_StreamAbort → abortLightStream）。
 import { abortLightStream, lightOneShot, lightStream } from './lightLlm'
 import { abortLightImage, lightEditImage, lightGenerateImage, setLightLlmProviderRoutes } from './lightLlmModalities'
+import { MemoryKernelService } from './memoryKernelService'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
@@ -153,6 +156,9 @@ export async function bootKernel(): Promise<Context> {
     // knowledgeService——v0.3.2 起文档处理系统同时服务知识库摄取与聊天读文件，
     // 附件路径主进程直读）。
     await ctx.plugin(DocumentKernelService)
+    // 持久记忆每轮登记缝（v0.4.6）：ctx.memory（同构，状态本体在 memoryKernelService
+    // 模块单例；根目录由 topics.sendMessage 按助手 id 主进程派生并确保存在）。
+    await ctx.plugin(MemoryKernelService)
 
     // LLM 层
     await ctx.plugin(LlmRuntime)
@@ -244,6 +250,10 @@ export async function bootKernel(): Promise<Context> {
     // Agent 层：注册表 + 回合循环（工厂由 loop 注入注册表）
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
+    // 目标域（v0.4.6 dsh 原生词表轻挂）：同会话目标状态服务（事件溯源）+ 自动续轮驱动；
+    // 模型面 goal 三件套（create/get/update）按助手开关在 topics.ts BUILTIN_MOUNTS 挂载。
+    await ctx.plugin(GoalService)
+    await ctx.plugin(goalRoundDriver)
 
     // App 服务 seam（P5）：话题树/会话回收/思考档位查询挂到 ctx，供未来插件接管
     registerAppServiceSeams(ctx)
@@ -577,6 +587,7 @@ function registerKernelIpc(): void {
         documents?: unknown
         preprocess?: { providerId?: unknown }
         generateImage?: { providerId?: unknown; modelId?: unknown }
+        memory?: { assistantId?: unknown }
       }
     ) => {
       // 白名单重建（v0.3.1 形态）+ 批次2/4/5/6 能力载荷（webSearch/knowledgeBases/
@@ -724,6 +735,14 @@ function registerKernelIpc(): void {
           throw new Error('kernel: invalid generateImage in topic send options')
         }
         cleanOptions.generateImage = { providerId: generateImage.providerId, modelId: generateImage.modelId }
+      }
+      if (options?.memory !== undefined) {
+        const memory = options.memory
+        if (typeof memory !== 'object' || memory === null || typeof memory.assistantId !== 'string' || memory.assistantId.length === 0) {
+          throw new Error('kernel: invalid memory in topic send options')
+        }
+        // 只上行助手 id：memory 根目录由主进程派生（路径权威在主进程，v0.4.6）。
+        cleanOptions.memory = { assistantId: memory.assistantId }
       }
       // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
       setTurnGenerateImageConfig(id, cleanOptions.generateImage)

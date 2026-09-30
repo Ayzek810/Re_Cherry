@@ -341,12 +341,14 @@ const fetchAndProcessAssistantResponseImpl = async (
       const generateImageActive = assistant.enableGenerateImage === true && paintingModel !== undefined
       const builtinTools = [
         // 附件门（§7.17）：read_document/ocr_document 只在触发消息带文件附件的轮挂载
-        //（无附件时 schema 是纯噪音）；ocr_document 之外的基础注册表项受助手工具页开关。
+        //（无附件时 schema 是纯噪音）；ask_user_question 受助手工具页开关。v0.4.6 用户裁决：
+        // memory/todo/goal 归外置（工作模式作用域），不再进本清单。
         ...BUILTIN_TOOL_IDS.filter((toolId) => toolId !== 'ocr_document' && assistant.builtinTools?.[toolId] !== false),
         ...(wantsDescriber ? ['describe_images'] : []),
-        ...(webSearchActive ? ['web_search'] : []),
+        ...(webSearchActive ? ['web_search', 'web_fetch'] : []),
         // 批次4 知识检索：助手挂知识库即追加（每轮登记见 options.knowledgeBases）。
-        ...((assistant.knowledge_bases?.length ?? 0) > 0 ? ['knowledge_search'] : []),
+        // v0.4.6：knowledge_read 同门挂载（kb_search 命中文档的整读/grep 取回键）。
+        ...((assistant.knowledge_bases?.length ?? 0) > 0 ? ['knowledge_search', 'knowledge_read'] : []),
         ...(skillsActive ? ['skill'] : []),
         ...(generateImageActive ? ['generate_image'] : []),
         ...documentToolIds
@@ -432,6 +434,11 @@ const fetchAndProcessAssistantResponseImpl = async (
         // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
         ...(generateImageActive && paintingModel
           ? { generateImage: { providerId: paintingModel.provider, modelId: paintingModel.id } }
+          : {}),
+        // v0.4.6 持久记忆（外置）：工作模式开 + 助手外置开关开时上行助手 id（内核主进程
+        // 派生受控目录，渲染层不上行路径）；payload 门与外置挂载门严格同条件。
+        ...(topic?.workMode === true && assistant.externalTools?.memory !== false
+          ? { memory: { assistantId: assistant.id } }
           : {})
       })
     } else {

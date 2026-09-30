@@ -14,9 +14,11 @@ import { effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-p
 import { type SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import * as toolFs from '@deepseek-ai/dsh-tool-fs'
 import * as toolFsSearch from '@deepseek-ai/dsh-tool-fs-search'
+import * as toolGoal from '@deepseek-ai/dsh-tool-goal'
 import * as toolJobs from '@deepseek-ai/dsh-tool-jobs'
 import * as toolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import * as toolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
+import * as toolTodo from '@deepseek-ai/dsh-tool-todo'
 import { effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { loggerService } from '@logger'
 import { EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
@@ -35,13 +37,20 @@ import * as askUserTool from './askUserTool'
 import * as describeImagesTool from './describeImageTool'
 import * as documentTool from './documentTool'
 import * as generateImageTool from './generateImageTool'
+import * as knowledgeReadTool from './knowledgeReadTool'
 import * as knowledgeSearchTool from './knowledgeSearchTool'
 import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
 import { createMcpBridgeModule } from './mcpBridge'
+import { getTurnMemoryRoot } from './memoryKernelService'
+import * as memoryTool from './memoryTool'
+import * as moveToTrashTool from './moveToTrashTool'
 import * as ocrDocumentTool from './ocrDocumentTool'
+import * as saveAttachmentTool from './saveAttachmentTool'
 import { isInjectedUserEvent } from './sessionEventView'
 import { resumeOrCreateSession } from './sessionResumeFallback'
 import * as skillTool from './skillTool'
+import { sanitizeUntrustedText } from './untrustedContent'
+import * as webFetchTool from './webFetchTool'
 import * as webSearchTool from './webSearchTool'
 
 const logger = loggerService.withContext('KernelTopics')
@@ -161,7 +170,14 @@ const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => 
   // 绘画模型已配置的轮把 'generate_image' 并入 builtinTools；每轮绘画模型经
   // sendMessage options.generateImage 登记（webSearch 同构）。执行 = 轻量 AI 服务面
   // lightGenerateImage（主进程直调，无 IPC 旁路）。
-  { id: 'generate_image', mount: (agentCtx) => agentCtx.plugin(generateImageTool) }
+  { id: 'generate_image', mount: (agentCtx) => agentCtx.plugin(generateImageTool) },
+  // v0.4.6 web_fetch（V2 WebFetchTool 同构）：随 web_search 挂载（webSearchActive 门由
+  // 渲染层决定，fetch 本身不依赖搜索提供商）；执行走三级抓取链 + Readability，
+  // 结果并入 web_search 同一条 [n] 编号链与引用卡。
+  { id: 'web_fetch', mount: (agentCtx) => agentCtx.plugin(webFetchTool) },
+  // v0.4.6 knowledge_read（V2 kb_read 同构）：随 knowledge_search 挂载（turnBases 门）；
+  // 命中文档整读/文档内 grep，baseId 执行侧防线复用每轮登记。
+  { id: 'knowledge_read', mount: (agentCtx) => agentCtx.plugin(knowledgeReadTool) }
 ]
 
 const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
@@ -171,7 +187,21 @@ const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) =>
   { id: 'fsSearch', mount: (agentCtx) => agentCtx.plugin(toolFsSearch, { sampleOverCapGlobResults: true }) },
   { id: 'editor', mount: (agentCtx) => agentCtx.plugin(toolStrReplaceEditor) },
   { id: 'pwsh', mount: (agentCtx) => agentCtx.plugin(toolPwsh) },
-  { id: 'jobs', mount: (agentCtx) => agentCtx.plugin(toolJobs) }
+  { id: 'jobs', mount: (agentCtx) => agentCtx.plugin(toolJobs) },
+  // v0.4.6（V2 同名工具移植）：工作区安全删除（OS 回收站）+ 附件物化。
+  // 两者共用档位升级流（read-only 档拒绝 + sandbox_permissions 问询放行）。
+  { id: 'trash', mount: (agentCtx) => agentCtx.plugin(moveToTrashTool) },
+  { id: 'saveAttachment', mount: (agentCtx) => agentCtx.plugin(saveAttachmentTool) },
+  // v0.4.6 用户裁决：memory / todo / goal 归外置（工作模式作用域）——它们都在会话之外
+  // 留持久状态（memory 写磁盘助手级 FACT/JOURNAL；todo/goal 写会话日志并驱动 UI 面板/
+  // 自动续轮）。memory 每轮根目录经 sendMessage options.memory（assistantId）登记，
+  // FACT.md 内容进 cherry:memory 快照节（recall side），JOURNAL 仅工具可达。
+  // dsh 原生词表（V2 dsh 驱动组合差集）：todo_write（allowParallelInProgress: false =
+  // 单活纪律）+ goal 三件套（create/get/update；自动续轮由 goal-round-driver 承担，
+  // 见 bootKernel）。
+  { id: 'memory', mount: (agentCtx) => agentCtx.plugin(memoryTool) },
+  { id: 'todo', mount: (agentCtx) => agentCtx.plugin(toolTodo, { allowParallelInProgress: false }) },
+  { id: 'goal', mount: (agentCtx) => agentCtx.plugin(toolGoal) }
 ]
 
 /** 外置工具 id → 模型可读的能力短语（工具面说明段用；与 @shared/config/agentTools 的 id 一一对应）。 */
@@ -180,7 +210,12 @@ const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
   fsSearch: 'searching the workspace by filename pattern and content keywords (glob / grep)',
   editor: 'structured file editing via exact string replacement (str_replace_editor)',
   pwsh: 'running PowerShell commands inside the sandbox (pwsh)',
-  jobs: 'tracking long-running background jobs (jobs)'
+  jobs: 'tracking long-running background jobs (jobs)',
+  trash: 'moving workspace files to the operating-system trash (move_to_trash; recoverable)',
+  saveAttachment: 'saving an attached conversation file into the workspace (save_attachment)',
+  memory: 'maintaining your persistent notes across conversations (memory)',
+  todo: 'maintaining a visible task list for this conversation (todo_write)',
+  goal: 'setting and tracking a persistent session goal with automatic continuation (goal)'
 }
 
 /**
@@ -273,18 +308,33 @@ function mountedStateEquals(
 }
 
 /**
- * 每轮登记漂移签名（批次5/6）：折叠 skill/read_document 本轮登记清单（技能
- * name/description、文档 name/path/ext）为单串。清单随轮重写（sendMessage 内
- * setTurnSkills/setTurnDocuments），快照节文本又是 setup 时静态计算——签名变化
- * 即 dispose 重挂，索引才对模型新鲜。与 computeMcpSignature 同构；无登记为 ''。
+ * 每轮登记漂移签名（批次5/6）：折叠 skill/read_document/memory 本轮登记清单（技能
+ * name/description、文档 name/path/ext、memory 根 + FACT.md 内容哈希）为单串。清单随轮
+ * 重写（sendMessage 内 setTurnSkills/setTurnDocuments/setTurnRoot），快照节文本又是
+ * setup 时静态计算——签名变化即 dispose 重挂，索引才对模型新鲜。与 computeMcpSignature
+ * 同构；无登记为 ''。
  */
-function computeTurnRegSignature(topicId: string): string {
+async function computeTurnRegSignature(topicId: string): Promise<string> {
   const skills = skillService.getTurnSkills(topicId) ?? []
   const documents = knowledgeService.getTurnDocuments(topicId) ?? []
-  if (skills.length === 0 && documents.length === 0) return ''
+  let memory: string | undefined
+  const memoryRoot = getTurnMemoryRoot(topicId)
+  if (memoryRoot !== undefined) {
+    // FACT.md 内容哈希进签名：模型 update 后下一轮重挂，cherry:memory 快照节才新鲜。
+    let factHash = 'absent'
+    try {
+      const fact = await readFile(join(memoryRoot, 'FACT.md'), 'utf-8')
+      factHash = createHash('sha256').update(fact).digest('hex').slice(0, 16)
+    } catch {
+      // 文件不存在 = 缺省态（首次使用前的正常形态）。
+    }
+    memory = `${memoryRoot}:${factHash}`
+  }
+  if (skills.length === 0 && documents.length === 0 && memory === undefined) return ''
   const payload = JSON.stringify({
     skills: skills.map((skill) => [skill.name, skill.description]),
-    documents: documents.map((document) => [document.name, document.path, document.ext])
+    documents: documents.map((document) => [document.name, document.path, document.ext]),
+    ...(memory === undefined ? {} : { memory })
   })
   return createHash('sha256').update(payload).digest('hex').slice(0, 16)
 }
@@ -1150,6 +1200,13 @@ export interface TopicSendOptions {
    * 一并上行；缺省/undefined = 本轮未启用，工具执行侧如实报可行动错误）。
    */
   generateImage?: { providerId: string; modelId: string }
+  /**
+   * 持久记忆（v0.4.6）：本轮 memory 工具的助手 id——主进程据此派生受控目录
+   *（{userData}/Data/assistant-memory/<sanitize(id)>/memory，路径权威在主进程，渲染层
+   * 不上行路径）。渲染层在助手工具页 memory 开关开时随 builtinTools='memory' 一并上行；
+   * 缺省/undefined = 本轮未启用，工具执行侧防线拒答。
+   */
+  memory?: { assistantId: string }
 }
 
 export async function sendMessage(ctx: Context, id: string, text: string, options?: TopicSendOptions): Promise<void> {
@@ -1207,6 +1264,14 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   preprocessChannel.setTurnProvider(id, options?.preprocess?.providerId)
   // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
   generateImageTool.setTurnGenerateImageConfig(id, options?.generateImage)
+  // v0.4.6 持久记忆：本轮根目录登记（主进程派生受控目录并确保存在）。
+  const memoryKernel = (ctx as unknown as { memory?: { setTurnRoot: (topicId: string, assistantId: string | undefined) => Promise<void> } })
+    .memory
+  if (memoryKernel !== undefined) {
+    await memoryKernel.setTurnRoot(id, options?.memory?.assistantId)
+  } else if (options?.memory !== undefined) {
+    logger.error('kernel: memory seam not mounted; per-turn memory registration skipped')
+  }
   // 工具面跟轮走（B1 的"下一轮"）：期望状态与活体挂载状态不一致时，弃用活体 agent
   //（会话已持久化）并按新状态重挂——开关随时可切，生效点永远在下一轮开始之前。
   // systemPrompt 同判：assistant section 是 setup 时的静态文本，行被 createTopic 覆盖后
@@ -1218,9 +1283,9 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   // 清单变化时 id 清单不变，靠签名差异触发重挂（computeMcpSignature 走 listTools 缓存，
   // 失败按 'unreachable' 计，服务恢复后下一轮自动重挂）。
   const desiredMcpSignature = await computeMcpSignature(externals)
-  // 每轮登记漂移签名（批次5/6）：技能/文档清单跨轮变更同样 id 不变、靠签名触发重挂
+  // 每轮登记漂移签名（批次5/6）：技能/文档/记忆清单跨轮变更同样 id 不变、靠签名触发重挂
   //（登记已在本函数开头写入，快照节由重挂后的 setup 重建）。
-  const desiredTurnRegSignature = computeTurnRegSignature(id)
+  const desiredTurnRegSignature = await computeTurnRegSignature(id)
   if (
     handle !== undefined &&
     (mountedState === undefined ||
@@ -1585,7 +1650,12 @@ async function ensureAgent(
       const turnSkills = skillService.getTurnSkills(topic.id) ?? []
       const index =
         turnSkills.length > 0
-          ? turnSkills.map((skill) => `- ${skill.name}${skill.description ? `: ${skill.description}` : ''}`).join('\n')
+          ? turnSkills
+              .map(
+                (skill) =>
+                  `- ${sanitizeUntrustedText(skill.name)}${skill.description ? `: ${sanitizeUntrustedText(skill.description)}` : ''}`
+              )
+              .join('\n')
           : '(no skills are attached to this turn)'
       agentCtx.systemPrompt.context({
         name: 'cherry:skills',
@@ -1597,19 +1667,49 @@ async function ensureAgent(
     // v0.4.4-1（ASD-STE100 + 拼名修复）：文档名加引号定边界（名字含空格/混合文字，
     // 裸名 + 冗余扩展标记导致模型首轮拼错文件名）；OCR 提示压成一句（与
     // ocr_document 描述不重复）。工具挂载态决定动词短语（ocr_document 未挂载不提及）。
+    // v0.4.6：文档名经 sanitizeUntrustedText（进受信边界的用户可写文本）。
     if (builtinsMounted.includes('read_document')) {
       const turnDocuments = knowledgeService.getTurnDocuments(topic.id) ?? []
       const index =
         turnDocuments.length > 0
-          ? turnDocuments.map((document) => `- "${document.name}"`).join('\n')
+          ? turnDocuments.map((document) => `- "${sanitizeUntrustedText(document.name)}"`).join('\n')
           : '(no documents are attached to this turn)'
       const verbs = builtinsMounted.includes('ocr_document') ? 'read_document or ocr_document' : 'read_document'
       const ocrHint = builtinsMounted.includes('ocr_document') ? ' PDFs without a text layer need the ocr_document tool.' : ''
+      const saveHint = externalsMounted.includes('saveAttachment')
+        ? ' The save_attachment tool can copy one into the workspace.'
+        : ''
       agentCtx.systemPrompt.context({
         name: 'cherry:documents',
         order: 1,
-        text: `Attached documents (${turnDocuments.length}); pass one to the ${verbs} tool, quoted exactly as listed below.${ocrHint}\n${index}`
+        text: `Attached documents (${turnDocuments.length}); pass one to the ${verbs} tool, quoted exactly as listed below.${ocrHint}${saveHint}\n${index}`
       })
+    }
+    // 持久记忆（v0.4.6，外置——工作模式作用域）：memory 工具挂载且有登记根的轮，FACT.md
+    // 内容（存在且非空时）注入快照节——V2 的 recall side 同构（工具是唯一写入口，注入只
+    // 读回放）。内容是模型自己写的持久文本，进受信边界前清洗（sanitizeUntrustedText）。
+    if (externalsMounted.includes('memory')) {
+      const memoryRoot = getTurnMemoryRoot(topic.id)
+      if (memoryRoot !== undefined) {
+        let factContent: string | undefined
+        try {
+          const fact = await readFile(join(memoryRoot, 'FACT.md'), 'utf-8')
+          if (fact.trim().length > 0) factContent = fact
+        } catch {
+          // 无 FACT.md = 该助手还没有持久记忆（首次使用前的正常形态，不注入）。
+        }
+        if (factContent !== undefined) {
+          agentCtx.systemPrompt.context({
+            name: 'cherry:memory',
+            order: 1,
+            text:
+              'These are your durable notes accumulated across this assistant\'s past conversations. Trust them ' +
+              'as ground truth unless you have direct evidence otherwise; update them via the memory tool ' +
+              '(action: update) so the next conversation also benefits.\n' +
+              sanitizeUntrustedText(factContent)
+          })
+        }
+      }
     }
   }
 
@@ -1649,7 +1749,7 @@ async function ensureAgent(
     externals: externalsMounted,
     mcpSignature: await computeMcpSignature(externalsMounted),
     // 与上方快照节同源（登记已在 sendMessage 开头写入；话题直开轮为既有登记/空）
-    turnRegSignature: computeTurnRegSignature(topic.id),
+    turnRegSignature: await computeTurnRegSignature(topic.id),
     systemPrompt: topic.systemPrompt ?? ''
   })
   return handle.agent

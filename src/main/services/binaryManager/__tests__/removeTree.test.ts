@@ -15,8 +15,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { removeTree, removeTreeIfPossible, removeTreeWithRetry } from '../removeTree'
 
-/** 真实临时根：`process.env.TEMP`（Windows）/ TMPDIR（POSIX）——两者都不在 main 的 mock 面里。 */
-const TMP_BASE = process.env.TEMP ?? process.env.TMPDIR ?? process.env.TMP ?? process.cwd()
+/** 真实临时根：优先进程工作目录（本会话环境的符号链接授权按卷/作用域差异波动，
+ * 工作区内稳定可建——kernel 测试族同先例），回退 TEMP/TMP。 */
+const TMP_BASE = path.join(process.cwd(), '.tmp-binarymanager-removetree-tests')
 
 const exists = (target: string): Promise<boolean> =>
   stat(target).then(
@@ -27,6 +28,7 @@ const exists = (target: string): Promise<boolean> =>
 let root: string
 
 beforeEach(async () => {
+  await mkdir(TMP_BASE, { recursive: true })
   root = await mkdtemp(path.join(TMP_BASE, 'codemate-removetree-'))
 })
 

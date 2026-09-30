@@ -23,7 +23,12 @@ const EXTERNAL_TOOL_I18N: Record<string, string> = {
   fsSearch: 'settings.agentSettings.tools.externals.fsSearch.name',
   editor: 'settings.agentSettings.tools.externals.editor.name',
   pwsh: 'settings.agentSettings.tools.externals.pwsh.name',
-  jobs: 'settings.agentSettings.tools.externals.jobs.name'
+  jobs: 'settings.agentSettings.tools.externals.jobs.name',
+  trash: 'settings.agentSettings.tools.externals.trash.name',
+  saveAttachment: 'settings.agentSettings.tools.externals.saveAttachment.name',
+  memory: 'settings.agentSettings.tools.externals.memory.name',
+  todo: 'settings.agentSettings.tools.externals.todo.name',
+  goal: 'settings.agentSettings.tools.externals.goal.name'
 }
 
 /**

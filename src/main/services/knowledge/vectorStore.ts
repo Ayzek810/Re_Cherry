@@ -113,6 +113,21 @@ export class BaseVectorStore {
     return hits.slice(0, Math.max(1, topK))
   }
 
+  /**
+   * 按条目级标识读回全部 chunk（knowledge_read 工具，v0.4.6）：插回顺序 = 自增 id，
+   * 同条目多文档（sitemap/directory）按文档批内相邻；调用方负责 overlap 去重与分页。
+   */
+  async readByUniqueId(uniqueId: string): Promise<Array<{ content: string; metadata: Record<string, unknown> }>> {
+    const result = await this.client.execute({
+      sql: 'SELECT content, metadata FROM chunks WHERE unique_id = ? ORDER BY id',
+      args: [uniqueId]
+    })
+    return result.rows.map((row) => ({
+      content: String(row.content),
+      metadata: JSON.parse(String(row.metadata)) as Record<string, unknown>
+    }))
+  }
+
   async count(): Promise<number> {
     const result = await this.client.execute('SELECT COUNT(*) AS n FROM chunks')
     return Number(result.rows[0]?.n ?? 0)

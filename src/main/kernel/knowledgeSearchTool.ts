@@ -88,7 +88,7 @@ export function apply(ctx: Context): void {
         if (bases === undefined || bases.length === 0) {
           throw new Error('knowledge_search: no knowledge bases are attached to this conversation turn')
         }
-        const merged: Array<{ score: number; source: string; pageContent: string; baseId: string }> = []
+        const merged: Array<{ score: number; source: string; uniqueId: string; pageContent: string; baseId: string }> = []
         const errors: string[] = []
         for (const base of bases) {
           try {
@@ -104,12 +104,13 @@ export function apply(ctx: Context): void {
               exec.signal
             )
             const threshold = base.threshold ?? 0
-            const hitsInBase: Array<{ score: number; source: string; pageContent: string; baseId: string }> = []
+            const hitsInBase: Array<{ score: number; source: string; uniqueId: string; pageContent: string; baseId: string }> = []
             for (const hit of hits) {
               if (hit.score >= threshold) {
                 hitsInBase.push({
                   score: hit.score,
                   source: String(hit.metadata?.source ?? base.id),
+                  uniqueId: hit.uniqueId,
                   pageContent: hit.pageContent,
                   baseId: base.id
                 })
@@ -151,20 +152,25 @@ export function apply(ctx: Context): void {
         // 乱的"）。正文按行去重后拼接（总量截 1200），模型仍拿到该文档的全部素材；
         // [n] 编号、meta entries、引用卡三者保持同序同集。
         const docOrder: string[] = []
-        const docMap = new Map<string, { source: string; baseId: string; parts: string[] }>()
+        const docMap = new Map<string, { source: string; baseId: string; uniqueId: string; parts: string[] }>()
         for (const hit of merged) {
           const existing = docMap.get(hit.source)
           if (existing) {
             existing.parts.push(hit.pageContent)
           } else {
-            docMap.set(hit.source, { source: hit.source, baseId: hit.baseId, parts: [hit.pageContent] })
+            docMap.set(hit.source, {
+              source: hit.source,
+              baseId: hit.baseId,
+              uniqueId: hit.uniqueId,
+              parts: [hit.pageContent]
+            })
             docOrder.push(hit.source)
           }
         }
         const documents = docOrder.map((source) => {
           const entry = docMap.get(source)
           if (entry === undefined) {
-            return { source, baseId: source, content: '' }
+            return { source, baseId: source, uniqueId: source, content: '' }
           }
           const seen = new Set<string>()
           const lines: string[] = []
@@ -176,7 +182,7 @@ export function apply(ctx: Context): void {
               lines.push(line)
             }
           }
-          return { source, baseId: entry.baseId, content: lines.join('\n').slice(0, 1200) }
+          return { source, baseId: entry.baseId, uniqueId: entry.uniqueId, content: lines.join('\n').slice(0, 1200) }
         })
         const text =
           documents.length === 0
@@ -201,13 +207,13 @@ export function apply(ctx: Context): void {
           bases: bases.length,
           results: documents.length,
           // KnowledgeReference V1 形状（v0.4 统一）：数字序号 id + sourceUrl + type；
-          // baseId 留在 metadata 供排查。
+          // baseId/uniqueId 留在 metadata（uniqueId 是 knowledge_read 的取回键，v0.4.6）。
           entries: documents.map((doc, index) => ({
             id: index + 1,
             content: doc.content,
             sourceUrl: doc.source,
             type: 'file' as const,
-            metadata: { baseId: doc.baseId }
+            metadata: { baseId: doc.baseId, uniqueId: doc.uniqueId }
           })),
           text
         }

@@ -23,14 +23,13 @@ import { getDataPath } from '@main/utils'
 import { chunkText } from './chunker'
 import { EmbeddingClient, type EmbeddingModelRef } from './embeddings'
 import {
+  type ExtractedContent,
   extractFromFile,
   extractFromNote,
   extractFromSitemap,
-  extractFromVideoPair,
   extractFromUrl,
-  listDirectoryFiles,
-  type ExtractedContent
-} from './extractors'
+  extractFromVideoPair,
+  listDirectoryFiles} from './extractors'
 import { BaseVectorStore } from './vectorStore'
 
 const logger = loggerService.withContext('KnowledgeService')
@@ -444,11 +443,41 @@ export class KnowledgeService {
     embedding: KnowledgeEmbeddingRef,
     query: string,
     signal?: AbortSignal
-  ): Promise<Array<{ pageContent: string; score: number; metadata: Record<string, unknown> }>> {
+  ): Promise<Array<{ uniqueId: string; pageContent: string; score: number; metadata: Record<string, unknown> }>> {
     const store = await this.openStore(base.id)
     const [queryVector] = await this.embeddings.embed(embedding, [query], signal)
     const topK = Math.max(1, base.documentCount ?? 30)
     return store.search(queryVector, topK)
+  }
+
+  /**
+   * knowledge_read 工具执行（v0.4.6）：按条目级标识读回摄取文本（chunk 拼接 +
+   * overlap 去重由工具层做，本方法只负责围栏校验与存储读回）。baseId 必须在本轮
+   * 登记清单内（执行侧防线，与 knowledge_search 同型）；未知 uniqueId 具名报错。
+   */
+  async readBaseDocument(
+    topicId: string,
+    baseId: string,
+    uniqueId: string
+  ): Promise<Array<{ content: string; source: string; index: number }>> {
+    const bases = this.getTurnBases(topicId)
+    const base = bases?.find((candidate) => candidate.id === baseId)
+    if (base === undefined) {
+      const known = (bases ?? []).map((candidate) => `"${candidate.id}"`).join(', ')
+      throw new Error(`knowledge base "${baseId}" is not attached to this conversation turn (attached bases: ${known})`)
+    }
+    const store = await this.openStore(base.id)
+    const chunks = await store.readByUniqueId(uniqueId)
+    if (chunks.length === 0) {
+      throw new Error(
+        `document "${uniqueId}" not found in knowledge base "${baseId}" — pass the baseId and document id exactly as a knowledge_search result reports them`
+      )
+    }
+    return chunks.map((chunk, index) => ({
+      content: chunk.content,
+      source: String(chunk.metadata?.source ?? uniqueId),
+      index
+    }))
   }
 }
 

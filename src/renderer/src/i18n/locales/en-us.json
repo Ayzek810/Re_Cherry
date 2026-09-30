@@ -2382,11 +2382,26 @@
           "fsSearch": {
             "name": "File Search (glob / grep)"
           },
+          "goal": {
+            "name": "Session Goal (goal)"
+          },
           "jobs": {
             "name": "Background Jobs (jobs)"
           },
+          "memory": {
+            "name": "Persistent Memory (memory)"
+          },
           "pwsh": {
             "name": "Command Line (pwsh)"
+          },
+          "saveAttachment": {
+            "name": "Save Attachment (save_attachment)"
+          },
+          "todo": {
+            "name": "Task List (todo_write)"
+          },
+          "trash": {
+            "name": "Trash Delete (move_to_trash)"
           }
         },
         "placeholder": "Per-tool management will be available in a future version",
@@ -3892,6 +3907,28 @@
     "close_others": "Close Other Tabs",
     "pin": "Pin Tab",
     "unpin": "Unpin Tab"
+  },
+  "tasks": {
+    "goal": {
+      "blockedReason": "Blocked reason",
+      "empty": "No session goal on this topic; the model can create one via the goal tool",
+      "phase": {
+        "active": "Active",
+        "blocked": "Blocked",
+        "complete": "Complete",
+        "paused": "Paused"
+      },
+      "rounds": "Rounds {{rounds}} / cap {{max}}",
+      "title": "Session Goal"
+    },
+    "source": "Folded from the kernel session log; updates live with the conversation",
+    "title": "Task Panel",
+    "todos": {
+      "empty": "No tasks; the model can create them via the todo_write tool",
+      "in_progress": "In progress",
+      "pending": "Pending",
+      "title": "Task List"
+    }
   },
   "title": {
     "apps": "Apps",
