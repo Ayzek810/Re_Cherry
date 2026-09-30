@@ -66,7 +66,6 @@ export type Assistant = {
   knowledgeRecognition?: 'off' | 'on'
   regularPhrases?: QuickPhrase[] // Added for regular phrase
   tags?: string[] // 助手标签
-  enableMemory?: boolean
   /** 工作模式默认配置（新话题开关的播种来源；工作目录与审批档位的助手级默认值）。 */
   workMode?: AssistantWorkModeConfig
   /**
@@ -501,7 +500,6 @@ export type ExternalToolResult = {
   toolUse?: MCPToolResponse[]
   webSearch?: WebSearchResponse
   knowledge?: KnowledgeReference[]
-  memories?: MemoryItem[]
 }
 
 export const WebSearchProviderIds = {
@@ -833,77 +831,6 @@ export type S3Config = {
 
 export type { Message } from './newMessage'
 export * from './tool'
-
-// Memory Service Types
-// ========================================================================
-export interface MemoryConfig {
-  embeddingDimensions?: number
-  embeddingModel?: Model
-  llmModel?: Model
-  // Dynamically retrieved, not persistently stored
-  embeddingApiClient?: ApiClient
-  customFactExtractionPrompt?: string
-  customUpdateMemoryPrompt?: string
-  /** Indicates whether embedding dimensions are automatically detected */
-  isAutoDimensions?: boolean
-}
-
-export interface MemoryItem {
-  id: string
-  memory: string
-  hash?: string
-  createdAt?: string
-  updatedAt?: string
-  score?: number
-  metadata?: Record<string, any>
-}
-
-export interface MemorySearchResult {
-  results: MemoryItem[]
-  relations?: any[]
-}
-
-export interface MemoryEntity {
-  userId?: string
-  agentId?: string
-  runId?: string
-}
-
-export interface MemorySearchFilters {
-  userId?: string
-  agentId?: string
-  runId?: string
-  [key: string]: any
-}
-
-export interface AddMemoryOptions extends MemoryEntity {
-  metadata?: Record<string, any>
-  filters?: MemorySearchFilters
-  infer?: boolean
-}
-
-export interface MemorySearchOptions extends MemoryEntity {
-  limit?: number
-  filters?: MemorySearchFilters
-}
-
-export interface MemoryHistoryItem {
-  id: number
-  memoryId: string
-  previousValue?: string
-  newValue: string
-  action: 'ADD' | 'UPDATE' | 'DELETE'
-  createdAt: string
-  updatedAt: string
-  isDeleted: boolean
-}
-
-export interface MemoryListOptions extends MemoryEntity {
-  limit?: number
-  offset?: number
-}
-
-export interface MemoryDeleteAllOptions extends MemoryEntity {}
 
 export type EditorView = 'preview' | 'source' | 'read' // 实时,源码,预览
 // ========================================================================

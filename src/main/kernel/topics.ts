@@ -42,7 +42,6 @@ import * as knowledgeSearchTool from './knowledgeSearchTool'
 import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
 import { createMcpBridgeModule } from './mcpBridge'
 import { getTurnMemoryRoot } from './memoryKernelService'
-import * as memorySearchTool from './memorySearchTool'
 import * as memoryTool from './memoryTool'
 import * as moveToTrashTool from './moveToTrashTool'
 import * as ocrDocumentTool from './ocrDocumentTool'
@@ -178,13 +177,7 @@ const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => 
   { id: 'web_fetch', mount: (agentCtx) => agentCtx.plugin(webFetchTool) },
   // v0.4.6 knowledge_read（V2 kb_read 同构）：随 knowledge_search 挂载（turnBases 门）；
   // 命中文档整读/文档内 grep，baseId 执行侧防线复用每轮登记。
-  { id: 'knowledge_read', mount: (agentCtx) => agentCtx.plugin(knowledgeReadTool) },
-  // v0.4.7 全局记忆接线（V1 MemorySearchTool 同构）：渲染层在「全局记忆开关 &&
-  // assistant.enableMemory」的轮把 'memory_search' 并入 builtinTools；执行直调主进程
-  // MemoryService（libsql 全局记忆库，跨会话/跨助手共享；嵌入不可用时服务内 LIKE 回退）。
-  // 与 v0.4.6 的 memory 外置工具并存互不替代：那是助手级 FACT/JOURNAL 文件（工作模式），
-  // 这是全局记忆库的检索面。工具无每轮登记载荷，挂载即授权（无执行侧防线可设）。
-  { id: 'memory_search', mount: (agentCtx) => agentCtx.plugin(memorySearchTool) }
+  { id: 'knowledge_read', mount: (agentCtx) => agentCtx.plugin(knowledgeReadTool) }
 ]
 
 const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [

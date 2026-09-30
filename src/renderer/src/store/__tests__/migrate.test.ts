@@ -223,4 +223,29 @@ describe('store migrations', () => {
       expect(noSettings.settings).toBeUndefined()
     })
   })
+
+  describe('migration 228: memory slice removal (v0.4.7 全局记忆废弃)', () => {
+    it('removes the stale memory slice from persisted state', async () => {
+      const state = {
+        memory: { memoryConfig: { llmModel: { id: 'm', provider: 'p' } }, globalMemoryEnabled: true },
+        settings: { enableQuickPanelTriggers: false },
+        _persist: { version: 227, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 228)
+
+      expect(migrated.memory).toBeUndefined()
+      expect(migrated.settings.enableQuickPanelTriggers).toBe(false)
+    })
+
+    it('tolerates state without a memory slice', async () => {
+      const migrated: any = await migrate(
+        { settings: { enableQuickPanelTriggers: false }, _persist: { version: 227, rehydrated: false } } as any,
+        228
+      )
+
+      expect(migrated.memory).toBeUndefined()
+      expect(migrated.settings.enableQuickPanelTriggers).toBe(false)
+    })
+  })
 })

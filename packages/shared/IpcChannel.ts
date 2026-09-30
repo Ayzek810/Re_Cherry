@@ -184,19 +184,6 @@ export enum IpcChannel {
   StoreSync_OnUpdate = 'store-sync:on-update',
   StoreSync_BroadcastSync = 'store-sync:broadcast-sync',
 
-  // Memory
-  Memory_Add = 'memory:add',
-  Memory_Search = 'memory:search',
-  Memory_List = 'memory:list',
-  Memory_Delete = 'memory:delete',
-  Memory_Update = 'memory:update',
-  Memory_Get = 'memory:get',
-  Memory_SetConfig = 'memory:set-config',
-  Memory_DeleteUser = 'memory:delete-user',
-  Memory_DeleteAllMemoriesForUser = 'memory:delete-all-memories-for-user',
-  Memory_GetUsersList = 'memory:get-users-list',
-  Memory_MigrateMemoryDb = 'memory:migrate-memory-db',
-
   // TRACE
   TRACE_SAVE_DATA = 'trace:saveData',
   TRACE_GET_DATA = 'trace:getData',

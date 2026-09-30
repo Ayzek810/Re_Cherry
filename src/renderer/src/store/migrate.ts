@@ -2771,19 +2771,25 @@ const migrateConfig = {
   // 1.7.7
   '189': (state: RootState) => {
     try {
-      void window.api.memory.migrateMemoryDb()
+      // @ts-ignore 全局记忆已于 v0.4.7 整体废弃（见 migrate 228）：历史分支保留可达性，
+      // 通道不再存在时走本分支 try/catch 的既定失败路径，状态原样返回。
+      void window.api.memory?.migrateMemoryDb()
       // @ts-ignore
       const memoryLlmApiClient = state?.memory?.memoryConfig?.llmApiClient
       // @ts-ignore
       const memoryEmbeddingApiClient = state?.memory?.memoryConfig?.embedderApiClient
 
+      // @ts-ignore
       if (memoryLlmApiClient) {
+        // @ts-ignore
         state.memory.memoryConfig.llmModel = getModel(memoryLlmApiClient.model, memoryLlmApiClient.provider)
         // @ts-ignore
         delete state.memory.memoryConfig.llmApiClient
       }
 
+      // @ts-ignore
       if (memoryEmbeddingApiClient) {
+        // @ts-ignore
         state.memory.memoryConfig.embeddingModel = getModel(
           memoryEmbeddingApiClient.model,
           memoryEmbeddingApiClient.provider
@@ -3444,6 +3450,20 @@ const migrateConfig = {
       return state
     } catch (error) {
       logger.error('migrate 227 error', error as Error)
+      return state
+    }
+  },
+  '228': (state: RootState) => {
+    try {
+      // v0.4.7 用户裁决：全局记忆（V1 遗产：libsql 记忆库 + 工具制召回）整体废弃——
+      // 工具制召回存在「模型不调工具就看不见记忆」的结构性缺陷；仅保留 V2 式
+      // 文件记忆（work-mode memory 工具，FACT.md 每轮注入上下文）。持久化切片
+      // memory 随之移除，旧存档的 memory 键在此显式清除（combineReducers 本也会
+      // 丢弃未知键，storage 残留随下次 flush 自愈）。
+      if ('memory' in state) delete (state as Record<string, unknown>).memory
+      return state
+    } catch (error) {
+      logger.error('migrate 228 error', error as Error)
       return state
     }
   }

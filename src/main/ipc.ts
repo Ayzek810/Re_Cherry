@@ -35,7 +35,6 @@ import { fileStorage as fileManager } from './services/FileStorage'
 import FileService from './services/FileSystemService'
 import { hermesDashboardService } from './services/hermes/HermesDashboardService'
 import { knowledgeService } from './services/knowledge/KnowledgeService'
-import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
 import NotificationService from './services/NotificationService'
 import * as NutstoreService from './services/NutstoreService'
@@ -83,7 +82,6 @@ const logger = loggerService.withContext('IPC')
 
 const backupManager = new BackupManager()
 const exportService = new ExportService()
-const memoryService = MemoryService.getInstance()
 // obsidian vault 只读枚举（V1 移植）：配置路径在首次调用时惰性解析，不占启动序
 const obsidianVaultService = new ObsidianVaultService()
 
@@ -523,21 +521,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       }
     }
   })
-
-  // memory
-  ipcMain.handle(IpcChannel.Memory_Add, (_, messages, config) => memoryService.add(messages, config))
-  ipcMain.handle(IpcChannel.Memory_Search, (_, query, config) => memoryService.search(query, config))
-  ipcMain.handle(IpcChannel.Memory_List, (_, config) => memoryService.list(config))
-  ipcMain.handle(IpcChannel.Memory_Delete, (_, id) => memoryService.delete(id))
-  ipcMain.handle(IpcChannel.Memory_Update, (_, id, memory, metadata) => memoryService.update(id, memory, metadata))
-  ipcMain.handle(IpcChannel.Memory_Get, (_, memoryId) => memoryService.get(memoryId))
-  ipcMain.handle(IpcChannel.Memory_SetConfig, (_, config) => memoryService.setConfig(config))
-  ipcMain.handle(IpcChannel.Memory_DeleteUser, (_, userId) => memoryService.deleteUser(userId))
-  ipcMain.handle(IpcChannel.Memory_DeleteAllMemoriesForUser, (_, userId) =>
-    memoryService.deleteAllMemoriesForUser(userId)
-  )
-  ipcMain.handle(IpcChannel.Memory_GetUsersList, () => memoryService.getUsersList())
-  ipcMain.handle(IpcChannel.Memory_MigrateMemoryDb, () => memoryService.migrateMemoryDb())
 
   // window
   ipcMain.handle(IpcChannel.Windows_SetMinimumSize, (_, width: number, height: number) => {

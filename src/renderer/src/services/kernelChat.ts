@@ -12,7 +12,6 @@ import {
   registerGeneratedImageFiles,
   syncKernelImageAttachment
 } from '@renderer/services/kernelImages'
-import { maybeProcessConversationMemory } from '@renderer/services/memoryProcessor'
 import { autoNameKernelTopic } from '@renderer/services/topicNaming'
 import { recordUsage } from '@renderer/services/usageStore'
 import store from '@renderer/store'
@@ -545,9 +544,6 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
       // 错误/中断回合不命名：失败回合的名字没有语义，留给下一次成功的轮次。
       if (event.data.reason.kind !== 'error' && event.data.reason.kind !== 'aborted') {
         void autoNameKernelTopic(topicId)
-        // v0.4.7 全局记忆抽取（V1 onRequestEnd → storeConversationMemory 同构）：成功回合
-        // 后台抽事实入库；门与失败语义见 services/memoryProcessor.ts（fire-and-forget）。
-        void maybeProcessConversationMemory(topicId)
         // v0.4.7 追问队列泵：回合成功结束后把队首追问按正常路径发出（见
         // services/followupQueue.ts；error/aborted 不泵——失败轮不该自动续问）。
         void pumpFollowupQueue(topicId)

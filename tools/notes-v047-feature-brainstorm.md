@@ -86,7 +86,7 @@
 
 **不建议：** OTLP 全链路追踪 UI（Re_Cherry 已有 trace 窗栈，开发者向）；codeMode 工具代码化调用（内核协议改造，相性未知，L）。
 
-**反向发现**：该 V2 分支没有语音/TTS、没有快捷短语、没有长期记忆工具——Re_Cherry 的 memory 工具反而是 V2 缺的；知识库入库源 V2 仅 file/note/directory/url 四种。
+**反向发现（2026-09-30 晚勘误）**：该 V2 分支没有语音/TTS、没有快捷短语；知识库入库源 V2 仅 file/note/directory/url 四种。~~没有长期记忆工具~~——**勘误**：V2 有 `memoryTools.ts`（per-agent FACT.md/JOURNAL 文件工具，经 `agent-memory` 内置 MCP server 无条件下发给每个 agent 会话，approval 'auto'——fork v0.4.6 的外置 memory 工具正源自它）；V2 真正没有的是 **V1 式全局记忆系统**（libsql + 嵌入检索 + LLM 抽取 + 全局/每助手开关对）。两套记忆的"并存互替"是 fork 的裁决拼图：v0.4.6 取 V2 机制，v0.4.7 回接 V1 机制。
 
 ### B+. V2 第二轮侦察（2026-09-30，i18n 差分 + composer/chat 深挖 + preference 键扫描；中间产物 `.recon2/i18n-diff-groups.txt`）
 
@@ -202,7 +202,7 @@
 
 | 优先 | 候选 | 来源 | 成本 | 一句话理由 |
 |------|------|------|------|-----------|
-| 1 | **全局记忆接线**（E7）——**方向已裁决：接线（2026-09-30）** | **内部**实锤 + **上游** V1 四件套原生形态 | M | 按条件挂载惯例回接：memory_search 工具（同 knowledge_search 的 messageThunk 并入路径）+ 轮前注入判定（globalMemoryEnabled && assistant.enableMemory）+ 轮后抽取轻通路 |
+| 1 | ~~全局记忆接线~~（E7）——**废弃（2026-09-30 当日裁决，接线后作废）** | ~~内部实锤 + 上游 V1 四件套~~ | ~~M~~ | **工具制召回的结构性缺陷（用户裁决理由）**：记忆里存着「固定问题的固定处置」时，模型不调工具就永远看不见——召回不该依赖模型主动检索。仅保留 V2 式文件记忆（work-mode memory 工具，FACT.md **每轮注入上下文**，召回是被动的、必然的）。接线全拆（工具/挂载/门/抽取/开关卡/测试），V1 遗产面（MemoryService/IPC/切片/设置页/memory.* 键）一并移除，migrate 228 清旧档 |
 | 2 | **追问队列 + Steering**（生成中排队追问/插入当前轮/编辑移除） | **上游** V2（§B+ α1） | M | 高频痛点升级：生成中打字不再是死局；排队自动发可先行，steer 看内核支持 |
 | 3 | 消息级原地翻译（译文块随消息） | **上游** V1（§B' V1-1） | M | 长外文回复不切页对照 |
 | 4 | Obsidian 集成（vault 进知识库 + 导出归档） | **上游** V1（V1-3） | M | 与已有知识库/导出体系天然衔接 |
@@ -222,7 +222,7 @@
 
 | # | 项 | 状态 |
 |---|-----|------|
-| 1 | 全局记忆接线 | ✅ 完成：memory_search 内核工具（条件挂载，门=全局开关&&enableMemory）+ 轮后抽取管线（memoryProcessor.ts，V1 MemoryProcessor 同构裁剪：差分前直检候选/只取最近一轮/无 zod 依赖）+ 助手工具页开关 + turn/end 触发；14 测试 + 双 typecheck + 静态 10/10 全绿 |
+| 1 | ~~全局记忆接线~~ | **❌ 废弃（2026-09-30 用户裁决）**：接线后当日报废，理由见 Tier 1 表——工具制召回「模型不调工具就看不见记忆」的结构性缺陷；接线全拆 + V1 遗产面移除（MemoryService/IPC/preload/切片/设置页/memory.* 键/migrate 228 清旧档），仅保留 work-mode memory 工具 |
 | 2 | 追问队列（Steering 留待内核 mid-turn 缝） | ✅ 完成：**用户裁决仅工作模式启用**；followupQueue 切片（blacklist 不持久化）+ 泵（turn/end 成功后按序发）+ Inputbar 拦截 + Dock 面板；5 测试 + 双 typecheck + 静态全绿 |
 | 6 | 电源事件守护 | ✅ 完成：PowerMonitorService（suspend/resume/shutdown 轻量收尾 App_SaveData；Windows 关机缺口如实记录）；6 测试 + 双 typecheck 绿 |
 | 3 | 消息级原地翻译 | ✅ 完成：TRANSLATION 块类型回归 + Dexie `message_translations`（v17）持久真源 + Redux 块投影 + 水合钩子；LLM 走翻译页轻通路（lightStream + state.llm.translateModel）；15 测试 |

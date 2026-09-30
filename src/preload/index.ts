@@ -10,12 +10,7 @@ import { IpcChannel } from '@shared/IpcChannel'
 import type { InstallProgressPayload } from '@shared/types/installProgress'
 import type { Notification } from '@types'
 import type {
-  AddMemoryOptions,
-  AssistantMessage,
   FileMetadata,
-  MemoryConfig,
-  MemoryListOptions,
-  MemorySearchOptions,
   Shortcut,
   ThemeMode,
   WebDavConfig
@@ -502,23 +497,6 @@ const api = {
   openPath: (path: string) => ipcRenderer.invoke(IpcChannel.Open_Path, path),
   shortcuts: {
     update: (shortcuts: Shortcut[]) => ipcRenderer.invoke(IpcChannel.Shortcuts_Update, shortcuts)
-  },
-  memory: {
-    add: (messages: string | AssistantMessage[], options?: AddMemoryOptions) =>
-      ipcRenderer.invoke(IpcChannel.Memory_Add, messages, options),
-    search: (query: string, options: MemorySearchOptions) =>
-      ipcRenderer.invoke(IpcChannel.Memory_Search, query, options),
-    list: (options?: MemoryListOptions) => ipcRenderer.invoke(IpcChannel.Memory_List, options),
-    delete: (id: string) => ipcRenderer.invoke(IpcChannel.Memory_Delete, id),
-    update: (id: string, memory: string, metadata?: Record<string, any>) =>
-      ipcRenderer.invoke(IpcChannel.Memory_Update, id, memory, metadata),
-    get: (id: string) => ipcRenderer.invoke(IpcChannel.Memory_Get, id),
-    setConfig: (config: MemoryConfig) => ipcRenderer.invoke(IpcChannel.Memory_SetConfig, config),
-    deleteUser: (userId: string) => ipcRenderer.invoke(IpcChannel.Memory_DeleteUser, userId),
-    deleteAllMemoriesForUser: (userId: string) =>
-      ipcRenderer.invoke(IpcChannel.Memory_DeleteAllMemoriesForUser, userId),
-    getUsersList: () => ipcRenderer.invoke(IpcChannel.Memory_GetUsersList),
-    migrateMemoryDb: () => ipcRenderer.invoke(IpcChannel.Memory_MigrateMemoryDb)
   },
   window: {
     setMinimumSize: (width: number, height: number) =>

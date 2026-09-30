@@ -351,20 +351,6 @@ export const formatCitationsFromBlock = (
     )
   }
 
-  if (block.memories && Array.isArray(block.memories) && block.memories.length > 0) {
-    // 5. Handle Memory References
-    formattedCitations.push(
-      ...block.memories.map((memory, index) => ({
-        number: index + 1,
-        url: '',
-        title: `Memory ${memory.hash?.slice(0, 8)}`,
-        content: memory.memory,
-        showFavicon: false,
-        type: 'memory'
-      }))
-    )
-  }
-
   // 4. Deduplicate non-knowledge citations by URL and Renumber Sequentially
   const urlSet = new Set<string>()
   return formattedCitations

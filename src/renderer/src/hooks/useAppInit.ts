@@ -1,4 +1,3 @@
-import { loggerService } from '@logger'
 import PrivacyPolicyUpdateNotice from '@renderer/components/app/PrivacyPolicyUpdateNotice'
 import { isMac, LATEST_PRIVACY_POLICY_VERSION } from '@renderer/config/constant'
 import { isLocalAi } from '@renderer/config/env'
@@ -13,10 +12,8 @@ import {
   syncProvidersToKernel,
   syncWebSearchToKernel
 } from '@renderer/services/kernelChat'
-import MemoryService from '@renderer/services/MemoryService'
 import tabsService from '@renderer/services/TabsService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
-import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath } from '@renderer/store/runtime'
 import { checkDataLimit } from '@renderer/utils'
 import { defaultLanguage } from '@shared/config/constant'
@@ -28,8 +25,6 @@ import { useDefaultModel } from './useAssistant'
 import useFullScreenNotice from './useFullScreenNotice'
 import { useRuntime } from './useRuntime'
 import { useNavbarPosition, useSettings } from './useSettings'
-
-const logger = loggerService.withContext('useAppInit')
 
 export function useAppInit() {
   const dispatch = useAppDispatch()
@@ -48,17 +43,12 @@ export function useAppInit() {
   const { setDefaultModel, setQuickModel } = useDefaultModel()
   const avatar = useLiveQuery(() => db.settings.get('image://avatar'))
   const { theme } = useTheme()
-  const memoryConfig = useAppSelector(selectMemoryConfig)
 
   useEffect(() => {
     document.getElementById('spinner')?.remove()
     // eslint-disable-next-line no-restricted-syntax
     console.timeEnd('init')
-
-    // Initialize MemoryService after app is ready
-    MemoryService.getInstance()
   }, [])
-
   useEffect(() => {
     void window.api.getDataPathFromArgs().then((dataPath) => {
       if (dataPath) {
@@ -154,12 +144,6 @@ export function useAppInit() {
   useEffect(() => {
     void window.api.config.set('enableDataCollection', enableDataCollection)
   }, [enableDataCollection])
-
-  // Update memory service configuration when it changes
-  useEffect(() => {
-    const memoryService = MemoryService.getInstance()
-    memoryService.updateConfig().catch((error) => logger.error('Failed to update memory config:', error))
-  }, [memoryConfig])
 
   useEffect(() => {
     // dsh 内核桥：订阅内核 session 事件流

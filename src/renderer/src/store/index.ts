@@ -40,7 +40,6 @@ import inputToolsReducer from './inputTools'
 import knowledge from './knowledge'
 import llm, { updateProviders } from './llm'
 import mcp from './mcp'
-import memory from './memory'
 import messageBlocksReducer from './messageBlock'
 import migrate from './migrate'
 import minapps from './minapps'
@@ -68,7 +67,6 @@ const rootReducer = combineReducers({
   runtime,
   shortcuts,
   minapps,
-  memory,
   copilot,
   tabs,
   messages: newMessagesReducer,
@@ -120,14 +118,13 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
   {
     key: 'cherry-studio',
     storage,
-    version: 227,
+    version: 228,
     blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions', 'followupQueue'],
     transforms: [stripProviderApiKeys],
     migrate
   },
   rootReducer
 )
-
 /**
  * Configures the store sync service to synchronize specific state slices across all windows.
  * For detailed implementation, see @renderer/services/StoreSyncService.ts

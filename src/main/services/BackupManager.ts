@@ -889,8 +889,7 @@ class BackupManager {
 
   /**
    * Stage an empty Data directory; handleStartupRestore swaps it in on next launch.
-   * Avoids races with libsql / MemoryService / KnowledgeService recreating files
-   * before relaunch.
+   * Avoids races with libsql / KnowledgeService recreating files before relaunch.
    *
    * v0.3.1-2：`Data/` 之外的三样也一并预备（内核数据 / provider key / 应用配置）——它们都在 userData 根，
    * 原来不在重置范围内，导致"重置后 key、会话历史、应用配置全都还在"。目录预备成空目录，文件预备成
