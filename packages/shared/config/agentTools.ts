@@ -10,7 +10,8 @@
 /**
  * 内置工具 id（= dsh 工具名）。两类挂载条件：
  * - 条件挂载（不进本表设置页）：web_search/knowledge_search/skill/read_document/describe_images/
- *   generate_image/web_fetch/knowledge_read 随轮条件由渲染层并入 builtinTools（见 messageThunk）。
+ *   generate_image/web_fetch/knowledge_read/memory_search 随轮条件由渲染层并入 builtinTools
+ *   （见 messageThunk；memory_search 门 = 全局记忆开关 && assistant.enableMemory，v0.4.7）。
  * - 本表项 = 每轮按助手开关挂载（稀疏缺省 = 开）：ask_user_question / ocr_document（ocr 另受
  *   附件门）。
  */

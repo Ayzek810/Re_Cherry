@@ -15,10 +15,9 @@ import type {
   Tool as AnthropicTool,
   ToolResultBlockParam
 } from '@anthropic-ai/sdk/resources/messages'
+import { isGemini3ModelId } from '@shared/utils/model'
 import type { DynamicToolUIPart, FileUIPart, JSONValue, ReasoningUIPart, TextUIPart, ToolSet } from 'ai'
 import { tool, zodSchema } from 'ai'
-
-import { isGemini3ModelId } from '@shared/utils/model'
 
 // fork 缝：CherryUIMessage/Model/Provider 取自本地最小类型（V2 的
 // @shared/data/types/* 依赖未移植的 provider-registry，见 ../interfaces）。

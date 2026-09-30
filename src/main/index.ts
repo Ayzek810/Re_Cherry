@@ -24,6 +24,7 @@ import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarne
 import { hermesDashboardService } from './services/hermes/HermesDashboardService'
 import { paperAgentService } from './services/paperAgent/PaperAgentService'
 import { nodeTraceService } from './services/NodeTraceService'
+import { powerMonitorService } from './services/PowerMonitorService'
 import {
   CHERRY_STUDIO_PROTOCOL,
   handleProtocolUrl,
@@ -190,6 +191,17 @@ if (!app.requestSingleInstanceLock()) {
       appMenuService?.setupApplicationMenu()
     } catch (error) {
       logger.error('Failed to setup application menu', error instanceof Error ? error : new Error(String(error)))
+    }
+
+    // 系统电源事件守护（suspend/resume/shutdown 前的轻量收尾，见 PowerMonitorService）。
+    // 归类依据（硬性不变量 #8）：可选韧性初始化器，不是可用性底线——底线是上面的
+    // registerShortcuts/await registerIpc；电源守护失败只损失一次 best-effort 保存通知，
+    // 数据安全由内核会话日志（崩溃安全）+ 渲染层持续持久化兜底，故包 log-only try/catch
+    // 且必须排在关键接线之后。
+    try {
+      powerMonitorService.init()
+    } catch (error) {
+      logger.error('Failed to init power monitor service', error instanceof Error ? error : new Error(String(error)))
     }
 
     nodeTraceService.init()

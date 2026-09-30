@@ -47,7 +47,7 @@ const forkCount = (): number => vi.mocked(utilityProcess.fork).mock.calls.length
 
 /** 取最后一个 extract 请求的 id（桥的 nextId 跨请求递增，硬编码必漂移）。 */
 function lastExtractId(child: FakeChild): number {
-  const calls = (child.postMessage as ReturnType<typeof vi.fn>).mock.calls
+  const calls = (child.postMessage).mock.calls
   for (let i = calls.length - 1; i >= 0; i--) {
     const arg = calls[i][0] as { type?: string; id?: number }
     if (arg?.type === 'extract') return arg.id as number

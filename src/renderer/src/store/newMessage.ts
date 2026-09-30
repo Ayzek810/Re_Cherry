@@ -17,10 +17,10 @@
 import { loggerService } from '@logger'
 import type { EntityState, PayloadAction } from '@reduxjs/toolkit'
 import { createEntityAdapter, createSlice } from '@reduxjs/toolkit'
+import type { Topic } from '@renderer/types'
 // Separate type-only imports from value imports
 import type { Message } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import type { Topic } from '@renderer/types'
 
 const logger = loggerService.withContext('newMessage')
 

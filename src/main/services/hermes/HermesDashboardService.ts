@@ -16,13 +16,11 @@
 //    （services/codeCli/hermesHome.ts，钉进 CodeMate 子树）；AbsoluteFilePath 品牌类型
 //    未移植，退化为 string。V2 无 workspace 概念（spawn 无 cwd），fork 不造。
 
-import { ChildProcess, execFileSync } from 'node:child_process'
+import type { ChildProcess} from 'node:child_process';
+import { execFileSync } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import path from 'node:path'
-
-import { Mutex } from 'async-mutex'
-import { BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
@@ -31,6 +29,8 @@ import { getRawShellEnv, refreshShellEnv } from '@main/utils/shellEnv'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ManagedToolStatusState } from '@shared/types/managedTool'
 import { redactSecretText } from '@shared/utils/redaction'
+import { Mutex } from 'async-mutex'
+import { BrowserWindow } from 'electron'
 
 import { getHermesHome } from '../codeCli/hermesHome'
 import { resolveBinary } from '../codeCli/resolveBinary'

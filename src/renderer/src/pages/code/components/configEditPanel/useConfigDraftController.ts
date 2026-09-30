@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
+import { loggerService } from '@logger'
 import type { CliConfigConnection, CliConfigFileDraft, CliConfigGatewayContext } from '@renderer/pages/code/cliConfig'
 import {
   cliConfigConnectionMatchesProvider,
@@ -13,12 +11,13 @@ import {
   updateCliConfigDraftConfig,
   validateCliConfigDraftForWrite
 } from '@renderer/pages/code/cliConfig'
-import { loggerService } from '@logger'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
 import { parseUniqueModelId } from '@shared/types/uniqueModelId'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
-import { isUniqueModelId } from '../../cliConfig/values'
 import type { Model } from '../../cliConfig/providerView'
+import { isUniqueModelId } from '../../cliConfig/values'
 import {
   createDraftSnapshot,
   createInitialConfigDraftState,

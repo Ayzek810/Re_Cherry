@@ -1,16 +1,15 @@
+import { CodeCli } from '@shared/types/codeCli'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 import { ExternalLink } from 'lucide-react'
 import { type FC, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { CliProviderConfig } from '@shared/types/codeCliState'
-import { CodeCli } from '@shared/types/codeCli'
-import type { InstallProgressPayload } from '@shared/types/installProgress'
-
 import type { CodeToolMeta, VersionStatus } from '../types'
 import { BinaryInstallErrorDialog } from './BinaryInstallErrorDialog'
 import { ConfigList } from './ConfigList'
-import { VersionStatusCard } from './VersionStatusCard'
 import { Button, SearchInput } from './shadcn'
+import { VersionStatusCard } from './VersionStatusCard'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/CodeCliContentPanel.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。缝点三处，版本卡装配/供应商搜索/添加提示脚位逐字：

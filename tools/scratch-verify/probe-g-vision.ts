@@ -17,9 +17,10 @@
  *    data URL 且解码后是合法 PNG（魔数 + IHDR 宽度 >1000 = 真实光栅化产物）；
  * 2. 最终文本 = 'VISION-STUB-1\n\nVISION-STUB-2'（按序拼装）。
  */
-import { createServer, type Server } from 'node:http'
 import { writeFileSync } from 'node:fs'
+import { createServer, type Server } from 'node:http'
 import path from 'node:path'
+
 import { app } from 'electron'
 
 import { setLightLlmProviderRoutes } from '../../src/main/kernel/lightLlmModalities'

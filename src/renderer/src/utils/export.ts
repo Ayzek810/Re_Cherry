@@ -745,6 +745,143 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
   }
 }
 
+export interface ObsidianExportAttributes {
+  title: string
+  created?: string
+  source?: string
+  tags?: string
+  processingMethod: string
+  folder: string
+  vault: string
+}
+
+/**
+ * 导出Markdown到Obsidian
+ *
+ * 写文件通道选型：不走 fs 写 IPC。内容先写入剪贴板，再打开
+ * `obsidian://new?...&clipboard` deep link，由 Obsidian 本体落盘（V1 原样）。
+ * fork 侧 window.open 的 obsidian: 协议已在 WindowService.setWindowOpenHandler
+ * 经 isSafeExternalUrl 白名单（security.ts）放行到 shell.openExternal。
+ * @param attributes 文档属性
+ * @param attributes.title 标题
+ * @param attributes.created 创建时间
+ * @param attributes.source 来源
+ * @param attributes.tags 标签
+ * @param attributes.processingMethod 处理方式（'1' 追加 | '2' 前置 | '3' 新建/覆盖）
+ * @param attributes.folder 选择的文件夹路径或文件路径
+ * @param attributes.vault 选择的Vault名称
+ */
+export const exportMarkdownToObsidian = async (attributes: ObsidianExportAttributes): Promise<void> => {
+  if (getExportState()) {
+    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    return
+  }
+
+  setExportingState(true)
+
+  try {
+    // 从参数获取Vault名称
+    const obsidianVault = attributes.vault
+    let obsidianFolder = attributes.folder || ''
+    let isMarkdownFile = false
+
+    if (!obsidianVault) {
+      window.toast.error(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
+      return
+    }
+
+    if (!attributes.title) {
+      window.toast.error(i18n.t('chat.topics.export.obsidian_title_required'))
+      return
+    }
+
+    // 检查是否选择了.md文件
+    if (obsidianFolder && obsidianFolder.endsWith('.md')) {
+      isMarkdownFile = true
+    }
+
+    let filePath = ''
+
+    // 如果是.md文件，直接使用该文件路径
+    if (isMarkdownFile) {
+      filePath = obsidianFolder
+    } else {
+      // 否则构建路径
+      //构建保存路径添加以 / 结尾
+      if (obsidianFolder && !obsidianFolder.endsWith('/')) {
+        obsidianFolder = obsidianFolder + '/'
+      }
+
+      //构建文件名
+      const fileName = transformObsidianFileName(attributes.title)
+      filePath = obsidianFolder + fileName + '.md'
+    }
+
+    let obsidianUrl = `obsidian://new?file=${encodeURIComponent(filePath)}&vault=${encodeURIComponent(obsidianVault)}&clipboard`
+
+    if (attributes.processingMethod === '3') {
+      obsidianUrl += '&overwrite=true'
+    } else if (attributes.processingMethod === '2') {
+      obsidianUrl += '&prepend=true'
+    } else if (attributes.processingMethod === '1') {
+      obsidianUrl += '&append=true'
+    }
+
+    window.open(obsidianUrl)
+    window.toast.success(i18n.t('chat.topics.export.obsidian_export_success'))
+  } catch (error) {
+    logger.error('Failed to export to Obsidian:', error as Error)
+    window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+  } finally {
+    setExportingState(false)
+  }
+}
+
+/**
+ * 生成Obsidian文件名,源自 Obsidian  Web Clipper 官方实现,修改了一些细节
+ * @param fileName
+ * @returns
+ */
+function transformObsidianFileName(fileName: string): string {
+  const platform = window.navigator.userAgent
+  const isWin = /win/i.test(platform)
+  const isMac = /mac/i.test(platform)
+
+  // 删除Obsidian 全平台无效字符
+  let sanitized = fileName.replace(/[#|\\^[\]]/g, '')
+
+  if (isWin) {
+    // Windows 的清理
+    sanitized = sanitized
+      .replace(/[<>:"/\\|?*]/g, '') // 移除无效字符
+      .replace(/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i, '_$1$2') // 避免保留名称
+      .replace(/[\s.]+$/, '') // 移除结尾的空格和句点
+  } else if (isMac) {
+    // Mac 的清理
+    sanitized = sanitized
+      .replace(/[<>:"/\\|?*]/g, '') // 移除无效字符
+      .replace(/^\./, '_') // 避免以句点开头
+  } else {
+    // Linux 或其他系统
+    sanitized = sanitized
+      .replace(/[<>:"/\\|?*]/g, '') // 移除无效字符
+      .replace(/^\./, '_') // 避免以句点开头
+  }
+
+  // 所有平台的通用操作
+  sanitized = sanitized
+    .replace(/^\.+/, '') // 移除开头的句点
+    .trim() // 移除前后空格
+    .slice(0, 245) // 截断为 245 个字符，留出空间以追加 ' 1.md'
+
+  // 确保文件名不为空
+  if (sanitized.length === 0) {
+    sanitized = 'Untitled'
+  }
+
+  return sanitized
+}
+
 export const exportMarkdownToJoplin = async (
   title: string,
   contentOrMessages: string | Message | Message[]
@@ -923,8 +1060,8 @@ async function createSiyuanDoc(
 }
 
 // ---------------------------------------------------------------------------
-// 笔记导出（v0.3.3-2 笔记移植，V1 原样；仅去掉 obsidian 一路——它依赖 fork 里没有的
-// ObsidianExportDialog/Popup，属另一条未移植链，菜单项已同步删掉）
+// 笔记导出（v0.3.3-2 笔记移植，V1 原样；obsidian 一路随 ObsidianExportDialog/Popup
+// 链的移植（v0.4.7）补回——内容经剪贴板 + obsidian:// deep link 交给 Obsidian 本体）
 // ---------------------------------------------------------------------------
 
 const exportNoteAsMarkdown = async (noteName: string, content: string): Promise<void> => {
@@ -986,7 +1123,7 @@ const exportNoteAsImageFile = async (noteName: string): Promise<void> => {
 
 export interface NoteExportOptions {
   node: { name: string; externalPath: string }
-  platform: 'markdown' | 'docx' | 'notion' | 'yuque' | 'joplin' | 'siyuan' | 'copyImage' | 'exportImage'
+  platform: 'markdown' | 'docx' | 'notion' | 'yuque' | 'obsidian' | 'joplin' | 'siyuan' | 'copyImage' | 'exportImage'
 }
 
 export const exportNote = async ({ node, platform }: NoteExportOptions): Promise<void> => {
@@ -1009,6 +1146,11 @@ export const exportNote = async ({ node, platform }: NoteExportOptions): Promise
       case 'yuque':
         await exportMarkdownToYuque(node.name, `# ${node.name}\n\n${content}`)
         return
+      case 'obsidian': {
+        const { default: ObsidianExportPopup } = await import('@renderer/components/Popups/ObsidianExportPopup')
+        await ObsidianExportPopup.show({ title: node.name, processingMethod: '1', rawContent: content })
+        return
+      }
       case 'joplin':
         await exportMarkdownToJoplin(node.name, content)
         return

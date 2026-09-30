@@ -2,16 +2,26 @@
 import { loggerService } from '@logger'
 import { CopyIcon, DeleteIcon, EditIcon, RefreshIcon } from '@renderer/components/Icons'
 import InspectMessagePopup from '@renderer/components/Popups/InspectMessagePopup'
+import ObsidianExportPopup from '@renderer/components/Popups/ObsidianExportPopup'
 import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPopup'
 import { isChatCandidateModel, isVisionModel } from '@renderer/config/models'
 import type { MessageMenubarButtonId, MessageMenubarScope } from '@renderer/config/registry/messageMenubar'
 import { DEFAULT_MESSAGE_MENUBAR_SCOPE, getMessageMenubarConfig } from '@renderer/config/registry/messageMenubar'
+import type { TranslateLanguage } from '@renderer/config/translateLanguages'
+import { langCodeToI18nKey } from '@renderer/config/translateLanguages'
 import { useMessageEditing } from '@renderer/context/MessageEditingContext'
 import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMessageOperations } from '@renderer/hooks/useMessageOperations'
+import { useMessageTranslationStatus, useTranslateLanguages } from '@renderer/hooks/useMessageTranslate'
 import { useEnableDeveloperMode, useMessageStyle, useSettings } from '@renderer/hooks/useSettings'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { getMessageTitle } from '@renderer/services/MessagesService'
+import {
+  abortMessageTranslation,
+  closeMessageTranslation,
+  copyMessageTranslation,
+  startMessageTranslation
+} from '@renderer/services/messageTranslate'
 import type { RootState } from '@renderer/store'
 import store from '@renderer/store'
 import { messageBlocksSelectors } from '@renderer/store/messageBlock'
@@ -36,7 +46,7 @@ import type { MenuProps } from 'antd'
 import { Dropdown, Popconfirm, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
-import { AtSign, Bug, Check, FilePenLine, ListChecks, Menu, Save, ThumbsUp, Upload } from 'lucide-react'
+import { AtSign, Bug, Check, CirclePause, FilePenLine, Languages, ListChecks, Menu, Save, ThumbsUp, Upload } from 'lucide-react'
 import type { Dispatch, FC, ReactNode, SetStateAction } from 'react'
 import { Fragment, memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -73,10 +83,13 @@ type MessageMenubarButtonContext = {
   enableDeveloperMode: boolean
   handleResendUserMessage: (messageUpdate?: Message) => Promise<void>
   handleTraceUserMessage: () => void | Promise<void>
+  handleTranslate: (language: TranslateLanguage) => void | Promise<void>
+  hasTranslationBlocks: boolean
   isAssistantMessage: boolean
   isBubbleStyle: boolean
   isGrouped?: boolean
   isLastMessage: boolean
+  isTranslating: boolean
   isUserMessage: boolean
   message: Message
   onCopy: (e: React.MouseEvent) => void
@@ -89,6 +102,7 @@ type MessageMenubarButtonContext = {
   showDeleteTooltip: boolean
   softHoverBg: boolean
   t: TFunction
+  translateLanguages: TranslateLanguage[]
 }
 
 type MessageMenubarButtonRenderer = (ctx: MessageMenubarButtonContext) => ReactNode | null
@@ -183,6 +197,18 @@ const MessageMenubar: FC<Props> = (props) => {
       )
     }
   }, [message])
+
+  // 消息级原地翻译（V1 MessageMenubar handleTranslate 移植）：翻译中直接忽略（上游守卫同款）
+  const { isTranslating, hasTranslationBlocks } = useMessageTranslationStatus(message)
+  const translateLanguages = useTranslateLanguages()
+
+  const handleTranslate = useCallback(
+    async (language: TranslateLanguage) => {
+      if (isTranslating) return
+      await startMessageTranslation({ topicId: topic.id, message, sourceText: mainTextContent, language })
+    },
+    [isTranslating, topic.id, message, mainTextContent]
+  )
 
   const menubarScope: MessageMenubarScope = topic?.type ?? DEFAULT_MESSAGE_MENUBAR_SCOPE
   const { buttonIds, dropdownRootAllowKeys } = getMessageMenubarConfig(menubarScope)
@@ -296,6 +322,14 @@ const MessageMenubar: FC<Props> = (props) => {
               void exportMarkdownToYuque(title, markdown)
             }
           },
+          exportMenuOptions.obsidian && {
+            label: t('chat.topics.export.obsidian'),
+            key: 'obsidian',
+            onClick: async () => {
+              const title = topic.name?.replace(/\\/g, '_') || 'Untitled'
+              await ObsidianExportPopup.show({ title, message, processingMethod: '1' })
+            }
+          },
           exportMenuOptions.joplin && {
             label: t('chat.topics.export.joplin'),
             key: 'joplin',
@@ -342,6 +376,7 @@ const MessageMenubar: FC<Props> = (props) => {
     exportMenuOptions.markdown,
     exportMenuOptions.markdown_reason,
     exportMenuOptions.notion,
+    exportMenuOptions.obsidian,
     exportMenuOptions.plain_text,
     exportMenuOptions.siyuan,
     exportMenuOptions.yuque,
@@ -432,10 +467,13 @@ const MessageMenubar: FC<Props> = (props) => {
     enableDeveloperMode,
     handleResendUserMessage,
     handleTraceUserMessage,
+    handleTranslate,
+    hasTranslationBlocks,
     isAssistantMessage,
     isBubbleStyle,
     isGrouped,
     isLastMessage,
+    isTranslating,
     isUserMessage,
     message,
     onCopy,
@@ -447,7 +485,8 @@ const MessageMenubar: FC<Props> = (props) => {
     setShowDeleteTooltip,
     showDeleteTooltip,
     softHoverBg,
-    t
+    t,
+    translateLanguages
   }
 
   return (
@@ -655,6 +694,75 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
           <AtSign size={15} />
         </ActionButton>
       </Tooltip>
+    )
+  },
+  // 消息级原地翻译（V1 messageMenubar translate 按钮移植）：用户消息无入口；翻译中 =
+  // 停止按钮；常态 = 语言下拉（内置 20 语言，上游 translateLanguages 同交互），已有译文时
+  // 追加 复制/关闭 两项；点击语言重译（上游 getTranslationUpdater 原地重置语义）。
+  translate: ({ isUserMessage, isTranslating, translateLanguages, handleTranslate, hasTranslationBlocks, message, softHoverBg, t }) => {
+    if (isUserMessage) {
+      return null
+    }
+
+    if (isTranslating) {
+      return (
+        <Tooltip title={t('translate.stop')} mouseEnterDelay={0.8}>
+          <ActionButton
+            className="message-action-button"
+            onClick={(e) => {
+              e.stopPropagation()
+              abortMessageTranslation(message.id)
+            }}
+            $softHoverBg={softHoverBg}>
+            <CirclePause size={15} />
+          </ActionButton>
+        </Tooltip>
+      )
+    }
+
+    const items: MenuProps['items'] = [
+      ...translateLanguages.map((item) => ({
+        label: item.emoji + ' ' + t(langCodeToI18nKey.get(item.langCode) ?? item.langCode),
+        key: item.langCode,
+        onClick: () => void handleTranslate(item)
+      })),
+      ...(hasTranslationBlocks
+        ? [
+            { type: 'divider' as const },
+            {
+              label: '📋 ' + t('common.copy'),
+              key: 'translate-copy',
+              onClick: () => void copyMessageTranslation(message)
+            },
+            {
+              label: '✖ ' + t('messageTranslate.close'),
+              key: 'translate-close',
+              onClick: () => void closeMessageTranslation(message.topicId, message.id)
+            }
+          ]
+        : [])
+    ]
+
+    return (
+      <Dropdown
+        menu={{
+          style: {
+            maxHeight: 250,
+            overflowY: 'auto',
+            backgroundClip: 'border-box'
+          },
+          items,
+          onClick: (e) => e.domEvent.stopPropagation()
+        }}
+        trigger={['click']}
+        placement="top"
+        arrow>
+        <Tooltip title={t('messageTranslate.action')} mouseEnterDelay={1.2}>
+          <ActionButton className="message-action-button" onClick={(e) => e.stopPropagation()} $softHoverBg={softHoverBg}>
+            <Languages size={15} />
+          </ActionButton>
+        </Tooltip>
+      </Dropdown>
     )
   },
   useful: ({ isAssistantMessage, isGrouped, onUseful, softHoverBg, message, t }) => {

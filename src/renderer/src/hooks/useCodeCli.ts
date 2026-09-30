@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
 import { loggerService } from '@logger'
-import { useAppDispatch, useAppSelector, type RootState } from '@renderer/store'
+import { type RootState,useAppDispatch, useAppSelector } from '@renderer/store'
 import { setCodeCliConfigs } from '@renderer/store/settings'
-import type { CliProviderConfig, CodeCliConfigs, CodeCliId, CodeCliToolState } from '@shared/types/codeCliState'
 import { CLI_OWN_LOGIN_PROVIDER_ID, CodeCli, isApiGatewayProviderId } from '@shared/types/codeCli'
+import type { CliProviderConfig, CodeCliConfigs, CodeCliId, CodeCliToolState } from '@shared/types/codeCliState'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // fork 移植自 cherry-studio v2 src/renderer/hooks/useCodeCli.ts（2026-09-24，v0.3.4-1 批次4a）。
 // 缝点两处，已标 `// fork 缝`：
@@ -95,7 +94,7 @@ export const useCodeCli = (initialTool: CodeCli = DEFAULT_TOOL, onToolChange?: (
       providerId: string,
       partial: Pick<CliProviderConfig, 'modelId'> & Partial<CliProviderConfig>
     ): Promise<string> => {
-      const toolId = selectedCliTool as CodeCliId
+      const toolId = selectedCliTool
       const existing = getToolState(toolId, configsRef.current).providers[providerId]
       const nextConfig = 'config' in partial ? partial.config : existing?.config
       const next: CliProviderConfig = {
@@ -117,7 +116,7 @@ export const useCodeCli = (initialTool: CodeCli = DEFAULT_TOOL, onToolChange?: (
 
   const deleteProviderConfig = useCallback(
     async (providerId: string) => {
-      const toolId = selectedCliTool as CodeCliId
+      const toolId = selectedCliTool
       await patchToolState(toolId, (prev) => {
         const nextProviders = { ...prev.providers }
         delete nextProviders[providerId]
@@ -133,7 +132,7 @@ export const useCodeCli = (initialTool: CodeCli = DEFAULT_TOOL, onToolChange?: (
 
   const setCurrentProvider = useCallback(
     async (providerId: string | null) => {
-      const toolId = selectedCliTool as CodeCliId
+      const toolId = selectedCliTool
       await patchToolState(toolId, (prev) => ({ ...prev, current: providerId }))
     },
     [patchToolState, selectedCliTool]
@@ -141,7 +140,7 @@ export const useCodeCli = (initialTool: CodeCli = DEFAULT_TOOL, onToolChange?: (
 
   const reorderProviders = useCallback(
     async (orderedIds: string[]) => {
-      const toolId = selectedCliTool as CodeCliId
+      const toolId = selectedCliTool
       await patchToolState(toolId, (prev) => {
         const nextProviders = { ...prev.providers }
         for (let i = 0; i < orderedIds.length; i++) {

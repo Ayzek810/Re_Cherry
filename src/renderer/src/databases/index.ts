@@ -14,7 +14,15 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
-import type { FileMetadata, KnowledgeNoteItem, PaintingRecord, QuickPhrase, TranslateRecord } from '@renderer/types'
+import type {
+  FileMetadata,
+  KnowledgeNoteItem,
+  MessageTranslationRecord,
+  PaintingRecord,
+  QuickPhrase,
+  TranslateRecord,
+  UsageRecord
+} from '@renderer/types'
 import { Dexie, type EntityTable } from 'dexie'
 
 import { upgradeToV5, upgradeToV7, upgradeToV8 } from './upgrades'
@@ -29,6 +37,8 @@ export const db = new Dexie('CherryStudio', {
   quick_phrases: EntityTable<QuickPhrase, 'id'>
   translate_records: EntityTable<TranslateRecord, 'id'>
   paintings: EntityTable<PaintingRecord, 'id'>
+  message_translations: EntityTable<MessageTranslationRecord, 'messageId'>
+  usage_records: EntityTable<UsageRecord, 'id'>
 }
 
 db.version(1).stores({
@@ -157,6 +167,21 @@ db.version(15).stores({
 // FileStorage，本表只存引用与元数据）。
 db.version(16).stores({
   paintings: '&id, createdAt'
+})
+
+// 消息级原地翻译（V1 MessageTranslate 移植）：译文按 messageId 落本地（渲染层旁路
+// 本地增强，不入内核会话日志——不变量2；对照 v13/v14 的 message_files 教训：只有需要
+// 会话日志回放的数据才走日志，纯本地展示增强走 Dexie 功能表）。v12 删掉的 message_blocks
+// 表不复活：译文单表单键，不承担通用块存储职责。
+db.version(17).stores({
+  message_translations: '&messageId'
+})
+
+// v0.4.7 用量统计面板：回合级 usage 记录（kernelChat 回合收尾落库）。派生分析数据
+// （trace/span 同类），不是会话状态第二真相源——不变量2 允许；++id 自增主键，
+// timestamp/modelId/topicId 二级索引服务时间范围与模型分组查询。
+db.version(18).stores({
+  usage_records: '++id, timestamp, modelId, topicId'
 })
 
 export default db

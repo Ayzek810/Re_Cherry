@@ -2,6 +2,8 @@ import { UploadOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
 import CodeEditor from '@renderer/components/CodeEditor'
+import { useMCPServers } from '@renderer/hooks/useMCPServers'
+import { useTimer } from '@renderer/hooks/useTimer'
 import { mcpApi } from '@renderer/services/mcpApi'
 import type { MCPServer } from '@renderer/types'
 import { objectKeys, safeValidateMcpConfig } from '@renderer/types'
@@ -14,9 +16,13 @@ import { useTranslation } from 'react-i18next'
 
 /**
  * v0.3.2 自 CS_V1 移植（批次1 UI）。fork 改动点：
- * - 上游 uploadDxt 调用改走 mcpApi.uploadDxt（批次1 替身：弹提示并返回 null，不解包 DXT）；
- * - 上游在导入成功后经 checkMcpConnectivity 后台探测连通性并回写 isActive，
- *   该通道未随替身提供，故移除——新导入的服务器保持非启用，批次3 接线后恢复。
+ * - DXT 导入 v0.4.7 接线：uploadDxt 走 Mcp_UploadDxt → 主进程 DxtService 解包校验；
+ *   manifest → MCPServer 转换与 ${__dirname}/user_config 参数清洗同上游 AddMcpServerModal
+ *   （启动期主进程还会按 dxtPath 重解配置，见 MCPService.initTransport）；
+ * - 导入成功后经 checkConnectivity 后台探测连通性并回写 isActive（批次1 替身期移除，
+ *   随本批次恢复；探测失败不弹错——DXT 服务器可能需额外配置，结果只是启用状态信号）；
+ * - 重名检查同时比对 manifest.name 与最终落库名 display_name||name（上游只查前者，
+ *   display_name 存在时漏判重名）。
  */
 const logger = loggerService.withContext('AddMcpServerModal')
 
@@ -77,6 +83,8 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
 }) => {
   const { t } = useTranslation()
   const [form] = Form.useForm()
+  const { setMCPServerActive } = useMCPServers()
+  const { setTimeoutTimer } = useTimer()
   const [loading, setLoading] = useState(false)
   const [importMethod, setImportMethod] = useState<'json' | 'dxt'>(initialImportMethod)
   const [dxtFile, setDxtFile] = useState<File | null>(null)
@@ -143,27 +151,60 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         // Process DXT file
         try {
           const installTimestamp = Date.now()
-          // 批次1 替身：替身签名接收路径字符串并忽略它（无主进程解包）。上游传入 File 本体
-          // （依赖 Electron 的 File.path 扩展，fork 未声明该类型），此处以文件名占位。
-          const result = await mcpApi.uploadDxt(dxtFile.name)
+          const result = await mcpApi.uploadDxt(dxtFile)
 
-          if (!result) {
+          if (!result.success || !result.data) {
+            window.toast.error(result.error || t('settings.mcp.addServer.importFrom.dxtProcessFailed'))
             setLoading(false)
             return
           }
 
-          // Check for duplicate names
-          if (existingServers && existingServers.some((server) => server.name === result.name)) {
-            window.toast.error(t('settings.mcp.addServer.importFrom.nameExists', { name: result.name }))
+          const { manifest, extractDir } = result.data
+
+          // Check for duplicate names（同时比对落库名与 manifest.name，见头注释）
+          const serverName = manifest.display_name || manifest.name
+          if (
+            existingServers &&
+            existingServers.some((server) => server.name === serverName || server.name === manifest.name)
+          ) {
+            window.toast.error(t('settings.mcp.addServer.importFrom.nameExists', { name: serverName }))
             setLoading(false)
             return
           }
 
-          // Create MCPServer from the shim result
+          // Process args with variable substitution
+          const processedArgs = manifest.server.mcp_config.args
+            .map((arg) => {
+              // Replace ${__dirname} with the extraction directory
+              let processedArg = arg.replace(/\$\{__dirname\}/g, extractDir)
+
+              // For now, remove user_config variables and their values
+              processedArg = processedArg.replace(/--[^=]*=\$\{user_config\.[^}]+\}/g, '')
+
+              return processedArg.trim()
+            })
+            .filter((arg) => arg.trim() !== '' && arg !== '--' && arg !== '=' && !arg.startsWith('--='))
+
+          logger.debug('Processed DXT args:', processedArgs)
+
+          // Create MCPServer from DXT manifest
           const newServer: MCPServer = {
-            ...result,
             id: nanoid(),
+            name: serverName,
+            description: manifest.description || manifest.long_description || '',
+            baseUrl: '',
+            command: manifest.server.mcp_config.command,
+            args: processedArgs,
+            env: manifest.server.mcp_config.env || {},
             isActive: false,
+            type: 'stdio',
+            // DXT 元数据：启动期主进程按 dxtPath 重解配置（平台覆写 + 变量替换）
+            dxtVersion: manifest.dxt_version,
+            dxtPath: extractDir,
+            logoUrl: manifest.icon ? `${extractDir}/${manifest.icon}` : undefined,
+            provider: manifest.author?.name,
+            providerUrl: manifest.homepage || manifest.repository?.url,
+            tags: manifest.keywords,
             installSource: 'manual',
             isTrusted: true,
             installedAt: installTimestamp,
@@ -174,6 +215,27 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
           form.resetFields()
           setDxtFile(null)
           onClose()
+
+          // Check server connectivity in background (with timeout)；失败只记日志不弹错
+          //（DXT 服务器可能需要额外配置，探测结果仅作启用状态信号，上游同语义）
+          setTimeoutTimer(
+            'handleOkDxtConnectivity',
+            () => {
+              mcpApi
+                .checkConnectivity(newServer)
+                .then((isConnected) => {
+                  logger.debug(`Connectivity check for ${newServer.name}: ${isConnected}`)
+                  setMCPServerActive(newServer, isConnected)
+                })
+                .catch((connError: unknown) => {
+                  logger.warn(
+                    `DXT server ${newServer.name} connectivity check failed, servers requiring additional setup are expected to fail here`,
+                    connError as Error
+                  )
+                })
+            },
+            1000
+          )
         } catch (error) {
           logger.error('DXT processing error:', error as Error)
           window.toast.error(t('settings.mcp.addServer.importFrom.dxtProcessFailed'))

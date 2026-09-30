@@ -537,6 +537,36 @@
         },
         "notion": "导出到 Notion",
         "obsidian": "导出到 Obsidian",
+        "obsidian_atributes": "配置笔记属性",
+        "obsidian_btn": "确定",
+        "obsidian_created": "创建时间",
+        "obsidian_created_placeholder": "请选择创建时间",
+        "obsidian_export_failed": "导出到 Obsidian 失败",
+        "obsidian_export_success": "导出到 Obsidian 成功",
+        "obsidian_fetch_error": "获取 Obsidian 保管库失败",
+        "obsidian_fetch_folders_error": "获取文件夹结构失败",
+        "obsidian_loading": "加载中...",
+        "obsidian_no_vault_selected": "请先选择一个保管库",
+        "obsidian_no_vaults": "未找到 Obsidian 保管库",
+        "obsidian_operate": "处理方式",
+        "obsidian_operate_append": "追加",
+        "obsidian_operate_new_or_overwrite": "新建（如果存在就覆盖）",
+        "obsidian_operate_placeholder": "请选择处理方式",
+        "obsidian_operate_prepend": "前置",
+        "obsidian_path": "路径",
+        "obsidian_path_placeholder": "请选择路径",
+        "obsidian_reasoning": "导出思维链",
+        "obsidian_root_directory": "根目录",
+        "obsidian_select_vault_first": "请先选择保管库",
+        "obsidian_source": "来源",
+        "obsidian_source_placeholder": "请输入来源",
+        "obsidian_tags": "标签",
+        "obsidian_tags_placeholder": "请输入标签，多个标签用英文逗号分隔",
+        "obsidian_title": "标题",
+        "obsidian_title_placeholder": "请输入标题",
+        "obsidian_title_required": "标题不能为空",
+        "obsidian_vault": "保管库",
+        "obsidian_vault_placeholder": "请选择保管库名称",
         "siyuan": "导出到思源笔记",
         "title": "导出",
         "title_naming_failed": "标题生成失败，使用默认标题",
@@ -595,13 +625,13 @@
       "title": "统一网关"
     },
     "apply_failed": "写入 CLI 配置到系统文件失败",
-    "checking": "检查中…",
-    "clear_config_failed": "清除 CLI 配置失败，凭证可能仍保留在该工具的配置文件中",
     "check_updates": "检查更新",
     "check_updates_failed": "检查更新失败",
     "check_updates_latest": "已是最新版本",
     "check_updates_not_installed": "该工具尚未安装",
     "check_updates_system": "这是系统安装的工具，不受本应用管理（请在系统侧自行升级）",
+    "checking": "检查中…",
+    "clear_config_failed": "清除 CLI 配置失败，凭证可能仍保留在该工具的配置文件中",
     "cli_config": {
       "format_failed": "格式化失败，请检查文件格式",
       "title": "CLI 配置文件",
@@ -1070,6 +1100,16 @@
     "size": "大小",
     "text": "文本",
     "title": "文件"
+  },
+  "followupQueue": {
+    "edit": "编辑（移回输入框）",
+    "hint": "回合结束后自动按序发送；仅工作模式话题启用",
+    "pause": "暂停自动发送",
+    "pausedCount": "已暂停，{{count}} 条追问排队中",
+    "queuedCount": "{{count}} 条追问排队中",
+    "remove": "移除",
+    "resume": "恢复自动发送",
+    "title": "追问队列"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -1665,6 +1705,12 @@
       "enabled": "工作模式已开启",
       "toggle": "工作模式"
     }
+  },
+  "messageTranslate": {
+    "action": "翻译",
+    "close": "关闭译文",
+    "copied": "译文已复制",
+    "empty": "译文为空"
   },
   "minapp": {
     "add": {
@@ -2367,6 +2413,10 @@
             "hint": "选择绘画模型后才会挂载",
             "name": "聊天生图（generate_image）"
           },
+          "memory_search": {
+            "hint": "开启后此助手可检索全局记忆库（跨会话共享的事实与偏好），回合结束后还会在后台抽取新事实。需在「设置 › 记忆」开启全局记忆并配置抽取模型",
+            "name": "全局记忆（memory_search）"
+          },
           "ocr": {
             "name": "文档 OCR（ocr_document）"
           }
@@ -2702,6 +2752,11 @@
         "username": "坚果云用户名"
       },
       "obsidian": {
+        "default_vault": "默认 Obsidian 仓库",
+        "default_vault_fetch_error": "获取 Obsidian 仓库失败",
+        "default_vault_loading": "正在获取 Obsidian 仓库...",
+        "default_vault_no_vaults": "未找到 Obsidian 仓库",
+        "default_vault_placeholder": "请选择默认 Obsidian 仓库",
         "title": "Obsidian 配置"
       },
       "s3": {
@@ -3753,9 +3808,9 @@
         "local_paddle": {
           "cancel": "取消下载",
           "concurrency": "并发页数",
-          "gpu_acceleration": "GPU 加速",
           "download": "下载模型",
           "error_prefix": "下载失败",
+          "gpu_acceleration": "GPU 加速",
           "help": "本地 OCR（PP-OCRv6，约 140 MB）：启用后扫描版 PDF 在聊天读取与知识库摄取时自动走本机识别，无需联网与密钥；GPU 加速走 DirectML（不可用时自动回退 CPU），并发页数提高吞吐（识别为 CPU 计算，过高会互相抢核）",
           "model_title": "本地模型",
           "not_downloaded": "模型未下载（约 140 MB，完全本地运行）",
@@ -3763,12 +3818,6 @@
           "remove": "删除模型",
           "retry": "重试",
           "unsupported": "当前平台不支持本地 OCR 推理"
-        },
-        "vision_model": {
-          "concurrency": "并发页数",
-          "help": "视觉模型文档解析：本机把 PDF 逐页光栅化成图片，交给你选定的视觉模型转写成 Markdown（保留标题/表格/公式结构）——需要模型服务商支持图片输入，按页计费；并发页数越高整体越快，也更容易触发服务商限流（限流报错会废弃整本，请按钥匙配额调整）",
-          "model_placeholder": "选择一个视觉模型",
-          "model_title": "视觉模型"
         },
         "paddleocr": {
           "aistudio_access_token": "星河社区访问令牌",
@@ -3779,7 +3828,13 @@
         "provider": "文档处理服务商",
         "provider_placeholder": "选择一个文档处理服务商",
         "title": "文档处理",
-        "tooltip": "在设置 -> 工具中设置文档处理服务商，文档处理可以有效提升复杂格式文档与扫描版文档的检索效果"
+        "tooltip": "在设置 -> 工具中设置文档处理服务商，文档处理可以有效提升复杂格式文档与扫描版文档的检索效果",
+        "vision_model": {
+          "concurrency": "并发页数",
+          "help": "视觉模型文档解析：本机把 PDF 逐页光栅化成图片，交给你选定的视觉模型转写成 Markdown（保留标题/表格/公式结构）——需要模型服务商支持图片输入，按页计费；并发页数越高整体越快，也更容易触发服务商限流（限流报错会废弃整本，请按钥匙配额调整）",
+          "model_placeholder": "选择一个视觉模型",
+          "model_title": "视觉模型"
+        }
       },
       "title": "其他设置",
       "websearch": {
@@ -3891,6 +3946,22 @@
       "show": "显示托盘图标",
       "title": "托盘"
     },
+    "usage": {
+      "by_model": "按模型",
+      "daily": "按日",
+      "empty": "该范围内暂无用量记录",
+      "input_tokens": "输入 Tokens",
+      "output_tokens": "输出 Tokens",
+      "range": {
+        "30d": "近 30 天",
+        "7d": "近 7 天",
+        "all": "全部",
+        "today": "今天"
+      },
+      "requests": "请求数",
+      "requests_count": "{{count}} 次",
+      "title": "用量统计"
+    },
     "use_system_title_bar": {
       "confirm": {
         "content": "更改标题栏样式需要重启应用才能生效，是否现在重启？",
@@ -3960,6 +4031,15 @@
   },
   "translate": {
     "auto_detect": "自动检测",
+    "custom_code": "语言码（如 xx-xx）",
+    "custom_error": {
+      "builtin": "不能使用内置语言码",
+      "emoji": "语言图标",
+      "empty_code": "请填写语言码",
+      "empty_value": "请填写语言名称",
+      "exists": "该语言码已存在"
+    },
+    "custom_value": "语言名称",
     "error": {
       "auto_source": "自动检测模式下无法交换",
       "empty": "未返回翻译结果",
@@ -3975,6 +4055,15 @@
     "model": "翻译模型",
     "model_hint_prefix": "当前模型：",
     "output_empty": "翻译结果将显示在这里",
+    "prefs": {
+      "add_language": "添加语言",
+      "auto_copy": "自动复制结果",
+      "custom_hint": "自定义语言会出现在源/目标语言列表中，可随时移除",
+      "custom_languages": "自定义语言",
+      "prompt": "翻译指令",
+      "prompt_hint": "支持 {{target_language}} 与 {{text}} 占位符；留空使用内置指令",
+      "prompt_placeholder": "留空使用内置翻译指令"
+    },
     "select_model": "选择翻译模型",
     "settings": "翻译设置",
     "source_language": "源语言",

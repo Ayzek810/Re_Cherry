@@ -1,7 +1,6 @@
+import { cn } from '@renderer/utils/style'
 import { Select as AntSelect } from 'antd'
 import type { ReactNode } from 'react'
-
-import { cn } from '@renderer/utils/style'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/tools/
 // ConfigFieldPrimitives.tsx（2026-09-24，v0.3.4-1 批次4b）。缝点两处：

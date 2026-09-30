@@ -3,12 +3,13 @@
  *
  * 真通道方法直通主进程 MCPService（preload window.api.mcp 薄转发）；纯配置类
  * updateServer 不经进程——服务器配置真相源是 redux mcp 切片（经 Dsh_SyncMcpServers
- * 整体投影进主进程内存），主进程不回写配置。安装类（uploadDxt/getInstallInfo/
- * isBinaryExist/install*Binary）批次3 不接线，保留批次1 提示态（MVP 边界见交付注记）。
+ * 整体投影进主进程内存），主进程不回写配置。v0.4.7：uploadDxt（DXT 扩展安装）接线，
+ * 走 Mcp_UploadDxt → 主进程 DxtService。安装类余项（getInstallInfo/isBinaryExist/
+ * install*Binary）仍为批次1 提示态（MVP 边界见交付注记）。
  */
 import { loggerService } from '@logger'
 import type { MCPPrompt, MCPResource, MCPServer, MCPTool } from '@renderer/types'
-import type { MCPServerLogEntry } from '@shared/config/types'
+import type { DxtUploadResult, MCPServerLogEntry } from '@shared/config/types'
 import { t } from 'i18next'
 
 const logger = loggerService.withContext('McpApi')
@@ -39,11 +40,7 @@ export const mcpApi = {
     await window.api.mcp.removeServer(server)
   },
   checkConnectivity: (server: MCPServer): Promise<boolean> => window.api.mcp.checkConnectivity(server),
-  uploadDxt: async (_path: string): Promise<MCPServer | null> => {
-    logger.warn('uploadDxt is not wired yet')
-    pendingToast()
-    return null
-  },
+  uploadDxt: (file: File): Promise<DxtUploadResult> => window.api.mcp.uploadDxt(file),
   getInstallInfo: async (): Promise<{ uvPath: string | null; bunPath: string | null; dir: string | null }> => {
     logger.warn('getInstallInfo is not wired yet')
     return { uvPath: null, bunPath: null, dir: null }

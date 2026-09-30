@@ -4,6 +4,7 @@ import { loggerService } from '@logger'
 import { isVisionModel } from '@renderer/config/models'
 import { providerReasoningCompat, type ReasoningCompatProviderInput } from '@renderer/config/reasoningCompat'
 import i18n from '@renderer/i18n'
+import { pumpFollowupQueue } from '@renderer/services/followupQueue'
 import { fetchTopicEventsWithRetry, subscribeKernelSessionEvents } from '@renderer/services/kernelEventStream'
 import {
   encodeImageFileForKernel,
@@ -11,7 +12,9 @@ import {
   registerGeneratedImageFiles,
   syncKernelImageAttachment
 } from '@renderer/services/kernelImages'
+import { maybeProcessConversationMemory } from '@renderer/services/memoryProcessor'
 import { autoNameKernelTopic } from '@renderer/services/topicNaming'
+import { recordUsage } from '@renderer/services/usageStore'
 import store from '@renderer/store'
 import { updateTopicUpdatedAt } from '@renderer/store/assistants'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
@@ -542,6 +545,12 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
       // 错误/中断回合不命名：失败回合的名字没有语义，留给下一次成功的轮次。
       if (event.data.reason.kind !== 'error' && event.data.reason.kind !== 'aborted') {
         void autoNameKernelTopic(topicId)
+        // v0.4.7 全局记忆抽取（V1 onRequestEnd → storeConversationMemory 同构）：成功回合
+        // 后台抽事实入库；门与失败语义见 services/memoryProcessor.ts（fire-and-forget）。
+        void maybeProcessConversationMemory(topicId)
+        // v0.4.7 追问队列泵：回合成功结束后把队首追问按正常路径发出（见
+        // services/followupQueue.ts；error/aborted 不泵——失败轮不该自动续问）。
+        void pumpFollowupQueue(topicId)
       }
       break
     }
@@ -851,7 +860,7 @@ function buildGenerateImageBlock(messageId: string, meta: unknown): ReturnType<t
   if (!Array.isArray(images) || images.length === 0 || !images.every((image) => typeof image === 'string')) {
     return undefined
   }
-  void registerGeneratedImageFiles(images as string[])
+  void registerGeneratedImageFiles(images)
   return createImageBlock(messageId, {
     status: MessageBlockStatus.SUCCESS,
     metadata: { generateImageResponse: { type: 'url', images: images } }
@@ -1116,6 +1125,22 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
     }
   }
   store.dispatch(newMessagesActions.updateMessage({ topicId, messageId: state.assistantMessageId, updates }))
+  // v0.4.7 用量统计面板：回合级 usage 落库（派生分析数据，见 services/usageStore.ts；
+  // 失败/中断回合的 token 也已消耗，照记）。
+  if (state.usage.inputTokens > 0 || state.usage.outputTokens > 0) {
+    const assistantMessage = store.getState().messages.entities[state.assistantMessageId]
+    if (assistantMessage !== undefined && assistantMessage.model !== undefined) {
+      void recordUsage({
+        timestamp: Date.now(),
+        topicId,
+        assistantId: assistantMessage.assistantId,
+        modelId: assistantMessage.model.id,
+        providerId: assistantMessage.model.provider,
+        inputTokens: state.usage.inputTokens,
+        outputTokens: state.usage.outputTokens
+      })
+    }
+  }
   store.dispatch(updateTopicUpdatedAt({ topicId }))
   store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
   // v0.3.1 第三轮：fulfilled 的**真来源**。旧位置在发送任务队列排空时设 true——queue 排

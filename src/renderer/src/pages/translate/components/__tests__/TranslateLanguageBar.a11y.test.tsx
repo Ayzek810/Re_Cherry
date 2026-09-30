@@ -41,6 +41,7 @@ describe('TranslateLanguageBar · 可访问名', () => {
         target="zh-cn"
         onTargetChange={vi.fn()}
         languageLabel={languageLabel}
+        customLanguages={[]}
         exchangeDisabled={false}
         onExchange={vi.fn()}
       />
@@ -63,6 +64,7 @@ describe('TranslateLanguageBar · 可访问名', () => {
         target="zh-cn"
         onTargetChange={vi.fn()}
         languageLabel={languageLabel}
+        customLanguages={[]}
         exchangeDisabled={false}
         onExchange={vi.fn()}
       />
@@ -86,6 +88,7 @@ describe('TranslateLanguageBar · 可访问名', () => {
         onTargetChange={vi.fn()}
         detectedLanguage="ja-jp"
         languageLabel={languageLabel}
+        customLanguages={[]}
         exchangeDisabled={false}
         onExchange={vi.fn()}
       />

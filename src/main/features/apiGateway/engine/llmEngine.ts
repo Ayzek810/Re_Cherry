@@ -9,14 +9,12 @@
 // tools 映射到 GenerateOptions.ToolSchema（pi-ai 侧 {name, description, parameters} 近 1:1）。
 // StreamChunk → UIMessageChunk 的逐条映射见 mapStreamChunk。
 
-import { asSchema, type ToolSet, type UIMessageChunk } from 'ai'
-import { CallId, ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import {
+  type AssistantMessage,
   createAssistantMessage,
   createMessage,
   createToolResultMessage,
   createUserMessage,
-  type AssistantMessage,
   type GenerateOptions,
   type Message,
   type StreamChunk,
@@ -24,9 +22,11 @@ import {
   type ToolSchema,
   type UserMessage
 } from '@deepseek-ai/dsh-llm'
+import { CallId, ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { loggerService } from '@logger'
 import { getKernel } from '@main/kernel'
-import { PROTOCOL_BY_TYPE, type KernelProviderInput } from '@main/kernel/providers'
+import { type KernelProviderInput,PROTOCOL_BY_TYPE } from '@main/kernel/providers'
+import { asSchema, type ToolSet, type UIMessageChunk } from 'ai'
 
 import type { CherryUIMessage } from '../adapters/interfaces'
 

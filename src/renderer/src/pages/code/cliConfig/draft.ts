@@ -12,6 +12,8 @@
 import { loggerService } from '@logger'
 import { getStoreProviders } from '@renderer/hooks/useStore'
 import type { Provider as ForkProvider } from '@renderer/types'
+import type { UniqueModelId } from '@shared/types/uniqueModelId'
+import { parseUniqueModelId } from '@shared/types/uniqueModelId'
 import { formatGatewayModelId } from '@shared/utils/apiGateway'
 import { FILE_CONFIGURED_CLI_TOOLS, getCliConfigTargets, isFileConfiguredCli } from '@shared/utils/cliConfig'
 
@@ -27,8 +29,6 @@ import type {
   ResolvedCliConfigContext
 } from './types'
 import { firstApiKey, isUniqueModelId } from './values'
-import { parseUniqueModelId } from '@shared/types/uniqueModelId'
-import type { UniqueModelId } from '@shared/types/uniqueModelId'
 
 const logger = loggerService.withContext('writeCliConfigDraft')
 

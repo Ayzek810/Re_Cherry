@@ -25,6 +25,7 @@ import type { StreamProcessorCallbacks } from '@renderer/services/StreamProcessi
 import { isWebSearchEnabled } from '@renderer/services/WebSearchService'
 import store from '@renderer/store'
 import { moveTopicToHead, updateTopicUpdatedAt } from '@renderer/store/assistants'
+import { selectGlobalMemoryEnabled } from '@renderer/store/memory'
 import { getEffectiveMcpMode } from '@renderer/types'
 import { type Assistant, type FileMetadata, type Model, type Topic } from '@renderer/types'
 import type { FileMessageBlock, ImageMessageBlock, Message, MessageBlock } from '@renderer/types/newMessage'
@@ -339,6 +340,10 @@ const fetchAndProcessAssistantResponseImpl = async (
       // 批次5 聊天生图（V2 PaintingTool.applies 双门语义）：助手开关开 + 绘画模型已配置。
       const paintingModel = getState().llm.paintingModel
       const generateImageActive = assistant.enableGenerateImage === true && paintingModel !== undefined
+      // v0.4.7 全局记忆接线（V1 searchOrchestrationPlugin 判定同构）：全局记忆开关 &&
+      // 助手 enableMemory → 追加 memory_search 工具（主进程 MemoryService 检索，
+      // 见 kernel/memorySearchTool.ts；与 v0.4.6 外置 memory 工具并存互不替代）。
+      const memorySearchActive = selectGlobalMemoryEnabled(getState()) && assistant.enableMemory === true
       const builtinTools = [
         // 附件门（§7.17）：read_document/ocr_document 只在触发消息带文件附件的轮挂载
         //（无附件时 schema 是纯噪音）；ask_user_question 受助手工具页开关。v0.4.6 用户裁决：
@@ -351,6 +356,7 @@ const fetchAndProcessAssistantResponseImpl = async (
         ...((assistant.knowledge_bases?.length ?? 0) > 0 ? ['knowledge_search', 'knowledge_read'] : []),
         ...(skillsActive ? ['skill'] : []),
         ...(generateImageActive ? ['generate_image'] : []),
+        ...(memorySearchActive ? ['memory_search'] : []),
         ...documentToolIds
       ]
       // 批次3 MCP：助手 mcpMode 派生挂载单元清单（`mcp:<serverId>`）。manual = 勾选集

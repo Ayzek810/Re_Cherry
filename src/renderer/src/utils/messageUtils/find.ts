@@ -8,7 +8,8 @@ import type {
   MainTextMessageBlock,
   Message,
   MessageBlock,
-  ThinkingMessageBlock
+  ThinkingMessageBlock,
+  TranslationMessageBlock
 } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
 
@@ -179,6 +180,26 @@ export const findCitationBlocks = (message: Message): CitationMessageBlock[] => 
     }
   }
   return citationBlocks
+}
+
+/**
+ * Finds all TranslationMessageBlocks associated with a given message.（V1 find.ts 移植）
+ * @param message - The message object.
+ * @returns An array of TranslationMessageBlocks (empty if none found).
+ */
+export const findTranslationBlocks = (message: Message): TranslationMessageBlock[] => {
+  if (!message || !message.blocks || message.blocks.length === 0) {
+    return []
+  }
+  const state = store.getState()
+  const translationBlocks: TranslationMessageBlock[] = []
+  for (const blockId of message.blocks) {
+    const block = messageBlocksSelectors.selectById(state, blockId)
+    if (block && block.type === MessageBlockType.TRANSLATION) {
+      translationBlocks.push(block as TranslationMessageBlock)
+    }
+  }
+  return translationBlocks
 }
 
 /**

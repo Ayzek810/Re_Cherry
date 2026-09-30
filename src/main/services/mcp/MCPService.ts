@@ -12,10 +12,14 @@
  * 环境注入）、stderr → 服务器日志流。
  *
  * **裁剪清单（本构建不做，调用即明错）**：OAuth 全套（UnauthorizedError 直接抛出
- * 引导文案）、DXT（独立服务与 getResolvedMcpConfig）、内置 inMemory 服务器全家
+ * 引导文案）、内置 inMemory 服务器全家
  *（hub/mcp-auto-install，type:'inMemory' 拒绝连接）、uv/bun bundled binary 兜底
  *（双缺抛引导装 Node.js/uv 的文案）、progress 事件推送、resolveHubTool、
  * callToolById、遥测与上游 CacheService/withSpanFunc（TTLCache/直 logger 替代）。
+ *
+ * v0.4.7：DXT 自裁剪清单恢复（上游 DxtService 移植，services/DxtService.ts）——
+ * stdio 启动前按 server.dxtPath 重解 manifest（平台覆写 + 变量替换，失败降级安装期
+ * 值并记 warn，上游同语义）、传输 cwd 指向解包目录、removeServer 时删除解包目录。
  *
  * fork 偏离：无 login shell 环境探测（commandResolution.ts 快照 process.env）；
  * 服务器配置注册表（setServers/getServers/getServerById）由渲染层 Dsh_SyncMcpServers
@@ -36,6 +40,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 
 import { loggerService } from '@logger'
+import DxtService from '@main/services/DxtService'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -77,6 +82,8 @@ export class McpService {
   private activeToolCalls = new Map<string, AbortController>()
   private readonly logBuffer = new ServerLogBuffer(200)
   private readonly cache = new TTLCache()
+  /** DXT 扩展解包/重解配置（目录懒解析，构造期无 IO）。 */
+  private readonly dxtService = new DxtService()
   /** 渲染层同步投影的服务器配置注册表（id → 配置）。 */
   private servers = new Map<string, MCPServer>()
   private readonly logSubscribers = new Set<(log: MCPServerLogEntryWithServer) => void>()
@@ -230,25 +237,41 @@ export class McpService {
     if (server.command) {
       let cmd = server.command
       const args = [...(server.args ?? [])]
+
+      // DXT 服务器（server.dxtPath）：启动前按解包目录重解 manifest——平台覆写 + 变量替换
+      // 得到最终 command/args/env；解析失败降级到安装期值并记 warn（上游同语义，不静默）。
+      if (server.dxtPath) {
+        const resolvedConfig = this.dxtService.getResolvedMcpConfig(server.dxtPath)
+        if (resolvedConfig) {
+          cmd = resolvedConfig.command
+          args.splice(0, args.length, ...resolvedConfig.args)
+          server.env = { ...server.env, ...resolvedConfig.env }
+        } else {
+          logger.warn(`mcp "${server.name}": failed to resolve DXT config, falling back to install-time values`)
+        }
+      }
+
       // 命令查找用 process.env 快照；transport 环境在 registryUrl 注入后再取一次
       //（getInheritedEnv(server.env) 两处调用故意分开：中间可能改写 server.env）。
       const lookupEnv = getInheritedEnv(server.env)
 
-      if (server.command === 'npx' || server.command === 'uvx' || server.command === 'uv') {
-        const resolved = await findCommandInShellEnv(server.command, lookupEnv)
+      // 查找与注入按解析后的 cmd 判（非 DXT 时 cmd === server.command，行为不变；
+      // DXT 覆写后以上游 manifest 解析结果为准，不被 npx 查找反向覆盖）。
+      if (cmd === 'npx' || cmd === 'uvx' || cmd === 'uv') {
+        const resolved = await findCommandInShellEnv(cmd, lookupEnv)
         if (resolved === null) {
           // bundled binary 兜底不在本构建（见头注释）：双缺时引导安装。
           throw new Error(
-            server.command === 'npx'
+            cmd === 'npx'
               ? 'npx not found in PATH. Please install Node.js (which includes npx) from https://nodejs.org and restart the app.'
-              : `${server.command} not found in PATH. Please install uv from https://github.com/astral-sh/uv and restart the app.`
+              : `${cmd} not found in PATH. Please install uv from https://github.com/astral-sh/uv and restart the app.`
           )
         }
         cmd = resolved
-        if (server.command === 'npx' && server.registryUrl) {
+        if (cmd === 'npx' && server.registryUrl) {
           server.env = { ...server.env, NPM_CONFIG_REGISTRY: server.registryUrl }
         }
-        if ((server.command === 'uvx' || server.command === 'uv') && server.registryUrl) {
+        if ((cmd === 'uvx' || cmd === 'uv') && server.registryUrl) {
           server.env = {
             ...server.env,
             UV_DEFAULT_INDEX: server.registryUrl,
@@ -261,7 +284,9 @@ export class McpService {
         command: cmd,
         args,
         env: getInheritedEnv(server.env),
-        stderr: 'pipe'
+        stderr: 'pipe',
+        // DXT 服务器以解包目录为工作目录（相对入口/资源可解析，上游同语义）。
+        ...(server.dxtPath ? { cwd: server.dxtPath } : {})
       })
       transport.stderr?.on('data', (data: Buffer) => {
         const message = data.toString().trim()
@@ -498,6 +523,13 @@ export class McpService {
   async removeServer(server: MCPServer): Promise<void> {
     await this.closeClient(server)
     this.logBuffer.remove(this.getServerKey(server))
+    // DXT 服务器：连带删除解包目录（上游同语义；清理失败只记日志，不阻断移除流程）。
+    if (server.dxtPath) {
+      const cleaned = this.dxtService.cleanupDxtServerByPath(server.dxtPath)
+      if (cleaned) {
+        logger.debug(`mcp "${server.name}": DXT server directory removed (${server.dxtPath})`)
+      }
+    }
     this.emitServerLog(server, { timestamp: Date.now(), level: 'info', message: 'Server removed', source: 'client' })
   }
 

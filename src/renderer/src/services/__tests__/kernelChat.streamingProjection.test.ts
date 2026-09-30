@@ -12,8 +12,8 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { initKernelBridge, sendToKernel } from '@renderer/services/kernelChat'
 import type { KernelSessionEventPayload } from '@renderer/services/kernelEventStream'
 import store from '@renderer/store'
-import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import type { MessageBlock, ThinkingMessageBlock } from '@renderer/types/newMessage'
+import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type SessionListener = (payload: KernelSessionEventPayload) => void
@@ -53,9 +53,7 @@ const blocksOf = (messageId: string): MessageBlock[] => {
 }
 
 const thinkingBlockOf = (messageId: string): ThinkingMessageBlock | undefined =>
-  blocksOf(messageId).find((block) => block.type === MessageBlockType.THINKING) as
-    | ThinkingMessageBlock
-    | undefined
+  blocksOf(messageId).find((block) => block.type === MessageBlockType.THINKING)
 
 const mainContentOf = (messageId: string): string | undefined => {
   const main = blocksOf(messageId).find((block) => block.type === MessageBlockType.MAIN_TEXT) as

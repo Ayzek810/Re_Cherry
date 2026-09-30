@@ -3,12 +3,12 @@
 // @shared/types/uniqueModelId（V2 为 @shared/data/types/model）；Model ← ./providerView 投影。
 // 函数体逐字。
 
-import { formatGatewayModelId } from '@shared/utils/apiGateway'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
 import { parseUniqueModelId } from '@shared/types/uniqueModelId'
+import { formatGatewayModelId } from '@shared/utils/apiGateway'
 
-import { isUniqueModelId } from './values'
 import type { Model } from './providerView'
+import { isUniqueModelId } from './values'
 
 /**
  * The gateway-addressed model string ("providerId:apiModelId") for a stored real `UniqueModelId`,

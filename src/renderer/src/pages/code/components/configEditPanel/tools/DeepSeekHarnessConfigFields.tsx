@@ -1,7 +1,3 @@
-import { AlertTriangle } from 'lucide-react'
-import type { FC } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import {
   DEEPSEEK_HARNESS_AGENT_PRESETS,
   DEEPSEEK_HARNESS_PERMISSION_MODES,
@@ -11,6 +7,9 @@ import {
   isDeepSeekHarnessPermissionMode,
   normalizeDeepSeekHarnessSettings
 } from '@shared/types/codeCli'
+import { AlertTriangle } from 'lucide-react'
+import type { FC } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { ConfigSelectField } from './ConfigFieldPrimitives'
 

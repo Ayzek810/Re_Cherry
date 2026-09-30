@@ -10,15 +10,14 @@ import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
-import StreamZip from 'node-stream-zip'
-
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { cacheRoot, nodeRuntimeDir, pythonRuntimeDir } from '@main/services/deepSeekHarness/paths'
 import type { InstallProgressStep } from '@shared/types/installProgress'
+import StreamZip from 'node-stream-zip'
 
 import { replaceDirectory } from './atomicSwap'
-import { type DownloadProgress, downloadFromAnySource } from './downloadFile'
+import { downloadFromAnySource,type DownloadProgress } from './downloadFile'
 
 const logger = loggerService.withContext('RuntimeDownloader')
 

@@ -12,11 +12,9 @@ import { type ChildProcess, execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { Mutex } from 'async-mutex'
-import { app, BrowserWindow } from 'electron'
-
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
+import type { KernelModelInput } from '@main/kernel/providers'
 import { crossPlatformSpawn, executeCommand, terminateProcessTree, waitForProcessExit } from '@main/utils/processRunner'
 import { getRawShellEnv, refreshShellEnv, withPathPrepend } from '@main/utils/shellEnv'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -27,7 +25,12 @@ import { formatGatewayModelId } from '@shared/utils/apiGateway'
 import { isNonChatModel } from '@shared/utils/model'
 import { isLoginBasedProvider } from '@shared/utils/provider'
 import { redactLiteral, redactSecretText } from '@shared/utils/redaction'
+import { Mutex } from 'async-mutex'
+import { app, BrowserWindow } from 'electron'
 
+import { ensureMarketInstalled, isMarketUsable } from '../binaryManager/marketBaseline'
+import { NPM_REGISTRY_MIRROR } from '../binaryManager/registry'
+import { NODE_VERSION } from '../binaryManager/runtimeDownloader'
 import { getCodeMateProvider } from '../codeCli/providerSnapshot'
 import { resolveBinary } from '../codeCli/resolveBinary'
 import {
@@ -40,12 +43,8 @@ import {
   rollbackDeepSeekHarnessConfig,
   writeDeepSeekHarnessConfig
 } from './config'
-import type { KernelModelInput } from '@main/kernel/providers'
-import { cacheRoot, codeMateToolsRoot, deepSeekHarnessHome, deepSeekHarnessWorkspace, nodeRuntimeDir } from './paths'
-import { ensureMarketInstalled, isMarketUsable } from '../binaryManager/marketBaseline'
-import { NPM_REGISTRY_MIRROR } from '../binaryManager/registry'
-import { NODE_VERSION } from '../binaryManager/runtimeDownloader'
 import { startGatewayForCodeMate } from './gatewayRuntime'
+import { cacheRoot, codeMateToolsRoot, deepSeekHarnessHome, deepSeekHarnessWorkspace, nodeRuntimeDir } from './paths'
 
 const logger = loggerService.withContext('DeepSeekHarnessService')
 

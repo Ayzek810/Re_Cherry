@@ -1,11 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { loggerService } from '@logger'
 import { CLI_OWN_LOGIN_PROVIDER_ID, CodeCli, isApiGatewayProviderId } from '@shared/types/codeCli'
 import type { CliProviderConfig } from '@shared/types/codeCliState'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
 import { isFileConfiguredCli } from '@shared/utils/cliConfig'
+import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import {
   clearCliConfig,

@@ -31,7 +31,7 @@ export function recordToPaintingData(record: PaintingRecord): PaintingData {
     files: record.output ?? [],
     inputFiles: record.input ?? [],
     persistedAt: record.createdAt,
-    params: { ...(record.params ?? {}) } as PaintingData['params']
+    params: { ...record.params } as PaintingData['params']
   }
 }
 

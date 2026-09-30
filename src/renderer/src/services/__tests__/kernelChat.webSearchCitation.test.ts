@@ -141,7 +141,7 @@ describe('冻结载体合并回归（真机 15:40 实证：RTK 冻结块上原�
       false
     )
     if (first === undefined || first.merged) throw new Error('first call must create a block')
-    const frozen = deepFreeze(first.block) as CitationMessageBlock
+    const frozen = deepFreeze(first.block)
 
     const result = buildSearchCitationBlock(
       'msg-1',

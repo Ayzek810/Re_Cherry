@@ -3,6 +3,7 @@ import Scrollbar from '@renderer/components/Scrollbar'
 import ModelSettings from '@renderer/pages/settings/ModelSettings/ModelSettings'
 import { Divider as AntDivider } from 'antd'
 import {
+  BarChart3,
   Blocks,
   Brain,
   Cloud,
@@ -35,6 +36,7 @@ import QuickAssistantSettings from './QuickAssistantSettings'
 import QuickPhraseSettings from './QuickPhraseSettings'
 import ShortcutSettings from './ShortcutSettings'
 import SkillsSettings from './SkillsSettings'
+import UsageSettings from './UsageSettings/UsageSettings'
 import WebSearchSettings from './WebSearchSettings'
 
 const SettingsPage: FC = () => {
@@ -118,6 +120,12 @@ const SettingsPage: FC = () => {
               {t('settings.quickPhrase.title')}
             </MenuItem>
           </MenuItemLink>
+          <MenuItemLink to="/settings/usage">
+            <MenuItem className={isRoute('/settings/usage')}>
+              <BarChart3 size={18} />
+              {t('settings.usage.title')}
+            </MenuItem>
+          </MenuItemLink>
           <MenuItemLink to="/settings/shortcut">
             <MenuItem className={isRoute('/settings/shortcut')}>
               <Command size={18} />
@@ -149,6 +157,7 @@ const SettingsPage: FC = () => {
             <Route path="skills" element={<SkillsSettings />} />
 
             <Route path="quickphrase" element={<QuickPhraseSettings />} />
+            <Route path="usage" element={<UsageSettings />} />
             <Route path="memory" element={<MemorySettings />} />
             <Route path="general/*" element={<GeneralSettings />} />
             <Route path="display" element={<DisplaySettings />} />

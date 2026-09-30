@@ -10,7 +10,7 @@ import type {
   ToolMessageBlock
 } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { isMainTextBlock, isMessageProcessing, isToolBlock, isVideoBlock } from '@renderer/utils/messageUtils/is'
+import { isMainTextBlock, isMessageProcessing, isToolBlock, isTranslationBlock, isVideoBlock } from '@renderer/utils/messageUtils/is'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import React, { useMemo } from 'react'
 import { shallowEqual, useSelector } from 'react-redux'
@@ -26,6 +26,7 @@ import MainTextBlock from './MainTextBlock'
 import PlaceholderBlock from './PlaceholderBlock'
 import ThinkingBlock from './ThinkingBlock'
 import ToolBlockGroup from './ToolBlockGroup'
+import TranslationBlock from './TranslationBlock'
 import VideoBlock from './VideoBlock'
 
 const logger = loggerService.withContext('MessageBlockRenderer')
@@ -350,6 +351,14 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
             break
           case MessageBlockType.COMPACT:
             blockComponent = <CompactBlock key={block.id} block={block} />
+            break
+          case MessageBlockType.TRANSLATION:
+            // 消息级原地翻译（V1 移植）：译文附加块渲染在正文下方
+            if (!isTranslationBlock(block)) {
+              logger.warn('Expected translation block but got different type', block)
+              break
+            }
+            blockComponent = <TranslationBlock key={block.id} block={block} />
             break
           default:
             logger.warn('Unsupported block type in MessageBlockRenderer:', (block as any).type, block)

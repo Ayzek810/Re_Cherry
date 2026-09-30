@@ -1,12 +1,12 @@
 import { toOpenAPISchema } from '@elysia/openapi'
 import { ScalarRender } from '@elysia/openapi/scalar'
+import type { LanguageVarious } from '@types'
 import type { AnyElysia } from 'elysia'
 import * as z from 'zod'
 
 // fork 缝：V2 的 @main/i18n / preferenceTypes / @shared/utils/languages 由
 // ./docsI18n 本地缝替代（文档文案仅英文，见该文件缝注）。
 import { getAppLanguage, languageNativeNameMap, SUPPORTED_LANGUAGES, t } from './docsI18n'
-import type { LanguageVarious } from '@types'
 
 /** Path under which OpenAPI docs (UI) and the JSON spec (`${OPENAPI_PATH}/json`) are served. */
 export const OPENAPI_PATH = '/openapi' as const

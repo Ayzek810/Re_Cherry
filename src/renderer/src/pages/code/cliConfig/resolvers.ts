@@ -8,8 +8,8 @@
 // src/shared/utils/api/format.ts L7-14/L117-135/L187-200（trim 以原生 String.trim 等价，
 // fork 无 es-toolkit/compat 依赖）。
 
-import type { EndpointType, Provider } from './providerView'
 import { HERMES_ENDPOINTS } from './constants'
+import type { EndpointType, Provider } from './providerView'
 
 // ---------------------------------------------------------------------------
 // fork 缝②：V2 @shared/utils/api/format.ts 摘取（URL 归一工具，纯字符串处理）

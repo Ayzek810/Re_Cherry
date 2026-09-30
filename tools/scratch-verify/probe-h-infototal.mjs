@@ -1,5 +1,4 @@
 /** 诊断：pdf-parse v2 的 getInfo().total 与 getText().total 对 2 页合成 PDF 的取值。 */
-import { writeFileSync } from 'node:fs'
 
 function buildPdf(texts) {
   const objs = []

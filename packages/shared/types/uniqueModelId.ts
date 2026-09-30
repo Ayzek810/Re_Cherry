@@ -2,7 +2,7 @@
 // 此处落最小语义面："providerId::modelId"（双冒号分隔，modelId 段可含单冒号）。
 // zod schema 随包内 zod 4 提供（fork 已有 zod@4.1.5）。
 
-import { z } from 'zod'
+import * as z from 'zod';
 
 declare const brand: unique symbol
 export type UniqueModelId = string & { readonly [brand]: 'UniqueModelId' }

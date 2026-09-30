@@ -25,10 +25,9 @@ import StreamZip from 'node-stream-zip'
 import {
   findAllSkillDirectories,
   findSkillMdPath,
+  type ParsedSkillMetadata,
   parseSkillMdContent,
-  sanitizeFolderName,
-  type ParsedSkillMetadata
-} from './skillMetadata'
+  sanitizeFolderName} from './skillMetadata'
 
 const logger = loggerService.withContext('SkillService')
 

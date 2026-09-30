@@ -1,4 +1,4 @@
 export * from './api'
 export * from './dataUrl'
-export * from './pdf'
 export * from './matchPattern'
+export * from './pdf'

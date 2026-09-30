@@ -7,11 +7,10 @@
 // ③ 依赖缝：smol-toml 未随 fork 安装（fork 目标表仅 hermes 两 target，yaml+dotenv，TOML 臂
 //   运行期不可达）；CliConfigLanguage 联合保形，parseTomlOrThrow 显式抛错。
 
-import { parse as parseJsonc, type ParseError } from 'jsonc-parser'
-import { type Document, isMap, isScalar, parse as parseYaml, parseDocument } from 'yaml'
-
 import type { CliConfigTarget } from '@shared/utils/cliConfig'
 import { redactSecretText } from '@shared/utils/redaction'
+import { parse as parseJsonc, type ParseError } from 'jsonc-parser'
+import { type Document, isMap, isScalar, parse as parseYaml, parseDocument } from 'yaml'
 
 /** One CLI config file as read through `code_cli.read_config`: content === null ⇔ the file does not exist. */
 // fork 缝②：V2 为 `Pick<OutputFor<'code_cli.read_config'>['files'][number], 'path' | 'content'>`。

@@ -5,11 +5,11 @@
 // ② claude 分支随 claudeModels.ts 整块删除（fork 保留工具无 Claude detailed models 面）；
 //   resolveCliConfigApplyContext 其余逐字。
 
-import { parseUniqueModelId, UniqueModelIdSchema } from '@shared/types/uniqueModelId'
+import type { CodeCli } from '@shared/types/codeCli'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
+import { parseUniqueModelId, UniqueModelIdSchema } from '@shared/types/uniqueModelId'
 
 import type { Model } from './providerView'
-import type { CodeCli } from '@shared/types/codeCli'
 
 export function parseConfiguredModelId(
   // Wide on purpose: tolerates legacy '' and corrupt dev-profile values.

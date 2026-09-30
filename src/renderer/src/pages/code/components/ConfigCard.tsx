@@ -1,10 +1,9 @@
+import { ProviderAvatarPrimitive } from '@renderer/components/ProviderAvatar'
+import { getProviderLogo } from '@renderer/config/providers'
+import { isApiGatewayProviderId } from '@shared/types/codeCli'
 import { ArrowUpToLine, CircleMinus, GripVertical, Play, SquarePen } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import { getProviderLogo } from '@renderer/config/providers'
-import { ProviderAvatarPrimitive } from '@renderer/components/ProviderAvatar'
-import { isApiGatewayProviderId } from '@shared/types/codeCli'
 
 import { Button, GatewayIcon, NormalTooltip } from './shadcn'
 

@@ -5,6 +5,7 @@
  * detectLanguage 移植 V1（v1.9.11）`utils/translate.ts:103-129` 的离线 franc 档。
  */
 import type { TranslateLangCode } from '@renderer/config/translateLanguages'
+import type { AnyTranslateLangCode } from '@renderer/types/translate'
 import { franc } from 'franc-min'
 
 /** V2 TRANSLATE_PROMPT 逐字（{{target_language}}/{{text}} 两占位符）。 */
@@ -27,12 +28,14 @@ const BIDIRECTIONAL_PAIRS: Array<[TranslateLangCode, TranslateLangCode]> = [
 /**
  * V2 determineTargetLanguage 移植：auto 源语言按目标语言的对向解析；同语言与
  * 非配对两种失败态（V2 same_language / not_pair 同语义）。
+ * v0.4.7：源/目标放宽为 AnyTranslateLangCode（自定义语言码无内置配对，走
+ * "无对向 = 保持 auto/直通" 分支，与内置未配对语言同语义）。
  */
 export function determineTargetLanguage(
-  source: TranslateLangCode | 'auto',
-  target: TranslateLangCode
+  source: AnyTranslateLangCode | 'auto',
+  target: AnyTranslateLangCode
 ):
-  | { ok: true; source: TranslateLangCode | 'auto'; target: TranslateLangCode }
+  | { ok: true; source: AnyTranslateLangCode | 'auto'; target: AnyTranslateLangCode }
   | { ok: false; reason: 'same_language' | 'not_pair' } {
   if (source !== 'auto') {
     if (source === target) return { ok: false, reason: 'same_language' }
@@ -44,6 +47,22 @@ export function determineTargetLanguage(
   const other = pair[0] === target ? pair[1] : pair[0]
   if (other === target) return { ok: false, reason: 'same_language' }
   return { ok: true, source, target }
+}
+
+/** 自定义语言新增校验（V2 AddCustomLanguageForm.validate 同语义，手写窄化）： */
+export function validateCustomLanguage(
+  value: string,
+  langCode: string,
+  builtinCodes: ReadonlySet<string>,
+  existing: Array<{ langCode: string }>
+): { ok: true; value: string; langCode: string } | { ok: false; reason: 'empty_value' | 'empty_code' | 'builtin' | 'exists' } {
+  const nextValue = value.trim()
+  const nextCode = langCode.trim().toLowerCase()
+  if (nextValue.length === 0) return { ok: false, reason: 'empty_value' }
+  if (nextCode.length === 0) return { ok: false, reason: 'empty_code' }
+  if (builtinCodes.has(nextCode)) return { ok: false, reason: 'builtin' }
+  if (existing.some((lang) => lang.langCode === nextCode)) return { ok: false, reason: 'exists' }
+  return { ok: true, value: nextValue, langCode: nextCode }
 }
 
 /** 模板替换（V2 resolveTranslatePayload 同语义：{{target_language}}/{{text}} 两占位符）。 */

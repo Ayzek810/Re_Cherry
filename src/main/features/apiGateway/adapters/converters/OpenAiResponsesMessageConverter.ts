@@ -6,12 +6,11 @@
  */
 
 import type { ProviderOptions } from '@ai-sdk/provider-utils'
+import type OpenAI from '@cherrystudio/openai'
+import { parseDataUrl } from '@shared/utils/dataUrl'
 import type { DynamicToolUIPart, FileUIPart, ReasoningUIPart, TextUIPart, ToolSet } from 'ai'
 import { tool, zodSchema } from 'ai'
 import mime from 'mime'
-
-import type OpenAI from '@cherrystudio/openai'
-import { parseDataUrl } from '@shared/utils/dataUrl'
 
 // fork 缝：CherryUIMessage/Model/Provider 取自本地最小类型（V2 的
 // @shared/data/types/* 依赖未移植的 provider-registry，见 ../interfaces）。

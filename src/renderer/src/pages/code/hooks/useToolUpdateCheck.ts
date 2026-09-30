@@ -1,9 +1,8 @@
-import { useCallback, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { loggerService } from '@logger'
 import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
 import type { CodeCli } from '@shared/types/codeCli'
+import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { withDetail } from '../utils/errorDetail'
 

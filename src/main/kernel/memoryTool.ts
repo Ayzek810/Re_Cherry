@@ -10,9 +10,9 @@
  * 安全设计照抄 V2：目录/文件必须是真实项（拒绝 symlink/FIFO）、Windows 大小写不敏感
  * 解析、JOURNAL 以 O_APPEND 原子追加（posix 侧 O_NOFOLLOW）。
  */
+import { randomUUID } from 'node:crypto'
 import { constants as fsConstants, lstat, open, readdir, rename, unlink } from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'

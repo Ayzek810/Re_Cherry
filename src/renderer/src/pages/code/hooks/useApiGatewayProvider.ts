@@ -8,11 +8,10 @@
 // ③ fork Provider 形状无 authType/settings/reportsActualCost（V2 独有装饰字段，不投影），
 //   apiKeys 携带 key 值（fork providerView 契约：key 值由构造方注入）。
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { CLI_API_GATEWAY_PROVIDER_ID } from '@shared/types/codeCli'
 import { gatewayClientOrigin } from '@shared/utils/apiGateway'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import type { Provider } from '../cliConfig/providerView'
 import { useApiGatewayStatus } from './useCodeCliStatus'

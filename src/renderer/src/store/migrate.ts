@@ -3418,6 +3418,34 @@ const migrateConfig = {
       logger.error('migrate 225 error', error as Error)
       return state
     }
+  },
+  '226': (state: RootState) => {
+    try {
+      // v0.4.7 翻译页偏好项回补：settings 新增三键——持久化切片回水整体覆盖
+      // initialState（migrate 218/224/225 同一坑），旧用户无新键，逐一补缺省。
+      if (state.settings) {
+        if (state.settings.translateAutoCopy === undefined) state.settings.translateAutoCopy = false
+        if (state.settings.translateCustomPrompt === undefined) state.settings.translateCustomPrompt = ''
+        if (state.settings.translateCustomLanguages === undefined) state.settings.translateCustomLanguages = []
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 226 error', error as Error)
+      return state
+    }
+  },
+  '227': (state: RootState) => {
+    try {
+      // v0.4.7 Obsidian 集成移植：settings 新增 defaultObsidianVault——持久化切片回水
+      // 整体覆盖 initialState（migrate 218/224/225/226 同一坑），旧用户无新键，补缺省 null。
+      if (state.settings && state.settings.defaultObsidianVault === undefined) {
+        state.settings.defaultObsidianVault = null
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 227 error', error as Error)
+      return state
+    }
   }
 }
 

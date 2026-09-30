@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { loggerService } from '@logger'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { CodeCli } from '@shared/types/codeCli'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useHermesDashboardStatus } from './useCodeCliStatus'
 

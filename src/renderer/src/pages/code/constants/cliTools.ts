@@ -12,6 +12,7 @@ export { CLI_TOOLS } from '../components/CliIcon'
 
 import { CodeCli } from '@shared/types/codeCli'
 import { isLoginBasedProvider } from '@shared/utils/provider'
+
 import type { Provider } from '../cliConfig/providerView'
 
 /**

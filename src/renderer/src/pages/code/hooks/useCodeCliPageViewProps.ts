@@ -1,13 +1,7 @@
-import { useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-
+import { loggerService } from '@logger'
 import { useCodeCli } from '@renderer/hooks/useCodeCli'
 import { useProviders } from '@renderer/hooks/useProvider'
-import { loggerService } from '@logger'
 import { CODE_CLI_TOOL_PRESET_MAP } from '@shared/data/presets/codeCliTools'
-import { toCliProvider } from '../cliConfig/providerView'
-import type { CodeCliId } from '@shared/types/codeCliState'
-import type { CliProviderConfig } from '@shared/types/codeCliState'
 import {
   CLI_OWN_LOGIN_PROVIDER_ID,
   CodeCli,
@@ -15,8 +9,13 @@ import {
   isApiGatewayProviderId,
   LOGIN_CAPABLE_CLI_TOOLS
 } from '@shared/types/codeCli'
+import type { CodeCliId } from '@shared/types/codeCliState'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
+import { useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { clearCliConfig, resolveCliConfigApplyContext } from '../cliConfig'
+import { toCliProvider } from '../cliConfig/providerView'
 import type { CodeCliPageViewProps } from '../components/CodeCliPageView'
 import { CLI_TOOLS, PROVIDERLESS_CLI_TOOLS } from '../constants/cliTools'
 import { OWN_LOGIN_PROVIDER } from '../constants/ownLoginProvider'

@@ -57,6 +57,13 @@ export interface InputbarCoreProps {
   onPause?: () => void
   handleSendMessage: () => void
 
+  /**
+   * 生成中允许发送（v0.4.7 追问队列）：true 时 isLoading 不再禁用发送键/回车，
+   * 发送动作由调用方决定（内核聊天话题 = 入队）。mini 窗口等无内核会话的
+   * scope 不传，保持"生成中锁发送"的既有语义。
+   */
+  queueWhileLoading?: boolean
+
   // Toolbar sections
   leftToolbar?: React.ReactNode
   rightToolbar?: React.ReactNode
@@ -114,6 +121,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   isLoading,
   onPause,
   handleSendMessage,
+  queueWhileLoading = false,
   leftToolbar,
   rightToolbar,
   topContent,
@@ -179,8 +187,10 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   })
   // 判断是否有内容：文本不为空或有文件
   const noContent = isEmpty && files.length === 0
-  // 发送入口统一禁用条件：空内容、正在生成、全局搜索态
-  const isSendDisabled = noContent || isLoading || searching
+  // 发送入口统一禁用条件：空内容、正在生成、全局搜索态。
+  // v0.4.7 追问队列（仅工作模式话题，用户裁决）：queueWhileLoading 时生成中仍可发送，
+  // 动作语义由调用方改为入队（见 Inputbar.sendMessage 拦截）。
+  const isSendDisabled = noContent || searching || (isLoading && !queueWhileLoading)
 
   useEffect(() => {
     setExtensions(supportedExts)
@@ -535,7 +545,8 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
 
   const rightSectionExtras = useMemo(() => {
     const extras: React.ReactNode[] = []
-    // v1 同款：生成中把发送键替换为醒目的红色“停止”按钮
+    // v1 同款：生成中把发送键替换为醒目的红色“停止”按钮。
+    // v0.4.7 追问队列（仅工作模式）：生成中保留发送键（= 入队追问），停止键并排。
     if (isLoading) {
       extras.push(
         <Tooltip key="stop" placement="top" title={t('chat.input.pause')} mouseLeaveDelay={0} arrow>
@@ -544,12 +555,17 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
           </ActionIconButton>
         </Tooltip>
       )
+      if (queueWhileLoading) {
+        extras.push(
+          <SendMessageButton key="queue-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />
+        )
+      }
     } else {
       extras.push(<SendMessageButton key="send-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />)
     }
 
     return <>{extras}</>
-  }, [handleSendMessage, isSendDisabled, isLoading, t, onPause])
+  }, [handleSendMessage, isSendDisabled, isLoading, queueWhileLoading, t, onPause])
 
   const quickPanelElement = config.enableQuickPanel ? <QuickPanelView setInputText={setText} /> : null
 

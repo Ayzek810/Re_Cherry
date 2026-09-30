@@ -2,10 +2,9 @@
 // 路径系统与 entry-tree/orphanSweep 机制）；按 V2 同名函数语义写的极简版：
 // 同目录 tmp（同 mode）→ rename 覆盖，rename 失败（EXDEV/EPERM）回退 copyFile+unlink，
 // 任何失败都清理 tmp 并重抛；tmp 清理失败非 ENOENT 时记 warn（消息沿用 V2 原文）。
+import { loggerService } from '@logger'
 import { randomBytes } from 'crypto'
 import { copyFile, rename, unlink, writeFile } from 'fs/promises'
-
-import { loggerService } from '@logger'
 
 const logger = loggerService.withContext('Utils:AtomicFile')
 

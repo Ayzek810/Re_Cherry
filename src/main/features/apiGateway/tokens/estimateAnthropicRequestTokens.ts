@@ -6,7 +6,6 @@
 // 语义提示：返回值是启发式估算，量级正确、不逐 token 精确。
 
 import type { MessageCreateParams } from '@anthropic-ai/sdk/resources'
-
 import { loggerService } from '@logger'
 
 import { boundedBodyTokens } from './fallbackEstimate'

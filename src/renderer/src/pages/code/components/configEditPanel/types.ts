@@ -5,10 +5,9 @@
 // 4b 挂组件时回指此处。
 
 import type { CliConfigConnection, CliConfigFileDraft, CliConfigGatewayContext } from '@renderer/pages/code/cliConfig'
-import type { CliProviderConfig } from '@shared/types/codeCliState'
-import type { CodeCli } from '@shared/types/codeCli'
-
 import type { Model, Provider } from '@renderer/pages/code/cliConfig/providerView'
+import type { CodeCli } from '@shared/types/codeCli'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
 
 export type ConfigDraftMode = 'managed' | 'foreign'

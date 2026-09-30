@@ -37,7 +37,7 @@ describe('utils/image', () => {
       // 绘画文件的真实形态：file:// + 无扩展名存储名 ⇒ mime.getType 返回 null ⇒ octet-stream。
       // 此前这里抛 "Not an image blob"，导致自然尺寸取不到、图片"上对齐填满"。
       window.api = {
-        ...(window.api ?? {}),
+        ...window.api,
         fs: { read: vi.fn(async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47])) }
       } as never
       const blob = await getImageBlobFromSource('file:///data/Files/1a2b3c4d5e')
@@ -47,7 +47,7 @@ describe('utils/image', () => {
 
     it('file:// 且扩展名可识别 → 带正确 MIME', async () => {
       window.api = {
-        ...(window.api ?? {}),
+        ...window.api,
         fs: { read: vi.fn(async () => new Uint8Array([1, 2, 3])) }
       } as never
       const blob = await getImageBlobFromSource('file:///data/Files/abc.png')

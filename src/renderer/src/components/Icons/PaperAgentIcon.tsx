@@ -5,10 +5,9 @@
 // 包成 IconComponent 形状——这样两个消费面（CliIcon 的 CLI 工具图标、MinAppIcon 的磁贴/启动台
 // 图标）共用同一份资产，不会出现"一处换了另一处还是旧占位"。
 
-import type { FC } from 'react'
-
 import PaperAgentLogo from '@renderer/assets/images/apps/paper-agent.png'
 import { cn } from '@renderer/utils/style'
+import type { FC } from 'react'
 
 const PaperAgentIcon: FC<{ size?: number; className?: string }> = ({ size = 28, className }) => (
   <img src={PaperAgentLogo} width={size} height={size} alt="" className={cn('object-contain', className)} />

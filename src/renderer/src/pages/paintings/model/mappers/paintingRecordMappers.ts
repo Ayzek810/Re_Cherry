@@ -22,7 +22,7 @@ export function paintingDataToRecord(
     prompt: painting.prompt,
     params: {
       prompt: painting.prompt,
-      ...(painting.params ?? {}),
+      ...painting.params,
       // v0.3.3 批次6：canonical 键名统一为 V2 的 `size`/`numImages`（旧行里的
       // imageSize/batchSize 由 canonicalGenerate 的 LEGACY_PARAM_ALIASES 读时兼容）。
       size: (painting.params?.size as string) ?? '1024x1024',
@@ -46,7 +46,7 @@ export function recordToPaintingData(record: PaintingRecord): PaintingData {
     files: record.output ?? [],
     inputFiles: record.input ?? [],
     persistedAt: record.createdAt,
-    params: { ...(record.params ?? {}) } as PaintingData['params']
+    params: { ...record.params } as PaintingData['params']
   }
 }
 

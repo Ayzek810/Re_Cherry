@@ -36,9 +36,8 @@ import type {
   ToolUseBlock,
   Usage
 } from '@anthropic-ai/sdk/resources/messages'
-import type { FinishReason, UIMessageChunk } from 'ai'
-
 import { loggerService } from '@logger'
+import type { FinishReason, UIMessageChunk } from 'ai'
 
 // fork 缝：V2 原文为 '../../reasoningCache'（apiGateway 根）；fork 落位 core/。
 import { googleReasoningCache, openRouterReasoningCache } from '../../core/reasoningCache'

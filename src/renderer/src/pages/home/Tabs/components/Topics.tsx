@@ -3,6 +3,7 @@ import AssistantAvatar from '@renderer/components/Avatar/AssistantAvatar'
 import type { DraggableVirtualListRef } from '@renderer/components/DraggableList'
 import { DraggableVirtualList } from '@renderer/components/DraggableList'
 import { CopyIcon, DeleteIcon, EditIcon } from '@renderer/components/Icons'
+import ObsidianExportPopup from '@renderer/components/Popups/ObsidianExportPopup'
 import PromptPopup from '@renderer/components/Popups/PromptPopup'
 import { isMac } from '@renderer/config/constant'
 import { useAssistant, useAssistants } from '@renderer/hooks/useAssistant'
@@ -411,7 +412,9 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
           exportMenuOptions.obsidian && {
             label: t('chat.topics.export.obsidian'),
             key: 'obsidian',
-            onClick: async () => {}
+            onClick: async () => {
+              await ObsidianExportPopup.show({ title: topic.name, topic, processingMethod: '3' })
+            }
           },
           exportMenuOptions.joplin && {
             label: t('chat.topics.export.joplin'),

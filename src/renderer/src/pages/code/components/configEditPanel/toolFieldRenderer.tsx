@@ -1,8 +1,7 @@
+import { CodeCli } from '@shared/types/codeCli'
 import type { ReactNode } from 'react'
 
 import type { Model } from '../../cliConfig/providerView'
-import { CodeCli } from '@shared/types/codeCli'
-
 import { DeepSeekHarnessConfigFields } from './tools/DeepSeekHarnessConfigFields'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/toolFieldRenderer.tsx

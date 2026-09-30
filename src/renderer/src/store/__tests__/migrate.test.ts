@@ -193,4 +193,34 @@ describe('store migrations', () => {
       expect(badSlice.preprocess.providers).toBe('not-an-array')
     })
   })
+
+  describe('migration 227: defaultObsidianVault backfill (v0.4.7 Obsidian 集成移植)', () => {
+    it('backfills missing defaultObsidianVault on persisted settings (old shape → null)', async () => {
+      const state = {
+        settings: { exportMenuOptions: { obsidian: true } },
+        _persist: { version: 226, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 227)
+
+      expect(migrated.settings.defaultObsidianVault).toBeNull()
+    })
+
+    it('preserves an existing defaultObsidianVault (user selection survives upgrade)', async () => {
+      const state = {
+        settings: { defaultObsidianVault: 'MyVault' },
+        _persist: { version: 226, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 227)
+
+      expect(migrated.settings.defaultObsidianVault).toBe('MyVault')
+    })
+
+    it('tolerates a missing settings slice', async () => {
+      const noSettings: any = await migrate({ _persist: { version: 226, rehydrated: false } } as any, 227)
+
+      expect(noSettings.settings).toBeUndefined()
+    })
+  })
 })

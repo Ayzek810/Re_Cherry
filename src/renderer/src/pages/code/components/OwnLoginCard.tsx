@@ -1,8 +1,7 @@
+import type { CodeCli } from '@shared/types/codeCli'
 import { ArrowUpToLine, CircleMinus, GripVertical, Play, SquarePen } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import type { CodeCli } from '@shared/types/codeCli'
 
 import { CliIcon } from './CliIcon'
 import { Button, NormalTooltip } from './shadcn'

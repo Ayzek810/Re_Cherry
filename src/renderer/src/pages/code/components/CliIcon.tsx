@@ -6,13 +6,12 @@
 // paper-agent：用户 2026-09-29 提供位图 → components/Icons/PaperAgentIcon（此前是 lucide 占位）。
 // CLI_TOOLS 裁到 3 项；OPTICAL_VIEWBOXES 随 SVG 源裁剪移除（位图/lucide 图标无 viewBox 面）。
 
-import type { ComponentType, FC } from 'react'
-
 import DeepSeekLogo from '@renderer/assets/images/providers/deepseek.png'
 import NousresearchIcon from '@renderer/components/Icons/NousresearchIcon'
 import PaperAgentIcon from '@renderer/components/Icons/PaperAgentIcon'
 import { cn } from '@renderer/utils/style'
 import { CodeCli } from '@shared/types/codeCli'
+import type { ComponentType, FC } from 'react'
 
 /** V2 `@cherrystudio/ui/icons` IconComponent 的 fork 消费面（CliIcon/types.ts 回挂用）。 */
 export type IconComponent = ComponentType<{ size?: number; className?: string }>

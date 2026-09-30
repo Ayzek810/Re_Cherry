@@ -169,6 +169,11 @@ const api = {
     stopServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_StopServer, server),
     removeServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_RemoveServer, server),
     checkConnectivity: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_CheckConnectivity, server),
+    // DXT 扩展安装（上游同构）：File 读成 ArrayBuffer + 原始文件名 invoke（不依赖 File.path 扩展）。
+    uploadDxt: async (file: File) => {
+      const buffer = await file.arrayBuffer()
+      return ipcRenderer.invoke(IpcChannel.Mcp_UploadDxt, buffer, file.name)
+    },
     onServerLog: (callback: (log: unknown) => void): (() => void) => {
       const listener = (_event: Electron.IpcRendererEvent, log: unknown) => callback(log)
       ipcRenderer.on(IpcChannel.Mcp_ServerLog, listener)
@@ -573,6 +578,11 @@ const api = {
     decryptToken: (token: string) => ipcRenderer.invoke(IpcChannel.Nutstore_DecryptToken, token),
     getDirectoryContents: (token: string, path: string) =>
       ipcRenderer.invoke(IpcChannel.Nutstore_GetDirectoryContents, token, path)
+  },
+  obsidian: {
+    getVaults: () => ipcRenderer.invoke(IpcChannel.Obsidian_GetVaults),
+    getFolders: (vaultName: string) => ipcRenderer.invoke(IpcChannel.Obsidian_GetFiles, vaultName),
+    getFiles: (vaultName: string) => ipcRenderer.invoke(IpcChannel.Obsidian_GetFiles, vaultName)
   },
   searchService: {
     openUrlInSearchWindow: (uid: string, url: string) => ipcRenderer.invoke(IpcChannel.SearchWindow_OpenUrl, uid, url),

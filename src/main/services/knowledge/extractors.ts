@@ -17,7 +17,7 @@
  * MarkItDown 同样不支持 .doc）；本地 .html 与网页 url 正文走 turndown 转
  * Markdown。sitemap/directory/video 已接入（v0.4 工程项）。
  */
-import { readFile, readdir } from 'node:fs/promises'
+import { readdir,readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
@@ -158,7 +158,7 @@ async function extractXlsxToMarkdown(filePath: string): Promise<string> {
       const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false, defval: '' })
       const meaningful = rows.filter((row) => row.some((value) => String(value).trim().length > 0))
       if (meaningful.length === 0) continue
-      sections.push(`## ${name}\n\n${rowsToGfmTable(meaningful as string[][])}`)
+      sections.push(`## ${name}\n\n${rowsToGfmTable(meaningful)}`)
     }
     if (sections.length === 0) {
       throw new Error(`knowledge: xlsx "${path.basename(filePath)}" has no non-empty sheets`)

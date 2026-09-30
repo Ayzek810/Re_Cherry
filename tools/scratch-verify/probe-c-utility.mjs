@@ -9,7 +9,8 @@ import { writeFileSync } from 'node:fs'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { utilityProcess, app } from 'electron'
+
+import { app,utilityProcess } from 'electron'
 
 const scratchDir = path.dirname(fileURLToPath(import.meta.url))
 const modelDir = path.join(scratchDir, 'models', 'pp-ocrv6')

@@ -1356,7 +1356,7 @@ export function buildImageWireBody(
     }
   }
 
-  return { ...(profile.extraBody ?? {}), ...body }
+  return { ...profile.extraBody, ...body }
 }
 
 // ── Param bag validation / coercion (fork 缝) ───────────────────────────────

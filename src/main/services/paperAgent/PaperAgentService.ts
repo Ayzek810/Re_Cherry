@@ -14,9 +14,6 @@ import { type ChildProcess, execFileSync } from 'node:child_process'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
-import { Mutex } from 'async-mutex'
-import { BrowserWindow } from 'electron'
-
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import {
@@ -29,6 +26,8 @@ import { crossPlatformSpawn, terminateProcessTree, waitForProcessExit } from '@m
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ManagedToolStatus, ManagedToolStatusState } from '@shared/types/managedTool'
 import { redactSecretText } from '@shared/utils/redaction'
+import { Mutex } from 'async-mutex'
+import { BrowserWindow } from 'electron'
 
 const logger = loggerService.withContext('PaperAgentService')
 

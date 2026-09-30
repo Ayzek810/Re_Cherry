@@ -1,10 +1,9 @@
-import { useCallback, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { loggerService } from '@logger'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
-import type { CliProviderConfig } from '@shared/types/codeCliState'
 import { CodeCli, isApiGatewayProviderId, normalizeDeepSeekHarnessSettings } from '@shared/types/codeCli'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
+import { useCallback, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { resolveLaunchModelId } from '../cliConfig'
 import type { Provider } from '../cliConfig/providerView'

@@ -7,7 +7,12 @@ import ImageViewer from '@renderer/components/ImageViewer'
 import MarkdownShadowDOMRenderer from '@renderer/components/MarkdownShadowDOMRenderer'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
-import type { CompactMessageBlock, MainTextMessageBlock, ThinkingMessageBlock } from '@renderer/types/newMessage'
+import type {
+  CompactMessageBlock,
+  MainTextMessageBlock,
+  ThinkingMessageBlock,
+  TranslationMessageBlock
+} from '@renderer/types/newMessage'
 import { removeSvgEmptyLines } from '@renderer/utils/formats'
 import { processLatexBrackets } from '@renderer/utils/markdown'
 import { isEmpty } from 'lodash'
@@ -45,7 +50,7 @@ const DISALLOWED_ELEMENTS = ['iframe', 'script']
 
 interface Props {
   // message: Message & { content: string }
-  block: MainTextMessageBlock | ThinkingMessageBlock | CompactMessageBlock
+  block: MainTextMessageBlock | ThinkingMessageBlock | CompactMessageBlock | TranslationMessageBlock
   // 可选的后处理函数，用于在流式渲染过程中处理文本（如引用标签转换）
   postProcess?: (text: string) => string
   /** 引用 registry（V2 迁移）：编号 → 引用数据，供 Link/CitationSup 查表挂胶囊。 */

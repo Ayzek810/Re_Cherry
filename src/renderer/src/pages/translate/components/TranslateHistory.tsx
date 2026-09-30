@@ -2,8 +2,8 @@
  * 历史抽屉（V2 components/TranslateHistory.tsx 结构，星标/详情/清空/文件支路删除）：
  * antd Drawer(placement=right) + 行列表 + 点击回填。数据由页面注入，组件只做展示与回调。
  */
-import { BUILTIN_TRANSLATE_LANGUAGES, type TranslateLangCode } from '@renderer/config/translateLanguages'
-import type { TranslateRecord } from '@renderer/types/translate'
+import { BUILTIN_TRANSLATE_LANGUAGES } from '@renderer/config/translateLanguages'
+import type { AnyTranslateLangCode, TranslateRecord } from '@renderer/types/translate'
 import { Drawer, Empty } from 'antd'
 import { ArrowRight } from 'lucide-react'
 import type { FC } from 'react'
@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 type Props = {
   isOpen: boolean
   items: TranslateRecord[]
-  languageLabel: (code: TranslateLangCode | 'auto') => string
+  languageLabel: (code: AnyTranslateLangCode | 'auto') => string
   onClose: () => void
   onHistoryItemClick: (record: TranslateRecord) => void
 }
@@ -35,7 +35,7 @@ const formatCreatedAt = (value: number, locale: string): string => {
 const TranslateHistoryList: FC<Props> = ({ isOpen, items, languageLabel, onClose, onHistoryItemClick }) => {
   const { t, i18n } = useTranslation()
 
-  const emojiOf = (code: TranslateLangCode | 'auto') =>
+  const emojiOf = (code: AnyTranslateLangCode | 'auto') =>
     code === 'auto' ? AUTO_EMOJI : (LANGUAGE_EMOJI.get(code) ?? UNKNOWN_EMOJI)
 
   return (

@@ -20,6 +20,7 @@ import LocalBackupSettings from './LocalBackupSettings'
 import MarkdownExportSettings from './MarkdownExportSettings'
 import NotionSettings from './NotionSettings'
 import NutstoreSettings from './NutstoreSettings'
+import ObsidianSettings from './ObsidianSettings'
 import SiyuanSettings from './SiyuanSettings'
 import WebDavSettings from './WebDavSettings'
 import YuqueSettings from './YuqueSettings'
@@ -107,6 +108,7 @@ const DataSettings: FC = () => {
         {menu === 'notion' && <NotionSettings />}
         {menu === 'yuque' && <YuqueSettings />}
         {menu === 'joplin' && <JoplinSettings />}
+        {menu === 'obsidian' && <ObsidianSettings />}
         {menu === 'siyuan' && <SiyuanSettings />}
         {menu === 'local_backup' && <LocalBackupSettings />}
       </SettingContainer>

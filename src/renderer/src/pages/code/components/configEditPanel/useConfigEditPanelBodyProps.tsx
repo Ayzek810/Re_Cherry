@@ -1,9 +1,8 @@
+import { getStoreProviders } from '@renderer/hooks/useStore'
+import { isApiGatewayProviderId } from '@shared/types/codeCli'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import { getStoreProviders } from '@renderer/hooks/useStore'
-import { isApiGatewayProviderId } from '@shared/types/codeCli'
 
 import type { ApiKeyEntry } from '../../cliConfig'
 import type { ConfigEditDialogBodyProps } from './ConfigEditDialogBody'

@@ -6,6 +6,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
 import ort from 'onnxruntime-node'
 
 const scratchDir = path.dirname(fileURLToPath(import.meta.url))

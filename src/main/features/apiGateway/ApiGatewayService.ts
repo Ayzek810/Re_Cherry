@@ -15,16 +15,15 @@
 
 import { timingSafeEqual } from 'node:crypto'
 
-import { Mutex } from 'async-mutex'
-import { BrowserWindow } from 'electron'
-import { v4 as uuidv4 } from 'uuid'
-
 import { loggerService } from '@logger'
 import { createLatestReconciler, type LatestReconciler } from '@main/core/concurrency/latestReconciler'
-import { configManager, ConfigKeys } from '@main/services/ConfigManager'
+import { ConfigKeys,configManager } from '@main/services/ConfigManager'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ApiGatewayConfig, ApiGatewayStopOutcome } from '@shared/types/apiGateway'
 import { REDACTED } from '@shared/utils/redaction'
+import { Mutex } from 'async-mutex'
+import { BrowserWindow } from 'electron'
+import { v4 as uuidv4 } from 'uuid'
 
 import type { ApiGateway } from './server'
 

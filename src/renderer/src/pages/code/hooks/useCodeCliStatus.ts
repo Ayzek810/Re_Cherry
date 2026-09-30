@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
-
 import type { BinaryToolSnapshot } from '@renderer/pages/code/utils/binarySnapshot'
 import type { ManagedToolStatusState } from '@shared/types/managedTool'
+import { useEffect, useState } from 'react'
 
 // fork 缝（批次4a 原创缝 hook，~60 行）：V2 的状态读取走 useSharedCacheValue
 //（'feature.deepseek_harness.status' / 'feature.hermes_dashboard.status' / gateway 运行态 /

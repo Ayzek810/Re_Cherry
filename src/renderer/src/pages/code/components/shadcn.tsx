@@ -10,6 +10,9 @@
 // border-subtle/foreground-tertiary/accent 等语义令牌）；V2 复合状态色令牌（success-border /
 // success-subtle / warning-subtle / error-* 族）fork 未暴露，消费点以 success/warning/error 的
 // 透明度修饰（/35 /15）降级——视觉保真度批次 5 视真机效果再调。
+import ForkCodeEditor from '@renderer/components/CodeEditor'
+import ForkScrollbar from '@renderer/components/Scrollbar'
+import { cn } from '@renderer/utils/style'
 import { Alert as AntAlert, Empty as AntEmpty, Input as AntInput, Modal as AntModal, Tooltip as AntTooltip } from 'antd'
 import { RadioTower, Search } from 'lucide-react'
 import type {
@@ -22,11 +25,7 @@ import type {
   ReactNode,
   Ref
 } from 'react'
-import { createContext, useContext } from 'react'
-
-import ForkCodeEditor from '@renderer/components/CodeEditor'
-import ForkScrollbar from '@renderer/components/Scrollbar'
-import { cn } from '@renderer/utils/style'
+import { createContext, use } from 'react'
 
 import { overallPercent, segmentFills } from '../utils/progressSegments'
 
@@ -138,7 +137,7 @@ interface DialogContextValue {
 const DialogContext = createContext<DialogContextValue>({})
 
 export const Dialog: FC<CherryDialogProps> = ({ open, onOpenChange, children }) => (
-  <DialogContext.Provider value={{ open, onOpenChange }}>{children}</DialogContext.Provider>
+  <DialogContext value={{ open, onOpenChange }}>{children}</DialogContext>
 )
 
 type CherryDialogContentSize = 'default' | 'lg'
@@ -151,7 +150,7 @@ interface CherryDialogContentProps extends HTMLAttributes<HTMLDivElement> {
 
 export const DialogContent: FC<CherryDialogContentProps> = ({ size = 'default', className, children, ...rest }) => {
   void rest
-  const { open, onOpenChange } = useContext(DialogContext)
+  const { open, onOpenChange } = use(DialogContext)
   return (
     <AntModal
       open={open}

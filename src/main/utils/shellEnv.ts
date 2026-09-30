@@ -1,13 +1,11 @@
+import { loggerService } from '@logger'
+// fork 缝：V2 平台常量位于 @main/core/platform，fork 等价物为 @main/constant。
+import { isMac, isWin } from '@main/constant'
 import { spawn } from 'child_process'
-
 // fork 缝：V2 的 @application 路径系统未移植；'sys.home' 在 V2 即 os.homedir()
 // （见 V2 src/main/core/paths/pathRegistry.ts）。dedupePathSegments 缝实现也需要 path。
 import os from 'os'
 import path from 'path'
-
-import { loggerService } from '@logger'
-// fork 缝：V2 平台常量位于 @main/core/platform，fork 等价物为 @main/constant。
-import { isMac, isWin } from '@main/constant'
 
 // fork 缝：V2 的 ./binaryEnv（mise 受管二进制环境）与 ./bundledGit（内置 MinGit）未随 fork
 // 移植，按其在 shellEnv.ts 的消费面内联最小等价实现：dedupePathSegments 为 V2

@@ -35,6 +35,7 @@ import storeSyncService from '../services/StoreSyncService'
 import assistants from './assistants'
 import backup from './backup'
 import copilot from './copilot'
+import followupQueue from './followupQueue'
 import inputToolsReducer from './inputTools'
 import knowledge from './knowledge'
 import llm, { updateProviders } from './llm'
@@ -83,7 +84,9 @@ const rootReducer = combineReducers({
   // v0.3.2 验收轮：文档预处理服务商配置（设置页 /settings/preprocess 编辑）
   preprocess,
   // v0.3.3-2 笔记（V1 原样移植）：笔记目录 + 排序/展开等 UI 态（notesPath 由启动时 App_Info 补）
-  note
+  note,
+  // v0.4.7 追问队列（V2 QueuedFollowupsDock 同构）：会话级临时态，见 store/followupQueue.ts
+  followupQueue
 })
 
 // v0.2.4 K3：写盘前剥离非空 provider apiKey（明文不落 localStorage）。
@@ -117,8 +120,8 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
   {
     key: 'cherry-studio',
     storage,
-    version: 225,
-    blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions'],
+    version: 227,
+    blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions', 'followupQueue'],
     transforms: [stripProviderApiKeys],
     migrate
   },

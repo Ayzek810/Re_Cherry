@@ -1,13 +1,12 @@
+import type { CodeCli } from '@shared/types/codeCli'
 import { Loader2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import type { CodeCli } from '@shared/types/codeCli'
-
 import type { CLI_TOOLS } from '../constants/cliTools'
+import type { CodeToolMeta, VersionStatus } from '../types'
 import { CliIcon } from './CliIcon'
 import { Scrollbar } from './shadcn'
-import type { CodeToolMeta, VersionStatus } from '../types'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/CodeCliSidebar.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。缝点三处，工具行渲染（图标/选中态/安装态标签/概要行）逐字：

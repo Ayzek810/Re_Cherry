@@ -1,9 +1,8 @@
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './shadcn'
-
 import { CurrentConfigPanel } from './CurrentConfigPanel'
+import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/LaunchDialog.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。缝点两处，对话框骨架（标题/CurrentConfigPanel/取消-启动脚位）逐字：

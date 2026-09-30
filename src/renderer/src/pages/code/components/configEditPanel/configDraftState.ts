@@ -7,9 +7,10 @@ import {
   sanitizeCliConfigBlob,
   updateCliConfigDraftConfig
 } from '@renderer/pages/code/cliConfig'
-import type { CliProviderConfig } from '@shared/types/codeCliState'
 import type { CodeCli } from '@shared/types/codeCli'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
+
 import type { Model } from '../../cliConfig/providerView'
 import { isUniqueModelId } from '../../cliConfig/values'
 import type { ConfigDraft } from './types'

@@ -116,6 +116,10 @@ export function analyzeMessageContent(message: Message): MessageContentStats {
       case MessageBlockType.CITATION:
         stats.citations++
         break
+      case MessageBlockType.TRANSLATION:
+        // 消息级原地翻译（V1 分支随 TRANSLATION 块类型回归一并恢复）
+        stats.translations++
+        break
       case MessageBlockType.ERROR:
         stats.errors++
         break
@@ -240,8 +244,12 @@ function processTextlikeBlocks(block: MessageBlock, selectedTypes: Set<ContentTy
       return `<error>\n${errorContent}\n</error>`
     }
 
-    // 翻译块：fork 的翻译是独立页面（Dexie translate_records），消息块里没有 TRANSLATION 类型
-    //（V1 的 knowledge.ts 有这一支，移植时随该类型一并去掉）
+    case MessageBlockType.TRANSLATION: {
+      // 消息级原地翻译（V1 分支随 TRANSLATION 块类型回归一并恢复）
+      if (!selectedTypes.has(CONTENT_TYPES.TRANSLATION)) return ''
+      const translationBlock = block
+      return `<translation target="${translationBlock.targetLanguage}">\n${translationBlock.content}\n</translation>`
+    }
 
     case MessageBlockType.UNKNOWN:
       // 占位符块，通常不需要输出内容

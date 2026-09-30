@@ -4,10 +4,11 @@
  * import('sharp')/'ppu-paddle-ocr'/'onnxruntime-node' 将按 asar 内 node_modules
  * 解析，原生件走 app.asar.unpacked）。2 页合成 PDF，判据：两页文本精确识别。
  */
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { mkdirSync,writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { utilityProcess, app } from 'electron'
+
+import { app,utilityProcess } from 'electron'
 
 const scratchDir = path.dirname(fileURLToPath(import.meta.url))
 const modelDir = path.join(scratchDir, 'models', 'pp-ocrv6')

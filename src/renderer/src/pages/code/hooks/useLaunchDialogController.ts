@@ -1,12 +1,12 @@
+import { loggerService } from '@logger'
+import type { CodeCli} from '@shared/types/codeCli';
+import { isApiGatewayProviderId } from '@shared/types/codeCli'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
+import type { UniqueModelId } from '@shared/types/uniqueModelId'
+import { isFileConfiguredCli } from '@shared/utils/cliConfig'
 import type { ComponentProps } from 'react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import { loggerService } from '@logger'
-import type { CliProviderConfig } from '@shared/types/codeCliState'
-import type { UniqueModelId } from '@shared/types/uniqueModelId'
-import { CodeCli, isApiGatewayProviderId } from '@shared/types/codeCli'
-import { isFileConfiguredCli } from '@shared/utils/cliConfig'
 
 import {
   type CliConfigFileDraft,
@@ -19,8 +19,8 @@ import {
   writeCliConfigDraft
 } from '../cliConfig'
 import type { Model, Provider } from '../cliConfig/providerView'
-import { PROVIDERLESS_CLI_TOOLS } from '../constants/cliTools'
 import type { LaunchDialog } from '../components/LaunchDialog'
+import { PROVIDERLESS_CLI_TOOLS } from '../constants/cliTools'
 import type { ApiGatewayProviderBundle } from './useApiGatewayProvider'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useLaunchDialogController.ts

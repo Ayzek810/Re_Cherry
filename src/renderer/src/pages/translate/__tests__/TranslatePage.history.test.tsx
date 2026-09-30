@@ -65,7 +65,7 @@ describe('TranslatePage · 历史回填', () => {
     records.push(HISTORY_RECORD)
     // Navbar 挂载时会问全屏状态（useFullscreen）。
     ;(window as unknown as { api: Record<string, unknown> }).api = {
-      ...((window as unknown as { api?: Record<string, unknown> }).api ?? {}),
+      ...(window as unknown as { api?: Record<string, unknown> }).api,
       isFullScreen: vi.fn().mockResolvedValue(false)
     }
   })

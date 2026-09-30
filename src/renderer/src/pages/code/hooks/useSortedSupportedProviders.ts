@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
-
-import type { CodeCliToolState } from '@shared/types/codeCliState'
 import type { CodeCli } from '@shared/types/codeCli'
+import type { CodeCliToolState } from '@shared/types/codeCliState'
+import { useCallback, useMemo, useState } from 'react'
 
 import type { Provider } from '../cliConfig/providerView'
 

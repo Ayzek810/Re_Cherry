@@ -35,6 +35,7 @@ import type {
   OpenAIReasoningSummary,
   OpenAIVerbosity
 } from '@renderer/types/aiCoreTypes'
+import type { CustomTranslateLanguage } from '@renderer/types/translate'
 import type { CodeCliConfigs } from '@shared/types/codeCliState'
 import { v4 as uuid } from 'uuid'
 
@@ -186,6 +187,10 @@ export interface SettingsState {
   enableSpellCheck: boolean
   spellCheckLanguages: string[]
   enableQuickPanelTriggers: boolean
+  /** 翻译页偏好（v0.4.7 回补 V2 偏好项；migrate 226 回填）。 */
+  translateAutoCopy: boolean
+  translateCustomPrompt: string
+  translateCustomLanguages: CustomTranslateLanguage[]
   // 硬件加速设置
   disableHardwareAcceleration: boolean
   // 使用系统标题栏 (仅Linux)
@@ -203,6 +208,8 @@ export interface SettingsState {
     plain_text: boolean
     notes: boolean
   }
+  /** 默认 Obsidian vault 名（V1 移植；导出弹窗预选，migrate 227 回填） */
+  defaultObsidianVault: string | null
   // OpenAI
   openAI: {
     // TODO: it's a bad naming. rename it to reasoningSummary in v2.
@@ -369,6 +376,9 @@ export const initialState: SettingsState = {
   enableSpellCheck: false,
   spellCheckLanguages: [],
   enableQuickPanelTriggers: false,
+  translateAutoCopy: false,
+  translateCustomPrompt: '',
+  translateCustomLanguages: [],
   // 消息操作确认设置
   confirmDeleteMessage: true,
   confirmRegenerateMessage: true,
@@ -389,6 +399,7 @@ export const initialState: SettingsState = {
     plain_text: true,
     notes: true
   },
+  defaultObsidianVault: null,
   // OpenAI
   openAI: {
     summaryText: 'auto',
@@ -781,8 +792,19 @@ const settingsSlice = createSlice({
     setSpellCheckLanguages: (state, action: PayloadAction<string[]>) => {
       state.spellCheckLanguages = action.payload
     },
+    setTranslatePreferences: (
+      state,
+      action: PayloadAction<
+        Partial<Pick<SettingsState, 'translateAutoCopy' | 'translateCustomPrompt' | 'translateCustomLanguages'>>
+      >
+    ) => {
+      Object.assign(state, action.payload)
+    },
     setExportMenuOptions: (state, action: PayloadAction<typeof initialState.exportMenuOptions>) => {
       state.exportMenuOptions = action.payload
+    },
+    setDefaultObsidianVault: (state, action: PayloadAction<string>) => {
+      state.defaultObsidianVault = action.payload
     },
     setEnableQuickPanelTriggers: (state, action: PayloadAction<boolean>) => {
       state.enableQuickPanelTriggers = action.payload
@@ -941,7 +963,9 @@ export const {
   setPrivacyPolicyVersion,
   setEnableSpellCheck,
   setSpellCheckLanguages,
+  setTranslatePreferences,
   setExportMenuOptions,
+  setDefaultObsidianVault,
   setEnableQuickPanelTriggers,
   setConfirmDeleteMessage,
   setConfirmRegenerateMessage,

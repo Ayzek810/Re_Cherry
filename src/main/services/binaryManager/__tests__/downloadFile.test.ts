@@ -9,10 +9,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createProgressThrottle,
-  type DownloadSink,
   downloadFile,
   downloadFromAnySource,
   type DownloadProgress,
+  type DownloadSink,
   selectProgressUpdate
 } from '../downloadFile'
 

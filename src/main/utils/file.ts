@@ -219,6 +219,11 @@ export function getConfigDir() {
   return path.join(os.homedir(), HOME_CHERRY_DIR, 'config')
 }
 
+/** DXT 扩展解包落位根目录（上游 getMcpDir 同构：~/.re_cherry/mcp）。 */
+export function getMcpDir() {
+  return path.join(os.homedir(), HOME_CHERRY_DIR, 'mcp')
+}
+
 export function getCacheDir() {
   return path.join(app.getPath('userData'), 'Cache')
 }

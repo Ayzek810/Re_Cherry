@@ -1,6 +1,6 @@
-import { Worker } from 'node:worker_threads'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { Worker } from 'node:worker_threads'
 
 import { describe, expect, it } from 'vitest'
 

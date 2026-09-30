@@ -1,6 +1,7 @@
 import childProcess from 'node:child_process'
 import { syncBuiltinESMExports } from 'node:module'
 import { pathToFileURL } from 'node:url'
+
 import { registerHostModuleFallback } from './host-module-fallback.mjs'
 import { enforceWindowsChildProcessHide } from './windows-child-process-hide.mjs'
 

@@ -1,9 +1,7 @@
-import type { Server as HttpServer } from 'http'
-
-import type { Server } from 'elysia/universal/server'
-
 import { loggerService } from '@logger'
 import { configManager } from '@main/services/ConfigManager'
+import type { Server } from 'elysia/universal/server'
+import type { Server as HttpServer } from 'http'
 
 import { type ApiGatewayApp, buildApp } from './app'
 

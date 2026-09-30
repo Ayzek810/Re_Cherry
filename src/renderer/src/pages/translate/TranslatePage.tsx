@@ -13,7 +13,7 @@ import { lightStream, lightStreamAbort } from '@renderer/services/lightLlm'
 import { loggerService } from '@renderer/services/LoggerService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setTranslateModel } from '@renderer/store/llm'
-import type { TranslateRecord } from '@renderer/types/translate'
+import type { AnyTranslateLangCode, TranslateRecord } from '@renderer/types/translate'
 import { cn } from '@renderer/utils/style'
 import {
   buildTranslatePrompt,
@@ -41,13 +41,17 @@ const TranslatePage = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const translateModel = useAppSelector((state) => state.llm.translateModel)
+  // v0.4.7 偏好项回补（V2 feature.translate.page.* 的 fork redux 对位）
+  const translateAutoCopy = useAppSelector((state) => state.settings.translateAutoCopy)
+  const translateCustomPrompt = useAppSelector((state) => state.settings.translateCustomPrompt)
+  const translateCustomLanguages = useAppSelector((state) => state.settings.translateCustomLanguages)
 
   const [sourceText, setSourceText] = useState('')
   const [outputText, setOutputText] = useState('')
   const [translating, setTranslating] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [source, setSource] = useState<TranslateLangCode | 'auto'>('auto')
-  const [target, setTarget] = useState<TranslateLangCode>('zh-cn')
+  const [source, setSource] = useState<AnyTranslateLangCode | 'auto'>('auto')
+  const [target, setTarget] = useState<AnyTranslateLangCode>('zh-cn')
   /** V1 语义（`TranslatePage.tsx:86/241-242`）：源语言为 auto 时检测到的实际语言，用于显示与落库。 */
   const [detectedLanguage, setDetectedLanguage] = useState<TranslateLangCode | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -80,11 +84,14 @@ const TranslatePage = () => {
   }, [loadHistory])
 
   const languageLabel = useCallback(
-    (code: TranslateLangCode | 'auto') => {
+    (code: AnyTranslateLangCode | 'auto') => {
+      // v0.4.7 自定义语言优先（其 value 即展示名），内置走 i18n 键族。
+      const custom = translateCustomLanguages.find((lang) => lang.langCode === code)
+      if (custom !== undefined) return `${custom.emoji} ${custom.value}`.trim()
       const key = langCodeToI18nKey.get(code)
       return key ? t(key) : t('translate.auto_detect')
     },
-    [t]
+    [t, translateCustomLanguages]
   )
 
   /** 翻译（V2 useTranslate 单飞语义：新调用作废旧调用；requestId 不匹配的流事件一律丢弃）。 */
@@ -121,7 +128,17 @@ const TranslatePage = () => {
         {
           provider: translateModel.provider,
           model: translateModel.id,
-          messages: [{ role: 'user', text: buildTranslatePrompt(TRANSLATE_PROMPT, targetLabel, text) }],
+          // v0.4.7 偏好项回补：自定义翻译指令（空 = 内置 TRANSLATE_PROMPT）
+          messages: [
+            {
+              role: 'user',
+              text: buildTranslatePrompt(
+                translateCustomPrompt.trim().length > 0 ? translateCustomPrompt : TRANSLATE_PROMPT,
+                targetLabel,
+                text
+              )
+            }
+          ],
           source: 'cherry-translate'
         },
         (event) => {
@@ -135,6 +152,12 @@ const TranslatePage = () => {
         }
       )
       if (!cancelledRef.current && accumulated.trim().length > 0) {
+        // v0.4.7 偏好项回补（V2 feature.translate.page.auto_copy 同语义）：翻译成功即复制。
+        if (translateAutoCopy) {
+          navigator.clipboard.writeText(accumulated).catch((error: unknown) => {
+            logger.warn('translate auto-copy failed', error instanceof Error ? error : new Error(String(error)))
+          })
+        }
         const record: TranslateRecord = {
           id: uuid(),
           sourceText: text,
@@ -160,7 +183,7 @@ const TranslatePage = () => {
         requestIdRef.current = undefined
       }
     }
-  }, [sourceText, translating, translateModel, source, target, languageLabel, loadHistory, t])
+  }, [sourceText, translating, translateModel, source, target, translateAutoCopy, translateCustomPrompt, languageLabel, loadHistory, t])
 
   const abort = useCallback(() => {
     // fork 缝：「停止」额外发起真取消——作废事件之外，主进程 abort 该 requestId 的在途流
@@ -247,6 +270,7 @@ const TranslatePage = () => {
             onTargetChange={setTarget}
             detectedLanguage={detectedLanguage}
             languageLabel={languageLabel}
+            customLanguages={translateCustomLanguages}
             exchangeDisabled={translating}
             onExchange={exchange}
           />

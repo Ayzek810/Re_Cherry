@@ -236,7 +236,6 @@ async function downloadAttempt(context: AttemptContext): Promise<AttemptOutcome 
   const controller = new AbortController()
   let expiry: 'idle' | 'total' | undefined
   let idleTimer: ReturnType<typeof setTimeout> | undefined
-  let totalTimer: ReturnType<typeof setTimeout> | undefined
   const armIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer)
     idleTimer = setTimeout(() => {
@@ -244,7 +243,7 @@ async function downloadAttempt(context: AttemptContext): Promise<AttemptOutcome 
       controller.abort()
     }, idleTimeoutMs)
   }
-  totalTimer = setTimeout(() => {
+  const totalTimer = setTimeout(() => {
     expiry = 'total'
     controller.abort()
   }, totalTimeoutMs)

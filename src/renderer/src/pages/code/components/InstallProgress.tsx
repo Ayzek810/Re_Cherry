@@ -14,10 +14,9 @@
 //
 // 底座是 shadcn.tsx 的 `Progress`（与 Button/Tooltip 同档的标准 primitive）。
 
+import type { InstallProgressStep, InstallStagePosition } from '@shared/types/installProgress'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import type { InstallProgressStep, InstallStagePosition } from '@shared/types/installProgress'
 
 import { Progress } from './shadcn'
 

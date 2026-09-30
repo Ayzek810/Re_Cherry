@@ -1,7 +1,7 @@
+import { cn } from '@renderer/utils/style'
 import type { FC } from 'react'
 
 import { Button } from '../shadcn'
-import { cn } from '@renderer/utils/style'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/PanelPrimitives.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。逐字；import 面对号（Button ← 本页 shim，ref 直传面同 shim）。

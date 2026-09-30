@@ -210,7 +210,12 @@ export const useNotesMenu = ({
                 key: 'yuque',
                 onClick: () => exportNote({ node, platform: 'yuque' })
               },
-              // obsidian 一项在 fork 里去掉：它依赖未移植的 ObsidianExportDialog/Popup 链
+              // obsidian 一路随 ObsidianExportDialog/Popup 链移植（v0.4.7）补回
+              exportMenuOptions.obsidian && {
+                label: t('chat.topics.export.obsidian'),
+                key: 'obsidian',
+                onClick: () => exportNote({ node, platform: 'obsidian' })
+              },
               exportMenuOptions.joplin && {
                 label: t('chat.topics.export.joplin'),
                 key: 'joplin',

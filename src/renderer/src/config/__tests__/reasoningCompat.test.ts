@@ -1,9 +1,9 @@
-import type { Model } from '@renderer/types'
-import { describe, expect, it } from 'vitest'
-
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+
+import type { Model } from '@renderer/types'
+import { describe, expect, it } from 'vitest'
 
 import { PI_AI_DETECTED_HOSTS, providerReasoningCompat, type ReasoningCompatProviderInput } from '../reasoningCompat'
 

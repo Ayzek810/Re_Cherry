@@ -1,9 +1,9 @@
+import type { CodeCli } from '@shared/types/codeCli'
 import type { ComponentProps } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ConfirmDialog } from '../components/shadcn'
-import type { CodeCli } from '@shared/types/codeCli'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useRemoveCliToolDialog.ts
 //（2026-09-24，v0.3.4-1 批次4b）。逐字；import 面对号：ConfirmDialog 类型 ← 本页 shim

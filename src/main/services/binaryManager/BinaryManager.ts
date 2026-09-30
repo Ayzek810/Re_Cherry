@@ -6,12 +6,9 @@
 // src/shared/types/binary.ts 的子集抄形状（fork 不建 shared 文件，operation/definition 面若
 // UI 需要随批次4 再补）。
 
-import { createRequire } from 'node:module'
 import fsp from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import path from 'node:path'
-
-import { Mutex, tryAcquire, type MutexInterface } from 'async-mutex'
-import { BrowserWindow } from 'electron'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
@@ -23,6 +20,13 @@ import {
   deepSeekHarnessHome
 } from '@main/services/deepSeekHarness/paths'
 import { withPathPrepend } from '@main/utils/shellEnv'
+import { IpcChannel } from '@shared/IpcChannel'
+import type { InstallProgressPayload, InstallProgressStep } from '@shared/types/installProgress'
+import { buildInstallProgressPayload, createStageTracker } from '@shared/types/installProgress'
+import { redactSecretText } from '@shared/utils/redaction'
+import { Mutex, type MutexInterface,tryAcquire } from 'async-mutex'
+import { BrowserWindow } from 'electron'
+
 import { judgeManagedApplication } from './applicationStatus'
 import { buildInPlace } from './atomicSwap'
 import { createProgressThrottle, type DownloadProgress, selectProgressUpdate } from './downloadFile'
@@ -37,10 +41,12 @@ import {
 } from './layout'
 import { installMarketBundle, nodeMarketIo, readProfileBundleVersion } from './marketBaseline'
 import { createPipProgress, feedPipProgress, formatPipProgress } from './pipProgress'
+import { BINARY_TOOL_PRESETS,type BinaryToolName, type BinaryToolPreset } from './presets'
 import { PYPI_VERSION_SOURCES } from './pypiSources'
 import { NPM_REGISTRY_MIRROR } from './registry'
 import { removeTreeWithRetry } from './removeTree'
 import { DEFAULT_COMMAND_TIMEOUT_MS, runBoundedCommand } from './runCommand'
+import { ensureNodeRuntime, ensurePythonRuntime, isNodeRuntimeInstalled, NODE_VERSION } from './runtimeDownloader'
 import {
   deployFrontDist,
   downloadSourceZip,
@@ -49,13 +55,6 @@ import {
   resolveHeadSha,
   seedUserConfig
 } from './sourceInstaller'
-import { IpcChannel } from '@shared/IpcChannel'
-import type { InstallProgressPayload, InstallProgressStep } from '@shared/types/installProgress'
-import { buildInstallProgressPayload, createStageTracker } from '@shared/types/installProgress'
-import { redactSecretText } from '@shared/utils/redaction'
-
-import { type BinaryToolName, type BinaryToolPreset, BINARY_TOOL_PRESETS } from './presets'
-import { ensureNodeRuntime, ensurePythonRuntime, isNodeRuntimeInstalled, NODE_VERSION } from './runtimeDownloader'
 
 const logger = loggerService.withContext('BinaryManager')
 

@@ -2,8 +2,10 @@
  * 顶栏语言栏（V2 components/TranslateLanguageBar.tsx 结构）：源语言 / 交换 / 目标语言。
  * V2 的 Combobox + useLanguages 换成 fork 的 antd Select + 内置语言表；
  * 语言文案由页面注入的 languageLabel 提供（fork i18n languages.* 键族）。
+ * v0.4.7：自定义语言（AnyTranslateLangCode）与内置同列表渲染，customLabel 提供文案。
  */
 import { BUILTIN_TRANSLATE_LANGUAGES, type TranslateLangCode } from '@renderer/config/translateLanguages'
+import type { AnyTranslateLangCode, CustomTranslateLanguage } from '@renderer/types/translate'
 import { cn } from '@renderer/utils/style'
 import { Select, Tooltip } from 'antd'
 import { ArrowLeftRight } from 'lucide-react'
@@ -13,13 +15,15 @@ import { useTranslation } from 'react-i18next'
 
 type Props = {
   className?: string
-  source: TranslateLangCode | 'auto'
-  onSourceChange: (value: TranslateLangCode | 'auto') => void
-  target: TranslateLangCode
-  onTargetChange: (value: TranslateLangCode) => void
+  source: AnyTranslateLangCode | 'auto'
+  onSourceChange: (value: AnyTranslateLangCode | 'auto') => void
+  target: AnyTranslateLangCode
+  onTargetChange: (value: AnyTranslateLangCode) => void
   /** V1 语义（`TranslatePage.tsx:743-745`）：auto 源语言检测到的实际语言，追加在自动检测项后。 */
   detectedLanguage?: TranslateLangCode | null
-  languageLabel: (code: TranslateLangCode | 'auto') => string
+  languageLabel: (code: AnyTranslateLangCode | 'auto') => string
+  /** v0.4.7 自定义语言（追加在内置之后；空 = 无）。 */
+  customLanguages: CustomTranslateLanguage[]
   exchangeDisabled: boolean
   onExchange: () => void
 }
@@ -34,18 +38,24 @@ const TranslateLanguageBar: FC<Props> = ({
   onTargetChange,
   detectedLanguage,
   languageLabel,
+  customLanguages,
   exchangeDisabled,
   onExchange
 }) => {
   const { t } = useTranslation()
 
   const languageOptions = useMemo(
-    () =>
-      BUILTIN_TRANSLATE_LANGUAGES.map((lang) => ({
+    () => [
+      ...BUILTIN_TRANSLATE_LANGUAGES.map((lang) => ({
         value: lang.langCode,
         label: `${lang.emoji} ${languageLabel(lang.langCode)}`
       })),
-    [languageLabel]
+      ...customLanguages.map((lang) => ({
+        value: lang.langCode,
+        label: `${lang.emoji} ${lang.value}`
+      }))
+    ],
+    [customLanguages, languageLabel]
   )
 
   /** V1 `TranslatePage.tsx:743-745`：自动检测项的文案是 `自动检测 (检测到的语言)`。 */
@@ -70,7 +80,7 @@ const TranslateLanguageBar: FC<Props> = ({
         className={LANGUAGE_SELECT_CLASS}
         value={source}
         options={sourceOptions}
-        onChange={(value) => onSourceChange(value as TranslateLangCode | 'auto')}
+        onChange={(value) => onSourceChange(value as AnyTranslateLangCode | 'auto')}
         showSearch
         optionFilterProp="label"
         popupMatchSelectWidth={false}
@@ -95,7 +105,7 @@ const TranslateLanguageBar: FC<Props> = ({
         className={LANGUAGE_SELECT_CLASS}
         value={target}
         options={languageOptions}
-        onChange={(value) => onTargetChange(value as TranslateLangCode)}
+        onChange={(value) => onTargetChange(value as AnyTranslateLangCode)}
         showSearch
         optionFilterProp="label"
         popupMatchSelectWidth={false}

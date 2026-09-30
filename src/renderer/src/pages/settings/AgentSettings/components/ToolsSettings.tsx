@@ -91,6 +91,26 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
         <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
           {t('settings.agentSettings.tools.builtins.generate_image.hint')}
         </span>
+        {/* v0.4.7 全局记忆接线（V1 searchOrchestrationPlugin 双门同构）：enableMemory（助手面）
+            + 全局记忆开关（设置 › 记忆，store/memory.globalMemoryEnabled）。挂载的是
+            memory_search 检索工具（条件内置，见 @shared/config/agentTools 注释）；回合结束后
+            还有后台事实抽取（services/memoryProcessor），同受这两道门。 */}
+        <ToolGrid>
+          <ToolCard onClick={() => updateAssistant({ enableMemory: !assistant.enableMemory })}>
+            <span className="truncate text-left text-sm">
+              {t('settings.agentSettings.tools.builtins.memory_search.name')}
+            </span>
+            <Switch
+              size="small"
+              checked={assistant.enableMemory === true}
+              onClick={(_, event) => event.stopPropagation()}
+              onChange={(enabled) => updateAssistant({ enableMemory: enabled })}
+            />
+          </ToolCard>
+        </ToolGrid>
+        <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
+          {t('settings.agentSettings.tools.builtins.memory_search.hint')}
+        </span>
       </SettingsItem>
 
       <SettingsItem divider={false}>

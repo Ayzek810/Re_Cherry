@@ -1,13 +1,12 @@
 import type { ComponentProps, FC } from 'react'
 import { Fragment } from 'react'
 
-import { ConfirmDialog } from './shadcn'
-
 import { CodeCliContentPanel } from './CodeCliContentPanel'
 import { CodeCliSidebar } from './CodeCliSidebar'
 import { ConfigEditPanel } from './configEditPanel/ConfigEditPanel'
 import { OwnLoginConfigPanel } from './configEditPanel/OwnLoginConfigPanel'
 import { LaunchDialog } from './LaunchDialog'
+import { ConfirmDialog } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/CodeCliPageView.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。逐字；import 面对号：ConfirmDialog ← 本页 shim，

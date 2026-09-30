@@ -1,13 +1,12 @@
+import { useSettings } from '@renderer/hooks/useSettings'
+import type { CliConfigFileDraft } from '@renderer/pages/code/cliConfig'
+import { formatCliConfigDraftFile } from '@renderer/pages/code/cliConfig'
+import { cn } from '@renderer/utils/style'
+import { Tabs as AntTabs } from 'antd'
 import { Wand2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Tabs as AntTabs } from 'antd'
-
-import { useSettings } from '@renderer/hooks/useSettings'
-import { formatCliConfigDraftFile } from '@renderer/pages/code/cliConfig'
-import type { CliConfigFileDraft } from '@renderer/pages/code/cliConfig'
-import { cn } from '@renderer/utils/style'
 
 import { Button, CodeEditor, Tooltip } from '../shadcn'
 

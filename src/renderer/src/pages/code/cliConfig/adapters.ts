@@ -1,8 +1,7 @@
+import { CodeCli,normalizeDeepSeekHarnessSettings } from '@shared/types/codeCli'
+import { type CliConfigWriteFile, type FileConfiguredCli, getCliConfigTargets } from '@shared/utils/cliConfig'
 import type { Document } from 'yaml'
 import { isMap, isScalar } from 'yaml'
-
-import { normalizeDeepSeekHarnessSettings, CodeCli } from '@shared/types/codeCli'
-import { type CliConfigWriteFile, type FileConfiguredCli, getCliConfigTargets } from '@shared/utils/cliConfig'
 
 import { buildHermesEnvConfig } from './builders'
 import { HERMES_ENDPOINTS } from './constants'
@@ -17,7 +16,7 @@ import {
 } from './draftFiles'
 import { parseYamlDocumentOrThrow, parseYamlOrThrow, readConfigFiles, requireReadFile } from './file'
 import type { Provider } from './providerView'
-import { type HermesApiMode, HERMES_API_MODES, resolveHermesProviderInfo } from './resolvers'
+import { HERMES_API_MODES, type HermesApiMode, resolveHermesProviderInfo } from './resolvers'
 import type {
   CliConfigConnection,
   CliConfigDraftBuildArgs,

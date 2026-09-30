@@ -14,6 +14,7 @@ import type {
   Message,
   ThinkingMessageBlock,
   ToolMessageBlock,
+  TranslationMessageBlock,
   VideoMessageBlock
 } from '@renderer/types/newMessage'
 import {
@@ -282,6 +283,34 @@ export function createCompactBlock(
     ...baseBlock,
     content,
     compactedContent
+  }
+}
+
+/**
+ * Creates a Translation Message Block.（V1 create.ts 逐字移植）
+ * @param messageId - The ID of the parent message.
+ * @param content - The translation content.
+ * @param targetLanguage - The target language of the translation.
+ * @param overrides - Optional properties to override the defaults.
+ * @returns A TranslationMessageBlock object.
+ */
+export function createTranslationBlock(
+  messageId: string,
+  content: string,
+  targetLanguage: string,
+  overrides: Partial<Omit<TranslationMessageBlock, 'id' | 'messageId' | 'type' | 'content' | 'targetLanguage'>> = {}
+): TranslationMessageBlock {
+  const { sourceBlockId, sourceLanguage, ...baseOverrides } = overrides
+  const baseBlock = createBaseMessageBlock(messageId, MessageBlockType.TRANSLATION, {
+    status: MessageBlockStatus.SUCCESS,
+    ...baseOverrides
+  })
+  return {
+    ...baseBlock,
+    content,
+    targetLanguage,
+    sourceBlockId: sourceBlockId,
+    sourceLanguage: sourceLanguage
   }
 }
 

@@ -1,15 +1,14 @@
+import { type RootState,useAppSelector } from '@renderer/store'
+import { type CodeCli,isApiGatewayProviderId } from '@shared/types/codeCli'
+import type { CliProviderConfig } from '@shared/types/codeCliState'
+import { parseUniqueModelId } from '@shared/types/uniqueModelId'
+import { isEmbeddingModel, isGatewayRoutableModel, isGenerateImageModel, isRerankModel } from '@shared/utils/model'
+import { isLoginBasedProvider } from '@shared/utils/provider'
 import { useCallback, useMemo } from 'react'
 
-import { useAppSelector, type RootState } from '@renderer/store'
-import { isApiGatewayProviderId, type CodeCli } from '@shared/types/codeCli'
-import type { CliProviderConfig } from '@shared/types/codeCliState'
-import { isEmbeddingModel, isGenerateImageModel, isGatewayRoutableModel, isRerankModel } from '@shared/utils/model'
-import { isLoginBasedProvider } from '@shared/utils/provider'
-
-import { CLI_TOOL_PROVIDER_MAP } from '../constants/cliTools'
-import { toCliModel, type Model, type Provider } from '../cliConfig/providerView'
+import { type Model, type Provider,toCliModel } from '../cliConfig/providerView'
 import { isUniqueModelId, safeCreateUniqueModelId } from '../cliConfig/values'
-import { parseUniqueModelId } from '@shared/types/uniqueModelId'
+import { CLI_TOOL_PROVIDER_MAP } from '../constants/cliTools'
 import { modelSupportsCliTool } from '../utils/modelSupport'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useConfigMetadata.ts

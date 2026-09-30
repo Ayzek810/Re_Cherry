@@ -537,6 +537,36 @@
         },
         "notion": "Export to Notion",
         "obsidian": "Export to Obsidian",
+        "obsidian_atributes": "Configure Note Attributes",
+        "obsidian_btn": "Confirm",
+        "obsidian_created": "Creation Time",
+        "obsidian_created_placeholder": "Please select the creation time",
+        "obsidian_export_failed": "Export failed",
+        "obsidian_export_success": "Export success",
+        "obsidian_fetch_error": "Failed to fetch Obsidian vaults",
+        "obsidian_fetch_folders_error": "Failed to fetch folder structure",
+        "obsidian_loading": "Loading...",
+        "obsidian_no_vault_selected": "Please select a vault first",
+        "obsidian_no_vaults": "No Obsidian vaults found",
+        "obsidian_operate": "Operation Method",
+        "obsidian_operate_append": "Append",
+        "obsidian_operate_new_or_overwrite": "Create New (Overwrite if it exists)",
+        "obsidian_operate_placeholder": "Please select the operation method",
+        "obsidian_operate_prepend": "Prepend",
+        "obsidian_path": "Path",
+        "obsidian_path_placeholder": "Please select the path",
+        "obsidian_reasoning": "Include Reasoning Chain",
+        "obsidian_root_directory": "Root Directory",
+        "obsidian_select_vault_first": "Please select a vault first",
+        "obsidian_source": "Source",
+        "obsidian_source_placeholder": "Please enter the source",
+        "obsidian_tags": "Tags",
+        "obsidian_tags_placeholder": "Please enter tags, separate multiple tags with commas",
+        "obsidian_title": "Title",
+        "obsidian_title_placeholder": "Please enter the title",
+        "obsidian_title_required": "The title cannot be empty",
+        "obsidian_vault": "Vault",
+        "obsidian_vault_placeholder": "Please select the vault name",
         "siyuan": "Export to Siyuan Note",
         "title": "Export",
         "title_naming_failed": "Failed to generate title, using default title",
@@ -595,13 +625,13 @@
       "title": "Unified Gateway"
     },
     "apply_failed": "Failed to write CLI config to the system file",
-    "checking": "Checking…",
-    "clear_config_failed": "Failed to clear the CLI config. Your credentials may still be in the tool's config files.",
     "check_updates": "Check for updates",
     "check_updates_failed": "Failed to check for updates",
     "check_updates_latest": "Already up to date",
     "check_updates_not_installed": "This tool is not installed",
     "check_updates_system": "This tool is a system install outside the app's management (upgrade it there)",
+    "checking": "Checking…",
+    "clear_config_failed": "Failed to clear the CLI config. Your credentials may still be in the tool's config files.",
     "cli_config": {
       "format_failed": "Format failed. Check the file syntax.",
       "title": "CLI Config File",
@@ -1070,6 +1100,16 @@
     "size": "Size",
     "text": "Text",
     "title": "Files"
+  },
+  "followupQueue": {
+    "edit": "Edit (back to composer)",
+    "hint": "Sent automatically in order when the turn ends; work-mode topics only",
+    "pause": "Pause auto-send",
+    "pausedCount": "Paused, {{count}} follow-up(s) queued",
+    "queuedCount": "{{count}} follow-up(s) queued",
+    "remove": "Remove",
+    "resume": "Resume auto-send",
+    "title": "Follow-up queue"
   },
   "gpustack": {
     "keep_alive_time": {
@@ -1665,6 +1705,12 @@
       "enabled": "Work mode on",
       "toggle": "Work mode"
     }
+  },
+  "messageTranslate": {
+    "action": "Translate",
+    "close": "Close translation",
+    "copied": "Translation copied",
+    "empty": "Translation is empty"
   },
   "minapp": {
     "add": {
@@ -2367,6 +2413,10 @@
             "hint": "Mounted only after a painting model is selected",
             "name": "Chat image generation (generate_image)"
           },
+          "memory_search": {
+            "hint": "Lets this assistant search the shared long-term memory (facts and preferences across conversations); new facts are also extracted in the background after each turn. Enable global memory and pick an extraction model in Settings › Memory",
+            "name": "Long-term memory (memory_search)"
+          },
           "ocr": {
             "name": "Document OCR (ocr_document)"
           }
@@ -2702,6 +2752,11 @@
         "username": "Nutstore Username"
       },
       "obsidian": {
+        "default_vault": "Default Obsidian Vault",
+        "default_vault_fetch_error": "Failed to fetch Obsidian vault",
+        "default_vault_loading": "Loading Obsidian vault...",
+        "default_vault_no_vaults": "No Obsidian vaults found",
+        "default_vault_placeholder": "Please select the default Obsidian vault",
         "title": "Obsidian Configuration"
       },
       "s3": {
@@ -3753,9 +3808,9 @@
         "local_paddle": {
           "cancel": "Cancel Download",
           "concurrency": "Concurrent Pages",
-          "gpu_acceleration": "GPU Acceleration",
           "download": "Download Model",
           "error_prefix": "Download failed",
+          "gpu_acceleration": "GPU Acceleration",
           "help": "Local OCR (PP-OCRv6, ~140 MB): when enabled, scanned PDFs are recognized locally during chat reading and knowledge base ingestion — no network or API key required. GPU acceleration uses DirectML (falls back to CPU automatically when unavailable); higher concurrency increases throughput (recognition is CPU-bound; too high makes pages contend for cores)",
           "model_title": "Local Model",
           "not_downloaded": "Model not downloaded (~140 MB, runs fully on this device)",
@@ -3763,12 +3818,6 @@
           "remove": "Remove Model",
           "retry": "Retry",
           "unsupported": "Local OCR inference is not supported on this platform"
-        },
-        "vision_model": {
-          "concurrency": "Concurrent Pages",
-          "help": "Vision-model document parsing: the PDF is rasterized page by page on this device and handed to the vision model you select, which transcribes it into Markdown (headings, tables and formulas preserved) — the model provider must accept image input; billing is per page. Higher concurrency finishes sooner but hits provider rate limits sooner (a rate-limit error discards the whole document — tune it to your key quota)",
-          "model_placeholder": "Select a vision model",
-          "model_title": "Vision Model"
         },
         "paddleocr": {
           "aistudio_access_token": "Access token of AI Studio Community",
@@ -3779,7 +3828,13 @@
         "provider": "Document Processing Provider",
         "provider_placeholder": "Choose a document processing provider",
         "title": "Document Processing",
-        "tooltip": "In Settings -> Tools, set a document processing service provider. Document processing can effectively improve the retrieval performance of complex format documents and scanned documents."
+        "tooltip": "In Settings -> Tools, set a document processing service provider. Document processing can effectively improve the retrieval performance of complex format documents and scanned documents.",
+        "vision_model": {
+          "concurrency": "Concurrent Pages",
+          "help": "Vision-model document parsing: the PDF is rasterized page by page on this device and handed to the vision model you select, which transcribes it into Markdown (headings, tables and formulas preserved) — the model provider must accept image input; billing is per page. Higher concurrency finishes sooner but hits provider rate limits sooner (a rate-limit error discards the whole document — tune it to your key quota)",
+          "model_placeholder": "Select a vision model",
+          "model_title": "Vision Model"
+        }
       },
       "title": "Other Settings",
       "websearch": {
@@ -3891,6 +3946,22 @@
       "show": "Show Tray Icon",
       "title": "Tray"
     },
+    "usage": {
+      "by_model": "By model",
+      "daily": "Daily",
+      "empty": "No usage records in this range",
+      "input_tokens": "Input Tokens",
+      "output_tokens": "Output Tokens",
+      "range": {
+        "30d": "Last 30 days",
+        "7d": "Last 7 days",
+        "all": "All",
+        "today": "Today"
+      },
+      "requests": "Requests",
+      "requests_count": "{{count}} request(s)",
+      "title": "Usage"
+    },
     "use_system_title_bar": {
       "confirm": {
         "content": "Changing the title bar style requires restarting the app to take effect. Do you want to restart now?",
@@ -3960,6 +4031,15 @@
   },
   "translate": {
     "auto_detect": "Auto Detect",
+    "custom_code": "Language code (e.g. xx-xx)",
+    "custom_error": {
+      "builtin": "Built-in language codes cannot be used",
+      "emoji": "Language icon",
+      "empty_code": "Please enter a language code",
+      "empty_value": "Please enter a language name",
+      "exists": "This language code already exists"
+    },
+    "custom_value": "Language name",
     "error": {
       "auto_source": "Cannot swap in auto-detect mode",
       "empty": "No translation returned",
@@ -3975,6 +4055,15 @@
     "model": "Translation Model",
     "model_hint_prefix": "Current model: ",
     "output_empty": "Translation will appear here",
+    "prefs": {
+      "add_language": "Add language",
+      "auto_copy": "Auto-copy result",
+      "custom_hint": "Custom languages appear in the source/target lists and can be removed anytime",
+      "custom_languages": "Custom languages",
+      "prompt": "Translation prompt",
+      "prompt_hint": "Supports the {{target_language}} and {{text}} placeholders; leave empty to use the built-in prompt",
+      "prompt_placeholder": "Leave empty to use the built-in prompt"
+    },
     "select_model": "Select translation model",
     "settings": "Translation Settings",
     "source_language": "Source Language",

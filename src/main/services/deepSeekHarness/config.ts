@@ -14,12 +14,11 @@ import type { FileHandle } from 'node:fs/promises'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { Document, isMap, isSeq, parseDocument, type YAMLError } from 'yaml'
-
 import { PROTOCOL_BY_TYPE } from '@main/kernel/providers'
 import { atomicWriteFile } from '@main/utils/atomicFile'
 import type { DeepSeekHarnessAgentPreset } from '@shared/types/codeCli'
 import { formatApiHost, withoutTrailingApiVersion } from '@shared/utils/api'
+import { Document, isMap, isSeq, parseDocument, type YAMLError } from 'yaml'
 
 export type DeepSeekHarnessMode = 'direct' | 'gateway'
 export type DeepSeekHarnessProtocol = 'anthropic-messages' | 'openai-responses' | 'openai-completions'

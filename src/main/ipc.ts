@@ -24,9 +24,9 @@ import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
 import BackupManager from './services/BackupManager'
 import { binaryManager } from './services/binaryManager/BinaryManager'
-import { isBinaryToolName, BINARY_TOOL_NAMES, type BinaryToolName } from './services/binaryManager/presets'
-import { readCliConfigFiles, writeCliConfigFiles } from './services/codeCli/configWriter'
+import { BINARY_TOOL_NAMES, type BinaryToolName,isBinaryToolName } from './services/binaryManager/presets'
 import { parseCliConfigReadInput, parseCliConfigWriteInput } from './services/codeCli/configPayload'
+import { readCliConfigFiles, writeCliConfigFiles } from './services/codeCli/configWriter'
 import { configManager } from './services/ConfigManager'
 import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
 import { ExportService } from './services/ExportService'
@@ -35,12 +35,13 @@ import { fileStorage as fileManager } from './services/FileStorage'
 import FileService from './services/FileSystemService'
 import { hermesDashboardService } from './services/hermes/HermesDashboardService'
 import { knowledgeService } from './services/knowledge/KnowledgeService'
-import * as localPaddle from './services/preprocess/localPaddle'
 import MemoryService from './services/memory/MemoryService'
 import { openTraceWindow, setTraceWindowTitle } from './services/NodeTraceService'
-import { paperAgentService } from './services/paperAgent/PaperAgentService'
 import NotificationService from './services/NotificationService'
 import * as NutstoreService from './services/NutstoreService'
+import ObsidianVaultService from './services/ObsidianVaultService'
+import { paperAgentService } from './services/paperAgent/PaperAgentService'
+import * as localPaddle from './services/preprocess/localPaddle'
 import { providerKeyStore } from './services/ProviderKeyStore'
 import { proxyManager } from './services/ProxyManager'
 import { searchService } from './services/SearchService'
@@ -83,6 +84,8 @@ const logger = loggerService.withContext('IPC')
 const backupManager = new BackupManager()
 const exportService = new ExportService()
 const memoryService = MemoryService.getInstance()
+// obsidian vault 只读枚举（V1 移植）：配置路径在首次调用时惰性解析，不占启动序
+const obsidianVaultService = new ObsidianVaultService()
 
 export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   const notificationService = new NotificationService()
@@ -489,6 +492,17 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   // export
   ipcMain.handle(IpcChannel.Export_Word, exportService.exportToWord.bind(exportService))
 
+  // obsidian（V1 移植）：vault 枚举与目录结构只读查询
+  ipcMain.handle(IpcChannel.Obsidian_GetVaults, () => {
+    return obsidianVaultService.getVaults()
+  })
+  ipcMain.handle(IpcChannel.Obsidian_GetFiles, (_event, vaultName: string) => {
+    if (typeof vaultName !== 'string' || vaultName.trim().length === 0) {
+      return []
+    }
+    return obsidianVaultService.getFilesByVaultName(vaultName)
+  })
+
   // open path
   ipcMain.handle(IpcChannel.Open_Path, async (_, path: string) => {
     await shell.openPath(path)
@@ -682,6 +696,26 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     ipcMain.handle(IpcChannel.Mcp_StopServer, (_, server) => mcpService.stopServer(asServer(server)))
     ipcMain.handle(IpcChannel.Mcp_RemoveServer, (_, server) => mcpService.removeServer(asServer(server)))
     ipcMain.handle(IpcChannel.Mcp_CheckConnectivity, (_, server) => mcpService.checkConnectivity(asServer(server)))
+
+    // DXT 扩展安装（v0.4.7 自上游 Mcp_UploadDxt 移植）：上传内容落临时文件后交 DxtService
+    // 解包校验。文件名过 basename 防穿越（createTempFile 直接拼接，不可透传原始名字）；
+    // 失败如实回 { success:false, error }，不吞错。
+    const { default: DxtService } = await import('./services/DxtService')
+    const dxtService = new DxtService()
+    ipcMain.handle(IpcChannel.Mcp_UploadDxt, async (event, fileBuffer: ArrayBuffer, fileName: string) => {
+      try {
+        const safeName = path.basename(typeof fileName === 'string' && fileName.length > 0 ? fileName : 'extension.dxt')
+        const tempPath = await fileManager.createTempFile(event, safeName)
+        await fileManager.writeFile(event, tempPath, Buffer.from(fileBuffer))
+        return await dxtService.uploadDxt(tempPath)
+      } catch (error) {
+        logger.error('DXT upload error:', error as Error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to upload DXT file'
+        }
+      }
+    })
 
     // 服务器日志事件（主 → 渲染）：MCPService 只维护回调注册表，转发由调用方接线。
     mcpService.onServerLog((log) => {

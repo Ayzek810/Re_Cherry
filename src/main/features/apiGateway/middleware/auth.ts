@@ -1,6 +1,5 @@
-import crypto from 'crypto'
-
 import { configManager } from '@main/services/ConfigManager'
+import crypto from 'crypto'
 
 /** Timing-safe string comparison. */
 export const isValidToken = (token: string, apiKey: string): boolean => {

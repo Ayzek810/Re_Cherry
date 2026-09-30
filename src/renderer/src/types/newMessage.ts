@@ -31,7 +31,8 @@ export enum MessageBlockType {
   ERROR = 'error', // 错误信息
   CITATION = 'citation', // 引用类型 (Now includes web search, grounding, etc.)
   VIDEO = 'video', // 视频内容
-  COMPACT = 'compact' // Compact command response
+  COMPACT = 'compact', // Compact command response
+  TRANSLATION = 'translation' // 消息级原地翻译（渲染层旁路本地增强，不入会话日志）
 }
 
 // 块状态定义
@@ -143,6 +144,17 @@ export interface CompactMessageBlock extends BaseMessageBlock {
   compactedContent: string // 从 <local-command-stdout> 提取的内容
 }
 
+// 翻译块（消息级原地翻译，V1 MessageTranslate 移植）：渲染层旁路的本地增强，
+// 译文不进内核会话日志；持久化在 Dexie message_translations（messageId 主键），
+// 由 MessageContent 的水合钩子重投影为附加块（见 services/messageTranslate.ts）。
+export interface TranslationMessageBlock extends BaseMessageBlock {
+  type: MessageBlockType.TRANSLATION
+  content: string
+  sourceBlockId?: string // Optional: ID of the block that was translated
+  sourceLanguage?: string
+  targetLanguage: string
+}
+
 // MessageBlock 联合类型
 export type MessageBlock =
   | PlaceholderMessageBlock
@@ -156,6 +168,7 @@ export type MessageBlock =
   | CitationMessageBlock
   | VideoMessageBlock
   | CompactMessageBlock
+  | TranslationMessageBlock
 
 export enum UserMessageStatus {
   SUCCESS = 'success'

@@ -1,12 +1,11 @@
-import { type FC, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import { isOwnLoginConfigurable } from '@renderer/pages/code/cliConfig'
 import { CLI_OWN_LOGIN_PROVIDER_ID, type CodeCli, isApiGatewayProviderId } from '@shared/types/codeCli'
 import type { CliProviderConfig } from '@shared/types/codeCliState'
+import { type FC, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
-import { OwnLoginCard } from './OwnLoginCard'
 import { ProviderCard } from './ConfigCard'
+import { OwnLoginCard } from './OwnLoginCard'
 import { EmptyState, ReorderableList } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/ConfigList.tsx

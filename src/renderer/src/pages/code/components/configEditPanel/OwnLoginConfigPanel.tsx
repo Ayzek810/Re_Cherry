@@ -1,20 +1,18 @@
-import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../shadcn'
-import { CliIcon } from '../CliIcon'
-import { SettingContainer, SettingGroup, SettingTitle } from '../SettingsPrimitives'
 import { loggerService } from '@logger'
-import { CLI_OWN_LOGIN_PROVIDER_ID } from '@shared/types/codeCli'
-
 import {
   type CliConfigFileDraft,
   readOwnLoginCliConfigDraft,
   sanitizeCliConfigBlob,
   validateCliConfigDraftForWrite
 } from '@renderer/pages/code/cliConfig'
+import { CLI_OWN_LOGIN_PROVIDER_ID } from '@shared/types/codeCli'
+import type { FC } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
+import { CliIcon } from '../CliIcon'
+import { SettingContainer, SettingGroup, SettingTitle } from '../SettingsPrimitives'
+import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../shadcn'
 import { AdvancedConfigToggle } from './AdvancedConfigToggle'
 import { CliConfigEditor } from './CliConfigEditor'
 import { renderToolFields } from './toolFieldRenderer'

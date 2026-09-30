@@ -8,6 +8,7 @@ import {
   MessageBlockType,
   type ThinkingMessageBlock,
   type ToolMessageBlock,
+  type TranslationMessageBlock,
   type VideoMessageBlock
 } from '@renderer/types/newMessage'
 
@@ -57,6 +58,16 @@ export function isTextLikeBlock(
  */
 export function isVideoBlock(block: MessageBlock): block is VideoMessageBlock {
   return block.type === MessageBlockType.VIDEO
+}
+
+/**
+ * Checks if a message block is a Translation block.（V1 is.ts 移植）
+ * Acts as a TypeScript type guard.
+ * @param block - The message block to check.
+ * @returns True if the block is a TranslationMessageBlock, false otherwise.
+ */
+export function isTranslationBlock(block: MessageBlock): block is TranslationMessageBlock {
+  return block.type === MessageBlockType.TRANSLATION
 }
 
 /**

@@ -3,11 +3,11 @@
 // fork @shared/types/uniqueModelId），均已标 `// fork 缝`。
 
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
+import type { CliConfigLanguage, CliConfigTarget } from '@shared/utils/cliConfig'
 
 // fork 缝：V2 为 `@shared/data/types/{provider,model}`；fork 的 CLI 层 Provider/Model 由
 // ./providerView 把 redux llm 原生形状（V1）投影成 V2 消费面形状，函数体逐字不动。
 import type { Model, Provider } from './providerView'
-import type { CliConfigLanguage, CliConfigTarget } from '@shared/utils/cliConfig'
 
 export type { CliConfigLanguage, CliConfigTarget }
 

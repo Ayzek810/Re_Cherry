@@ -134,6 +134,11 @@ export enum IpcChannel {
 
   Export_Word = 'export:word',
 
+  // obsidian（V1 移植）：只读枚举本地 Obsidian vault 与 vault 目录结构；导出内容
+  // 不走文件写入 IPC，由渲染层经 obsidian:// deep link + 剪贴板交付给 Obsidian 本体
+  Obsidian_GetVaults = 'obsidian:get-vaults',
+  Obsidian_GetFiles = 'obsidian:get-files',
+
   Shortcuts_Update = 'shortcuts:update',
 
   // backup
@@ -239,6 +244,8 @@ export enum IpcChannel {
   Mcp_StopServer = 'mcp:stop-server',
   Mcp_RemoveServer = 'mcp:remove-server',
   Mcp_CheckConnectivity = 'mcp:check-connectivity',
+  /** DXT（.dxt）扩展安装（v0.4.7 自上游 Mcp_UploadDxt 移植）：ArrayBuffer + 文件名，返回解包结果。 */
+  Mcp_UploadDxt = 'mcp:upload-dxt',
   /** MCP 服务器日志事件（主 → 渲染，上游 Mcp_ServerLog 同语义）。 */
   Mcp_ServerLog = 'mcp:server-log',
   /** 知识库通道（批次4）：库文件生命周期 + 条目处理 + 检索（上游 KnowledgeBase_* 命名子集）。 */

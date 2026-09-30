@@ -16,6 +16,7 @@
  */
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+
 import { app } from 'electron'
 
 import { parsePdf } from '../../src/main/services/preprocess/localPaddle'

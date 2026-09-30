@@ -21,6 +21,7 @@ import { checkRateLimit, getUserMessage } from '@renderer/services/MessagesServi
 import { spanManagerService } from '@renderer/services/SpanManagerService'
 import { estimateTextTokens as estimateTxtTokens, estimateUserPromptUsage } from '@renderer/services/TokenService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
+import { enqueueFollowup } from '@renderer/store/followupQueue'
 import { sendMessage as _sendMessage } from '@renderer/store/thunk/messageThunk'
 import {
   type Assistant,
@@ -39,6 +40,7 @@ import type { FC } from 'react'
 import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import FollowupQueueDock from './components/FollowupQueueDock'
 import { InputbarCore } from './components/InputbarCore'
 import InputbarTools from './InputbarTools'
 import KnowledgeBaseInput from './KnowledgeBaseInput'
@@ -229,6 +231,16 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       })
 
   const sendMessage = useCallback(async () => {
+    // v0.4.7 追问队列（用户裁决：仅工作模式话题启用）：生成中发送 = 入队而不是丢弃。
+    // 仅纯文本可入队——附件上传/预览与发送强耦合，带附件时保留"生成中锁发送"旧语义。
+    if (loading && topic.workMode === true && files.length === 0) {
+      dispatch(enqueueFollowup({ topicId: topic.id, text }))
+      setText('')
+      setTimeoutTimer('sendMessage_2', () => resizeTextArea(), 0)
+      focusTextarea()
+      return
+    }
+
     if (checkRateLimit(assistant)) {
       return
     }
@@ -275,6 +287,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
     text,
     mentionedModels,
     files,
+    loading,
     dispatch,
     setText,
     setFiles,
@@ -421,6 +434,10 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   // topContent: 所有顶部预览内容
   const topContent = (
     <>
+      {/* v0.4.7 追问队列（仅工作模式话题）：生成中入队的追问，回合结束后自动按序发出 */}
+      {topic.workMode === true && (
+        <FollowupQueueDock topicId={topic.id} onEdit={setText} onFocusInput={focusTextarea} />
+      )}
       {selectedKnowledgeBases.length > 0 && (
         <KnowledgeBaseInput
           selectedKnowledgeBases={selectedKnowledgeBases}
@@ -471,6 +488,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       supportedExts={supportedExts}
       onPause={onPause}
       handleSendMessage={sendMessage}
+      queueWhileLoading={topic.workMode === true}
       leftToolbar={leftToolbar}
       rightToolbar={rightToolbar}
       topContent={topContent}

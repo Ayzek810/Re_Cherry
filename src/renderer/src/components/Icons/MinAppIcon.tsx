@@ -2,9 +2,9 @@ import { allMinApps } from '@renderer/config/minapps'
 import type { MinAppType } from '@renderer/types'
 import type { FC } from 'react'
 
+import DeepSeekLogo from '../../assets/images/providers/deepseek.png'
 import NousresearchIcon from './NousresearchIcon'
 import PaperAgentIcon from './PaperAgentIcon'
-import DeepSeekLogo from '../../assets/images/providers/deepseek.png'
 
 interface Props {
   app: MinAppType

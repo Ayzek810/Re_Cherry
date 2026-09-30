@@ -15,12 +15,11 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
+import { loggerService } from '@logger'
 import StreamZip from 'node-stream-zip'
 
-import { loggerService } from '@logger'
-
 import { replaceDirectory } from './atomicSwap'
-import { type DownloadProgress, downloadFromAnySource } from './downloadFile'
+import { downloadFromAnySource,type DownloadProgress } from './downloadFile'
 
 const logger = loggerService.withContext('SourceInstaller')
 

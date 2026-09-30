@@ -1,16 +1,14 @@
+import { useMinapps } from '@renderer/hooks/useMinapps'
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 import { ArrowUpCircle, Download, ExternalLink, Pin, PinOff, Play, RefreshCw, Square, Trash2 } from 'lucide-react'
 import { type FC, useId } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { useMinapps } from '@renderer/hooks/useMinapps'
-import type { InstallProgressPayload } from '@shared/types/installProgress'
-
+import type { VersionStatus } from '../types'
 import { BinaryInstallFailureRow, BinaryInstallingHint } from './BinaryInstallErrorDialog'
 import { CliIcon } from './CliIcon'
 import { InstallProgress } from './InstallProgress'
 import { Button, Tooltip } from './shadcn'
-
-import type { VersionStatus } from '../types'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/VersionStatusCard.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。缝点三处，状态推导/四脚位（upgrade/remove/retry/launch）与

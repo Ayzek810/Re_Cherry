@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import store from '@renderer/store'
-import { setPinnedTabs } from '@renderer/store/settings'
 import { setOpenedKeepAliveMinapps } from '@renderer/store/runtime'
+import { setPinnedTabs } from '@renderer/store/settings'
 import {
   closeOtherTabs as closeOtherTabsAction,
   removeTab,

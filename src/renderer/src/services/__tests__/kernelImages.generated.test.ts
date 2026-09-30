@@ -61,7 +61,7 @@ describe('registerGeneratedImageFiles', () => {
     expect(saveGeneratedImage).toHaveBeenCalledTimes(1)
     expect(file?.type).toBe(FILE_TYPE.IMAGE)
     expect(rows.size).toBe(1)
-    expect(rows.get(file!.id)).toEqual(file)
+    expect(rows.get(file.id)).toEqual(file)
   })
 
   it('重复投影（回放/重开话题）：命中同 id 直接跳过，不再落盘、不再新增行', async () => {

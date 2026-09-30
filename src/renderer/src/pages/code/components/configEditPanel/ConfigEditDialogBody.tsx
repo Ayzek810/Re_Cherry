@@ -1,18 +1,17 @@
+import { ProviderAvatarPrimitive } from '@renderer/components/ProviderAvatar'
+import { getProviderLogo } from '@renderer/config/providers'
+import type { CliConfigFileDraft } from '@renderer/pages/code/cliConfig'
+import { isApiGatewayProviderId } from '@shared/types/codeCli'
 import { ExternalLink } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getProviderLogo } from '@renderer/config/providers'
-import { ProviderAvatarPrimitive } from '@renderer/components/ProviderAvatar'
-import type { CliConfigFileDraft } from '@renderer/pages/code/cliConfig'
-import { isApiGatewayProviderId } from '@shared/types/codeCli'
-
 import type { Provider } from '../../cliConfig/providerView'
-import { AdvancedConfigToggle } from './AdvancedConfigToggle'
-import { CliConfigEditor } from './CliConfigEditor'
 import { SettingContainer, SettingGroup, SettingTitle } from '../SettingsPrimitives'
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, GatewayIcon } from '../shadcn'
+import { AdvancedConfigToggle } from './AdvancedConfigToggle'
+import { CliConfigEditor } from './CliConfigEditor'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/
 // ConfigEditDialogBody.tsx（2026-09-24，v0.3.4-1 批次4b）。缝点四处，对话框骨架（标题行/三段

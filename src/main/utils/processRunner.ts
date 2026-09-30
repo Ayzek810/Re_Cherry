@@ -1,11 +1,9 @@
-import { type ChildProcess, execFile, type SpawnOptions } from 'child_process'
-import { promisify } from 'util'
-
-import crossSpawn from 'cross-spawn'
-
 import { loggerService } from '@logger'
 // fork 缝：V2 平台常量位于 @main/core/platform，fork 等价物为 @main/constant。
 import { isWin } from '@main/constant'
+import { type ChildProcess, execFile, type SpawnOptions } from 'child_process'
+import crossSpawn from 'cross-spawn'
+import { promisify } from 'util'
 
 import { getShellEnv } from './shellEnv'
 

@@ -80,3 +80,67 @@ export type KernelWebSearchConfig = {
   /** 结果压缩（none / cutoff / rag 三相，见 KernelWebSearchCompressionConfig；缺省 none）。 */
   compression?: KernelWebSearchCompressionConfig
 }
+
+// ============================================================================
+// DXT（.dxt）MCP 扩展包（v0.4.7 自上游 DxtService 移植；主进程产出，渲染层消费）
+// ============================================================================
+
+/** .dxt 包内 manifest.json 的形状（上游 DxtManifest 同构；只声明消费面用到的字段）。 */
+export type DxtManifest = {
+  dxt_version: string
+  name: string
+  display_name?: string
+  version: string
+  description?: string
+  long_description?: string
+  author?: {
+    name?: string
+    email?: string
+    url?: string
+  }
+  repository?: {
+    type?: string
+    url?: string
+  }
+  homepage?: string
+  icon?: string
+  server: {
+    type: string
+    entry_point: string
+    mcp_config: {
+      command: string
+      args: string[]
+      env?: Record<string, string>
+      platform_overrides?: {
+        [platform: string]: {
+          command?: string
+          args?: string[]
+          env?: Record<string, string>
+        }
+      }
+    }
+  }
+  tools?: Array<{
+    name: string
+    description: string
+  }>
+  keywords?: string[]
+  user_config?: Record<string, any>
+}
+
+/** manifest.server.mcp_config 经平台覆写 + 变量替换后的 stdio 启动配置。 */
+export type DxtResolvedMcpConfig = {
+  command: string
+  args: string[]
+  env?: Record<string, string>
+}
+
+/** Mcp_UploadDxt 的统一应答：失败走 success:false + error 原文（不吞错）。 */
+export type DxtUploadResult = {
+  success: boolean
+  data?: {
+    manifest: DxtManifest
+    extractDir: string
+  }
+  error?: string
+}
