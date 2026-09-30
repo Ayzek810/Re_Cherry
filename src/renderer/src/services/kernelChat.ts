@@ -92,6 +92,8 @@ interface TurnState {
   thinkingMillsec?: number
   /** 本轮块序（消息 blocks 列表的权威；按事件顺序追加，assistant/message 时替换回当前 step 的流式块）。 */
   blockIds: string[]
+  /** 取证钩子：上一条正文 delta 的 performance.now()（间隔 >1s 记 warn，定位流式停顿层）。 */
+  lastTextDeltaAt?: number
   /** callId → 工具块（tool/result 按 callId 回填同一块）。 */
   toolBlocks: Map<string, ToolMessageBlock>
   /** 跨 step 累计的 token 用量（每条 assistant/message 携带其 step 的用量）。 */
@@ -636,6 +638,15 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
         syncMessageBlocks(topicId, state)
       }
       state.mainText += chunk.text
+      // 取证钩子（v0.4.6-1 正文流式停顿排查）：相邻正文 delta 间隔 >1s 记 warn
+      //（renderer warn 落主进程盘）——区分"内核/IPC 断流"与"渲染层饥饿"。
+      const now = performance.now()
+      if (state.lastTextDeltaAt !== undefined && now - state.lastTextDeltaAt > 1000) {
+        logger.warn(
+          `kernelChat: text delta gap ${Math.round(now - state.lastTextDeltaAt)}ms (accumulated ${state.mainText.length} chars, topic=${topicId})`
+        )
+      }
+      state.lastTextDeltaAt = now
       flushBlockUpdate(state.mainBlockId, { content: state.mainText })
       break
     }
@@ -674,23 +685,28 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
 /** 块内容更新走 rAF 合并，避免高频 delta 刷爆渲染。
  * 派发异常必须放行队列（v0.4.6-1：dispatch 抛错时旧实现不 delete，条目变僵尸——
  * 该块后续所有 flush 永久合并进死条目，表现为"流几字停顿、收尾一次性全文"）。 */
-const blockFlushQueue = new Map<string, { timer: number; changes: Record<string, unknown> }>()
+const blockFlushQueue = new Map<string, { timer: number; changes: Record<string, unknown>; queuedAt: number }>()
 function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void {
   const existing = blockFlushQueue.get(blockId)
   if (existing !== undefined) {
     existing.changes = { ...existing.changes, ...changes }
     return
   }
-  const entry = { timer: 0, changes: changes as Record<string, unknown> }
+  const entry = { timer: 0, changes: changes as Record<string, unknown>, queuedAt: performance.now() }
   blockFlushQueue.set(blockId, entry)
   entry.timer = window.requestAnimationFrame(() => {
     const current = blockFlushQueue.get(blockId)
     if (current === undefined) return
     blockFlushQueue.delete(blockId)
+    // 取证钩子：rAF 派发延迟 >500ms = 渲染饥饿（rAF 未按帧派发）。
+    const delay = performance.now() - current.queuedAt
+    if (delay > 500) {
+      logger.warn(`kernelChat: block flush rAF delayed ${Math.round(delay)}ms (blockId=${blockId})`)
+    }
     try {
       store.dispatch(updateOneBlock({ id: blockId, changes: current.changes as Partial<MessageBlock> }))
     } catch (error) {
-      // 取证钩子：渲染层 error 不落盘，升 warn（ forensic——静默失败被禁）。
+      // 取证钩子：渲染层 error 不落盘，升 warn（forensic——静默失败被禁）。
       logger.warn(
         `kernelChat: block flush dispatch failed (blockId=${blockId}, changes=${Object.keys(current.changes).join(',')})`,
         error instanceof Error ? error : new Error(String(error))
