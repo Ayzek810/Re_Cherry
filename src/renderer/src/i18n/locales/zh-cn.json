@@ -2330,47 +2330,60 @@
         "builtinTitle": "内置工具",
         "builtins": {
           "ask": {
-            "name": "提问（ask_user_question）"
+            "description": "需要你决定时向你提问，并等待你的回答。",
+            "name": "提问"
           },
           "generate_image": {
+            "description": "在对话中生成或修改图片。需要先选定绘画模型。",
             "hint": "选择绘画模型后才会挂载",
-            "name": "聊天生图（generate_image）"
+            "name": "聊天生图"
           },
           "ocr": {
-            "name": "文档 OCR（ocr_document）"
+            "description": "读取图片或 PDF 中的文字，供后续步骤使用。",
+            "name": "文档 OCR"
           }
         },
         "externalTitle": "外置工具",
         "externals": {
           "editor": {
-            "name": "结构化编辑（str_replace_editor）"
+            "description": "用精确匹配替换文件中的文本片段。",
+            "name": "结构化编辑"
           },
           "fs": {
-            "name": "文件读写（read / write / move）"
+            "description": "读写工作区中的文件，也可在目录之间移动文件。",
+            "name": "文件读写"
           },
           "fsSearch": {
-            "name": "文件搜索（glob / grep）"
+            "description": "按名称查找文件，按内容查找文本行。",
+            "name": "文件搜索"
           },
           "goal": {
-            "name": "持久目标（goal）"
+            "description": "设定会话目标，自动续跑直到完成。",
+            "name": "持久目标"
           },
           "jobs": {
-            "name": "后台作业（jobs）"
+            "description": "启动长任务，稍后读取它的输出。",
+            "name": "后台作业"
           },
           "memory": {
-            "name": "持久记忆（memory）"
+            "description": "在会话之外记住事实，供以后使用。",
+            "name": "持久记忆"
           },
           "pwsh": {
-            "name": "命令行（pwsh）"
+            "description": "运行 PowerShell 命令并读取输出。",
+            "name": "命令行"
           },
           "saveAttachment": {
-            "name": "附件入库（save_attachment）"
+            "description": "把附件保存为工作区中的文件。",
+            "name": "附件入库"
           },
           "todo": {
-            "name": "任务清单（todo_write）"
+            "description": "维护当前会话的任务清单。",
+            "name": "任务清单"
           },
           "trash": {
-            "name": "回收站删除（move_to_trash）"
+            "description": "把文件移入系统回收站，而不是直接删除。",
+            "name": "回收站删除"
           }
         },
         "placeholder": "完整的逐工具管理将在后续版本提供",

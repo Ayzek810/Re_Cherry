@@ -2330,47 +2330,60 @@
         "builtinTitle": "Built-in Tools",
         "builtins": {
           "ask": {
-            "name": "Ask (ask_user_question)"
+            "description": "Ask you a question when the agent needs a decision. Wait for your answer.",
+            "name": "Ask"
           },
           "generate_image": {
+            "description": "Generate or change an image in the chat. Select a painting model first.",
             "hint": "Mounted only after a painting model is selected",
-            "name": "Chat image generation (generate_image)"
+            "name": "Chat Image Generation"
           },
           "ocr": {
-            "name": "Document OCR (ocr_document)"
+            "description": "Read text from images and PDFs for later steps.",
+            "name": "Document OCR"
           }
         },
         "externalTitle": "External Tools",
         "externals": {
           "editor": {
-            "name": "Structured Editor (str_replace_editor)"
+            "description": "Replace exact text blocks in a file.",
+            "name": "Structured Editor"
           },
           "fs": {
-            "name": "File I/O (read / write / move)"
+            "description": "Read and write files in the workspace. Move files between directories.",
+            "name": "File I/O"
           },
           "fsSearch": {
-            "name": "File Search (glob / grep)"
+            "description": "Find files by name. Find text lines by content.",
+            "name": "File Search"
           },
           "goal": {
-            "name": "Session Goal (goal)"
+            "description": "Set a session goal. Continue rounds until the goal is done.",
+            "name": "Session Goal"
           },
           "jobs": {
-            "name": "Background Jobs (jobs)"
+            "description": "Start long tasks. Read their output later.",
+            "name": "Background Jobs"
           },
           "memory": {
-            "name": "Persistent Memory (memory)"
+            "description": "Keep facts outside the session for later use.",
+            "name": "Persistent Memory"
           },
           "pwsh": {
-            "name": "Command Line (pwsh)"
+            "description": "Run PowerShell commands. Read the output.",
+            "name": "Command Line"
           },
           "saveAttachment": {
-            "name": "Save Attachment (save_attachment)"
+            "description": "Save an attachment as a file in the workspace.",
+            "name": "Save Attachment"
           },
           "todo": {
-            "name": "Task List (todo_write)"
+            "description": "Keep the task list of the current session.",
+            "name": "Task List"
           },
           "trash": {
-            "name": "Trash Delete (move_to_trash)"
+            "description": "Move files to the system trash. Do not delete them.",
+            "name": "Trash Delete"
           }
         },
         "placeholder": "Per-tool management will be available in a future version",

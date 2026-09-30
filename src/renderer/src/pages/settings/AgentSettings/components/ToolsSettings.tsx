@@ -1,5 +1,5 @@
 import type { Assistant } from '@renderer/types'
-import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
+import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS, TOOL_ORIGIN_NAMES, type ToolPageCardId } from '@shared/config/agentTools'
 import { Switch } from 'antd'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,29 +12,108 @@ interface Props {
   updateAssistant: (update: Partial<Omit<Assistant, 'id'>>) => void
 }
 
-/** 静态 i18n 键映射（注册表 id → 词条键；显式写出以通过 i18n 动态键检查）。 */
-const BUILTIN_TOOL_I18N: Record<string, string> = {
-  ask_user_question: 'settings.agentSettings.tools.builtins.ask.name',
-  ocr_document: 'settings.agentSettings.tools.builtins.ocr.name'
+/**
+ * 一张卡片要用的两条文案键：i18n 工具名 / 介绍。
+ * 原版名不是文案（标识符），从 `TOOL_ORIGIN_NAMES` 取。逐条显式写出键、不用模板字面量拼，
+ * 以通过 i18n 静态键检查。
+ */
+interface ToolCopyKeys {
+  name: string
+  description: string
 }
 
-const EXTERNAL_TOOL_I18N: Record<string, string> = {
-  fs: 'settings.agentSettings.tools.externals.fs.name',
-  fsSearch: 'settings.agentSettings.tools.externals.fsSearch.name',
-  editor: 'settings.agentSettings.tools.externals.editor.name',
-  pwsh: 'settings.agentSettings.tools.externals.pwsh.name',
-  jobs: 'settings.agentSettings.tools.externals.jobs.name',
-  trash: 'settings.agentSettings.tools.externals.trash.name',
-  saveAttachment: 'settings.agentSettings.tools.externals.saveAttachment.name',
-  memory: 'settings.agentSettings.tools.externals.memory.name',
-  todo: 'settings.agentSettings.tools.externals.todo.name',
-  goal: 'settings.agentSettings.tools.externals.goal.name'
+const BUILTIN_TOOL_COPY: Record<string, ToolCopyKeys> = {
+  ask_user_question: {
+    name: 'settings.agentSettings.tools.builtins.ask.name',
+    description: 'settings.agentSettings.tools.builtins.ask.description'
+  },
+  ocr_document: {
+    name: 'settings.agentSettings.tools.builtins.ocr.name',
+    description: 'settings.agentSettings.tools.builtins.ocr.description'
+  }
+}
+
+const EXTERNAL_TOOL_COPY: Record<string, ToolCopyKeys> = {
+  fs: {
+    name: 'settings.agentSettings.tools.externals.fs.name',
+    description: 'settings.agentSettings.tools.externals.fs.description'
+  },
+  fsSearch: {
+    name: 'settings.agentSettings.tools.externals.fsSearch.name',
+    description: 'settings.agentSettings.tools.externals.fsSearch.description'
+  },
+  editor: {
+    name: 'settings.agentSettings.tools.externals.editor.name',
+    description: 'settings.agentSettings.tools.externals.editor.description'
+  },
+  pwsh: {
+    name: 'settings.agentSettings.tools.externals.pwsh.name',
+    description: 'settings.agentSettings.tools.externals.pwsh.description'
+  },
+  jobs: {
+    name: 'settings.agentSettings.tools.externals.jobs.name',
+    description: 'settings.agentSettings.tools.externals.jobs.description'
+  },
+  trash: {
+    name: 'settings.agentSettings.tools.externals.trash.name',
+    description: 'settings.agentSettings.tools.externals.trash.description'
+  },
+  saveAttachment: {
+    name: 'settings.agentSettings.tools.externals.saveAttachment.name',
+    description: 'settings.agentSettings.tools.externals.saveAttachment.description'
+  },
+  memory: {
+    name: 'settings.agentSettings.tools.externals.memory.name',
+    description: 'settings.agentSettings.tools.externals.memory.description'
+  },
+  todo: {
+    name: 'settings.agentSettings.tools.externals.todo.name',
+    description: 'settings.agentSettings.tools.externals.todo.description'
+  },
+  goal: {
+    name: 'settings.agentSettings.tools.externals.goal.name',
+    description: 'settings.agentSettings.tools.externals.goal.description'
+  }
+}
+
+/** 生图不走 tools 开关映射（助手字段 enableGenerateImage），故单独一条。 */
+const GENERATE_IMAGE_COPY: ToolCopyKeys = {
+  name: 'settings.agentSettings.tools.builtins.generate_image.name',
+  description: 'settings.agentSettings.tools.builtins.generate_image.description'
 }
 
 /**
- * 工具页（v0.3.0 验收设计）：方形卡片网格，两组工具各带开关（稀疏 map 缺省 = 开，默认全开），
- * 拨动下一轮对话生效。内置工具（@shared/config/agentTools）未开启工作模式也可用；
- * 外置工具仅工作模式开启时挂载；审批三档在「权限模式」页（单一数据源单一编辑点）。
+ * 方形卡片正文：第一排 i18n 工具名 + 开关，第二排工具原版名（字略小），下面是介绍。
+ *
+ * 抽成模块级组件而不是内联两遍：内置组的生图卡片走的是助手字段而非 tools 映射，
+ * 但三排版式必须完全一致，否则两类卡片会长得不一样。
+ */
+const ToolCardBody: FC<{
+  cardId: ToolPageCardId
+  copy: ToolCopyKeys
+  checked: boolean
+  onToggle: (enabled: boolean) => void
+}> = ({ cardId, copy, checked, onToggle }) => {
+  const { t } = useTranslation()
+
+  return (
+    <>
+      <ToolCardHead>
+        <ToolName>{t(copy.name)}</ToolName>
+        {/* 卡片整体可点是老行为，指针停在开关上时不要连带触发一次卡片点击（= 反向再切一次）。 */}
+        <Switch size="small" checked={checked} onClick={(_, event) => event.stopPropagation()} onChange={onToggle} />
+      </ToolCardHead>
+      <ToolOrigin>{TOOL_ORIGIN_NAMES[cardId]}</ToolOrigin>
+      <ToolDescription>{t(copy.description)}</ToolDescription>
+    </>
+  )
+}
+
+/**
+ * 工具页（v0.3.0 验收设计；卡片为方形三排：名+开关 / 原版名 / 介绍）：两组工具各带开关
+ * （稀疏 map 缺省 = 开，默认全开），拨动下一轮对话生效。内置工具（@shared/config/agentTools）
+ * 未开启工作模式也可用；外置工具仅工作模式开启时挂载；审批三档在「权限模式」页
+ * （单一数据源单一编辑点）。
  */
 const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
   const { t } = useTranslation()
@@ -47,21 +126,23 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
 
   const renderToolGrid = (
     field: 'builtinTools' | 'externalTools',
-    entries: readonly string[],
-    i18nMap: Record<string, string>
+    entries: readonly ToolPageCardId[],
+    copyMap: Record<string, ToolCopyKeys>
   ) => (
     <ToolGrid>
-      {entries.map((toolId) => (
-        <ToolCard key={toolId} onClick={() => handleToggle(field, toolId, !isEnabled(assistant[field], toolId))}>
-          <span className="truncate text-left text-sm">{t(i18nMap[toolId])}</span>
-          <Switch
-            size="small"
-            checked={isEnabled(assistant[field], toolId)}
-            onClick={(_, event) => event.stopPropagation()}
-            onChange={(enabled) => handleToggle(field, toolId, enabled)}
-          />
-        </ToolCard>
-      ))}
+      {entries.map((toolId) => {
+        const checked = isEnabled(assistant[field], toolId)
+        return (
+          <ToolCard key={toolId} onClick={() => handleToggle(field, toolId, !checked)}>
+            <ToolCardBody
+              cardId={toolId}
+              copy={copyMap[toolId]}
+              checked={checked}
+              onToggle={(enabled) => handleToggle(field, toolId, enabled)}
+            />
+          </ToolCard>
+        )
+      })}
     </ToolGrid>
   )
 
@@ -69,33 +150,29 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
     <SettingsContainer>
       <SettingsItem divider={false}>
         <SettingsTitle>{t('settings.agentSettings.tools.builtinTitle')}</SettingsTitle>
-        {renderToolGrid('builtinTools', BUILTIN_TOOL_IDS, BUILTIN_TOOL_I18N)}
+        {renderToolGrid('builtinTools', BUILTIN_TOOL_IDS, BUILTIN_TOOL_COPY)}
         {/* 批次5 双门：assistant.enableGenerateImage（工具面）+ llm.paintingModel（模型面）。
             模型面在**设置页**配置（V2 的 feature.paintings.default_model_id 语义），绘画页只读它
-            播种新草稿、不再写全局值。 */}
+            播种新草稿、不再写全局值。
+            fork 缝：绘画模型选择器不在此处——已移到「设置 › 默认模型 › 绘画模型」
+            （ModelSettings.tsx，llm.paintingModel 单一编辑点），本页只留工具面开关。
+            原先此处挂过一条「选择绘画模型后才会挂载」的小字，已删：同样的前提写在卡片自己的
+            介绍里（`…generate_image.description`），框外再挂一条只是重复。 */}
         <ToolGrid>
           <ToolCard onClick={() => updateAssistant({ enableGenerateImage: !assistant.enableGenerateImage })}>
-            <span className="truncate text-left text-sm">
-              {t('settings.agentSettings.tools.builtins.generate_image.name')}
-            </span>
-            <Switch
-              size="small"
+            <ToolCardBody
+              cardId="generate_image"
+              copy={GENERATE_IMAGE_COPY}
               checked={assistant.enableGenerateImage === true}
-              onClick={(_, event) => event.stopPropagation()}
-              onChange={(enabled) => updateAssistant({ enableGenerateImage: enabled })}
+              onToggle={(enabled) => updateAssistant({ enableGenerateImage: enabled })}
             />
           </ToolCard>
         </ToolGrid>
-        {/* fork 缝：绘画模型选择器不在此处——已移到「设置 › 默认模型 › 绘画模型」
-            （ModelSettings.tsx，llm.paintingModel 单一编辑点），本页只留工具面开关。 */}
-        <span className="text-xs" style={{ color: 'var(--color-text-3)' }}>
-          {t('settings.agentSettings.tools.builtins.generate_image.hint')}
-        </span>
       </SettingsItem>
 
       <SettingsItem divider={false}>
         <SettingsTitle>{t('settings.agentSettings.tools.externalTitle')}</SettingsTitle>
-        {renderToolGrid('externalTools', EXTERNAL_TOOL_IDS, EXTERNAL_TOOL_I18N)}
+        {renderToolGrid('externalTools', EXTERNAL_TOOL_IDS, EXTERNAL_TOOL_COPY)}
       </SettingsItem>
 
       <SettingsItem divider={false}>
@@ -107,29 +184,65 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
   )
 }
 
-/** 方形卡片网格（照 dnd/Sortable 的 grid 布局习惯：auto-fill + minmax）。 */
+/**
+ * 方形卡片网格：定宽 180px（沿用改造前那张小卡片的宽度，间距/内边距也回到它的 8px / 10px 12px），
+ * 不用 `1fr` 拉伸——面板宽时两个内置工具会被拉成巨块，方形卡片一旦随宽度走尺寸就不可预期。
+ */
 const ToolGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, 180px);
   gap: 8px;
   width: 100%;
 `
 
+/** 正方形卡片：三排内容自上而下，多余空间留底部（`aspect-ratio` 定死方块）。 */
 const ToolCard = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 56px;
+  flex-direction: column;
+  gap: 6px;
+  aspect-ratio: 1 / 1;
   padding: 10px 12px;
   border: 0.5px solid var(--color-border);
   border-radius: 8px;
   cursor: pointer;
+  overflow: hidden;
   transition: border-color 0.2s;
 
   &:hover {
     border-color: var(--color-primary);
   }
+`
+
+const ToolCardHead = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+`
+
+const ToolName = styled.span`
+  overflow: hidden;
+  color: var(--color-text-1);
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const ToolOrigin = styled.span`
+  overflow: hidden;
+  color: var(--color-text-3);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const ToolDescription = styled.p`
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-2);
+  font-size: 12px;
+  line-height: 1.5;
 `
 
 export default ToolsSettings

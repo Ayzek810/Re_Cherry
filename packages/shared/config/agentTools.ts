@@ -38,3 +38,28 @@ export const EXTERNAL_TOOL_IDS = [
 ] as const
 
 export type ExternalToolId = (typeof EXTERNAL_TOOL_IDS)[number]
+
+/**
+ * 工具页卡片第二排显示的原版名（= 模型实际看到的工具名，标识符而非文案，故不进词表）。
+ *
+ * 一个挂载单元可展开多个工具，这里按单元列出它展开的那些名字（`fs` → read / write / move）。
+ * 覆盖三处：两个内置 id、十个外置 id，以及走助手字段 `enableGenerateImage` 的生图卡片——
+ * 类型用联合写死，这样注册表新增工具时这里不补就会编译失败。
+ */
+export type ToolPageCardId = BuiltinToolId | ExternalToolId | 'generate_image'
+
+export const TOOL_ORIGIN_NAMES: Record<ToolPageCardId, string> = {
+  ask_user_question: 'ask_user_question',
+  ocr_document: 'ocr_document',
+  generate_image: 'generate_image',
+  fs: 'read / write / move',
+  fsSearch: 'glob / grep',
+  editor: 'str_replace_editor',
+  pwsh: 'pwsh',
+  jobs: 'jobs',
+  trash: 'move_to_trash',
+  saveAttachment: 'save_attachment',
+  memory: 'memory',
+  todo: 'todo_write',
+  goal: 'goal'
+}
