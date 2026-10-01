@@ -1,4 +1,5 @@
 import { parsePdfWithProvider, preprocessChannel } from '@main/services/preprocess/preprocessChannel'
+import { abortTopicWork, topicWorkCount } from '@main/services/topicWorkAbort'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { extractFromFile } from '../extractors'
@@ -138,10 +139,12 @@ describe('ocrTurnDocument（§7.17 三轮：挂进文档处理通道，按通道
     const result = await svc.ocrTurnDocument('topic-ocr-cloud', 'scan.pdf')
 
     expect(preprocessChannel.getConfig).toHaveBeenCalledWith('mineru')
+    // 第三个参数是本次解析的中止信号：2026-10-01 起 ocrTurnDocument 总会带上一条
+    // 「按话题」的信号（内核 stop 不中断在途工具，见 topicWorkAbort.ts）。
     expect(parsePdfWithProvider).toHaveBeenCalledWith(
       { id: 'mineru', apiKey: 'k', apiHost: 'https://mineru.net' },
       'C:/books/scan.pdf',
-      undefined
+      expect.any(AbortSignal)
     )
     expect(result).toEqual({ name: 'scan.pdf', text: '云解析全文' })
   })
@@ -294,5 +297,57 @@ describe('库生命周期（v1 二轮审查 m2-08 / m2-09）', () => {
     // 收尾：关闭并删除，避免句柄跨用例残留。
     await svc.deleteBase('reset-base')
     expect(opened[1].close).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * 2026-10-01 真机取证：内核的 topic stop **不中断在途工具**（`stop()` 返回后内核自己的
+ * `isRunning` 仍为 true，那次 OCR 随后照常跑完）。所以 ocr_document 那次解析必须由 fork
+ * 自己按话题登记一条中止源。本组钉住这条接线：暂停 → abort 到这次解析的信号 → 注销登记。
+ */
+describe('ocrTurnDocument 的按话题中止源', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    service().setTurnDocuments('topic-abort', [{ name: 'scan.pdf', path: 'C:/books/scan.pdf' }])
+  })
+
+  it('按话题中止会 abort 解析信号，且结束后注销登记', async () => {
+    vi.mocked(preprocessChannel.getTurnProviderId).mockReturnValue('vision-model')
+    vi.mocked(preprocessChannel.getConfig).mockReturnValue({ id: 'vision-model' } as never)
+
+    let captured: AbortSignal | undefined
+    let unblock: (() => void) | undefined
+    vi.mocked(parsePdfWithProvider).mockImplementation(((_config, _path, signal?: AbortSignal) => {
+      captured = signal
+      return new Promise<string>((resolve) => {
+        unblock = () => resolve('文本层正文')
+        // 真实执行缝在被打断时交回已完成部分；这里只需证明"信号确实断了"。
+        signal?.addEventListener('abort', () => resolve('[interrupted]'), { once: true })
+      })
+    }) as never)
+
+    const pending = service().ocrTurnDocument('topic-abort', 'scan.pdf')
+
+    expect(topicWorkCount('topic-abort')).toBe(1)
+    expect(captured?.aborted).toBe(false)
+
+    // 模拟"用户按了暂停，停止指令到达主进程"。
+    expect(abortTopicWork('topic-abort', new Error('paused by user'))).toBe(1)
+    expect(captured?.aborted).toBe(true)
+
+    unblock?.()
+    const result = await pending
+    expect(result.text).toContain('interrupted')
+    // 结束后必须注销：否则登记表随话题数增长（与 m2-08 同一条纪律）。
+    expect(topicWorkCount('topic-abort')).toBe(0)
+  })
+
+  it('解析失败时同样注销登记（finally 路径）', async () => {
+    vi.mocked(preprocessChannel.getTurnProviderId).mockReturnValue('vision-model')
+    vi.mocked(preprocessChannel.getConfig).mockReturnValue({ id: 'vision-model' } as never)
+    vi.mocked(parsePdfWithProvider).mockRejectedValue(new Error('provider exploded') as never)
+
+    await expect(service().ocrTurnDocument('topic-abort', 'scan.pdf')).rejects.toThrow('provider exploded')
+    expect(topicWorkCount('topic-abort')).toBe(0)
   })
 })

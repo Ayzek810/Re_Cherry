@@ -153,10 +153,18 @@ describe('extractFromFile: pdf text layer (real pdf-parse, synthetic pdfs; V2 �
   it('returns artifact-only text as-is (detection is the caller/provider concern, not the extractor)', async () => {
     const filePath = await writeTemp('scanned.pdf', buildPdf(['1', '2']))
     const result = await extractFromFile(filePath)
-    // pdf-parse 对多页文档追加 "-- N of M --" 分隔行——断言只看页码伪迹本身在场。
+    // pdf-parse 对多页文档追加 "-- N of M --" 分隔行——页码行按裁定**保留**（用户裁决
+    // 2026-10-01：扫描件只读到页码时，模型据此判断这是扫描版），断言只看伪迹在场。
     expect(result.text).toContain('1')
     expect(result.text).toContain('2')
     expect(result.text).toContain('-- 1 of 2 --')
+  })
+
+  it('读取前检查中断信号：已中止 → 立即拒绝（PDF 与其他格式同层同进程后的暂停语义）', async () => {
+    const filePath = await writeTemp('abort.pdf', buildPdf(['Abort test body text.']))
+    const controller = new AbortController()
+    controller.abort(new Error('paused by user'))
+    await expect(extractFromFile(filePath, { signal: controller.signal })).rejects.toThrow('paused by user')
   })
 })
 

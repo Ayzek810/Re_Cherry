@@ -40,6 +40,7 @@ import type { KnowledgeTurnBase, TurnDocument } from '../services/knowledge/Know
 import { knowledgeService } from '../services/knowledge/KnowledgeService'
 import { preprocessChannel } from '../services/preprocess/preprocessChannel'
 import type { SkillTurnEntry } from '../services/skills/SkillService'
+import { abortTopicWork } from '../services/topicWorkAbort'
 import {
   attachmentFileExtension,
   CherryAttachmentStore,
@@ -59,6 +60,7 @@ import { KnowledgeKernelService } from './knowledgeKernelService'
 import { abortLightStream, lightOneShot, lightStream } from './lightLlm'
 import { abortLightImage, lightEditImage, lightGenerateImage, setLightLlmProviderRoutes } from './lightLlmModalities'
 import { MemoryKernelService } from './memoryKernelService'
+import { registerModelStreamAbort } from './modelStreamAbort'
 import { type KernelProviderInput, syncCherryProviders } from './providers'
 import { registerAppServiceSeams, type TopicTreeService } from './services'
 import { uiSessionEvent } from './sessionEventView'
@@ -202,6 +204,10 @@ export async function bootKernel(): Promise<Context> {
     // 唯一补丁文件持有两个请求端中性门（思考剥离 + 图片句柄短锚，见 thinkingReplay.ts 头注
     // 与 imageHandleText.ts 头注），与 DSML 修复（响应端 waterfall）机制不同、互不替代。
     registerDsmlRepair(ctx)
+    // 在途模型流切断（v1：暂停一律直接打断，见 modelStreamAbort.ts）：同一 waterfall 上
+    // 按话题登记我方中断信号，`Dsh_TopicStop` → `abortTopicWork` 即在途 HTTP 请求当场被 abort，
+    // 运行时规范成 `finish { kind: 'aborted' }`。无人暂停时零行为差异。
+    registerModelStreamAbort(ctx)
 
     // 提示词与工具层（tools 空注册：MCP 已砍，占位满足 agent-loop 的 inject）。
     // includeRuntimeContext 必须开：RuntimeContextProjection 靠它把动态上下文（工具面
@@ -827,7 +833,17 @@ function registerKernelIpc(): () => void {
   })
 
   handle(IpcChannel.Dsh_TopicStop, (_event, id: string) => {
-    topicTree(requireKernel()).stop(id)
+    // [pause-probe] 停止指令到达主进程的落盘痕迹：排查"暂停打不断"时用它区分
+    // 「渲染层没发」与「内核没中断在途工具」。
+    const tree = topicTree(requireKernel())
+    logger.warn(`[pause-probe] kernel stop requested for "${id}" (running before stop = ${tree.isRunning(id)})`)
+    // 2026-10-01（真机取证）：内核的 stop **不中断在途工具**（stop 返回后 isRunning 仍为 true，
+    // 那次 OCR 随后照常跑完）。所以这里同时中止我们自己的长活（文档处理按话题登记，见
+    // services/topicWorkAbort.ts）——暂停要真的打断，就不能只依赖内核。
+    const abortedWork = abortTopicWork(id, new Error('paused by user'))
+    logger.warn(`[pause-probe] aborted ${abortedWork} in-flight topic work item(s) for "${id}"`)
+    tree.stop(id)
+    logger.warn(`[pause-probe] kernel stop returned (running after stop = ${tree.isRunning(id)})`)
     return { ok: true }
   })
 

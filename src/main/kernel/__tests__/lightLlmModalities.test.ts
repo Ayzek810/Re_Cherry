@@ -13,6 +13,7 @@ import {
   lightGenerateImage,
   lightRerank,
   lightVisionDocument,
+  LightVisionRequestError,
   normalizeVector,
   setLightLlmProviderRoutes
 } from '../lightLlmModalities'
@@ -550,12 +551,80 @@ describe('lightVisionDocument（文档处理通道 vision-model 执行缝）', (
     expect(url).toBe('https://open.bigmodel.cn/api/paas/v4/chat/completions')
   })
 
-  it('requestId 无关：AbortSignal 原样透传给 fetch（预算打断在途请求）', async () => {
+  it('调用方 signal 进合成信号（超时纳入后不再要求同一对象，但随调用方中止）', async () => {
     fetchMock.mockResolvedValueOnce(okResponse({ choices: [{ message: { content: 'ok' } }] }))
     const controller = new AbortController()
     await lightVisionDocument({ providerId: 'silicon', modelId: 'm', prompt: 'p', images: [image] }, controller.signal)
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(init.signal).toBe(controller.signal)
+    const signal = init.signal as AbortSignal
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal.aborted).toBe(false)
+    controller.abort()
+    expect(signal.aborted).toBe(true)
+  })
+
+  it('调用方 signal 与单次超时合成：外部中止仍立刻打断在途请求', async () => {
+    fetchMock.mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+    )
+    const controller = new AbortController()
+    const pending = lightVisionDocument(
+      { providerId: 'silicon', modelId: 'm', prompt: 'p', images: [image] },
+      controller.signal
+    )
+    controller.abort(new Error('budget exceeded'))
+    const error = await pending.catch((thrown: unknown) => thrown)
+    expect((error as Error).message).toContain('budget exceeded')
+    // 被调用方打断不是"失败"：不标可重试（暂停/预算有自己的语义）。
+    expect((error as LightVisionRequestError).retriable).toBe(false)
+  })
+
+  it('单次请求超时（timeoutMs 可覆盖）：超时报错并标为可重试', async () => {
+    fetchMock.mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          const signal = init.signal as AbortSignal
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+    )
+    const error = await lightVisionDocument({
+      providerId: 'silicon',
+      modelId: 'm',
+      prompt: 'p',
+      images: [image],
+      timeoutMs: 20
+    }).catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(LightVisionRequestError)
+    expect((error as Error).message).toContain('timed out after 20ms')
+    expect((error as LightVisionRequestError).retriable).toBe(true)
+  })
+
+  it('传输层失败：message 带上 undici 丢弃的 cause 链，并标为可重试', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed', { cause: new Error('other side closed') }))
+    const error = await lightVisionDocument({
+      providerId: 'silicon',
+      modelId: 'm',
+      prompt: 'p',
+      images: [image]
+    }).catch((thrown: unknown) => thrown)
+    expect((error as Error).message).toContain('fetch failed <- other side closed')
+    expect((error as LightVisionRequestError).retriable).toBe(true)
+  })
+
+  it('HTTP 状态错误不标可重试（服务端的明确答复，重试无意义）', async () => {
+    fetchMock.mockResolvedValueOnce(errorResponse(429, 'rate limited'))
+    const error = await lightVisionDocument({
+      providerId: 'silicon',
+      modelId: 'm',
+      prompt: 'p',
+      images: [image]
+    }).catch((thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(LightVisionRequestError)
+    expect((error as LightVisionRequestError).retriable).toBe(false)
   })
 
   it('明错面：空 images / 无 host / HTTP 失败带状态与细节 / 响应形状不符', async () => {

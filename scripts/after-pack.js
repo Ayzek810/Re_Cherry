@@ -45,11 +45,13 @@ exports.default = async function (context) {
     if (!entries.some((p) => p.endsWith('/out/main/localOcrWorker.js'))) {
       throw new Error('after-pack: out/main/localOcrWorker.js missing from app.asar (electron.vite ocrWorker entry)')
     }
-    if (!entries.some((p) => p.endsWith('/out/main/pdfExtractWorker.js'))) {
-      throw new Error(
-        'after-pack: out/main/pdfExtractWorker.js missing from app.asar (electron.vite pdfExtractWorker entry)'
-      )
-    }
+    // @napi-rs/canvas：pdf.js 装 DOM 全局（DOMMatrix/Path2D/ImageData）的载体。缺它则
+    // "读 PDF 文本层"与两条 OCR 光栅化腿一起死，且旧形态是 pdfjs 打一句 warn 后留个裸引用
+    // （真机表现为 `DOMMatrix is not defined`）。它的平台包是 optionalDependencies，
+    // 与 @img/sharp 同一坑面——必须在打包期变红。
+    const canvasRoot = path.join(unpacked, 'node_modules', '@napi-rs')
+    assertExists(path.join(canvasRoot, 'canvas'), '@napi-rs/canvas package (unpacked)')
+    assertExists(path.join(canvasRoot, 'canvas-win32-x64-msvc'), '@napi-rs/canvas win32-x64 platform (unpacked)')
   } else if (platform === 'darwin' || platform === 'linux') {
     // darwin/linux：同缺口同修（跨平台交付开启前必须各自真机验证，此处只保证收集不缺包）。
     const arch = context.arch === 'arm64' || process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -60,6 +62,12 @@ exports.default = async function (context) {
     assertExists(
       path.join(unpacked, 'node_modules', 'onnxruntime-node', 'bin', 'napi-v6', ortPlatform, arch),
       `onnxruntime ${ortPlatform}-${arch} native dir (unpacked)`
+    )
+    // @napi-rs/canvas 平台包（读 PDF / OCR 光栅化共用的 DOM 全局载体；与 win 分支同判据）
+    const canvasPlatform = platform === 'darwin' ? `canvas-darwin-${arch}` : `canvas-linux-${arch}-gnu`
+    assertExists(
+      path.join(unpacked, 'node_modules', '@napi-rs', canvasPlatform),
+      `@napi-rs/canvas platform package ${canvasPlatform} (unpacked)`
     )
   }
 }

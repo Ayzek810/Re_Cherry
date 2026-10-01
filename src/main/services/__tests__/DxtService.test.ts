@@ -5,7 +5,7 @@
  * getResolvedMcpConfig / cleanupDxtServerByPath 为真 fs 集成测试：fixtures 用 archiver
  * （既有运行期依赖）在临时目录现做 .dxt（zip）包，服务实例注入 tempDir/mcpDir。
  * 主测试 setup 全局 mock 了 node:fs/node:path/node:os——本文件整体还原真实现
- *（pdfExtractBridge.test.ts 同款 importOriginal 局部覆写惯例）。
+ *（importOriginal 局部覆写惯例）。
  */
 import * as fs from 'node:fs'
 import os from 'node:os'

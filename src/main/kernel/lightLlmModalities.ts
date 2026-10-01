@@ -216,6 +216,52 @@ export interface LightVisionDocumentCall {
   prompt: string
   images: LightVisionDocumentImage[]
   maxTokens?: number
+  /** 单次请求超时（缺省 VISION_REQUEST_TIMEOUT_MS）。 */
+  timeoutMs?: number
+}
+
+/**
+ * 单次视觉请求超时（v1）：端点挂死/排队时必须**在有限时间内把话说清楚**。
+ * 此前只有通道的 8 分钟总预算——一页慢请求会把整轮拖到预算耗尽，用户看到的是
+ * "转两分钟然后一句 fetch failed"（2026-10-01 实机取证：20 页书第一页请求 120s 被对端掐断）。
+ */
+export const VISION_REQUEST_TIMEOUT_MS = 90_000
+
+/**
+ * 视觉请求失败（v1）。`message` 里拼上 undici 丢弃的 cause 链——`fetch failed` 本身不携带
+ * 原因，`SocketError: other side closed` / `UND_ERR_*` 这类关键区分信息全在 cause 里。
+ * `retriable` 只对**传输层**失败（超时 / 连接被断）为真：HTTP 状态码与响应形状是服务端的
+ * 明确答复，重试无意义（与"单页失败即整本拒绝"的裁定一致，传输层失败才允许重试一次）。
+ */
+export class LightVisionRequestError extends Error {
+  readonly retriable: boolean
+
+  constructor(message: string, retriable: boolean, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'LightVisionRequestError'
+    this.retriable = retriable
+  }
+}
+
+/** 错误链压成一行（最多四层）：`fetch failed <- SocketError: other side closed`。 */
+function describeFailureChain(error: unknown): string {
+  const parts: string[] = []
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && current !== undefined && current !== null; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.name === 'Error' ? current.message : `${current.name}: ${current.message}`)
+      current = (current as { cause?: unknown }).cause
+    } else {
+      parts.push(String(current))
+      break
+    }
+  }
+  return parts.length > 0 ? parts.join(' <- ') : String(error)
+}
+
+/** 传输层失败（undici 一律 surface 成 `TypeError: fetch failed`，原因在 cause）。 */
+function isTransportFailure(error: unknown): boolean {
+  return error instanceof TypeError
 }
 
 /**
@@ -252,21 +298,47 @@ export async function lightVisionDocument(call: LightVisionDocumentCall, signal?
     ],
     ...(call.maxTokens !== undefined && call.maxTokens > 0 ? { max_tokens: call.maxTokens } : {})
   }
-  const response = await fetch(compatibleEndpoint(route.apiHost, '/chat/completions'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(route) },
-    body: JSON.stringify(body),
-    signal
-  })
-  if (!response.ok) {
-    throw new Error(`lightLlm: vision document request failed (${response.status}): ${await readErrorDetail(response)}`)
+  const timeoutMs = call.timeoutMs ?? VISION_REQUEST_TIMEOUT_MS
+  const timeoutController = new AbortController()
+  const timer = setTimeout(() => {
+    timeoutController.abort(new Error(`no response within ${timeoutMs}ms`))
+  }, timeoutMs)
+  // 调用方 signal（预算/暂停）与本次超时合成：任一触发即掐断在途请求。
+  const requestSignal =
+    signal === undefined ? timeoutController.signal : AbortSignal.any([signal, timeoutController.signal])
+  try {
+    const response = await fetch(compatibleEndpoint(route.apiHost, '/chat/completions'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(route) },
+      body: JSON.stringify(body),
+      signal: requestSignal
+    })
+    if (!response.ok) {
+      throw new LightVisionRequestError(
+        `lightLlm: vision document request failed (${response.status}): ${await readErrorDetail(response)}`,
+        false
+      )
+    }
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: unknown } }> }
+    const content = data.choices?.[0]?.message?.content
+    if (typeof content !== 'string') {
+      throw new LightVisionRequestError('lightLlm: unexpected vision document response shape', false)
+    }
+    return content
+  } catch (error) {
+    if (error instanceof LightVisionRequestError) throw error
+    const callerAborted = signal?.aborted === true
+    const timedOut = timeoutController.signal.aborted
+    const suffix = timedOut ? ` (request timed out after ${timeoutMs}ms)` : callerAborted ? ' (cancelled)' : ''
+    // 被调用方打断的请求不是"失败"（暂停/预算有自己的语义与日志），retriable=false。
+    throw new LightVisionRequestError(
+      `lightLlm: vision document request failed: ${describeFailureChain(error)}${suffix}`,
+      timedOut || (!callerAborted && isTransportFailure(error)),
+      { cause: error }
+    )
+  } finally {
+    clearTimeout(timer)
   }
-  const data = (await response.json()) as { choices?: Array<{ message?: { content?: unknown } }> }
-  const content = data.choices?.[0]?.message?.content
-  if (typeof content !== 'string') {
-    throw new Error('lightLlm: unexpected vision document response shape')
-  }
-  return content
 }
 
 // ---- image（绘画页 / generate_image 工具的执行缝；OpenAI 兼容平面直连） ----

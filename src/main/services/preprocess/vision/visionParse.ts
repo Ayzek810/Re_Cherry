@@ -6,9 +6,12 @@
  * 默认 8、上限 20）：worker 按信用窗放行页图（job.window = 并发数，结算一页回一信），
  * 在途模型调用 ≤ 并发数，内存上界 = 并发 × 一页图；页完成顺序乱序，拼装按页号排序。
  *
- * 失败/打断语义（用户裁定）：
- * - 单页模型调用失败 = 整本拒绝，不加 retry（"假设用户是成年人"——并发调高是用户
- *   对自己钥匙配额的判断）；失败即终止在途请求（内部 AbortController）。
+ * 失败/打断语义（用户裁定 + v1 修订）：
+ * - 单页模型调用失败 = 整本拒绝，不加 retry —— **例外**：传输层失败（请求超时/连接被断，
+ *   `LightVisionRequestError.retriable`）重试一次。页图识图是只读幂等操作，对端掐断重发没有副作用；
+ *   HTTP 状态码与响应形状错误不重试（那是服务端的明确答复）。
+ * - **失败必须落盘**（v1）：单页失败、worker 报错、worker 意外退出、零页可交四条路都记 warn
+ *   并带上 cause 链——旧实现三条路一行日志都没有，只能靠翻内核库反推"拉不起来"。
  * - **打断交缓存**：预算到点 / 用户中止时，已完成页按序拼装 + 末尾附模型可见的
  *   截断说明，作为工具结果交回（一页未成则照旧拒绝）。
  * - 空页（光栅化不出 / 模型回空）不拖垮整本。
@@ -18,13 +21,16 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { loggerService } from '@logger'
-import { lightVisionDocument } from '@main/kernel/lightLlmModalities'
+import { lightVisionDocument, LightVisionRequestError } from '@main/kernel/lightLlmModalities'
 import { app, utilityProcess } from 'electron'
 
 const logger = loggerService.withContext('VisionDocument')
 
 /** 光栅化倍率：144dpi——视觉模型不需要 PP-OCR 的 216dpi，页图体积换取网络与费用。 */
 const RENDER_SCALE = 2
+
+/** 单页尝试次数上限：首次 + 传输层失败重试一次（v1）。 */
+const MAX_PAGE_ATTEMPTS = 2
 
 /** 页级并发缺省值（用户裁定 8）；面板可调，上限 40（用户裁定：20 仍是节点，40 为新最大值）。 */
 export const DEFAULT_VISION_CONCURRENCY = 8
@@ -57,7 +63,7 @@ interface WorkerPageMessage {
   type: 'page'
   page: number
   totalPages: number
-  mediaType: 'image/png'
+  mediaType: 'image/png' | 'image/jpeg'
   data: string
 }
 
@@ -152,6 +158,10 @@ export async function runVisionDocumentParse(
 
     /** 打断交缓存（用户裁定）：预算到点 / 用户中止时已完成页按序拼装交回，零完成则报错。 */
     const onInterrupted = (): void => {
+      // 中断是否真的传到视觉这条腿（info）：证明"中止源生效"，与内核无关。
+      logger.info(
+        `vision parse interrupted at ${pages.size}/${totalPagesSeen} page(s); reason=${String(signal?.reason ?? 'n/a')}`
+      )
       void drainInflight().then(() => {
         const pagesDone = pages.size
         finish(() => {
@@ -165,11 +175,17 @@ export async function runVisionDocumentParse(
       })
     }
 
-    /** 一页的消费：模型调用 → 结算回一信；单页失败 = 整本拒绝（不 retry，用户裁定）。 */
+    /** 一页的消费：模型调用 → 结算回一信；单页失败 = 整本拒绝（传输层失败重试一次，v1）。 */
     const consumePage = (message: WorkerPageMessage): Promise<void> => {
       const task = (async () => {
-        try {
-          if (message.data.length > 0) {
+        if (message.data.length === 0) {
+          logger.warn(`vision document: page ${message.page}/${message.totalPages} produced no image (skipped)`)
+          if (!settled) child.postMessage({ type: 'next' })
+          return
+        }
+        for (let attempt = 1; attempt <= MAX_PAGE_ATTEMPTS; attempt += 1) {
+          const startedAt = performance.now()
+          try {
             const text = (
               await lightVisionDocument(
                 {
@@ -182,17 +198,33 @@ export async function runVisionDocumentParse(
               )
             ).trim()
             if (text.length > 0) pages.set(message.page, text)
-            logger.info(`vision document: page ${message.page}/${message.totalPages} → ${text.length} chars`)
-          } else {
-            logger.warn(`vision document: page ${message.page}/${message.totalPages} produced no image (skipped)`)
+            logger.info(
+              `vision document: page ${message.page}/${message.totalPages} → ${text.length} chars ` +
+                `(image ${Math.round((message.data.length * 3) / 4 / 1024)}KB as ${message.mediaType}, ` +
+                `${Math.round(performance.now() - startedAt)}ms, attempt ${attempt})`
+            )
+            if (!settled) child.postMessage({ type: 'next' })
+            return
+          } catch (error) {
+            // 自身打断引起的请求异常由 onInterrupted 结算，这里只处理真实失败。
+            if (controller.signal.aborted) return
+            const elapsed = Math.round(performance.now() - startedAt)
+            const detail = error instanceof Error ? error.message : String(error)
+            if (error instanceof LightVisionRequestError && error.retriable && attempt < MAX_PAGE_ATTEMPTS) {
+              logger.warn(
+                `vision document: page ${message.page}/${message.totalPages} attempt ${attempt} failed after ` +
+                  `${elapsed}ms — retrying once: ${detail}`
+              )
+              continue
+            }
+            logger.warn(
+              `vision document: page ${message.page}/${message.totalPages} failed after ${elapsed}ms ` +
+                `(attempt ${attempt}/${MAX_PAGE_ATTEMPTS}): ${detail}`
+            )
+            finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+            return
           }
-        } catch (error) {
-          // 自身打断引起的请求异常由 onInterrupted 结算，这里只处理真实失败。
-          if (controller.signal.aborted) return
-          finish(() => reject(error instanceof Error ? error : new Error(String(error))))
-          return
         }
-        if (!settled) child.postMessage({ type: 'next' })
       })()
       inflight.add(task)
       void task.catch(() => undefined).finally(() => inflight.delete(task))
@@ -212,19 +244,26 @@ export async function runVisionDocumentParse(
         void drainInflight().then(() => {
           if (settled) return
           if (pages.size === 0) {
+            logger.warn(`vision document: worker finished with 0 text page(s) of ${message.totalPages} — rejecting`)
             finish(() => reject(new Error('vision document parse produced no text — pages may be blank or unreadable')))
           } else {
             finish(() => resolve(assemble()))
           }
         })
       } else if (message.type === 'error') {
+        logger.warn(`vision document: worker reported an error — ${message.message}`)
         finish(() => reject(new Error(message.message)))
       }
     })
     child.on('exit', (code: number) => {
       // 自然退出也可能跑在在途消费前面（信用窗）：先排空再判意外退出。
       void drainInflight().then(() => {
-        if (!settled) finish(() => reject(new Error(`vision document worker exited unexpectedly (code ${code})`)))
+        if (!settled) {
+          logger.warn(
+            `vision document: worker exited unexpectedly (code ${code}) after ${pages.size}/${totalPagesSeen} page(s)`
+          )
+          finish(() => reject(new Error(`vision document worker exited unexpectedly (code ${code})`)))
+        }
       })
     })
 

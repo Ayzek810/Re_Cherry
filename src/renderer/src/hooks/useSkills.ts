@@ -63,6 +63,8 @@ export function useInstalledSkills(agentId?: string) {
   const skills = useAppSelector((state) => state.skills.installedSkills)
   // r2-38：真实反映扫描过程/结果。此前两者硬编码为 `false`/`null`，主进程扫描失败时切片保持
   // 原状（首次进入即空），页面只能渲染"未安装任何技能"——失败看起来像空结果（§9 违规）。
+  // 契约（W4-2）：`loading` 初值为 `true` ⇒ **调用方必须在挂载时触发一次 `refresh()`**。
+  // 技能页曾漏掉这一步，表现为首次进入永久转圈（r2-38 之前硬编码 `false` 把这个漏接线掩住了）。
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)

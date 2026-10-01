@@ -2,7 +2,7 @@
  * 视觉模型文档处理的光栅化 utility process 入口（v0.4.4）。
  *
  * 定位：文档处理通道 vision-model 条目的**本机光栅化腿**——pdf-parse 逐页
- * getScreenshot → PNG base64 回主进程，主进程把页图交给用户配置的视觉模型
+ * getScreenshot（PNG）→ 转 JPEG q80 → base64 回主进程，主进程把页图交给用户配置的视觉模型
  *（OpenAI 兼容多模态 chat）转写成 markdown。视觉模型 = 文档处理的子系统，
  * 本 worker 与 localOcrWorker 同属一个通道的两条执行腿，故同纪律：
  *
@@ -33,9 +33,12 @@ interface VisionWorkerJob {
 
 type WorkerOutgoingMessage =
   | { type: 'log'; message: string }
-  | { type: 'page'; page: number; totalPages: number; mediaType: 'image/png'; data: string }
+  | { type: 'page'; page: number; totalPages: number; mediaType: 'image/png' | 'image/jpeg'; data: string }
   | { type: 'done'; totalPages: number }
   | { type: 'error'; message: string }
+
+/** 页图 JPEG 质量（v1）：实测同一页 q80 已经把 1521KB 压到 286KB，再高只增体积不增可读性。 */
+const PAGE_JPEG_QUALITY = 80
 
 const parentPort = process.parentPort
 const post = (message: WorkerOutgoingMessage): void => parentPort?.postMessage(message)
@@ -76,17 +79,43 @@ async function run(job: VisionWorkerJob): Promise<void> {
       })
       const rendered = screenshot.pages[0]?.data
       // 光栅化不出的页回空图（主进程跳过该页，不拖垮整本）——与 localOcrWorker 同语义。
+      const encoded =
+        rendered === undefined || rendered.byteLength === 0
+          ? { mediaType: 'image/png' as const, bytes: Buffer.alloc(0) }
+          : await encodePage(Buffer.from(rendered), page)
       post({
         type: 'page',
         page,
         totalPages: total,
-        mediaType: 'image/png',
-        data: rendered ? Buffer.from(rendered).toString('base64') : ''
+        mediaType: encoded.mediaType,
+        data: encoded.bytes.toString('base64')
       })
     }
     post({ type: 'done', totalPages: total })
   } finally {
     await parser.destroy().catch(() => undefined)
+  }
+}
+
+/**
+ * 页图编码：getScreenshot 只出 PNG，转成 JPEG 再上行（v1）。
+ *
+ * 依据（2026-10-01 实机量取，20 页扫描书第 1 页）：PNG 1521KB → JPEG q80 286KB，省 81%，
+ * 编码 39ms。页图是照片性质的内容，无损 PNG 只把上传时长、对端排队与失败率一起抬高
+ * （同一本书 PNG 请求 120s 被对端掐断，见 lightLlmModalities 的 VISION_REQUEST_TIMEOUT_MS）。
+ * 编码器缺失/失败时如实退回 PNG（页图仍可用，只是更大）并留一行日志，不静默降级成空页。
+ */
+async function encodePage(
+  png: Buffer,
+  page: number
+): Promise<{ mediaType: 'image/png' | 'image/jpeg'; bytes: Buffer }> {
+  try {
+    const sharp = (await import('sharp')).default
+    const jpeg = await sharp(png).jpeg({ quality: PAGE_JPEG_QUALITY }).toBuffer()
+    return { mediaType: 'image/jpeg', bytes: jpeg }
+  } catch (error) {
+    log(`page ${page}: JPEG encode failed (${String((error as Error)?.message ?? error)}); sending PNG`)
+    return { mediaType: 'image/png', bytes: png }
   }
 }
 

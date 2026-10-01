@@ -104,8 +104,8 @@ export async function terminateActiveOcrProcess(): Promise<void> {
   await exited
 }
 
-/** 同步终止常驻 worker（app before-quit 释放 onnxruntime/PaddleOCR 句柄；与 pdfExtractBridge
- *  的 `disposePdfExtractWorker` 同形）。在跑的解析不再结算——进程退出即终点，调用方不等待。
+/** 同步终止常驻 worker（app before-quit 释放 onnxruntime/PaddleOCR 句柄）。在跑的解析
+ *  不再结算——进程退出即终点，调用方不等待。
  *  为什么需要它（v1 二轮审查 m2-03）：该 worker 加载 onnxruntime + OCR 模型（数百 MB），
  *  空闲 5 分钟才自退；解析后 5 分钟内退出应用会留下残留子进程。此前只有删模型路径会终止它。 */
 export function disposeOcrWorker(): void {

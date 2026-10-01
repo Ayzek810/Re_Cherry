@@ -208,8 +208,16 @@ export function useCodeCliPageViewProps(
   const toolName = activeMeta?.label ?? ''
   // Local busy Sets give instant feedback; snapshot operations cover mutations
   // initiated in another window or before this page mounted.
-  // fork 缝⑤（续）：fork 快照无 operation 面，快照侧不补装态。
-  const mergedInstallingTools = useMemo(() => new Set<string>(installingTools), [installingTools])
+  // v1（W4-4）：V2 的这条语义此前在 fork 里被丢了（快照无 operation 面），表现为"切走再回来
+  // 进度就没了"——安装跑在主进程，局部 Set 随组件销毁。现在主进程把进行中的操作同步进快照，
+  // 这里把它并回来：页面重挂载/整页刷新后仍显示"正在安装"与当前步骤。
+  const snapshotOperation = statuses[selectedCliTool]?.operation
+  const mergedInstallingTools = useMemo(() => {
+    const next = new Set<string>(installingTools)
+    if (snapshotOperation?.kind === 'install') next.add(selectedCliTool)
+    return next
+  }, [installingTools, snapshotOperation, selectedCliTool])
+  const selectedExecutable = CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
   const snapshotVersionStatus: VersionStatus = statuses[selectedCliTool] ?? {
     installed: false,
     source: 'none',
@@ -366,10 +374,13 @@ export function useCodeCliPageViewProps(
           installError,
           snapshotsLoading,
           // 一次判据、一处求值：载荷属于当前选中工具才透传（此前同一谓词写了三遍）。
+          // v1（W4-4）：本地位空时回落到快照里那一份（重挂载后事件还没再来时的步骤名/比例）。
           installProgress:
-            installProgress?.tool === CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable
+            installProgress?.tool === selectedExecutable
               ? installProgress
-              : undefined,
+              : snapshotOperation?.progress?.tool === selectedExecutable
+                ? snapshotOperation.progress
+                : undefined,
           // v0.4.5：手动检查更新按钮（三个工具页共用）。
           onCheckUpdates: () => void updateCheck.checkForUpdates(selectedCliTool),
           checkingUpdates: updateCheck.checkingTools.has(CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable),

@@ -13,8 +13,9 @@ import { type BinaryToolSnapshot, interpretBinarySnapshot } from '../utils/binar
 //   (refresh)` → `window.api.codeCli.binary.latestVersions()`（fork 无 refresh 形参——主进程
 //   每次调用都现查，V2 的冷缓存两段式读取收敛为一次调用）；`useIpcOn('binary.availability_changed')`
 //   → `window.api.codeCli.binary.onChanged(cb)`。
-// ② 快照形状缝：fork 快照为 V2 子集（application 扁平状态串，无 operation 广播面——
-//   BinaryManager 抄形状注释），`application?.status` → `application`，operation 臂不保留。
+// ② 快照形状缝：fork 快照为 V2 子集（application 扁平状态串），`application?.status` →
+//   `application`。v1（W4-4）例外：`operation`（进行中的安装/卸载）**保留**——它是"切页后
+//   进度不丢"的唯一真相源（主进程持有），V2 的 operation 对象面其余字段仍不保留。
 // ③ logger/toast 缝：import 对号。
 
 const logger = loggerService.withContext('useCliVersionStatus')
@@ -32,6 +33,8 @@ const buildStatus = (snapshot: BinaryToolSnapshot | undefined, latest?: string):
     ...(view.systemPath !== undefined ? { systemPath: view.systemPath } : {}),
     // v0.4.5-1（O7）：上次安装失败的原因随快照下发，版本卡据此显示持久的失败行。
     ...(view.lastFailure !== undefined ? { lastFailure: view.lastFailure } : {}),
+    // v1（W4-4）：主进程进行中的操作随快照下发——页面重挂载后靠它恢复"正在安装"。
+    ...(view.operation !== undefined ? { operation: view.operation } : {}),
     canUpgrade: view.hasUpdate
   }
 }

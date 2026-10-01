@@ -4,6 +4,10 @@
 // managed/system/none，version 随 managed）。接口名与语义面（installed/hasUpdate/
 // applicationStatus/exactApplied/…）与 V2 保持一致，消费方无需感知差异；isNewerVersion 以
 // 点分数字段比较近似 semver.gt（非语义版本串回退为不等判定），已标缝注。
+// v1（W4-4）：`operation`（进行中的安装/卸载）从 V2 的丢弃面恢复——主进程侧同名字段同步进快照，
+// 渲染层据此在页面重挂载后恢复"正在安装"，不再依赖组件局部 busy 集合。
+
+import type { InstallProgressPayload } from '@shared/types/installProgress'
 
 export interface BinaryToolSnapshot {
   name: string
@@ -17,6 +21,15 @@ export interface BinaryToolSnapshot {
    * 版本卡的失败行据此持久显示——此前失败原因只活在一次 toast 里。
    */
   lastFailure?: string
+  /**
+   * v1（W4-4）：该工具**当前正在跑**的操作（主进程持有，见 BinaryManager 的同名字段）。
+   * 渲染层进入页面时以它为准——局部 busy 集合只在本次会话内即时反馈，切页即销毁。
+   */
+  operation?: {
+    kind: 'install' | 'remove'
+    at: number
+    progress?: InstallProgressPayload
+  }
 }
 
 /**
@@ -47,6 +60,8 @@ export interface InterpretedBinarySnapshot {
   hasUpdate: boolean
   /** v0.4.5-1（O7）：主进程记录的上次安装失败原因（无失败时 undefined）。 */
   lastFailure?: string
+  /** v1（W4-4）：主进程正在进行中的操作（无操作时 undefined）。 */
+  operation?: BinaryToolSnapshot['operation']
 }
 
 export interface InterpretBinarySnapshotOptions {
@@ -98,6 +113,7 @@ export function interpretBinarySnapshot(
     // An update requires the exact recipe to be applied — never a
     // runnable-but-not-applied conflict or an external source.
     hasUpdate: exactApplied && isNewerVersion(options.latest, applicationVersion),
-    ...(snapshot?.lastFailure ? { lastFailure: snapshot.lastFailure } : {})
+    ...(snapshot?.lastFailure ? { lastFailure: snapshot.lastFailure } : {}),
+    ...(snapshot?.operation ? { operation: snapshot.operation } : {})
   }
 }

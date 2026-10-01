@@ -255,6 +255,15 @@ const SkillsSettings: FC = () => {
   // Search result detail preview
   const [previewResult, setPreviewResult] = useState<SkillSearchResult | null>(null)
 
+  // 挂载即触发一次磁盘扫描投影（W4-2）。
+  // 为什么必须由页面触发：hook 的 `loading` 初值是 `true`（r2-38 让"扫描失败"不再伪装成
+  // "未安装"），而页面此前只在安装/卸载回调里调 `refresh()`，挂载时一处都没有 ⇒ 首次进入
+  // 技能页 `loading` 永远为真，那个 Spin 永远转下去，列表与空态都轮不到渲染。
+  // 契约：hook 只报状态，调用方负责在挂载时触发扫描（见 useSkills.ts 的 r2-38 注释）。
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
   // Load file tree when a skill is selected
   // Fork: 技能文件列举的主进程 IPC 尚未接线（批次1 UI-only）——文件树保持为空，
   // 详情页如实显示“选择文件”空状态；接线批次恢复上游 promise 逻辑。

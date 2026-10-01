@@ -11,7 +11,6 @@ import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { CodeCli } from '@shared/types/codeCli'
-import { extractPdfText } from '@shared/utils/pdf'
 import { redactSecretText } from '@shared/utils/redaction'
 import type { MCPServer, Notification, Shortcut, ThemeMode } from '@types'
 import checkDiskSpace from 'check-disk-space'
@@ -500,9 +499,6 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.File_ResumeWatcher, fileManager.resumeFileWatcher.bind(fileManager))
   ipcMain.handle(IpcChannel.File_BatchUploadMarkdown, fileManager.batchUploadMarkdownFiles.bind(fileManager))
   ipcMain.handle(IpcChannel.File_ShowInFolder, fileManager.showInFolder.bind(fileManager))
-
-  // pdf
-  ipcMain.handle(IpcChannel.Pdf_ExtractText, (_, data: Uint8Array | ArrayBuffer | string) => extractPdfText(data))
 
   // fs
   ipcMain.handle(IpcChannel.Fs_Read, FileService.readFile.bind(FileService))

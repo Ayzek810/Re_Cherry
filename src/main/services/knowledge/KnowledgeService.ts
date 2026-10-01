@@ -18,6 +18,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { parsePdfWithProvider, preprocessChannel } from '@main/services/preprocess/preprocessChannel'
+import { registerTopicWork } from '@main/services/topicWorkAbort'
 import { getDataPath } from '@main/utils'
 
 import { chunkText } from './chunker'
@@ -229,7 +230,7 @@ export class KnowledgeService {
       throw notAttachedError(nameOrPath, documents)
     }
     const ext = path.extname(document.path).toLowerCase()
-    // signal（暂停/中止）仅作用于可中断分支（PDF → worker 抽取，kill 即取消）。
+    // signal（暂停/中止）在 PDF 读取前检查（单次 pdfjs 调用内部不可中断，粒度见 extractors.extractPdf）。
     const text = (await extractFromFile(document.path, { signal })).text
     if (text.trim().length === 0) {
       logger.info(`document: "${document.name}" produced no extractable text (empty or scanned)`)
@@ -272,12 +273,24 @@ export class KnowledgeService {
     logger.info(`document processing engaged for "${document.name}" via provider "${config.id}" (ocr_document tool)`)
     // exec.signal（暂停/中止）与 8 分钟预算在 parsePdfWithProvider 内合并；
     // 打断走各执行缝的取消缝（local: cancel+部分缓存 / vision: HTTP abort+部分缓存）。
-    const text = await parsePdfWithProvider(config, document.path, signal)
-    if (text.trim().length === 0) {
-      throw new Error(`document "${document.name}" produced no OCR text — pages may be blank or unreadable`)
+    //
+    // 2026-10-01（真机取证）：内核的 topic stop **不会**中断在途工具——用户连按 5 次暂停，
+    // `dshTopicStop` 每次都送达内核、`stop()` 返回后内核自己的 `isRunning` 仍为 true，
+    // 随后那次 OCR 照常跑完（见 `services/topicWorkAbort.ts` 的模块注释）。故这里再加一条
+    // **按话题**的中止源：暂停到达主进程时直接 abort 本次解析，不等内核。
+    const workController = new AbortController()
+    const unregisterWork = registerTopicWork(topicId, workController)
+    const mergedSignal = signal === undefined ? workController.signal : AbortSignal.any([signal, workController.signal])
+    try {
+      const text = await parsePdfWithProvider(config, document.path, mergedSignal)
+      if (text.trim().length === 0) {
+        throw new Error(`document "${document.name}" produced no OCR text — pages may be blank or unreadable`)
+      }
+      logger.info(`document processing produced ${text.length} chars for "${document.name}" (${config.id})`)
+      return { name: document.name, text }
+    } finally {
+      unregisterWork()
     }
-    logger.info(`document processing produced ${text.length} chars for "${document.name}" (${config.id})`)
-    return { name: document.name, text }
   }
 
   private async openStore(baseId: string): Promise<BaseVectorStore> {

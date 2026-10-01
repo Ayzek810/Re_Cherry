@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
 import { TopicManager } from '@renderer/hooks/useTopic'
 import {
+  cancelActiveTurn,
   destroyTurnsInKernel,
   type DestroyTurnsResponse,
   forkBranchToKernel,
@@ -30,7 +31,6 @@ import { type Assistant, type FileMetadata, type Model, type Topic, TopicType } 
 import { objectKeys } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { abortCompletion, hasAbortRegistration } from '@renderer/utils/abortController'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { materializeKernelTopicRow, requestTopicSwitch } from '@renderer/utils/topicBranch'
 import { t as translate } from 'i18next'
@@ -406,56 +406,23 @@ export function useMessageOperations(topic: Topic) {
   const displayCount = useAppSelector(selectNewDisplayCount)
 
   /**
-   * 暂停当前主题正在进行的消息生成。 / Pauses ongoing message generation for the current topic.
+   * 暂停当前主题正在进行的消息生成。
    *
-   * r2-47：中止登记的键是**用户消息 id**（`addAbortController(userMessageId!, …)`，
-   * `userMessageId = assistantMessage.askId`）；这里收集的是 streaming 消息的 `askId`。
-   * 两者在"streaming 的是助手消息"时一致，但 `askId` 为空（或指向已被重映射的消息 id）时
-   * `abortCompletion` 查不到键、暂停静默变成无操作——而 UI 已经显示"已停止"，内核回合继续跑。
-   * 因此：空 `askId` 显式 warn（不再静默过滤），并按话题补一次 `dshTopicStop` 兜底
-   * （话题粒度是内核真正的停止入口，不新增第二套取消真相源）。
+   * 2026-10-01 重做为**单一路径**（旧的「登记表 + 键迁移 + 键失配兜底」三件套已删）：
+   *
+   * 1. **当帧落态**：`cancelActiveTurn` 标记本回合已取消，并把仍在流式的块与助手消息落成 PAUSED。
+   *    此后到达的内核增量由投影层丢弃 —— 所以界面"按下去就停"，不再等内核到边界收尾。
+   * 2. **通知内核一次**（fire-and-forget）：内核的 `agent.cancel` 是边界级的，它何时收尾只影响它自己；
+   *    同一个 IPC 在主进程里还会中止我们自己的在途长活（文档处理/OCR 等，按话题登记）。
+   *    失败只记日志 + 提示，**不改界面状态**——因为界面已经按用户意图停了。
    */
   const pauseMessages = useCallback(async () => {
-    const state = store.getState()
-    const topicMessages = selectMessagesForTopic(state, topic.id)
-
-    const streamingMessages = topicMessages.filter((m) => m.status === 'processing' || m.status === 'pending')
-    const askIds: string[] = []
-    let missingAskIdCount = 0
-    for (const message of streamingMessages) {
-      if (message.askId) {
-        askIds.push(message.askId)
-      } else {
-        missingAskIdCount += 1
-      }
-    }
-    if (missingAskIdCount > 0) {
-      logger.warn(
-        `[pauseMessages] ${missingAskIdCount} streaming message(s) in topic ${topic.id} carry no askId; ` +
-          'they cannot be matched to an abort registration (topic-level stop will cover them)'
-      )
-    }
-
-    const uniqueAskIds = [...new Set(askIds)]
-    let aborted = false
-    for (const askId of uniqueAskIds) {
-      // 只有真正命中登记键才算"停到了"：空 askId / 已被重映射的 id 都查不到键。
-      if (hasAbortRegistration(askId)) aborted = true
-      abortCompletion(askId)
-    }
-    if (!aborted && streamingMessages.length > 0) {
-      // 有在途消息但没有任何可用注册键（或键全部失配）：直接按话题停内核回合。否则用户看到
-      // "已停止"而内核回合继续跑（`kernelChat.finishTurn` 之前不会有人再发 `dshTopicStop`）。
-      try {
-        await window.api.dshTopicStop(topic.id)
-      } catch (error) {
-        logger.error('pauseMessages: failed to stop the kernel turn', error as Error)
-        window.toast.error(t('chat.pause.failed'))
-        // 停止失败 → 不谎报"已停止"：恢复 loading 使 UI 与内核实际状态一致。
-        dispatch(newMessagesActions.setTopicLoading({ topicId: topic.id, loading: true }))
-        return
-      }
-    }
+    const stopped = cancelActiveTurn(topic.id)
+    logger.warn(`[pause] topic=${topic.id} local-cancel=${stopped ? 'applied' : 'no-active-turn'}`)
+    void window.api.dshTopicStop(topic.id).catch((error) => {
+      logger.error('pauseMessages: failed to stop the kernel turn', error as Error)
+      window.toast.error(t('chat.pause.failed'))
+    })
     void pauseTrace(topic.id)
     dispatch(newMessagesActions.setTopicLoading({ topicId: topic.id, loading: false }))
   }, [topic.id, dispatch, t])

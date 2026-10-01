@@ -5,8 +5,11 @@
  * file（pdf/doc/docx/txt/md/html 族）+ url（网页正文）+ note（直取）。
  *
  * fork 裁剪：不移植 embedjs loader 全家（embedjs-loader-web/sitemap 等）；
- * PDF 用 dependencies 已有 pdf-parse@2 读文本层（V2 对齐：本层无扫描件检测，
- * 空文本由调用方如实报错；配置了服务商的库在 KnowledgeService 层整本路由）；
+ * PDF 用 dependencies 已有 pdf-parse@2 读文本层，**与其他格式同层同进程、一次读完**
+ * （v1 统一：旧实现曾把它拆进独立 utility 子进程 + 可插拔缝，2026-10-01 整条删除；
+ * 详见 extractPdf 注释——那条路落在 pdfjs 判定"非 Node"的环境里，DOM 全局补不上）；
+ * V2 对齐：本层无扫描件检测，空文本由调用方如实报错；配置了服务商的库在
+ * KnowledgeService 层整本路由；
  * docx 走 mammoth（docx→HTML）
  * + turndown(-gfm)（HTML→Markdown）——MarkItDown 同款管线原生进程内实现，
  * 零 CLI/Python 前置（2026-09-20 用户裁决）；xlsx 用 SheetJS（@e965/xlsx，V1 同款
@@ -39,7 +42,45 @@ export interface ExtractedContent {
 /** 纯文本扩展名（直读 utf-8）。 */
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', '.json', '.log', '.yaml', '.yml'])
 
-async function extractPdf(buffer: Buffer, source: string): Promise<string> {
+/**
+ * pdf-parse 的画布入口：**读 PDF 的前置条件**，必须在 pdf-parse 之前加载。
+ *
+ * 它无条件把 DOMMatrix / ImageData / Path2D 装到全局。这一步不能省：pdfjs 自己只在
+ * `isNodeJS` 为真时装这些全局，而该判据是
+ * `!(process.versions.electron && process.type && process.type !== "browser")`
+ * ——Electron 的 utility 子进程里为假，整块 polyfill 被跳过，且跳过时只打一句 warn 就
+ * 继续跑，之后任何裸引用 `DOMMatrix` 的地方炸 `ReferenceError`（2026-10-01 真机：20 页
+ * 扫描书 read_document 返回 `DOMMatrix is not defined`；旧实现把 PDF 抽取拆进 utility
+ * 子进程，恰好落在那个死角里）。
+ *
+ * 显式加载还有第二个作用：画布包缺失时**当场明确报错**，而不是留给后面一个裸引用。
+ * 本仓打包面（electron-builder.yml 的 asarUnpack + scripts/after-pack.js 的交付断言）
+ * 与两条 OCR 光栅化腿（视觉模型 / 本地 Paddle，它们本来就需要真画布）共同保证它在场。
+ */
+let pdfCanvasReady: Promise<void> | undefined
+
+function loadPdfSupport(): Promise<void> {
+  if (pdfCanvasReady === undefined) {
+    pdfCanvasReady = import('pdf-parse/worker').then(() => undefined)
+  }
+  return pdfCanvasReady
+}
+
+/**
+ * PDF 文本层读取：与其他格式**同层同进程、一次读完整本**（v1 统一）。
+ *
+ * 历史：v0.4.4-2 曾把 PDF 抽取拆进常驻 utility 子进程（理由写作"pdf.js 逐页解析打满
+ * 主进程事件循环"），并为此长出一整套可插拔缝、启动注入、退出释放、构建入口与打包断言。
+ * 2026-10-01 整条删除：那条路不仅多一份实现，还落在 pdfjs 判定"非 Node"的环境里（见上）。
+ * 实测 178MB / 530 页扫描书一次读完 **116ms**，一次性同步解析在真实体量上不构成问题。
+ *
+ * 中断语义：单次 pdfjs 调用内部不可中断，故中断粒度是"调用前后"——`signal` 在读取前
+ * 检查（暂停/预算到点即在此生效），读取本身按最坏实测在百毫秒量级内完成；调用方拿到的
+ * 工具结果在回合已取消时由内核/渲染层丢弃。
+ */
+async function extractPdf(buffer: Buffer, source: string, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted()
+  await loadPdfSupport()
   const { PDFParse } = await import('pdf-parse')
   const parser = new PDFParse({ data: new Uint8Array(buffer) })
   try {
@@ -49,19 +90,6 @@ async function extractPdf(buffer: Buffer, source: string): Promise<string> {
   } finally {
     await parser.destroy().catch(() => undefined)
   }
-}
-
-/**
- * PDF 抽取的可插拔缝（v0.4.4-2，§7.20 挂账清偿）：应用 boot 时由
- * pdfExtractBridge 注入「utilityProcess 抽取」实现——pdf.js 不再占用主进程
- * 事件循环（§7.20「直读 PDF 卡窗口」实锤），且抽取可被暂停信号中断（kill worker）。
- * 未注入（vitest / 兜底）时走进程内 pdf-parse，行为与 v0.4.4-1 一致。
- */
-type PdfExtractorOverride = (filePath: string, source: string, signal?: AbortSignal) => Promise<string>
-let pdfExtractorOverride: PdfExtractorOverride | undefined
-
-export function setPdfExtractorOverride(impl: PdfExtractorOverride | undefined): void {
-  pdfExtractorOverride = impl
 }
 
 let markdownConverter: TurndownService | undefined
@@ -323,18 +351,14 @@ async function extractLegacyDoc(filePath: string): Promise<string> {
   return document.getBody()
 }
 
-/** 按文件扩展名/类型抽取文本。signal 仅作用于可中断的分支（PDF worker 抽取）。 */
+/** 按文件扩展名/类型抽取文本。signal 仅 PDF 分支使用（单次调用内部不可中断，读取前检查）。 */
 export async function extractFromFile(filePath: string, options?: { signal?: AbortSignal }): Promise<ExtractedContent> {
   const extension = path.extname(filePath).toLowerCase()
   const source = path.basename(filePath)
   let text = ''
   if (extension === '.pdf') {
-    if (pdfExtractorOverride !== undefined) {
-      // worker 抽取：worker 自己读文件（大 PDF 不经主进程缓冲中转）。
-      text = await pdfExtractorOverride(filePath, source, options?.signal)
-    } else {
-      text = await extractPdf(await readFile(filePath), source)
-    }
+    // 与其他格式同形：就地读一次（见 extractPdf 的注释——不再有独立子进程那条路）。
+    text = await extractPdf(await readFile(filePath), source, options?.signal)
   } else if (extension === '.doc') {
     // 旧版二进制 .doc：officeparser/MarkItDown 均明确不支持（真机实锤报错），走 word-extractor。
     text = await extractLegacyDoc(filePath)

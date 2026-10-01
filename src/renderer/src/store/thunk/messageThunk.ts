@@ -26,7 +26,6 @@ import { getEffectiveMcpMode } from '@renderer/types'
 import { type Assistant, type FileMetadata, type Model, type Topic } from '@renderer/types'
 import type { FileMessageBlock, ImageMessageBlock, Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { addAbortController } from '@renderer/utils/abortController'
 import { serializeError } from '@renderer/utils/error'
 import { createAssistantMessage, createErrorBlock, resetAssistantMessage } from '@renderer/utils/messageUtils/create'
 import { getTopicQueue, waitForTopicQueue } from '@renderer/utils/queue'
@@ -250,20 +249,10 @@ const fetchAndProcessAssistantResponseImpl = async (
 
     const userMessageId = assistantMessage.askId
 
-    // r2-13：中止登记按**话题**收口（发新回合即摘掉上一回合的键）。此前这里还新建了一个
-    // 从未被接线的 `AbortController`（真正的取消走 dshTopicStop），每条用户消息留下一个
-    // 永不释放的闭包 + 一个无用 controller——那个空转对象已删除。
-    logger.silly('Add Abort Controller', { id: userMessageId })
-    addAbortController(
-      userMessageId!,
-      () => {
-        // 内核替换：停止生成改为通知内核中止回合
-        void window.api.dshTopicStop(topicId).catch((error) => {
-          logger.error('kernelChat: failed to stop topic', error)
-        })
-      },
-      topicId
-    )
+    // 2026-10-01：这里原来登记一张「用户消息 id → 回调」的中止表（还要在消息 id 被改写时迁移键、
+    // 键失配时再兜底发一次停止）。那三件套已整体删除：暂停改由 `services/topicTurnRuntime.ts`
+    // 按**话题**记账（`useMessageOperations.pauseMessages` → `kernelChat.cancelActiveTurn`），
+    // 不再需要在这里留任何登记。
 
     // dsh 内核替换：网络调用改为内核会话（provider/model/prompt 同步进内核，
     // 流式回复由内核 session 事件投影回 Redux）。

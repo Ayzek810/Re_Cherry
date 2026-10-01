@@ -151,12 +151,17 @@ const SectionTitle = styled.h2`
 `
 /**
  * 自适应列数（f2-62）：写死 `repeat(6, 1fr)` 时 7 个磁贴会在第二行只留 1 个靠左的磁贴，
- * 且列数语义被硬编码绑死。`auto-fit` + 96px 下限在 `Content` 的 720px 宽度下正好排满 7 列，
- * 窗口收窄时自动折行而不是压缩磁贴。
+ * 且列数语义被硬编码绑死。96px 下限 + `Content` 的 720px 宽度在收窄时自动折行，不压缩磁贴。
+ *
+ * 为什么必须是 **auto-fill 而不是 auto-fit**（W4-3 真机）：两个区块共用本样式，而 `auto-fit`
+ * 会把**空轨道折叠掉**、把它们的宽度平摊给实际有内容的格子——"小程序"区只有 3 个条目时，
+ * 3 个磁贴各占 ~229px（实测 x≈236/469/702），看起来就是"图标被摊开居中"；而 7 个入口的
+ * "应用"区因为排满轨道没有空轨道可折叠，仍是 ~110px 的左排（x≈177/289/…）。`auto-fill`
+ * 保留空轨道，条目固定宽度、从左依次排，尾部留空——两区因此同列宽、同左缘。
  */
 const Grid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 8px;
   padding: 0 8px;
 `

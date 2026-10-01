@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 import react from '@vitejs/plugin-react-swc'
 import { CodeInspectorPlugin } from 'code-inspector-plugin'
 import { defineConfig } from 'electron-vite'
@@ -13,6 +16,49 @@ const visualizerPlugin = (type: 'renderer' | 'main') => {
   return process.env[`VISUALIZER_${type.toUpperCase()}`] ? [visualizer({ open: true })] : []
 }
 
+/**
+ * 构建期不变式：**产物里不得出现 `delete require.cache[...]`**。
+ *
+ * 起因（2026-10-01 真机实锤，整条链已定位）：`electron-store` 的模块体里有一句
+ * `delete require.cache[__filename]`（它用 `module.parent` 推 parentDir）。该包此前被写在
+ * devDependencies 里，而主进程构建只把 root `dependencies` 列为 external——于是它被
+ * **内联进入口文件**，`__filename` 就变成入口自己的路径：**入口被从 Node 模块缓存里删掉**。
+ * 之后任何 chunk 的 `require("../index.js")` 都变成缓存未命中 → 整份入口重跑一遍
+ * （入口 chunk 里有 5 个回指它的 chunk）= 同一进程跑 5 次启动序列：`app:info` 二次注册、
+ * `dsh:sync-providers` 二次注册导致内核启动失败、两个 logger 抢同一日志文件（退出 `write after end`）、
+ * userData 被反复追加 "Dev"。
+ *
+ * 修法有两半：① `electron-store` 移入 root `dependencies`，构建自动 external、打包也会收集；
+ * ② 这里做**构建期红灯**——只要产物里还有谁在删模块缓存，立刻失败，而不是留到真机上看启动循环。
+ */
+function forbidModuleCacheTamperingPlugin() {
+  return {
+    name: 'rec-forbid-module-cache-tampering',
+    closeBundle(): void {
+      const mainDir = resolve('out/main')
+      let names: string[]
+      try {
+        names = readdirSync(mainDir, { recursive: true }) as string[]
+      } catch {
+        return // 产物尚未生成，没有可检查的对象
+      }
+      const offenders: string[] = []
+      for (const name of names) {
+        const fileName = String(name)
+        if (!fileName.endsWith('.js')) continue
+        const text = readFileSync(join(mainDir, fileName), 'utf8')
+        if (/delete\s+require\.cache|require\.cache\s*\[[^\]]*\]\s*=/.test(text)) offenders.push(fileName)
+      }
+      if (offenders.length > 0) {
+        throw new Error(
+          'bundled main bundles must not tamper with require.cache (inlined CJS packages that do will evict ' +
+            `the entry module and re-run the whole boot): ${offenders.join(', ')}`
+        )
+      }
+    }
+  }
+}
+
 const isDev = process.env.NODE_ENV === 'development'
 const isProd = process.env.NODE_ENV === 'production'
 
@@ -20,6 +66,7 @@ export default defineConfig({
   main: {
     plugins: [
       ...visualizerPlugin('main'),
+      forbidModuleCacheTamperingPlugin(),
       buildProxyBootstrapPlugin({
         dependencies: Object.keys(pkg.dependencies),
         isProd,
@@ -38,17 +85,17 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        // 四入口：index = 主进程；localOcrWorker = LocalPaddle OCR utility 子进程；
-        // visionWorker = 视觉模型文档处理的光栅化子进程；pdfExtractWorker =
-        // PDF 文本层抽取子进程（§7.20 挂账清偿：pdf.js 不再占用主进程事件循环）。
+        // 三入口：index = 主进程；localOcrWorker = LocalPaddle OCR utility 子进程；
+        // visionWorker = 视觉模型文档处理的光栅化子进程。
+        // （PDF 文本层抽取已回到主进程内的共用抽取引擎——旧 pdfExtractWorker 入口已删除：
+        //  那条路落在 pdfjs 判定"非 Node"的 utility 环境里，DOM 全局补不上，见 extractors.ts。）
         // 多入口下 rollup 不允许 inlineDynamicImports——内部动态导入按 chunk 拆分
         // 到 out/main/，electron-builder files "**/*" 全量打包，无 §4.16 闭包缺口；
         // 外部依赖照旧 externalize，不产生额外 chunk）。
         input: {
           index: resolve('src/main/index.ts'),
           localOcrWorker: resolve('src/main/services/preprocess/localPaddle/localOcrWorker.ts'),
-          visionWorker: resolve('src/main/services/preprocess/vision/visionWorker.ts'),
-          pdfExtractWorker: resolve('src/main/services/knowledge/pdfExtractWorker.ts')
+          visionWorker: resolve('src/main/services/preprocess/vision/visionWorker.ts')
         },
         external: ['bufferutil', 'utf-8-validate', 'electron', ...Object.keys(pkg.dependencies)],
         output: {

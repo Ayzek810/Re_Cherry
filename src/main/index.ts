@@ -16,7 +16,6 @@ import { isDev, isLinux, isWin } from './constant'
 import process from 'node:process'
 
 import { registerIpc } from './ipc'
-import { disposePdfExtractWorker, installPdfWorkerExtractor } from './services/knowledge/pdfExtractBridge'
 import { disposeOcrWorker } from './services/preprocess/localPaddle/localOcr'
 import { analyticsService } from './services/AnalyticsService'
 import { appMenuService } from './services/AppMenuService'
@@ -175,9 +174,6 @@ if (!app.requestSingleInstanceLock()) {
     // "No handler registered" 报错。外观类失败绝不能带走应用的基本可用性。
     registerShortcuts(mainWindow)
     await registerIpc(mainWindow, app)
-    // PDF 抽取 worker 桥安装（§7.20 挂账清偿）：boot 一次注入可插拔缝，vitest 不装
-    // （引擎测试保持进程内真跑）。幂等。
-    installPdfWorkerExtractor()
 
     // 托盘与 macOS 应用菜单：失败仅告警，不影响应用启动（与内核启动同策略）
     try {
@@ -306,13 +302,9 @@ if (!app.requestSingleInstanceLock()) {
     } catch {
       /* 未启动 */
     }
-    try {
-      disposePdfExtractWorker()
-    } catch {
-      /* 未启动 */
-    }
     // v1 二轮审查 m2-03：常驻 OCR worker（onnxruntime + PaddleOCR 模型，数百 MB）此前漏在
-    // 退出路径外——空闲 5 分钟才自退，解析后很快退出即残留子进程。与 pdf worker 同形处理。
+    // 退出路径外——空闲 5 分钟才自退，解析后很快退出即残留子进程。（PDF 文本层抽取已回到
+    // 主进程内的共用抽取引擎，不再有 pdf worker 需要释放。）
     try {
       disposeOcrWorker()
     } catch {

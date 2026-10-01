@@ -135,9 +135,6 @@ export enum IpcChannel {
   File_BatchUploadMarkdown = 'file:batchUploadMarkdown',
   File_ShowInFolder = 'file:showInFolder',
 
-  // PDF
-  Pdf_ExtractText = 'pdf:extractText',
-
   Export_Word = 'export:word',
 
   // obsidian（V1 移植）：只读枚举本地 Obsidian vault 与 vault 目录结构；导出内容

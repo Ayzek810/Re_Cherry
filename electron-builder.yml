@@ -68,6 +68,11 @@ asarUnpack:
   - "**/node_modules/sharp/**"
   - "**/node_modules/ppu-ocv/**"
   - "**/node_modules/ppu-paddle-ocr/**"
+  # @napi-rs/canvas（pdfjs 补 DOMMatrix/Path2D/ImageData 全局的载体；pdf-parse 的正式依赖，
+  # 其平台包是它的 optionalDependencies——与 @img/sharp 同一个"pnpm 收集器静默丢弃"坑面）：
+  # 运行时由 pdf.js 与两条 OCR 光栅化腿按字面 require 加载 .node，必须落在 app.asar.unpacked。
+  # scripts/after-pack.js 对此有交付断言（v1：读 PDF 与 OCR 共用同一份在场保证）。
+  - "**/node_modules/@napi-rs/**"
 
 win:
   executableName: Re_Cherry
@@ -132,6 +137,42 @@ afterSign: scripts/notarize.js
 artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
+    <!--LANG:en-->
+    Re_Cherry 0.5.3 - Fixes after the 0.5.2 cleanup round
+
+    This round closes one boot-path defect and four defects that users reported.
+
+    🛡️ Safety and correctness
+    - The boot sequence runs once per process. An inlined copy of `electron-store` deleted the entry module from the Node module cache, so every chunk that required the entry re-ran the whole boot: duplicate IPC handlers, a failed kernel boot, and two loggers on one file. The package now stays external, and the build fails if any bundle touches `require.cache`.
+    - The pause key cuts work in progress. Main aborts its own long work for the topic, and a new `llm/stream` middleware cancels the in-flight model request. The reply stops at the key press, not at the next turn boundary.
+    - The PDF text layer reads in the shared extractor engine: one pass, in the same process as the other formats. The utility subprocess, its build entry, its packaging assertion and the unused `pdf:extractText` IPC channel are gone. Root cause of the old `DOMMatrix is not defined` failure: pdf.js treats an Electron utility process as a non-Node environment and skips its own DOM polyfill.
+    - Knowledge-base citations merge into one carrier, as web-search citations already did. Two searches in one turn no longer produce two carriers with two numbering sets, and reopening a topic no longer splits them again.
+    - The Skills page loads. It scans on mount now. The scan was never triggered before, so the page spun forever.
+    - The install progress of a Code CLI tool survives a page switch and a reload. Main owns the running operation and reports it in the tool snapshot.
+    - The launchpad keeps pinned miniapp tiles at the left. The grid no longer collapses empty tracks, so a short row no longer spreads across the full width.
+
+    ⚡ Performance
+    - The vision document path sends JPEG page images: 1521 KB to 286 KB per page (-81%).
+    - A 178 MB, 530-page PDF reads its text layer in 116 ms.
+
+    <!--LANG:zh-CN-->
+    Re_Cherry 0.5.3 —— 0.5.2 整理轮之后的修复
+
+    本轮修掉启动链路上一个缺陷，以及四项用户上报的缺陷。
+
+    🛡️ 安全与正确性
+    - 启动序列每个进程只跑一次。被内联进产物的 `electron-store` 把自己的入口模块从 Node 模块缓存里删掉，于是每个「回指入口」的 chunk 都让整份入口重跑：IPC 重复注册、内核启动失败、两个 logger 抢同一日志文件。该包现在保持 external；任何产物只要改写 `require.cache`，构建即失败。
+    - 暂停键能掐断在途工作。主进程中止该话题下自己的长活，新的 `llm/stream` 中间件取消在途的模型请求——回答在按键当刻停住，不再等下一个回合边界。
+    - PDF 文本层回到共用抽取引擎：一次读完，与其他格式同进程。独立子进程、它的构建入口、打包断言，以及那条无人调用的 `pdf:extractText` 通道全部删除。旧报错 `DOMMatrix is not defined` 的根因：pdf.js 把 Electron 的 utility 进程判定为「非 Node 环境」，从而跳过它自己的 DOM 补丁。
+    - 知识库引用与网络搜索一样合并进同一个载体。同一轮两次检索不再产生两个载体、两套编号；重开话题也不再重新裂开。
+    - 技能页能正常加载：进入页面即扫描。此前从未触发扫描，于是永久转圈。
+    - 代码助手的安装进度在切页与整页刷新后仍在：主进程持有进行中的操作，并随工具快照下发。
+    - 启动台的固定小程序磁贴保持在左侧：网格不再折叠空轨道，短行不再被摊开到整行宽度。
+
+    ⚡ 性能
+    - 视觉文档通道改发 JPEG 页图：每页 1521 KB 降到 286 KB（−81%）。
+    - 178 MB / 530 页的 PDF，文本层读取 116 毫秒。
+
     <!--LANG:en-->
     Re_Cherry 0.5.2 - Pre-release cleanup, round 3
 

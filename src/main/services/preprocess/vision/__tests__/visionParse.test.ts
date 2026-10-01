@@ -10,10 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runVisionDocumentParse, visionWorkerPath } from '../visionParse'
 
-/** 逐页模型调用 mock（真 HTTP 不在单元面；行为实证见 tools/scratch-verify probe G）。 */
-vi.mock('@main/kernel/lightLlmModalities', () => ({
-  lightVisionDocument: vi.fn()
-}))
+/** 逐页模型调用 mock（真 HTTP 不在单元面；行为实证见 tools/scratch-verify probe G）。
+ *  只替掉发请求那一层——`LightVisionRequestError` 及其 retriable 语义用真模块（重试判据就在它身上）。 */
+vi.mock('@main/kernel/lightLlmModalities', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return { ...actual, lightVisionDocument: vi.fn() }
+})
 
 // 编排层的 worker 产物存在性预检走 node:fs.existsSync——setup 的 mock 无默认行为，
 // 这里默认 true（产物在），缺产物用例单独翻 false。
@@ -23,7 +25,7 @@ vi.mock('node:fs', async (importOriginal) => {
   return { ...mock, default: mock }
 })
 
-import { lightVisionDocument } from '@main/kernel/lightLlmModalities'
+import { lightVisionDocument, LightVisionRequestError } from '@main/kernel/lightLlmModalities'
 
 const children: FakeChild[] = []
 
@@ -191,24 +193,80 @@ describe('runVisionDocumentParse（utilityProcess 编排）', () => {
     expect(child.kill).toHaveBeenCalledTimes(1)
   })
 
-  it('模型调用失败：整本拒绝并上抛（不静默降级成空页）', async () => {
+  it('模型调用失败：整本拒绝并上抛（不静默降级成空页），非传输层失败不重试', async () => {
     vi.mocked(lightVisionDocument).mockRejectedValueOnce(new Error('vision document request failed (429): busy'))
     const { promise, child } = startParse('C:/books/scan.pdf')
     emit(child, { type: 'page', page: 1, totalPages: 3, mediaType: 'image/png', data: 'UE5H' })
     await expect(promise).rejects.toThrow('failed (429): busy')
+    expect(vi.mocked(lightVisionDocument)).toHaveBeenCalledTimes(1)
     expect(child.kill).toHaveBeenCalledTimes(1)
     // 失败后不放行下一页（worker 被 kill）
     expect(child.postMessage).not.toHaveBeenCalledWith({ type: 'next' })
   })
 
-  it('worker 报 error / 意外退出：如实上抛', async () => {
-    const first = startParse('C:/books/a.pdf')
-    emit(first.child, { type: 'error', message: 'pdf parse failed' })
-    await expect(first.promise).rejects.toThrow('pdf parse failed')
+  it('传输层失败重试一次：第一次掐断、第二次成功 → 该页照常入文（v1）', async () => {
+    vi.mocked(lightVisionDocument)
+      .mockRejectedValueOnce(new LightVisionRequestError('vision document request failed: fetch failed', true))
+      .mockResolvedValueOnce('第一页正文')
+    const { promise, child } = startParse('C:/books/scan.pdf')
+    await feedPage(child, 1, 1)
+    expect(vi.mocked(lightVisionDocument)).toHaveBeenCalledTimes(2)
+    expect(child.postMessage).toHaveBeenCalledWith({ type: 'next' })
+    emit(child, { type: 'done', totalPages: 1 })
+    await expect(promise).resolves.toBe('第一页正文')
+  })
 
-    const second = startParse('C:/books/b.pdf')
-    ;(second.child as unknown as { emit: (event: string, code: number) => void }).emit('exit', 1)
-    await expect(second.promise).rejects.toThrow('exited unexpectedly (code 1)')
+  it('传输层失败重试一次仍失败：整本拒绝，且错误带 cause 链与页号（不再沉默）', async () => {
+    vi.mocked(lightVisionDocument).mockRejectedValue(
+      new LightVisionRequestError('vision document request failed: fetch failed <- other side closed', true, {
+        cause: new Error('other side closed')
+      })
+    )
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const { promise, child } = startParse('C:/books/scan.pdf')
+      emit(child, { type: 'page', page: 1, totalPages: 3, mediaType: 'image/jpeg', data: 'UE5H' })
+      await expect(promise).rejects.toThrow('fetch failed <- other side closed')
+      // 恰好两次尝试（首次 + 重试一次），不无限重试
+      expect(vi.mocked(lightVisionDocument)).toHaveBeenCalledTimes(2)
+      const logged = warnSpy.mock.calls.flat().join('\n')
+      expect(logged).toContain('page 1/3')
+      expect(logged).toContain('other side closed')
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('页图编码随 worker 透传（JPEG 页图按 image/jpeg 上行）', async () => {
+    vi.mocked(lightVisionDocument).mockResolvedValueOnce('正文')
+    const { promise, child } = startParse('C:/books/scan.pdf')
+    emit(child, { type: 'page', page: 1, totalPages: 1, mediaType: 'image/jpeg', data: 'L2p/Rw==' })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(vi.mocked(lightVisionDocument).mock.calls[0][0]).toEqual(
+      expect.objectContaining({ images: [{ mediaType: 'image/jpeg', data: 'L2p/Rw==' }] })
+    )
+    emit(child, { type: 'done', totalPages: 1 })
+    await expect(promise).resolves.toBe('正文')
+  })
+
+  it('worker 报 error / 意外退出：如实上抛并落盘（v1：三条失败路都要留痕）', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const first = startParse('C:/books/a.pdf')
+      emit(first.child, { type: 'error', message: 'pdf parse failed' })
+      await expect(first.promise).rejects.toThrow('pdf parse failed')
+
+      const second = startParse('C:/books/b.pdf')
+      ;(second.child as unknown as { emit: (event: string, code: number) => void }).emit('exit', 1)
+      await expect(second.promise).rejects.toThrow('exited unexpectedly (code 1)')
+
+      const logged = warnSpy.mock.calls.flat().join('\n')
+      expect(logged).toContain('worker reported an error — pdf parse failed')
+      expect(logged).toContain('worker exited unexpectedly (code 1)')
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it('abort：立即拒绝并终止子进程', async () => {

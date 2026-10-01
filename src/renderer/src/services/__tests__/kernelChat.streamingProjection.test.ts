@@ -9,13 +9,13 @@
  *   3. assistant/message 最终替换块携带同一冻结值；正文块全文就位
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { initKernelBridge, kernelAnchorOf, sendToKernel } from '@renderer/services/kernelChat'
+import { cancelActiveTurn, initKernelBridge, kernelAnchorOf, sendToKernel } from '@renderer/services/kernelChat'
 import type { KernelSessionEventPayload } from '@renderer/services/kernelEventStream'
+import { hasLiveTurn, isTurnCancelled } from '@renderer/services/topicTurnRuntime'
 import store from '@renderer/store'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import type { Message, MessageBlock, ThinkingMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { abortMap, addAbortController } from '@renderer/utils/abortController'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type SessionListener = (payload: KernelSessionEventPayload) => void
@@ -47,8 +47,19 @@ const flushFrames = async (): Promise<void> => {
 const chunk = (topicId: string, seq: number, type: string, text: string, step = 1): void =>
   emit(topicId, seq, 'assistant/chunk', { step, chunk: { type, text } })
 
+/**
+ * 取一条消息**实际渲染**的块。
+ *
+ * 消息自身的 `blocks` 列表才是渲染源。不能只按 `messageId` 全表扫描：同一个话题里再次发送
+ * （或跨用例复用 messageId）时，上一轮遗留的同 messageId 块仍在 store 里，扫描会先命中那条
+ * 陈旧的空块——断言就会读到"界面根本不显示的块"。列表为空时才退回扫描（个别用例未建消息实体）。
+ */
 const blocksOf = (messageId: string): MessageBlock[] => {
   const entities = store.getState().messageBlocks.entities
+  const listed = store.getState().messages.entities[messageId]?.blocks
+  if (listed !== undefined && listed.length > 0) {
+    return listed.map((blockId) => entities[blockId]).filter((block): block is MessageBlock => block !== undefined)
+  }
   return Object.values(entities).filter(
     (block): block is MessageBlock => block !== undefined && block.messageId === messageId
   )
@@ -256,38 +267,36 @@ describe('kernelChat 回合收尾的 FIFO 清理（r2-20）', () => {
 })
 
 /**
- * r2-47 / r2-13：登记键是**用户消息 id**，而 user/message 回执会把该 id 改写为
- * `kernel-<topic>-<seq>`（`renameAbortController` 不迁移 `abortKeysByTopic` 索引）。
- * 回合收尾若只按话题清，改写后的键永远留在 abortMap 里（每回合泄一个闭包）。
+ * 暂停的单一路径（2026-10-01 重做）：按**话题**记账，键就是 topicId，没有键迁移、没有兜底、
+ * 没有残留。本组钉住三件事：
+ *   1. 回合开始即建立记录；`turn/end` 后记录清除（不存在"每回合泄一个闭包"）；
+ *   2. 暂停当帧把消息落 PAUSED（不等内核 `turn/end`）；
+ *   3. 暂停之后到达的正文增量被**丢弃**——界面立刻停住，与内核边界收尾解耦。
  */
-describe('kernelChat 回合收尾的中止登记清理（r2-47）', () => {
-  const TOPIC = 'topic-abort-registration'
-  const STUB = 'stub-abort-registration'
-  const USER_UUID = 'user-uuid-abort-registration'
+describe('kernelChat 暂停：按话题记账 + 当帧落态 + 丢弃后续增量', () => {
+  const TOPIC = 'topic-pause-single-path'
+  const STUB = 'stub-pause-single-path'
+  const USER_UUID = 'user-uuid-pause-single-path'
+  // 每条用例一套 id：真实发送每回合都新建 assistant 消息（新 stub id），
+  // 复用同一 id 会把上一轮留下的块混进本次读取（测试脚手架伪影，不是投影行为）。
+  const STUB_2 = 'stub-pause-single-path-2'
+  const USER_UUID_2 = 'user-uuid-pause-single-path-2'
 
-  it('id 改写后（uuid → kernel-<topic>-<seq>）回合收尾仍能摘掉登记', async () => {
-    initKernelBridge()
-    const send = sendToKernel(TOPIC, 'hi', STUB, USER_UUID)
-    await Promise.resolve()
+  /**
+   * 真实发送顺序是"先建助手消息（messagesReceived），再 sendToKernel"。
+   * 必须先建消息实体：`updateMessage` 对不存在的 id 是空操作，
+   * 缺了它 `startTurn`/`cancelActiveTurn` 落的 status 与 blocks 无处可落（脚手架伪影）。
+   */
+  const putAssistantStub = (id: string): void => {
     store.dispatch(
       newMessagesActions.messagesReceived({
         topicId: TOPIC,
         messages: [
           {
-            id: USER_UUID,
-            role: 'user',
-            topicId: TOPIC,
-            assistantId: 'assistant-1',
-            createdAt: new Date().toISOString(),
-            status: 'success',
-            blocks: []
-          } as unknown as Message,
-          {
-            id: STUB,
+            id,
             role: 'assistant',
             topicId: TOPIC,
             assistantId: 'assistant-1',
-            askId: USER_UUID,
             createdAt: new Date().toISOString(),
             status: 'processing',
             blocks: []
@@ -295,24 +304,52 @@ describe('kernelChat 回合收尾的中止登记清理（r2-47）', () => {
         ]
       })
     )
-    // messageThunk 的登记口径：键 = 用户消息 id，话题索引 = topicId
-    addAbortController(USER_UUID, () => undefined, TOPIC)
+  }
 
-    emit(TOPIC, 2, 'user/message', { content: [{ type: 'text', text: 'hi' }] })
+  it('回合开始建立记录、turn/end 清除记录', async () => {
+    initKernelBridge()
+    putAssistantStub(STUB)
+    const send = sendToKernel(TOPIC, 'hi', STUB, USER_UUID)
+    await Promise.resolve()
+
     emit(TOPIC, 3, 'turn/start', { turn: 1 })
     await flushFrames()
-    const kernelUserId = `kernel-${TOPIC}-2`
-    // 改写已发生：登记键迁到 kernel id（停止按钮按新 askId 才查得到）
-    expect(store.getState().messages.entities[USER_UUID]).toBeUndefined()
-    expect(store.getState().messages.entities[STUB]?.askId).toBe(kernelUserId)
-    expect(abortMap.has(kernelUserId)).toBe(true)
+    expect(hasLiveTurn(TOPIC)).toBe(true)
 
     emit(TOPIC, 4, 'turn/end', { reason: { kind: 'completed' } })
     await send
     await flushFrames()
+    expect(hasLiveTurn(TOPIC)).toBe(false)
+  })
 
-    // 收尾后两种键都不得残留（旧实现只清话题索引指向的旧 uuid，kernel id 键永久泄漏）
-    expect(abortMap.has(kernelUserId)).toBe(false)
-    expect(abortMap.has(USER_UUID)).toBe(false)
+  it('暂停当帧落 PAUSED，且之后的正文增量被丢弃', async () => {
+    initKernelBridge()
+    putAssistantStub(STUB_2)
+    const send = sendToKernel(TOPIC, 'hi', STUB_2, USER_UUID_2)
+    await Promise.resolve()
+
+    emit(TOPIC, 3, 'turn/start', { turn: 1 })
+    chunk(TOPIC, 4, 'text-delta', '第一段')
+    await flushFrames()
+    const beforePause = mainContentOf(STUB_2) ?? ''
+    expect(beforePause).toContain('第一段')
+
+    // 暂停：当帧落态（不依赖内核 turn/end）
+    expect(cancelActiveTurn(TOPIC)).toBe(true)
+    expect(isTurnCancelled(TOPIC)).toBe(true)
+    expect(store.getState().messages.entities[STUB_2]?.status).toBe('paused')
+
+    // 暂停之后到达的增量必须被丢弃：界面立刻停住
+    chunk(TOPIC, 5, 'text-delta', '第二段不该出现')
+    await flushFrames()
+    const afterDelta = mainContentOf(STUB_2) ?? ''
+    expect(afterDelta).toBe(beforePause)
+    expect(afterDelta).not.toContain('第二段不该出现')
+
+    // 收尾仍然清记录（幂等：turn/end 再做一次终态对账）
+    emit(TOPIC, 6, 'turn/end', { reason: { kind: 'aborted' } })
+    await send
+    await flushFrames()
+    expect(hasLiveTurn(TOPIC)).toBe(false)
   })
 })

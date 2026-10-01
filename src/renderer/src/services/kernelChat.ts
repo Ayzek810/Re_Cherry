@@ -13,6 +13,7 @@ import {
   syncKernelImageAttachment
 } from '@renderer/services/kernelImages'
 import { autoNameKernelTopic } from '@renderer/services/topicNaming'
+import { beginTurn, cancelTurn, endTurn, isTurnCancelled } from '@renderer/services/topicTurnRuntime'
 import { recordUsage } from '@renderer/services/usageStore'
 import store from '@renderer/store'
 import { updateTopicUpdatedAt } from '@renderer/store/assistants'
@@ -40,11 +41,6 @@ import {
   MessageBlockType,
   type ToolMessageBlock
 } from '@renderer/types/newMessage'
-import {
-  clearAbortControllersForTopic,
-  removeAbortController,
-  renameAbortController
-} from '@renderer/utils/abortController'
 import {
   createCitationBlock,
   createErrorBlock,
@@ -625,6 +621,8 @@ function startTurn(topicId: string, turn: number): void {
   const stubId = pendingStubs.get(topicId)
   if (stubId === undefined) return
 
+  // 暂停机制的唯一真相源：回合开始即建立记录（回合结束清掉，见 finishTurn 的 endTurn）。
+  beginTurn(topicId, turn, stubId)
   const mainBlock = createMainTextBlock(stubId, '', { status: MessageBlockStatus.STREAMING })
   streams.set(topicId, {
     assistantMessageId: stubId,
@@ -677,6 +675,9 @@ function freezePendingThinking(state: TurnState): void {
 function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
   const state = streams.get(topicId)
   if (state === undefined) return
+  // 用户已按暂停：本回合后续增量一律丢弃（界面当帧停住，不再等内核边界收尾）。
+  // 阶段名`text-delta`/`reasoning-delta`/`tool-call-delta` 都从这里进，一处拦下即可。
+  if (isTurnCancelled(topicId)) return
   // 换 step：上一段说话已由 assistant/message 收尾，本段新开流式块。
   // currentStep 未定 = 首个 step，沿用 startTurn 建好的初始块。
   if (state.currentStep !== undefined && state.currentStep !== step) {
@@ -1031,7 +1032,18 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
   if (citationResult !== undefined) {
     const citationBlock = citationResult.block
     if (citationResult.merged) {
-      store.dispatch(updateOneBlock({ id: citationBlock.id, changes: { response: citationBlock.response } }))
+      // 合并后的载荷字段随来源不同（web 搜索在 `response.results`，知识库在 `knowledge`）：
+      // 这里必须按实际存在的字段落 store——此前只写 `response`，知识库的合并结果会直接丢掉
+      //（算对了却进不了 store，界面仍显示两个载体）。
+      store.dispatch(
+        updateOneBlock({
+          id: citationBlock.id,
+          changes: {
+            ...(citationBlock.response !== undefined ? { response: citationBlock.response } : {}),
+            ...(citationBlock.knowledge !== undefined ? { knowledge: citationBlock.knowledge } : {})
+          }
+        })
+      )
     } else {
       state.citationBlockId = citationBlock.id
       state.citationBlockSource = citationBlock.response?.source
@@ -1120,10 +1132,26 @@ export function buildSearchCitationBlock(
       logger.warn('kernelChat: knowledge meta carried no results; skip citation block')
       return undefined
     }
+    const entries = payload.results as unknown as KnowledgeReference[]
+    if (existing !== undefined && Array.isArray(existing.knowledge)) {
+      // 与 web 搜索同构的不可变合并（W4-1）：同一轮第二次检索并入**同一个载体**。
+      // 为什么必须合并而不是新建载体：渲染层只取 `citationReferences[0]`，两个载体各自
+      // 从 1 编号 ⇒ 第二段正文的 [n] 会对到第一个载体里的错误条目（正确性问题，不只是观感）。
+      // 为什么必须新建对象：块进 store 后被冻结，原地 push 抛 "Cannot assign to read only
+      // property"（web 搜索分支 15:40 真机实证，故两分支同款写法）。
+      const mergedBlock: CitationMessageBlock = {
+        ...existing,
+        knowledge: [...existing.knowledge, ...entries]
+      }
+      logger.info(
+        `kernelChat: citation carrier (knowledge) merged, ${existing.knowledge.length + entries.length} entries total`
+      )
+      return { block: mergedBlock, merged: true }
+    }
     const block = createCitationBlock(messageId, {
-      knowledge: payload.results as unknown as KnowledgeReference[]
+      knowledge: entries
     })
-    logger.info(`kernelChat: citation carrier (knowledge) created with ${payload.results.length} entries`)
+    logger.info(`kernelChat: citation carrier (knowledge) created with ${entries.length} entries`)
     return { block, merged: false }
   }
   logger.warn(`kernelChat: unrecognized search meta kind "${String(payload.kind)}"; skip citation block`)
@@ -1178,11 +1206,10 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   const state = streams.get(topicId)
   if (state === undefined) {
     // 本回合没有投影状态（turn/end 先于 turn/start 到达、或 startTurn 未认领 stub）：回合仍然结束了，
-    // 本回合的簿记必须收口——否则未回执的 FIFO 条目会污染下一回合的回执配对（r2-20），
-    // 中止登记也会留在 abortMap 里（r2-13/r2-47）。pendingStubs 不动：后续若真来了 turn/start，
-    // 它是唯一的 stub 认领凭据（删掉会让那一轮彻底投影不出来）。
+    // 本回合的簿记必须收口——否则未回执的 FIFO 条目会污染下一回合的回执配对（r2-20）。
+    // 暂停记录也在这一处清掉（endTurn 是唯一的清理点，不存在残留闭包）。
     pendingUserIds.delete(topicId)
-    clearAbortControllersForTopic(topicId)
+    endTurn(topicId)
     return
   }
   const failed = reason.kind === 'error'
@@ -1288,16 +1315,56 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   // r2-20：本回合未回执的本地 user 消息 FIFO 到此作废——回执没来（内核侧失败/中断/删除轮次）时
   // 留着它只会让下一回合的 user/message 回执把 seq 记到错误的本地 id 上（FIFO 错配 → 锚点错位）。
   pendingUserIds.delete(topicId)
-  // r2-13 彻底版：摘掉本回合的中止登记，空闲时 abortMap 归零（此前每话题残留一个闭包）。
-  // r2-47：登记键是**用户消息 id**，而 user/message 回执会把该 id 改写为 kernel-<topic>-<seq>；
-  // `abortKeysByTopic` 仍指向旧 uuid（rename 不迁移话题索引，见 utils/abortController.ts），
-  // 只按话题清会漏掉改写后的键——那个闭包会随回合数无界留在 abortMap 里。故再按本轮回答的
-  // askId（= 用户消息 id，改写后即内核 id）清一次。两种键都是"本条消息"的键，不会误伤别的回合。
-  const assistantMessage = store.getState().messages.entities[state.assistantMessageId]
-  if (assistantMessage?.askId !== undefined) {
-    removeAbortController(assistantMessage.askId)
+  // 暂停记录在这里唯一收口：回合结束即清，不存在残留（旧的 abortMap + 话题索引 + 键迁移三件套
+  // 已随 utils/abortController.ts 一起删除）。
+  endTurn(topicId)
+}
+
+/**
+ * 用户按下暂停：**当帧**把界面状态落定，不等内核到边界收尾。
+ *
+ * 1. 标记本回合已取消 ⇒ 之后到达的一切增量由 `projectChunk` 丢弃（界面立刻停住）；
+ * 2. 把仍在流式/进行中的块与本回合助手消息落成 PAUSED（口径与 `finishTurn` 的 aborted 分支一致，
+ *    包含思考块时长内联冻结）；
+ * 3. 返回是否真有在跑的回合：`false` = 没有可停的东西。
+ *
+ * 内核那边仍会收到一次停止（调用方负责），它何时收尾都不再影响观感：`turn/end` 到达时
+ * `finishTurn` 走 aborted 分支做终态对账并清记录，此时重复落态是幂等的。
+ */
+export function cancelActiveTurn(topicId: string): boolean {
+  const state = streams.get(topicId)
+  if (state === undefined) return false
+  cancelTurn(topicId)
+  const entities = store.getState().messageBlocks.entities
+  for (const blockId of state.blockIds) {
+    const block = entities[blockId]
+    if (
+      block !== undefined &&
+      (block.status === MessageBlockStatus.STREAMING || block.status === MessageBlockStatus.PROCESSING)
+    ) {
+      const thinkingElapsed =
+        blockId === state.thinkingBlockId && state.thinkingStartedAt !== undefined
+          ? (state.thinkingMillsec ?? Math.max(0, Math.round(performance.now() - state.thinkingStartedAt)))
+          : undefined
+      store.dispatch(
+        updateOneBlock({
+          id: blockId,
+          changes: {
+            status: MessageBlockStatus.PAUSED,
+            ...(thinkingElapsed !== undefined ? { thinking_millsec: thinkingElapsed } : {})
+          }
+        })
+      )
+    }
   }
-  clearAbortControllersForTopic(topicId)
+  store.dispatch(
+    newMessagesActions.updateMessage({
+      topicId,
+      messageId: state.assistantMessageId,
+      updates: { status: AssistantMessageStatus.PAUSED }
+    })
+  )
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -1550,8 +1617,11 @@ async function projectEventsToMessages(
         // 会话日志，重开话题即复现药丸与胶囊）。同轮多次 web_search 合并进既有
         // 载体（v0.4 验收轮，与直播路径同构）。
         const currentReply = reply
+        // 只要本轮记着载体 id 就把载体交给构建函数——来源是否匹配由构建函数内部分支各自
+        // 把守（跨来源本就不合并）。旧条件写成「来源必须是 web 搜索」，导致知识库载体在还原
+        // 路径上永远拿不到 existing ⇒ 重开话题后引用又裂成两个载体（直播与还原不同构，W4-1）。
         const existingCarrier =
-          currentReply.citationBlockSource === WEB_SEARCH_SOURCE.WEBSEARCH && currentReply.citationBlockId !== undefined
+          currentReply.citationBlockId !== undefined
             ? (blockById.get(currentReply.citationBlockId) as CitationMessageBlock | undefined)
             : undefined
         const citationResult = buildSearchCitationBlock(
@@ -1640,8 +1710,7 @@ function remapMessageToKernelId(topicId: string, localId: string, seq: number): 
   const newId = kernelMessageId(topicId, seq)
   const existing = store.getState().messages.entities[localId]
   const blockIds = existing?.blocks ?? []
-  // 中止键随消息 id 改写迁移（user 消息 uuid → kernel id），否则停止按钮按新 askId 查不到注册
-  if (existing?.role === 'user') renameAbortController(localId, newId)
+  // 暂停不再按键记账（按话题记账，见 services/topicTurnRuntime.ts），故此处无需迁移任何中止键。
   store.dispatch(newMessagesActions.replaceMessageId({ topicId, oldId: localId, newId }))
   for (const blockId of blockIds) {
     store.dispatch(updateOneBlock({ id: blockId, changes: { messageId: newId } }))

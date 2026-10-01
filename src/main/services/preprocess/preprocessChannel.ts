@@ -164,6 +164,16 @@ export async function parsePdfWithProvider(
       signal.addEventListener('abort', onOuterAbort, { once: true })
     }
   }
+  // [pause-probe] 通道级中断落盘：区分「外部信号（暂停/中止）」与「8 分钟预算」谁先到。
+  controller.signal.addEventListener(
+    'abort',
+    () => {
+      logger.warn(
+        `[pause-probe] channel aborted for provider "${config.id}": reason=${String(controller.signal.reason)}`
+      )
+    },
+    { once: true }
+  )
   try {
     switch (config.id) {
       case 'local-paddle': {

@@ -1,6 +1,6 @@
 {
   "name": "Re_Cherry",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "description": "A personalized AI assistant forked from Cherry Studio.",
   "desktopName": "Re_Cherry.desktop",
@@ -124,6 +124,7 @@
     "ai": "^6.0.143",
     "async-mutex": "^0.5.0",
     "cross-spawn": "7.0.6",
+    "electron-store": "^8.2.0",
     "elysia": "^1.4.28",
     "font-list": "2.0.0",
     "gray-matter": "4.0.3",
@@ -269,7 +270,6 @@
     "electron": "41.2.1",
     "electron-builder": "26.8.1",
     "electron-devtools-installer": "^3.2.0",
-    "electron-store": "^8.2.0",
     "electron-vite": "5.0.0",
     "electron-window-state": "^5.0.3",
     "emittery": "^1.0.3",

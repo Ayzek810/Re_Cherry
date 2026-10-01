@@ -37,7 +37,6 @@ vi.mock('@renderer/utils/messageUtils/create', () => ({
   createThinkingBlock: vi.fn(),
   createToolBlock: vi.fn()
 }))
-vi.mock('@renderer/utils/abortController', () => ({ renameAbortController: vi.fn(), removeAbortController: vi.fn() }))
 // 以下两个只被"思考档位映射"用到，与本文件测的建册门控无关；不桩掉会让首个用例付出整张
 // provider/model 配置图的加载代价（实测 ~17s）。
 vi.mock('@renderer/config/reasoningCompat', () => ({ providerReasoningCompat: vi.fn(() => undefined) }))

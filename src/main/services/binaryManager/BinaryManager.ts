@@ -137,6 +137,31 @@ export type BinaryToolSnapshot = {
    * 一次 toast 里，用户回头再看就没了。
    */
   lastFailure?: string
+  /**
+   * v1（W4-4）：该工具**当前正在跑**的操作（安装/卸载），无操作时缺省。
+   *
+   * 为什么必须由主进程持有：安装跑在主进程，而"正在安装 + 进度"此前只活在渲染层组件的
+   * 局部 state 里——切走 `/code` 页组件即销毁，回来时主进程还在装、渲染层却已认为空闲
+   * （按钮变回"可安装"、进度行不渲染）。同步进快照（与 lastFailure 同一条路：把只活在
+   * 一次性事件里的东西变成可查事实）后，页面重挂载/整页刷新都能恢复。
+   *
+   * 瞬态字段：只随 `getToolSnapshots` 的内存应答下发，**不写进快照缓存文件**。
+   */
+  operation?: BinaryToolOperation
+}
+
+/**
+ * v1（W4-4）：主进程当前操作的类型。安装与升级在 IPC 面是同一次 `install_tool`（渲染层
+ * 才知道自己按的是"安装"还是"升级"），故主进程只区分 install 与 remove。
+ */
+export type BinaryToolOperationKind = 'install' | 'remove'
+
+export type BinaryToolOperation = {
+  kind: BinaryToolOperationKind
+  /** 开始时刻（epoch ms）。 */
+  at: number
+  /** 该操作最近一次进度载荷（与 `onInstallProgress` 同一份契约）。 */
+  progress?: InstallProgressPayload
 }
 
 export type BinaryOperationResult = { success: true } | { success: false; message: string }
@@ -275,6 +300,11 @@ export class BinaryManager {
    * 故"上次为什么失败"在重启后仍可读。
    */
   private readonly installFailures = new Map<string, string>()
+  /**
+   * v1（W4-4）：当前正在跑的操作（同一时刻至多一个——`operationGate` 是全局互斥）。
+   * 随快照下发（见 overlayOperation），不落盘。
+   */
+  private currentOperation: (BinaryToolOperation & { name: string }) | null = null
 
   /** 取变更闸；拿不到返回 undefined（调用方据此给出"有别的安装/卸载在跑"的明确结果）。 */
   private async acquireOperationGate(): Promise<MutexInterface.Releaser | undefined> {
@@ -283,6 +313,39 @@ export class BinaryManager {
     } catch {
       // tryAcquire 的唯一失败原因就是"已被占用"——错误文本即上面的自定义消息。
       return undefined
+    }
+  }
+
+  /**
+   * v1（W4-4）：登记当前操作并广播一次——渲染层据此**立刻**从快照里看到"正在装"，
+   * 而不是等最后一次进度事件或本次操作结束。
+   */
+  private beginOperation(name: string, kind: BinaryToolOperationKind): void {
+    this.currentOperation = { name, kind, at: Date.now() }
+    this.broadcastChanged()
+  }
+
+  /** v1（W4-4）：本次操作结束（成功/失败/卸载皆同）——清掉进行态并广播。 */
+  private endOperation(): void {
+    this.currentOperation = null
+  }
+
+  /**
+   * v1（W4-4）：把"当前操作"叠加到内存应答上。**不改缓存对象**（新建一份），
+   * 因此持久化的快照缓存文件里永远没有这个瞬态字段。
+   */
+  private overlayOperation(data: Record<string, BinaryToolSnapshot>): Record<string, BinaryToolSnapshot> {
+    const operation = this.currentOperation
+    if (operation === null) return data
+    const target = data[operation.name]
+    if (target === undefined) return data
+    const { progress } = operation
+    return {
+      ...data,
+      [operation.name]: {
+        ...target,
+        operation: { kind: operation.kind, at: operation.at, ...(progress === undefined ? {} : { progress }) }
+      }
     }
   }
 
@@ -306,19 +369,19 @@ export class BinaryManager {
       if (Date.now() - cached.at > SNAPSHOT_REFRESH_COOLDOWN_MS && this.snapshotProbeInFlight === null) {
         this.startBackgroundSnapshotRefresh()
       }
-      return cached.data
+      return this.overlayOperation(cached.data)
     }
     if (this.snapshotProbeInFlight !== null) {
       await this.snapshotProbeInFlight
-      return this.snapshotCache?.data ?? {}
+      return this.overlayOperation(this.snapshotCache?.data ?? {})
     }
     const seeded = await this.readSnapshotCacheFile()
     if (seeded) {
       this.snapshotCache = { data: seeded, at: Date.now() }
       this.startBackgroundSnapshotRefresh()
-      return seeded
+      return this.overlayOperation(seeded)
     }
-    return this.refreshSnapshotCache()
+    return this.overlayOperation(await this.refreshSnapshotCache())
   }
 
   private startBackgroundSnapshotRefresh(): void {
@@ -472,6 +535,8 @@ export class BinaryManager {
     if (!release) return { success: false, message: OPERATION_BUSY_MESSAGE }
     // 新一次尝试开始：清掉上一次的失败记忆（失败行只在"上次失败且当前不在忙"时出现）。
     this.installFailures.delete(name)
+    // v1（W4-4）：登记进行态（随快照下发）——渲染层切页/重挂载后靠它恢复"正在安装"。
+    this.beginOperation(name, 'install')
     try {
       if (plan.kind === 'npm') await this.installNpmTool(plan, targetVersion)
       else if (plan.kind === 'venv') await this.installVenvTool(plan, targetVersion)
@@ -490,6 +555,7 @@ export class BinaryManager {
       this.installFailures.set(name, message.slice(0, INSTALL_FAILURE_DETAIL_LIMIT))
       return { success: false as const, message }
     } finally {
+      this.endOperation()
       release()
       this.broadcastChanged()
     }
@@ -903,6 +969,8 @@ export class BinaryManager {
       logger.warn(`Refused to remove managed tool ${name}: another operation is running`)
       return { removed: false, message: OPERATION_BUSY_MESSAGE }
     }
+    // v1（W4-4）：卸载同样登记进行态——否则切页回来会看到一个像空闲的"卸载"按钮。
+    this.beginOperation(name, 'remove')
     try {
       // v0.4.5-1（真机"卸载耗时过长"）：卸载耗时此前**没有任何日志**——用户说慢，日志里一条都
       // 查不到，只能靠事后复刻基准测量（本次即如此）。删树 + 运行时 + 重探各记一次耗时，
@@ -939,6 +1007,7 @@ export class BinaryManager {
       logger.warn(`Failed to remove managed tool ${name}`, { error: message })
       return { removed: false, message }
     } finally {
+      this.endOperation()
       release()
       this.broadcastChanged()
     }
@@ -1099,6 +1168,11 @@ export class BinaryManager {
   ): void {
     try {
       const payload = buildInstallProgressPayload(tool, step, options)
+      // v1（W4-4）：进度同时记进"当前操作"——页面重挂载后靠快照里的这一份恢复步骤名/比例，
+      // 不必等下一次事件（长阶段里事件稀疏，"等下一次"看起来就是进度丢了）。
+      if (this.currentOperation !== null && this.currentOperation.name === tool) {
+        this.currentOperation.progress = payload
+      }
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) {
           window.webContents.send(IpcChannel.CodeCli_Binary_InstallProgress, payload)
