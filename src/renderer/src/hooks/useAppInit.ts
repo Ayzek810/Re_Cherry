@@ -15,16 +15,83 @@ import {
 import tabsService from '@renderer/services/TabsService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
 import { setAvatar, setFilesPath, setResourcesPath } from '@renderer/store/runtime'
+import type { WebSearchState } from '@renderer/store/websearch'
 import { checkDataLimit } from '@renderer/utils'
 import { defaultLanguage } from '@shared/config/constant'
-import { IpcChannel } from '@shared/IpcChannel'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import { useDefaultModel } from './useAssistant'
 import useFullScreenNotice from './useFullScreenNotice'
+import { useInjectCustomCss } from './useInjectCustomCss'
 import { useRuntime } from './useRuntime'
 import { useNavbarPosition, useSettings } from './useSettings'
+
+/** `syncWebSearchToKernel` 的参数形状（用 `Parameters` 取，避免与 kernelChat 的声明漂移）。 */
+type KernelWebSearchSyncConfig = Parameters<typeof syncWebSearchToKernel>[0]
+
+/**
+ * websearch 切片 → 内核网络搜索配置投影（r2-33）。
+ *
+ * 抽取为纯函数的原因：**只有这几个输入字段变化才需要重推内核**。此前 effect 依赖整个
+ * `state.websearch` 切片对象（Redux 每次 websearch action 都产出新引用），于是设置页里拨动
+ * 任意无关开关（`setDefaultProvider`/`setOverwrite`/`setProviderConfig`…）都会把含
+ * `apiKey`/`basicAuthPassword` 的完整 provider 清单重新跨 IPC 推一次主进程
+ * （mini 窗口的 store 广播还会额外制造触发源）。本函数让"载荷只由这些字段决定"可测。
+ */
+export function buildKernelWebSearchConfig(input: {
+  providers: WebSearchState['providers']
+  subscribeSources: WebSearchState['subscribeSources']
+  excludeDomains: WebSearchState['excludeDomains']
+  searchWithTime: WebSearchState['searchWithTime']
+  maxResults: WebSearchState['maxResults']
+  compressionConfig: WebSearchState['compressionConfig']
+  language?: string
+}): KernelWebSearchSyncConfig {
+  return {
+    providers: (input.providers ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      apiKey: p.apiKey,
+      apiHost: p.apiHost,
+      url: p.url,
+      engines: p.engines,
+      basicAuthUsername: p.basicAuthUsername,
+      basicAuthPassword: p.basicAuthPassword,
+      usingBrowser: p.usingBrowser
+    })),
+    // 订阅源黑名单（ublacklist 模式）平铺合并；excludeDomains 单独透传
+    blacklist: (input.subscribeSources ?? []).flatMap((s) => s.blacklist ?? []),
+    excludeDomains: input.excludeDomains ?? [],
+    searchWithTime: input.searchWithTime ?? false,
+    maxResults: input.maxResults ?? 5,
+    language: input.language,
+    // 结果压缩投影（批次7）：embeddingModel(Model) 收窄为 {providerId, modelId} 引用，
+    // 密钥由主进程自解析（同知识库先例），不在此通道传 apiKey。
+    compression: input.compressionConfig
+      ? {
+          method: input.compressionConfig.method ?? 'none',
+          cutoffLimit: input.compressionConfig.cutoffLimit,
+          cutoffUnit: input.compressionConfig.cutoffUnit,
+          documentCount: input.compressionConfig.documentCount,
+          embedding: input.compressionConfig.embeddingModel
+            ? {
+                providerId: input.compressionConfig.embeddingModel.provider,
+                modelId: input.compressionConfig.embeddingModel.id,
+                dimensions: input.compressionConfig.embeddingDimensions
+              }
+            : undefined,
+          // 批次2 rerank 实装：重排模型引用同形收窄（undefined = 不重排）。
+          rerank: input.compressionConfig.rerankModel
+            ? {
+                providerId: input.compressionConfig.rerankModel.provider,
+                modelId: input.compressionConfig.rerankModel.id
+              }
+            : undefined
+        }
+      : undefined
+  }
+}
 
 export function useAppInit() {
   const dispatch = useAppDispatch()
@@ -58,12 +125,8 @@ export function useAppInit() {
   }, [])
 
   useEffect(() => {
-    const handler = () => handleSaveData()
-    window.electron.ipcRenderer.on(IpcChannel.App_SaveData, handler)
-    // 具名解绑：组件重挂载（严格模式/HMR）时监听器叠加会让一次保存触发 N 次 flush
-    return () => {
-      window.electron.ipcRenderer.removeListener(IpcChannel.App_SaveData, handler)
-    }
+    // 具名解绑由 preload 桥的返回函数负责：组件重挂载（严格模式/HMR）时监听器叠加会让一次保存触发 N 次 flush
+    return window.api.events.onSaveData(() => handleSaveData())
   }, [])
 
   useFullScreenNotice()
@@ -126,19 +189,8 @@ export function useAppInit() {
     })
   }, [dispatch])
 
-  useEffect(() => {
-    let customCssElement = document.getElementById('user-defined-custom-css') as HTMLStyleElement
-    if (customCssElement) {
-      customCssElement.remove()
-    }
-
-    if (customCss) {
-      customCssElement = document.createElement('style')
-      customCssElement.id = 'user-defined-custom-css'
-      customCssElement.textContent = customCss
-      document.head.appendChild(customCssElement)
-    }
-  }, [customCss])
+  // r2-65：注入实现收口到 useInjectCustomCss（mini 窗口共用同一实现）。
+  useInjectCustomCss(customCss)
 
   useEffect(() => {
     void window.api.config.set('enableDataCollection', enableDataCollection)
@@ -152,56 +204,42 @@ export function useAppInit() {
   const kernelProviders = useAppSelector((state) => state.llm.providers)
   const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
   const imageDescriberPrompt = useAppSelector((state) => state.llm.imageDescriberPrompt)
-  // 批次2 网络搜索：websearch 切片（providers/blacklist/searchWithTime）变更即推内核
-  const webSearchState = useAppSelector((state) => state.websearch)
+  // 批次2 网络搜索：只订阅**载荷真正读取的字段**（r2-33）。此前订阅整个 websearch 切片，
+  // 任意无关 action（defaultProvider/overwrite/providerConfig…，含 mini 窗口广播进来的）都会
+  // 重推一次含密钥的 provider 清单。逐字段订阅 + useMemo 投影后，只有这些输入变化才发 IPC。
+  const webSearchProviders = useAppSelector((state) => state.websearch.providers)
+  const webSearchSubscribeSources = useAppSelector((state) => state.websearch.subscribeSources)
+  const webSearchExcludeDomains = useAppSelector((state) => state.websearch.excludeDomains)
+  const webSearchSearchWithTime = useAppSelector((state) => state.websearch.searchWithTime)
+  const webSearchMaxResults = useAppSelector((state) => state.websearch.maxResults)
+  const webSearchCompressionConfig = useAppSelector((state) => state.websearch.compressionConfig)
   // v0.4.3：应用语言随投影上行——KernelWebSearchConfig.language 供 local-google/bing
   // 追加 lang: 语言过滤（此前载荷从不携带该字段，消费端是死路）。语言变更也重推。
+  const webSearchKernelConfig = useMemo(
+    () =>
+      buildKernelWebSearchConfig({
+        providers: webSearchProviders,
+        subscribeSources: webSearchSubscribeSources,
+        excludeDomains: webSearchExcludeDomains,
+        searchWithTime: webSearchSearchWithTime,
+        maxResults: webSearchMaxResults,
+        compressionConfig: webSearchCompressionConfig,
+        language
+      }),
+    [
+      webSearchProviders,
+      webSearchSubscribeSources,
+      webSearchExcludeDomains,
+      webSearchSearchWithTime,
+      webSearchMaxResults,
+      webSearchCompressionConfig,
+      language
+    ]
+  )
 
   useEffect(() => {
-    void syncWebSearchToKernel({
-      providers: (webSearchState.providers ?? []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        apiKey: p.apiKey,
-        apiHost: p.apiHost,
-        url: p.url,
-        engines: p.engines,
-        basicAuthUsername: p.basicAuthUsername,
-        basicAuthPassword: p.basicAuthPassword,
-        usingBrowser: p.usingBrowser
-      })),
-      // 订阅源黑名单（ublacklist 模式）平铺合并；excludeDomains 单独透传
-      blacklist: (webSearchState.subscribeSources ?? []).flatMap((s) => s.blacklist ?? []),
-      excludeDomains: webSearchState.excludeDomains ?? [],
-      searchWithTime: webSearchState.searchWithTime ?? false,
-      maxResults: webSearchState.maxResults ?? 5,
-      language,
-      // 结果压缩投影（批次7）：embeddingModel(Model) 收窄为 {providerId, modelId} 引用，
-      // 密钥由主进程自解析（同知识库先例），不在此通道传 apiKey。
-      compression: webSearchState.compressionConfig
-        ? {
-            method: webSearchState.compressionConfig.method ?? 'none',
-            cutoffLimit: webSearchState.compressionConfig.cutoffLimit,
-            cutoffUnit: webSearchState.compressionConfig.cutoffUnit,
-            documentCount: webSearchState.compressionConfig.documentCount,
-            embedding: webSearchState.compressionConfig.embeddingModel
-              ? {
-                  providerId: webSearchState.compressionConfig.embeddingModel.provider,
-                  modelId: webSearchState.compressionConfig.embeddingModel.id,
-                  dimensions: webSearchState.compressionConfig.embeddingDimensions
-                }
-              : undefined,
-            // 批次2 rerank 实装：重排模型引用同形收窄（undefined = 不重排）。
-            rerank: webSearchState.compressionConfig.rerankModel
-              ? {
-                  providerId: webSearchState.compressionConfig.rerankModel.provider,
-                  modelId: webSearchState.compressionConfig.rerankModel.id
-                }
-              : undefined
-          }
-        : undefined
-    })
-  }, [webSearchState, language])
+    void syncWebSearchToKernel(webSearchKernelConfig)
+  }, [webSearchKernelConfig])
 
   // 批次3 MCP：mcp 切片 servers（配置含命令/env 密钥）整体投影进主进程 MCPService
   // 内存（不落盘不进会话；内核桥挂载时按 serverId 反查）。

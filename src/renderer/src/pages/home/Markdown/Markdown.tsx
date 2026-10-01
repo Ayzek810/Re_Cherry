@@ -1,11 +1,9 @@
 import 'katex/dist/katex.min.css'
-import 'katex/dist/contrib/copy-tex'
-import 'katex/dist/contrib/mhchem'
 import 'remark-github-blockquote-alert/alert.css'
 
 import ImageViewer from '@renderer/components/ImageViewer'
 import MarkdownShadowDOMRenderer from '@renderer/components/MarkdownShadowDOMRenderer'
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useSetting } from '@renderer/hooks/useSettings'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import type {
   CompactMessageBlock,
@@ -48,6 +46,12 @@ export type InlineHtmlPreviewMode = 'generating' | 'ready'
  * 静态导入，实测把约 573KB 的 KaTeX 引擎钉进首屏 store chunk（而同一引擎另有一份懒副本）。
  * 两个引擎共用同一套异步接线：插件就绪前该引擎的公式按原文渲染，就绪后由 state 更新重渲染；
  * 加载结果模块级缓存（跨消息块只付一次解析成本）。
+ *
+ * p2-02 续：KaTeX 的**两个 contrib**（`copy-tex` 复制公式为 LaTeX 源码、`mhchem` 化学式扩展）
+ * 此前仍是本文件的顶层副作用导入，而它们是 `katex` 包的消费者 ⇒ 整份 KaTeX 实体（产物里
+ * 443KB 的 `katex-*.js`）照样被钉在首屏静态导入闭包里。现在两个 contrib 与引擎插件一起
+ * 在同一段动态导入里加载，且 contrib **先于**插件就绪（它们往 katex 实例注册宏/钩子，
+ * 必须在第一次渲染前执行完）。
  */
 let mathjaxPluginPromise: Promise<Pluggable> | null = null
 function loadMathjaxPlugin(): Promise<Pluggable> {
@@ -60,7 +64,13 @@ function loadMathjaxPlugin(): Promise<Pluggable> {
 
 let katexPluginPromise: Promise<Pluggable> | null = null
 function loadKatexPlugin(): Promise<Pluggable> {
-  katexPluginPromise ??= import('rehype-katex').then((mod) => mod.default as unknown as Pluggable)
+  katexPluginPromise ??= (async () => {
+    // 顺序有语义：contrib 注册到 katex 实例上，必须早于任何 rehype-katex 渲染。
+    await import('katex/dist/contrib/copy-tex')
+    await import('katex/dist/contrib/mhchem')
+    const mod = await import('rehype-katex')
+    return mod.default as unknown as Pluggable
+  })()
   return katexPluginPromise
 }
 
@@ -224,7 +234,8 @@ interface Props {
 
 const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
   const { t } = useTranslation()
-  const { mathEngine, mathEnableSingleDollar } = useSettings()
+  const mathEngine = useSetting('mathEngine')
+  const mathEnableSingleDollar = useSetting('mathEnableSingleDollar')
 
   const isTrulyDone = 'status' in block && block.status === 'success'
   const [displayedContent, setDisplayedContent] = useState(postProcess ? postProcess(block.content) : block.content)

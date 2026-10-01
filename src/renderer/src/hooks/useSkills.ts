@@ -17,7 +17,7 @@ import { searchSkills } from '@renderer/services/SkillSearchService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { addInstalledSkill, removeInstalledSkills, setInstalledSkills } from '@renderer/store/skills'
 import type { InstalledSkill, SkillSearchResult } from '@types'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('useSkills')
@@ -61,18 +61,41 @@ export function useInstalledSkills(agentId?: string) {
   const { t } = useTranslation()
   // fork：切片是主进程扫描的投影（refresh 整体覆盖）；选择器实时反映。
   const skills = useAppSelector((state) => state.skills.installedSkills)
-  const loading = false
-  const error: string | null = null
+  // r2-38：真实反映扫描过程/结果。此前两者硬编码为 `false`/`null`，主进程扫描失败时切片保持
+  // 原状（首次进入即空），页面只能渲染"未安装任何技能"——失败看起来像空结果（§9 违规）。
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
-  /** 主进程全量扫描 → 切片整体投影（磁盘 = 真相源）。 */
+  /** 主进程全量扫描 → 切片整体投影（磁盘 = 真相源）。失败必须可见（error + toast），不静默。 */
   const refresh = useCallback(async () => {
+    setLoading(true)
     try {
       const entries = (await window.api.skills.list()) as MainSkillEntry[]
       dispatch(setInstalledSkills(entries.map((entry) => projectSkill(entry, 'local', null))))
+      if (mountedRef.current) {
+        setError(null)
+      }
     } catch (err) {
-      logger.error('skills: refresh failed', err instanceof Error ? err : new Error(String(err)))
+      const message = err instanceof Error ? err.message : String(err)
+      logger.error('skills: refresh failed', err instanceof Error ? err : new Error(message))
+      if (mountedRef.current) {
+        setError(message)
+      }
+      // 用户可见信号：安装/卸载路径同样 toast（本 hook 的 :103 等处）。
+      window.toast.error(t('settings.skills.refreshFailed'))
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
-  }, [dispatch])
+  }, [dispatch, t])
 
   const toggle = useCallback(
     async (skillId: string, isEnabled: boolean) => {
@@ -132,9 +155,11 @@ export function useSkillSearch() {
     setError(null)
 
     try {
-      const data = await searchSkills(query)
+      // r2-07：`searchSkills` 现返回判别式 `{ results, failed }`（失败的源不再被伪装成"成功但空"）。
+      const { results: found, failed } = await searchSkills(query)
       if (requestId === abortRef.current) {
-        setResults(data)
+        setResults(found)
+        setError(failed.length > 0 && found.length === 0 ? `skill search failed: ${failed.join(', ')}` : null)
       }
     } catch (err) {
       if (requestId === abortRef.current) {

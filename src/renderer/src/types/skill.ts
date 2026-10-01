@@ -86,36 +86,9 @@ export const ClawhubSearchResponseSchema = z.object({
   results: z.array(ClawhubSearchItemSchema)
 })
 
-export const ClawhubSkillDetailSchema = z.object({
-  skill: z.object({
-    slug: z.string(),
-    displayName: z.string(),
-    summary: z.string(),
-    tags: z.record(z.string(), z.string()).optional(),
-    stats: z
-      .object({
-        downloads: z.number().default(0),
-        stars: z.number().default(0),
-        installsAllTime: z.number().default(0)
-      })
-      .optional()
-  }),
-  owner: z
-    .object({
-      handle: z.string(),
-      displayName: z.string(),
-      image: z.string().nullable()
-    })
-    .nullable(),
-  moderation: z
-    .object({
-      isSuspicious: z.boolean(),
-      isMalwareBlocked: z.boolean(),
-      verdict: z.string()
-    })
-    .nullable()
-})
-export type ClawhubSkillDetail = z.infer<typeof ClawhubSkillDetailSchema>
+// ClawhubSkillDetailSchema / ClawhubSkillDetail（clawhub 详情接口）在 r2-108 中删除：
+// 全仓零消费者，`services/SkillSearchService.ts` 只导入三个 Search 响应 schema。
+// 接线详情接口时再加回。
 
 // ============================================================================
 // Unified skill search result (normalized across all sources)

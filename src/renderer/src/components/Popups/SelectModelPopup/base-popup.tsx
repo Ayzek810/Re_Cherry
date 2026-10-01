@@ -79,6 +79,12 @@ const SelectModelPopupView: React.FC<Props> = ({
     })
   }, [])
 
+  // c2-34：全局 keydown 的处理器通过 ref 读取当前高亮项。原实现把 `focusedItemKey` 直接放进
+  // 依赖数组，而它由鼠标划过每一行驱动 —— 划过十几行就是十几次 window 监听重挂，
+  // 每次都有一个「监听器不存在」的短窗口（期间 ↑/↓/Enter 丢事件）。
+  const focusedItemKeyRef = useRef(focusedItemKey)
+  focusedItemKeyRef.current = focusedItemKey
+
   const { tagSelection, selectedTags, tagFilter, toggleTag } = useModelTagFilter()
 
   // 把需要优先展示的服务商排到最前面
@@ -221,6 +227,16 @@ const SelectModelPopupView: React.FC<Props> = ({
               size={12}
               color="var(--color-text)"
               className="action-icon"
+              role="button"
+              tabIndex={0}
+              aria-label={t('navigate.provider_settings')}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return
+                e.preventDefault()
+                setOpen(false)
+                resolve(undefined)
+                window.navigate(`/settings/provider?id=${provider.id}`)
+              }}
               onClick={(e) => {
                 e.stopPropagation()
                 setOpen(false)
@@ -325,7 +341,7 @@ const SelectModelPopupView: React.FC<Props> = ({
       }
 
       // 当前聚焦的模型 index
-      const currentIndex = modelItems.findIndex((item) => item.key === focusedItemKey)
+      const currentIndex = modelItems.findIndex((item) => item.key === focusedItemKeyRef.current)
 
       let nextIndex = -1
 
@@ -370,7 +386,7 @@ const SelectModelPopupView: React.FC<Props> = ({
         }
       }
     },
-    [modelItems, open, focusedItemKey, resolve, handleItemClick, setFocusedItemKey, listItems]
+    [modelItems, open, resolve, handleItemClick, setFocusedItemKey, listItems]
   )
 
   useEffect(() => {
@@ -425,6 +441,17 @@ const SelectModelPopupView: React.FC<Props> = ({
           </ModelItemLeft>
           {showPinnedModels && (
             <PinIconWrapper
+              role="button"
+              tabIndex={0}
+              aria-label={item.isPinned ? t('tabs.unpin') : t('tabs.pin')}
+              onKeyDown={(e) => {
+                // c2-25：「固定常用模型」原本只能靠鼠标完成（不可聚焦、无 aria-label、
+                // 不响应 Enter/Space），而列表本身有完整的键盘导航。
+                if (e.key !== 'Enter' && e.key !== ' ') return
+                e.preventDefault()
+                e.stopPropagation()
+                void togglePin(getModelUniqId(item.model))
+              }}
               onClick={(e) => {
                 e.stopPropagation()
                 void togglePin(getModelUniqId(item.model))
@@ -481,6 +508,7 @@ const SelectModelPopupView: React.FC<Props> = ({
             getItemKey={getItemKey}
             estimateSize={estimateSize}
             isSticky={isSticky}
+            ariaLabel={t('common.models')}
             scrollPaddingStart={ITEM_HEIGHT} // 留出 sticky header 高度
             overscan={5}
             scrollerStyle={{ pointerEvents: isMouseOver ? 'auto' : 'none' }}>
@@ -526,6 +554,12 @@ const GroupItem = styled.div`
   }
   &:hover .action-icon {
     opacity: 0.3;
+  }
+  .action-icon:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+    border-radius: 4px;
   }
 `
 
@@ -620,6 +654,13 @@ const PinIconWrapper = styled.div.attrs({ className: 'pin-icon' })<{ $isPinned?:
   &:hover {
     opacity: 1 !important;
     color: ${(props) => (props.$isPinned ? 'var(--color-primary)' : 'inherit')};
+  }
+
+  &:focus-visible {
+    opacity: 1 !important;
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+    border-radius: 4px;
   }
 `
 

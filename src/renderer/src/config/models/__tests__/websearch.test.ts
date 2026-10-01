@@ -148,9 +148,18 @@ describe('websearch helpers', () => {
       expect(isWebSearchModel(disabled)).toBe(false)
     })
 
-    it('returns false when provider lookup fails', () => {
+    it('returns undefined (unknown, retry later) when the provider cannot be determined', () => {
+      // r2-80：provider 未知 ⇒ 三值契约里的「还没有答案」，绝不能折成确定性的 false——
+      // 调用方（Chat.tsx / SelectModelButton.tsx）只在拿到 true/false 时才可写回
+      // assistant.enableWebSearch，undefined 必须保持开关不动。
       providerMock.mockReturnValueOnce(undefined as any)
-      expect(isWebSearchModel(createModel())).toBe(false)
+      expect(isWebSearchModel(createModel())).toBeUndefined()
+    })
+
+    it('returns a definitive false (not undefined) for a named provider with no web search', () => {
+      // 有 provider ⇒ 确定答案，调用方可以据此写回开关
+      providerMock.mockReturnValueOnce(createProvider({ id: 'zhipu' }))
+      expect(isWebSearchModel(createModel({ id: 'glm-4-air' }))).toBe(false)
     })
 
     it('rejects non-Google Anthropic models against the Claude regex', () => {
@@ -300,8 +309,6 @@ describe('websearch helpers', () => {
         // Preview versions
         expect(GEMINI_SEARCH_REGEX.test('gemini-3-pro-preview')).toBe(true)
         expect(GEMINI_SEARCH_REGEX.test('gemini-3-flash-preview')).toBe(true)
-        expect(GEMINI_SEARCH_REGEX.test('gemini-3-pro-image-preview')).toBe(true)
-        expect(GEMINI_SEARCH_REGEX.test('gemini-3-flash-image-preview')).toBe(true)
         // Future stable versions
         expect(GEMINI_SEARCH_REGEX.test('gemini-3-flash')).toBe(true)
         expect(GEMINI_SEARCH_REGEX.test('gemini-3-pro')).toBe(true)
@@ -309,12 +316,24 @@ describe('websearch helpers', () => {
         expect(GEMINI_SEARCH_REGEX.test('gemini-3.0-flash')).toBe(true)
         expect(GEMINI_SEARCH_REGEX.test('gemini-3.0-pro')).toBe(true)
         expect(GEMINI_SEARCH_REGEX.test('gemini-3.5-flash-preview')).toBe(true)
-        expect(GEMINI_SEARCH_REGEX.test('gemini-3.5-pro-image-preview')).toBe(true)
       })
 
-      it('should not match gemini 2.x image-preview models', () => {
+      it('should not match gemini image models (any image suffix, not only -image-preview)', () => {
+        // r2-83：旧护栏只有字面量 `-image-preview`，下列现行生图 id 因此被判为可联网。
+        // 这些 id 在 `vision.ts:125-126` / `tooluse.ts:57-58` 里都被列为生图 / 非函数调用模型。
         expect(GEMINI_SEARCH_REGEX.test('gemini-2.5-flash-image-preview')).toBe(false)
         expect(GEMINI_SEARCH_REGEX.test('gemini-2.0-pro-image-preview')).toBe(false)
+        expect(GEMINI_SEARCH_REGEX.test('gemini-2.5-flash-image')).toBe(false)
+        expect(GEMINI_SEARCH_REGEX.test('gemini-2.0-flash-preview-image-generation')).toBe(false)
+        expect(GEMINI_SEARCH_REGEX.test('gemini-2.5-flash-image-latest')).toBe(false)
+        expect(GEMINI_SEARCH_REGEX.test('gemini-3-pro-image-preview')).toBe(false)
+        expect(GEMINI_SEARCH_REGEX.test('gemini-3-flash-image-preview')).toBe(false)
+        expect(GEMINI_SEARCH_REGEX.test('gemini-3.5-pro-image-preview')).toBe(false)
+      })
+
+      it('still matches non-image 2.x ids that merely contain "image"-like substrings', () => {
+        // `\b` 边界：`imagen` 不含 `-image`，不能被误伤
+        expect(GEMINI_SEARCH_REGEX.test('gemini-2.5-imagen-3')).toBe(true)
       })
 
       it('should not match older gemini models', () => {

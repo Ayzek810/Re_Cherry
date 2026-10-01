@@ -59,7 +59,8 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
     resolve({})
   }
 
-  CustomHeaderPopup.hide = onCancel
+  // v1 二轮审查 s2-43：渲染期给静态类写属性是副作用（严格模式下执行两次；卸载后引用仍指向
+  // 旧闭包）。关闭路径由 show() 内的 TopView.hide 与 `static hide()` 覆盖。
 
   return (
     <Modal

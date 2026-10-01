@@ -42,13 +42,22 @@ vi.mock('@renderer/components/ActionTools', () => ({
 }))
 
 vi.mock('@renderer/hooks/useSettings', () => ({
+  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   useSettings: () => ({
     codeEditor: { enabled: false, keymap: true },
     codeExecution: { enabled: false, timeoutMinutes: 1 },
     codeImageTools: false,
     codeCollapsible: true,
     codeWrappable: true
-  })
+  }),
+  useSetting: (key: string) =>
+    ({
+      codeEditor: { enabled: false, keymap: true },
+      codeExecution: { enabled: false, timeoutMinutes: 1 },
+      codeImageTools: false,
+      codeCollapsible: true,
+      codeWrappable: true
+    })[key]
 }))
 
 vi.mock('@renderer/components/CodeEditor', () => ({ default: () => <div data-testid="code-editor" /> }))

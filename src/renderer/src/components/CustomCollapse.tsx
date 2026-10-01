@@ -32,7 +32,12 @@ const CustomCollapse: FC<CustomCollapseProps> = ({
   style,
   styles
 }) => {
-  const [activeKeys, setActiveKeys] = useState(activeKey || defaultActiveKey)
+  // c2-33：局部 state 原来只做「初始镜像」且永不更新，于是 `getHeaderStyle()` 永远返回初始那一支：
+  // 用户手点折叠头展开一个初始收起的面板时，头部仍保留四角圆角，而 body 已展开贴上。
+  // 现在按「受控 / 非受控」分开：受控时圆角由 `activeKey` 推导，非受控时由本组件的 state 推导。
+  const isControlled = activeKey !== undefined
+  const [uncontrolledActiveKeys, setUncontrolledActiveKeys] = useState<string[]>(defaultActiveKey)
+  const effectiveActiveKeys = isControlled ? activeKey : uncontrolledActiveKeys
 
   const defaultCollapseStyle = {
     width: '100%',
@@ -48,7 +53,7 @@ const CustomCollapse: FC<CustomCollapseProps> = ({
   }
 
   const getHeaderStyle = () => {
-    return activeKeys && activeKeys.length > 0
+    return effectiveActiveKeys && effectiveActiveKeys.length > 0
       ? {
           ...defaultCollpaseHeaderStyle,
           borderTopLeftRadius: '8px',
@@ -71,18 +76,20 @@ const CustomCollapse: FC<CustomCollapseProps> = ({
   const collapseItemStyles = useMemo(() => {
     return merge({}, defaultCollapseItemStyles, styles)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeKeys])
+  }, [effectiveActiveKeys])
 
   return (
     <Collapse
       bordered={false}
       style={collapseStyle}
-      defaultActiveKey={defaultActiveKey}
+      defaultActiveKey={isControlled ? undefined : defaultActiveKey}
       activeKey={activeKey}
       destroyOnHidden={destroyInactivePanel}
       collapsible={collapsible}
       onChange={(keys) => {
-        setActiveKeys(keys)
+        if (!isControlled) {
+          setUncontrolledActiveKeys(Array.isArray(keys) ? keys : [keys])
+        }
         onChange?.(keys)
       }}
       expandIcon={({ isActive }) => (

@@ -13,6 +13,10 @@ type Props = {
   isOpen: boolean
   items: TranslateRecord[]
   languageLabel: (code: AnyTranslateLangCode | 'auto') => string
+  /** 历史读取失败原因（null = 没有失败）。失败不得与"暂无记录"同形（二轮审查 f2-24）。 */
+  error: string | null
+  /** 清掉错误态并重跑一次历史读取。 */
+  onRetry: () => void
   onClose: () => void
   onHistoryItemClick: (record: TranslateRecord) => void
 }
@@ -32,7 +36,15 @@ const formatCreatedAt = (value: number, locale: string): string => {
   return `${new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }).format(date)} ${time}`
 }
 
-const TranslateHistoryList: FC<Props> = ({ isOpen, items, languageLabel, onClose, onHistoryItemClick }) => {
+const TranslateHistoryList: FC<Props> = ({
+  isOpen,
+  items,
+  languageLabel,
+  error,
+  onRetry,
+  onClose,
+  onHistoryItemClick
+}) => {
   const { t, i18n } = useTranslation()
 
   const emojiOf = (code: AnyTranslateLangCode | 'auto') =>
@@ -46,7 +58,24 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, items, languageLabel, onClose
       width={360}
       title={t('translate.history')}
       styles={{ body: { paddingTop: 12 } }}>
-      {items.length === 0 ? (
+      {error !== null && items.length === 0 ? (
+        // 二轮审查 f2-24：读取失败此前渲染成官方的"暂无翻译记录"空态——用户会判断"没有记录"
+        // 并重复翻译，而本地历史是唯一副本。失败态与空态并列，并给出重试。
+        <div
+          data-testid="translate-history-error"
+          title={error}
+          className="flex min-h-40 flex-col items-center justify-center gap-2 px-4 text-center">
+          <span className="text-destructive text-sm">
+            {t('translate.history_load_failed', { defaultValue: 'Failed to load translation history' })}
+          </span>
+          <button
+            type="button"
+            className="rounded-md border border-border-subtle px-2 py-1 text-muted-foreground text-sm hover:bg-secondary-hover hover:text-foreground"
+            onClick={onRetry}>
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : items.length === 0 ? (
         <div className="flex min-h-40 items-center justify-center">
           <Empty description={t('translate.history_empty')} image={Empty.PRESENTED_IMAGE_SIMPLE} />
         </div>

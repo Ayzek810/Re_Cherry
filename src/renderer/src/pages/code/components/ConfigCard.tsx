@@ -1,19 +1,22 @@
 import { ProviderAvatarPrimitive } from '@renderer/components/ProviderAvatar'
 import { getProviderLogo } from '@renderer/config/providers'
 import { isApiGatewayProviderId } from '@shared/types/codeCli'
-import { ArrowUpToLine, CircleMinus, GripVertical, Play, SquarePen } from 'lucide-react'
+import { ArrowUpToLine, CircleMinus, Play, SquarePen } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button, GatewayIcon, NormalTooltip } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/ConfigCard.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，卡片渲染（拖拽把手/头像/名称行/悬停脚位）逐字：
+//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，卡片渲染（头像/名称行/悬停脚位）逐字：
 // ① 图标缝：V2 `useIcon(resolveProviderIconRef(provider.id))`（V2 图标注册表）→ fork
 //   getProviderLogo(provider.id) 位图资产（dsh→deepseek.png 等）；ProviderAvatarPrimitive 的
 //   V2 logo ReactNode 面 → fork logoSrc 面（同组件名，fork 移植件见 components/ProviderAvatar.tsx）。
 // ② UI 面缝：Button/NormalTooltip/GatewayIcon → 本页 shim（GatewayIcon 以 lucide RadioTower 等值）。
 // ③ 视觉缝：V2 复合状态色令牌不涉本文件；className 串保留原文。
+//
+// 二轮审查 f2-46：删掉 `cursor-grab` 的拖拽把手与 `dragging` 高亮——ReorderableList 不实现拖拽，
+// 把手是"渲染承诺了交互但语义为空"；顺序改由常显的"置顶"按钮承担（见下方 actions 容器拆分）。
 
 export interface ProviderCardProps {
   provider: Provider
@@ -23,7 +26,6 @@ export interface ProviderCardProps {
   description?: string
   isCurrent: boolean
   actionsDisabled?: boolean
-  dragging?: boolean
   onMoveToTop?: (provider: Provider) => void
   onConfigure: (provider: Provider) => void
   onToggleCurrent: (provider: Provider) => void
@@ -32,7 +34,7 @@ export interface ProviderCardProps {
 import type { Provider } from '../cliConfig/providerView'
 
 /** A single enabled-provider row for a CLI tool. Single-select: Enable + Configure
- * are revealed on hover. */
+ * are revealed on hover; "move to top" stays visible so ordering is discoverable. */
 export const ProviderCard: FC<ProviderCardProps> = ({
   provider,
   providerName,
@@ -40,7 +42,6 @@ export const ProviderCard: FC<ProviderCardProps> = ({
   description,
   isCurrent,
   actionsDisabled,
-  dragging,
   onMoveToTop,
   onConfigure,
   onToggleCurrent
@@ -53,18 +54,9 @@ export const ProviderCard: FC<ProviderCardProps> = ({
   return (
     <div
       className={`group relative rounded-xl border p-3.5 transition-colors ${
-        dragging
-          ? 'border-primary/40 opacity-50'
-          : isCurrent
-            ? 'border-primary bg-primary/5'
-            : 'border-border-subtle hover:border-border hover:bg-primary/5'
+        isCurrent ? 'border-primary bg-primary/5' : 'border-border-subtle hover:border-border hover:bg-primary/5'
       }`}>
       <div className="pointer-events-none relative flex items-center gap-3">
-        <GripVertical
-          size={13}
-          className="pointer-events-auto shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
-        />
-
         <span aria-hidden className="shrink-0">
           {isGateway ? (
             // The unified gateway wears a broadcast-tower glyph (relay/hub metaphor) instead of a brand logo.
@@ -97,7 +89,7 @@ export const ProviderCard: FC<ProviderCardProps> = ({
           {description && <p className="mt-0.5 truncate text-muted-foreground text-xs">{description}</p>}
         </div>
 
-        <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100">
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1.5">
           {onMoveToTop && (
             <NormalTooltip content={t('code.move_provider_to_top')} side="top" sideOffset={4} delayDuration={300}>
               <Button
@@ -111,26 +103,28 @@ export const ProviderCard: FC<ProviderCardProps> = ({
               </Button>
             </NormalTooltip>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onConfigure(provider)}
-            disabled={actionsDisabled}
-            className="min-h-0 border-border-subtle px-2.5 py-1">
-            <SquarePen size={11} />
-            {t('code.configure')}
-          </Button>
-          <Button
-            type="button"
-            variant={isCurrent ? 'destructive' : 'default'}
-            size="sm"
-            onClick={() => onToggleCurrent(provider)}
-            disabled={actionsDisabled}
-            className="min-h-0 px-2.5 py-1">
-            {isCurrent ? <CircleMinus size={11} /> : <Play size={11} />}
-            {isCurrent ? t('code.disable') : t('code.enable')}
-          </Button>
+          <div className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-has-[:focus-visible]:opacity-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onConfigure(provider)}
+              disabled={actionsDisabled}
+              className="min-h-0 border-border-subtle px-2.5 py-1">
+              <SquarePen size={11} />
+              {t('code.configure')}
+            </Button>
+            <Button
+              type="button"
+              variant={isCurrent ? 'destructive' : 'default'}
+              size="sm"
+              onClick={() => onToggleCurrent(provider)}
+              disabled={actionsDisabled}
+              className="min-h-0 px-2.5 py-1">
+              {isCurrent ? <CircleMinus size={11} /> : <Play size={11} />}
+              {isCurrent ? t('code.disable') : t('code.enable')}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

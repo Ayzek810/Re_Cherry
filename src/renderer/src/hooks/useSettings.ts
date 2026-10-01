@@ -95,6 +95,22 @@ export function useSettings() {
   }
 }
 
+/**
+ * Subscribe to **one** field of the settings slice.
+ *
+ * `useSettings()` subscribes to the whole slice (`state.settings`, 200+ fields). react-redux
+ * compares by reference, so one settings change re-renders all of its consumers. The repository
+ * has 67 consumers. The per-message and per-block renderers in the message tree (Markdown,
+ * MainTextBlock, MessageGroup, MessageEditor) were among them. A settings change therefore
+ * re-rendered the whole message tree, including every streaming text block.
+ *
+ * Use this hook on a hot path. Keep `useSettings()` for a page-level consumer that renders once.
+ * v1 second-pass review s2-04.
+ */
+export function useSetting<K extends keyof SettingsState>(key: K): SettingsState[K] {
+  return useAppSelector((state) => state.settings[key])
+}
+
 export function useMessageStyle() {
   const { messageStyle } = useSettings()
   const isBubbleStyle = messageStyle === 'bubble'

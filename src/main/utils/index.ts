@@ -59,12 +59,6 @@ export function getDataPath(subPath?: string) {
   return dataPath
 }
 
-export function makeSureDirExists(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
-}
-
 export async function calculateDirectorySize(directoryPath: string): Promise<number> {
   let totalSize = 0
   const items = await fsAsync.readdir(directoryPath)

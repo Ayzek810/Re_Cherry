@@ -61,6 +61,8 @@ export function useTranslationHydration(message: Message): void {
   const dispatch = useAppDispatch()
   const messageId = message.id
   const blockIds = message.blocks
+  // 内容键：同一批 block id 的数组引用每次 updateMessage 都会换新，用它做依赖避免无谓重跑
+  const blockIdsKey = (blockIds ?? []).join('\u0000')
 
   useEffect(() => {
     if (store_hasTranslationBlock(blockIds)) return
@@ -98,7 +100,8 @@ export function useTranslationHydration(message: Message): void {
     return () => {
       cancelled = true
     }
-  }, [dispatch, messageId, blockIds])
+    // f2-11 / X4：依赖数组的引用会随每次 blockInstruction 更新而失效，改按内容键收口
+  }, [dispatch, messageId, blockIdsKey])
 }
 
 // ---- 水合内部的小读面（独立函数便于测试桩注入点的一致性；非导出 API） ----

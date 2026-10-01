@@ -14,6 +14,8 @@ import {
 } from '@main/utils/file'
 import { t } from '@main/utils/locales'
 import { documentExts, imageExts, KB, MB } from '@shared/config/constant'
+import { IpcChannel } from '@shared/IpcChannel'
+import type { FileReadByIdResult } from '@shared/types/fileRead'
 import { parseDataUrl } from '@shared/utils'
 import type { FileMetadata, FileType, NotesTreeNode } from '@types'
 import { FILE_TYPE } from '@types'
@@ -122,7 +124,7 @@ const DEFAULT_WATCHER_CONFIG: Required<FileWatcherConfig> = {
   retryOnError: true,
   retryDelayMs: 5000,
   stabilityThreshold: 500,
-  eventChannel: 'file-change'
+  eventChannel: IpcChannel.File_Change
 }
 
 interface DirectoryListOptions {
@@ -183,7 +185,6 @@ class FileStorage {
     }
   }
 
-  // @TraceProperty({ spanName: 'getFileHash', tag: 'FileStorage' })
   private getFileHash = async (filePath: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const hash = crypto.createHash('md5')
@@ -365,7 +366,6 @@ class FileStorage {
     }
   }
 
-  // @TraceProperty({ spanName: 'deleteFile', tag: 'FileStorage' })
   public deleteFile = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<void> => {
     if (!fs.existsSync(path.join(this.storageDir, id))) {
       return
@@ -561,6 +561,47 @@ class FileStorage {
   ): Promise<string> => {
     const filePath = path.join(this.storageDir, id)
     return this.readFileCore(filePath, detectEncoding)
+  }
+
+  /**
+   * r2-79/⑥：按 id 读文件仓成员，并把「文件不存在」与「存在但读不出来」**分开**回给渲染层。
+   *
+   * 为什么需要这条通道：`File_Read` 对任何失败都抛同一个通用错误（`readFileCore` 把读错误
+   * 统一包成 `Failed to read file: …`），调用方无法区分。渲染层因此在全新安装时既不能
+   * 把「文件不存在」当成空列表去播种 `custom-minapps.json`，也不得把「读失败」误当
+   * 「不存在」而覆盖写用户文件（家规不变式 6：不可判定的状态不得授权破坏性动作）。
+   *
+   * 判定用 `fs.existsSync`：它是文件系统对「该路径有没有目录项」的**终局答案**（存在但无
+   * 读权限时仍报 true），符合「missing 必须是确定事实」的要求；其余任何失败一律落 `error`
+   * 分支，由渲染层如实报错且绝不写盘。`File_Read` 的行为不变（本方法不复用它）。
+   */
+  public readFileById = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<FileReadByIdResult> => {
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new Error('readFileById: id must be a non-empty string')
+    }
+    if (id.includes('\0')) {
+      throw new Error('readFileById: id must not contain a null byte')
+    }
+
+    const filePath = path.join(this.storageDir, id)
+    // 越界判定用 path.relative：跨平台一致（不依赖分隔符字面比较，Windows 反斜杠不会绕过）。
+    const relative = path.relative(this.storageDir, filePath)
+    if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error('readFileById: id must stay inside the storage directory')
+    }
+
+    if (!fs.existsSync(filePath)) {
+      logger.warn(`[IPC - Warning] File does not exist in storage: ${filePath}`)
+      return { status: 'missing' }
+    }
+
+    try {
+      const content = await this.readFileCore(filePath, false)
+      return { status: 'ok', content }
+    } catch (error) {
+      logger.error(`[IPC - Error] File exists but could not be read: ${filePath}`, error as Error)
+      return { status: 'error', message: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   /**
@@ -1628,7 +1669,6 @@ class FileStorage {
     return mimeToExtension[mimeType] || '.bin'
   }
 
-  // @TraceProperty({ spanName: 'copyFile', tag: 'FileStorage' })
   public copyFile = async (_: Electron.IpcMainInvokeEvent, id: string, destPath: string): Promise<void> => {
     try {
       const sourcePath = path.join(this.storageDir, id)

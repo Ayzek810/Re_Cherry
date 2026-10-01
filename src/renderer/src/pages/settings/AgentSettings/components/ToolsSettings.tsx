@@ -1,5 +1,12 @@
 import type { Assistant } from '@renderer/types'
-import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS, TOOL_ORIGIN_NAMES, type ToolPageCardId } from '@shared/config/agentTools'
+import {
+  BUILTIN_TOOL_IDS,
+  type BuiltinToolId,
+  EXTERNAL_TOOL_IDS,
+  type ExternalToolId,
+  TOOL_ORIGIN_NAMES,
+  type ToolPageCardId
+} from '@shared/config/agentTools'
 import { Switch } from 'antd'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -22,7 +29,10 @@ interface ToolCopyKeys {
   description: string
 }
 
-const BUILTIN_TOOL_COPY: Record<string, ToolCopyKeys> = {
+// k2-25：键类型写死成 id 联合（`TOOL_ORIGIN_NAMES` 同款写法），注册表新增工具时
+// 这两张表不补就**编译失败**；旧写法 `Record<string, …>` 会让漏项先编译通过，再在
+// 渲染期以 `copyMap[toolId]` 为 undefined 抛 TypeError。
+const BUILTIN_TOOL_COPY: Record<BuiltinToolId, ToolCopyKeys> = {
   ask_user_question: {
     name: 'settings.agentSettings.tools.builtins.ask.name',
     description: 'settings.agentSettings.tools.builtins.ask.description'
@@ -33,7 +43,7 @@ const BUILTIN_TOOL_COPY: Record<string, ToolCopyKeys> = {
   }
 }
 
-const EXTERNAL_TOOL_COPY: Record<string, ToolCopyKeys> = {
+const EXTERNAL_TOOL_COPY: Record<ExternalToolId, ToolCopyKeys> = {
   fs: {
     name: 'settings.agentSettings.tools.externals.fs.name',
     description: 'settings.agentSettings.tools.externals.fs.description'
@@ -124,10 +134,12 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
     updateAssistant({ [field]: { ...assistant[field], [toolId]: enabled } })
   }
 
-  const renderToolGrid = (
+  // 泛型把 entries 与 copyMap 钉成同一套 id：两张表各自是**完整**的（`Record<BuiltinToolId>` /
+  // `Record<ExternalToolId>`），漏登记就编译失败，而不是取到 undefined 再渲染期抛错（k2-25）。
+  const renderToolGrid = <Id extends ToolPageCardId>(
     field: 'builtinTools' | 'externalTools',
-    entries: readonly ToolPageCardId[],
-    copyMap: Record<string, ToolCopyKeys>
+    entries: readonly Id[],
+    copyMap: Record<Id, ToolCopyKeys>
   ) => (
     <ToolGrid>
       {entries.map((toolId) => {

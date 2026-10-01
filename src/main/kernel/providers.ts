@@ -3,6 +3,7 @@ import { type CredentialRef, credentialRef } from '@deepseek-ai/dsh-credentials'
 import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { loggerService } from '@logger'
 import { KERNEL_REASONING_LEVELS } from '@shared/config/reasoning'
+import type { ProviderReasoningCompat } from '@shared/types/reasoning'
 
 import { clearModelCapabilityCache } from './topics'
 
@@ -22,24 +23,11 @@ export interface KernelProviderInput {
 /**
  * 可透传给 pi-ai 的 per-model 兼容覆盖（引擎 getCompat：仅出现的键覆盖自动探测）。
  * Re_Cherry 用它修正第三方网关的思考参数语义（如硅基流动 DeepSeek/Zhipu 用 enable_thinking）。
+ *
+ * 声明本身定义在 `@shared/types/reasoning`（r2-88 跨包上提）：渲染层构造、内核消费，
+ * 两侧引用同一份。此前两边各抄一份、靠注释约束对齐——注释不是保证。
  */
-export interface KernelModelCompatInput {
-  thinkingFormat?:
-    | 'openai'
-    | 'deepseek'
-    | 'openrouter'
-    | 'together'
-    | 'zai'
-    | 'qwen'
-    | 'chat-template'
-    | 'qwen-chat-template'
-    | 'string-thinking'
-    | 'ant-ling'
-  supportsReasoningEffort?: boolean
-  requiresReasoningContentOnAssistantMessages?: boolean
-  /** 网关是否接受 role: "developer"（硅基流动等 OpenAI 兼容网关不认，须显式关掉）。 */
-  supportsDeveloperRole?: boolean
-}
+export type KernelModelCompatInput = ProviderReasoningCompat
 
 export interface KernelModelInput {
   id: string
@@ -110,7 +98,7 @@ function sanitizeReasoningEfforts(
 }
 
 /** provider id → 合法的 CredentialRef 名（POSIX 环境变量文法）。 */
-export function credentialRefForProvider(providerId: string): CredentialRef {
+function credentialRefForProvider(providerId: string): CredentialRef {
   return credentialRef(`CHERRY_${providerId.toUpperCase().replace(/[^A-Za-z0-9_]/g, '_')}`)
 }
 

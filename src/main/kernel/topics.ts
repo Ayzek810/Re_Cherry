@@ -21,7 +21,7 @@ import * as toolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 import * as toolTodo from '@deepseek-ai/dsh-tool-todo'
 import { effectiveApprovalPolicy, setApprovalPolicy } from '@deepseek-ai/dsh-user-approval'
 import { loggerService } from '@logger'
-import { EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
+import { EXTERNAL_TOOL_IDS, type ExternalToolId } from '@shared/config/agentTools'
 import { KERNEL_REASONING_LEVELS, type KernelReasoningLevel } from '@shared/config/reasoning'
 import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '@shared/config/workMode'
 import type { MCPTool } from '@types'
@@ -77,7 +77,7 @@ export interface KernelTopic {
   workingDir?: string
 }
 
-export interface KernelTopicInput {
+interface KernelTopicInput {
   id: string
   name?: string
   provider: string
@@ -205,7 +205,7 @@ const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) =>
 ]
 
 /** 外置工具 id → 模型可读的能力短语（工具面说明段用；与 @shared/config/agentTools 的 id 一一对应）。 */
-const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
+const EXTERNAL_TOOL_CAPABILITIES: Record<ExternalToolId, string> = {
   fs: 'reading, writing and moving files inside the sandbox workspace (read / write / move)',
   fsSearch: 'searching the workspace by filename pattern and content keywords (glob / grep)',
   editor: 'structured file editing via exact string replacement (str_replace_editor)',
@@ -224,7 +224,7 @@ const EXTERNAL_TOOL_CAPABILITIES: Record<string, string> = {
  * 开关随时可变以本段为准、禁止正文写调用标记（DSML 泄漏只变文本）、调用前一句短说明。
  * 具体工具的使用时机在各工具自身 description 里（不在此处逐工具写死）。
  */
-export function buildToolFaceSection(builtins: string[], externals: string[]): string {
+function buildToolFaceSection(builtins: string[], externals: string[]): string {
   // 纯聊天轮（externals 为空；ask_user 等内置问答工具不算"工具面"）压缩版（v0.3.1 上下文
   // 净化 B）：保留杀幻觉内核（本请求即环境全部事实）与 DSML/快照两条防线，砍掉逐条能力
   // 面与"调用前先说明"等只在有文件/命令工具时才有意义的行——真机实录无工具轮模型会把
@@ -255,9 +255,10 @@ export function buildToolFaceSection(builtins: string[], externals: string[]): s
   if (enabled.length > 0) {
     lines.push(
       '- File and command tools available this turn:',
-      ...enabled.flatMap((id) =>
-        EXTERNAL_TOOL_CAPABILITIES[id] === undefined ? [] : [`  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`]
-      )
+      // k2-02: the map is keyed by `ExternalToolId`, so a missing entry is a compile
+      // error, not a silently dropped line. The old `=== undefined ? [] : …` branch
+      // turned "you forgot to register the new tool" into a successful omission.
+      ...enabled.map((id) => `  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`)
     )
   } else if (!externals.some((id) => id.startsWith('mcp:'))) {
     // 本轮只有 MCP 工具时不说"没有任何工具"——MCP 工具的 schema 已在本请求里，
@@ -491,7 +492,7 @@ function registryPath(): string {
  * 折叠这两种状态的后果是数据毁灭：`absent`/空注册表会让 `sweepOrphanSessions` 把库里每个会话都判成
  * 孤儿并**物理 DELETE**（`purgePersistedSession`）——一次解析失败 = 一次启动 = 全部会话日志消失。
  */
-export type RegistryLoadOutcome = 'loaded' | 'absent' | 'failed'
+type RegistryLoadOutcome = 'loaded' | 'absent' | 'failed'
 
 /** 本进程的注册表加载结果，供清扫判定消费（启动时由 {@link loadRegistry} 写入）。 */
 let registryLoadOutcome: RegistryLoadOutcome = 'absent'
@@ -1599,8 +1600,18 @@ export function sessionEvents(ctx: Context, id: string): readonly SessionEvent[]
   return agent.session.events
 }
 
-/** 一条可搜索的消息投影。 */
-export interface KernelSearchHit {
+/**
+ * `inspect` returns the session's **complete** event list (its chunk-compressed body
+ * included), and it is the only read seam the kernel exposes — `list()` has no paging.
+ * A search therefore deserializes the whole library. The brake is a bounded pool
+ * instead of one serial `await` chain, so the scans overlap without an unbounded
+ * fan-out (k2-11). The inspected set and the AND/case-insensitive semantics are
+ * unchanged: no session is skipped and no match is dropped.
+ */
+const SEARCH_INSPECT_CONCURRENCY = 4
+
+/** 一条可搜索的消息投影（形状经 `searchSessions` 的返回值消费，故类型本身不出文件）。 */
+interface KernelSearchHit {
   topicId: string
   topicName: string
   seq: number
@@ -1613,15 +1624,20 @@ export interface KernelSearchHit {
  * 全库搜索：遍历内核持久化的所有会话，投影 user/assistant 消息文本，
  * 返回包含全部关键词（AND，大小写不敏感）的消息。
  * 数据源是内核 SQLite（权威）；旧 Dexie 数据按既定政策不参与。
+ *
+ * 结果顺序是 list() 的 header 顺序、header 内按 seq（每个会话的命中先收进自己的桶，
+ * 最后按 header 下标的顺序拼起来）——与旧的串行版本逐条一致（k2-11）。
  */
 export async function searchSessions(ctx: Context, terms: string[]): Promise<KernelSearchHit[]> {
   const normalized = terms.map((term) => term.trim().toLowerCase()).filter((term) => term.length > 0)
   if (normalized.length === 0) return []
 
   const headers = await ctx.sessionPersistence.list()
-  const hits: KernelSearchHit[] = []
+  const perSession: KernelSearchHit[][] = headers.map(() => [])
+  let cursor = 0
 
-  for (const header of headers) {
+  const scanOne = async (index: number): Promise<void> => {
+    const header = headers[index]
     const topicName = getTopic(header.id)?.name ?? header.id
     let events: readonly SessionEvent[]
     try {
@@ -1632,9 +1648,10 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
         `kernel: failed to inspect session "${header.id}" for search`,
         error instanceof Error ? error : new Error(String(error))
       )
-      continue
+      return
     }
 
+    const found: KernelSearchHit[] = []
     for (const event of events) {
       if (event.type !== 'user/message' && event.type !== 'assistant/message') continue
       // 注入的插件源消息是模型侧状态标注，不是对话内容：不得进检索结果（UI 视界同一判据，
@@ -1650,7 +1667,7 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
       if (text.length === 0) continue
       const lower = text.toLowerCase()
       if (normalized.every((term) => lower.includes(term))) {
-        hits.push({
+        found.push({
           topicId: header.id,
           topicName,
           seq: event.seq,
@@ -1660,9 +1677,18 @@ export async function searchSessions(ctx: Context, terms: string[]): Promise<Ker
         })
       }
     }
+    perSession[index] = found
   }
 
-  return hits
+  const worker = async (): Promise<void> => {
+    for (let index = cursor++; index < headers.length; index = cursor++) {
+      await scanOne(index)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(SEARCH_INSPECT_CONCURRENCY, headers.length) }, () => worker()))
+
+  return perSession.flat()
 }
 
 async function ensureAgent(

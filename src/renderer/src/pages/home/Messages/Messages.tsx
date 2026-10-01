@@ -4,10 +4,9 @@ import ContextMenu from '@renderer/components/ContextMenu'
 import { LoadingIcon } from '@renderer/components/Icons'
 import { LOAD_MORE_COUNT } from '@renderer/config/constant'
 import { useAssistant } from '@renderer/hooks/useAssistant'
-import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMessageOperations, useTopicMessages } from '@renderer/hooks/useMessageOperations'
 import useScrollPosition from '@renderer/hooks/useScrollPosition'
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useSetting } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useTimer } from '@renderer/hooks/useTimer'
 import SelectionBox from '@renderer/pages/home/Messages/SelectionBox'
@@ -29,17 +28,25 @@ import {
 import { updateCodeBlock } from '@renderer/utils/markdown'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { isTextLikeBlock } from '@renderer/utils/messageUtils/is'
-import { last } from 'lodash'
+import { last, throttle } from 'lodash'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import InfiniteScroll from 'react-infinite-scroll-component'
 import styled from 'styled-components'
 
+import { useChatContextValue } from './ChatContextProvider'
+import {
+  computeDisplayMessages,
+  type DisplayOrderCache,
+  EMPTY_DISPLAY_ORDER_CACHE,
+  projectDisplayMessages,
+  resolveDisplayOrder
+} from './displayWindow'
 import MessageAnchorLine from './MessageAnchorLine'
 import MessageGroup from './MessageGroup'
 import NarrowLayout from './NarrowLayout'
 import Prompt from './Prompt'
-import { MessagesContainer, ScrollContainer } from './shared'
+import { MessagesContainer, ScrollContainer, scrollMessagesToBottom } from './shared'
 import useParallelAnswers from './useParallelAnswers'
 
 interface MessagesProps {
@@ -67,17 +74,20 @@ const Messages: React.FC<MessagesProps> = ({
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   useAssistant(assistant.id)
-  const { showPrompt, messageNavigation } = useSettings()
+  const showPrompt = useSetting('showPrompt')
+  const messageNavigation = useSetting('messageNavigation')
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const messages = useTopicMessages(topic.id)
   const { displayCount, clearTopicMessages } = useMessageOperations(topic)
   const { setTimeoutTimer } = useTimer()
 
-  const { isMultiSelectMode, handleSelectMessage } = useChatContext(topic)
+  const { isMultiSelectMode, handleSelectMessage } = useChatContextValue()
 
   const messageElements = useRef<Map<string, HTMLElement>>(new Map())
   const messagesRef = useRef<Message[]>(messages)
+  const firstUpdateNotifiedRef = useRef(false)
+  const displayOrderRef = useRef<DisplayOrderCache>(EMPTY_DISPLAY_ORDER_CACHE)
 
   useEffect(() => {
     messagesRef.current = messages
@@ -92,8 +102,14 @@ const Messages: React.FC<MessagesProps> = ({
   }, [])
 
   useEffect(() => {
-    const newDisplayMessages = computeDisplayMessages(messages, 0, displayCount)
-    setDisplayMessages(newDisplayMessages)
+    // 窗口"选中顺序"只在条数与末条变化时重算（computeDisplayMessages 是 O(全量) 反向推导）；
+    // 流式内容变化只换实体引用 —— 但引用必须换，否则 MessageGroup 的 memo 会拿旧实体、流式文本冻结。
+    // byId 同时交给 resolveDisplayOrder 做「缓存里的 id 是否都还在」的校验：回合开始时用户消息 id
+    // 会重映射（临时 id → 内核 id），此时条数/末条都可能不变，只比 key 会让缓存里的旧 id 查不到实体，
+    // 用户卡片会被静默吞掉（真机实证：生成期间消失、回合结束后回来）。
+    const byId = new Map(messages.map((message) => [message.id, message]))
+    displayOrderRef.current = resolveDisplayOrder(displayOrderRef.current, messages, displayCount, undefined, byId)
+    setDisplayMessages((prev) => projectDisplayMessages(prev, displayOrderRef.current.ids, byId))
     setHasMore(messages.length > displayCount)
   }, [messages, displayCount])
 
@@ -101,9 +117,7 @@ const Messages: React.FC<MessagesProps> = ({
   const scrollToBottom = useCallback(() => {
     if (scrollContainerRef.current) {
       requestAnimationFrame(() => {
-        if (scrollContainerRef.current) {
-          scrollContainerRef.current.scrollTo({ top: 0 })
-        }
+        scrollMessagesToBottom(scrollContainerRef.current)
       })
     }
   }, [scrollContainerRef])
@@ -187,14 +201,37 @@ const Messages: React.FC<MessagesProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assistant, dispatch, scrollToBottom, topic])
 
+  // 历史 token / 上下文计数做速率限制（leading + trailing，最多 2 次/秒）。
+  // estimateHistoryTokens 会逐条 await getMessageParam 并拼接全文，而 messages 引用每个流式 delta 都换：
+  // 不设限等于每帧全量重算（CLAUDE.md §12 渲染饥饿的第二组成本）。
+  // 不用"只在条数/末条变化时算"的取舍：那会让生成期间计数冻结，属可见行为变更。
+  const estimateTokensThrottledRef = useRef<ReturnType<typeof throttle> | null>(null)
   useEffect(() => {
-    void runAsyncFunction(async () => {
-      void EventEmitter.emit(EVENT_NAMES.ESTIMATED_TOKEN_COUNT, {
-        tokensCount: await estimateHistoryTokens(assistant, messages),
-        contextCount: getContextCount(assistant, messages)
-      })
-    }).then(() => onFirstUpdate?.())
+    if (!estimateTokensThrottledRef.current) {
+      estimateTokensThrottledRef.current = throttle((currentMessages: Message[], currentAssistant: Assistant) => {
+        void runAsyncFunction(async () => {
+          void EventEmitter.emit(EVENT_NAMES.ESTIMATED_TOKEN_COUNT, {
+            tokensCount: await estimateHistoryTokens(currentAssistant, currentMessages),
+            contextCount: getContextCount(currentAssistant, currentMessages)
+          })
+        })
+      }, 500)
+    }
+
+    estimateTokensThrottledRef.current(messages, assistant)
+
+    // 首帧回调只许触发一次：旧实现挂在估算 promise 的 .then 上，每个 delta 都回调一次
+    // （反复重置 Chat 侧 300ms 首帧标记并重触发 silentSearch 防抖）。
+    if (firstUpdateNotifiedRef.current) return
+    firstUpdateNotifiedRef.current = true
+    onFirstUpdate?.()
   }, [assistant, messages, onFirstUpdate])
+
+  useEffect(() => {
+    return () => {
+      estimateTokensThrottledRef.current?.cancel()
+    }
+  }, [])
 
   const loadMoreMessages = useCallback(() => {
     if (!hasMore || isLoadingMore) return
@@ -307,43 +344,6 @@ const Messages: React.FC<MessagesProps> = ({
       </MessagesContainer>
     </HtmlArtifactPopupHost>
   )
-}
-
-const computeDisplayMessages = (messages: Message[], startIndex: number, displayCount: number) => {
-  // 如果剩余消息数量小于 displayCount，直接返回所有剩余消息的倒序切片
-  if (messages.length - startIndex <= displayCount) {
-    const result: Message[] = []
-    for (let i = messages.length - 1 - startIndex; i >= 0; i--) {
-      result.push(messages[i])
-    }
-    return result
-  }
-  const userIdSet = new Set() // 用户消息 id 集合
-  const assistantIdSet = new Set() // 助手消息 askId 集合
-  const displayMessages: Message[] = []
-
-  // 处理单条消息的函数
-  const processMessage = (message: Message) => {
-    if (!message) return
-
-    const idSet = message.role === 'user' ? userIdSet : assistantIdSet
-    const messageId = message.role === 'user' ? message.id : message.askId
-
-    if (!idSet.has(messageId)) {
-      idSet.add(messageId)
-      displayMessages.push(message)
-      return
-    }
-    // 如果是相同 askId 的助手消息，也要显示
-    displayMessages.push(message)
-  }
-
-  // 直接在原数组上倒序遍历，跳过前 startIndex 个，避免全量拷贝和 reverse()
-  for (let i = messages.length - 1 - startIndex; i >= 0 && userIdSet.size + assistantIdSet.size < displayCount; i--) {
-    processMessage(messages[i])
-  }
-
-  return displayMessages
 }
 
 const LoaderContainer = styled.div`

@@ -70,37 +70,18 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
 
   const buttonDisabled = name.trim().length === 0
 
-  // 处理内置头像的点击事件
-  const handleProviderLogoClick = async (providerId: string) => {
-    try {
-      const logoUrl = PROVIDER_LOGO_MAP[providerId]
-
-      if (provider?.id) {
-        await ImageStorage.set(`provider-${provider.id}`, logoUrl)
-        const savedLogo = await ImageStorage.get(`provider-${provider.id}`)
-        setLogo(savedLogo)
-      } else {
-        setLogo(logoUrl)
-      }
-
-      setLogoPickerOpen(false)
-    } catch (error: any) {
-      window.toast.error(error.message)
-    }
+  // v1 二轮审查 s2-36：编辑既有 provider 时，选图标 / 重置此前会**立即写 IndexedDB**，
+  // 而 `onCancel` 只 resolve 空值、不回滚已写入的图片——用户点「取消」图标其实已经被换掉，
+  // 并且 provider 列表的 providerLogos 与库里已不一致。现在编辑期只改本地 state，
+  // 落库交给调用方在 `onOk` 之后按既有约定写（`ProviderList` 的 editMenu 已实现该写入）。
+  const handleProviderLogoClick = (providerId: string) => {
+    setLogo(PROVIDER_LOGO_MAP[providerId])
+    setLogoPickerOpen(false)
   }
 
-  const handleReset = async () => {
-    try {
-      setLogo(null)
-
-      if (provider?.id) {
-        await ImageStorage.set(`provider-${provider.id}`, '')
-      }
-
-      setDropdownOpen(false)
-    } catch (error: any) {
-      window.toast.error(error.message)
-    }
+  const handleReset = () => {
+    setLogo(null)
+    setDropdownOpen(false)
   }
 
   const getInitials = () => {
@@ -127,24 +108,14 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
                 logoData = await compressImage(_file)
               }
 
-              if (provider?.id) {
-                if (logoData instanceof Blob && !(logoData instanceof File)) {
-                  const fileFromBlob = new File([logoData], 'logo.png', { type: logoData.type })
-                  await ImageStorage.set(`provider-${provider.id}`, fileFromBlob)
-                } else {
-                  await ImageStorage.set(`provider-${provider.id}`, logoData)
-                }
-                const savedLogo = await ImageStorage.get(`provider-${provider.id}`)
-                setLogo(savedLogo)
-              } else {
-                // 临时保存在内存中，等创建 provider 后会在调用方保存
-                const tempUrl = await new Promise<string>((resolve) => {
-                  const reader = new FileReader()
-                  reader.onload = () => resolve(reader.result as string)
-                  reader.readAsDataURL(logoData)
-                })
-                setLogo(tempUrl)
-              }
+              // 上传的新图标同样只留在内存：`onOk` resolve 出去的 data URL 由调用方落库
+              //（编辑期写库会让「取消」变成假的，见 s2-36）。
+              const tempUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve(reader.result as string)
+                reader.readAsDataURL(logoData)
+              })
+              setLogo(tempUrl)
               setDropdownOpen(false)
             } catch (error: any) {
               window.toast.error(error.message)

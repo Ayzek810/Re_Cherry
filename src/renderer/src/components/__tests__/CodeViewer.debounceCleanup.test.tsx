@@ -25,9 +25,11 @@ vi.mock('@renderer/context/CodeStyleProvider', () => ({
   })
 }))
 
-vi.mock('@renderer/hooks/useSettings', () => ({
-  useSettings: () => ({ fontSize: 14, codeShowLineNumbers: true, codeEditor: { keymap: true } })
-}))
+vi.mock('@renderer/hooks/useSettings', () => {
+  const settings = { fontSize: 14, codeShowLineNumbers: true, codeEditor: { keymap: true } }
+  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  return { useSettings: () => settings, useSetting: (key: string) => settings[key] }
+})
 
 // jsdom 量不出滚动容器高度，虚拟列表会返回 0 行，渐进式高亮的 effect 根本不会跑。
 // 这里只把虚拟项收敛到固定的几行，好让被测路径真的被执行到。

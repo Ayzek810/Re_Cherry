@@ -87,6 +87,13 @@ export class McpService {
   private readonly dxtService = new DxtService()
   /** 渲染层同步投影的服务器配置注册表（id → 配置）。 */
   private servers = new Map<string, MCPServer>()
+  /**
+   * `id → 配置内容哈希键` 投影缓存（v1 二轮审查 m2-22）：serverKey 是
+   * `JSON.stringify({baseUrl, command, args, env, id, registryUrl})`，此前每个调用点逐次重算
+   * ——`emitServerLog` 每个 stderr 分片一次、`listPrompts`/`listResources` 的 60min TTL 缓存键
+   * 与日志缓冲键每次都重新构造。同一注册表同步周期内配置是不变量，故随 `setServers` 投影一次。
+   */
+  private serverKeys = new Map<string, string>()
   private readonly logSubscribers = new Set<(log: MCPServerLogEntryWithServer) => void>()
 
   static getInstance(): McpService {
@@ -110,17 +117,28 @@ export class McpService {
         next.set(server.id, server)
       }
     }
-    // 配置已删除的服务器：关闭其客户端并清缓存（serverKey 按配置内容算，
-    // 这里按"新注册表里已不存在的 id"关闭）。
-    for (const [id] of this.servers) {
-      if (!next.has(id)) {
-        const server = this.servers.get(id)
-        if (server !== undefined) {
-          void this.closeClient(server)
-        }
-      }
+
+    // v1 二轮审查 m2-23：关闭判据此前只是「id 从新表消失」，而 `clients` 的键是**配置内容哈希**。
+    // 编辑服务器（改 command/args/env 是设置页常规操作）时 id 仍在表里，旧 key 的 Client 与它
+    // spawn 的 stdio 子进程都不会被关闭——用户视角是「改了配置，旧进程还在跑」。按 id 逐条比对
+    // 「消失 or key 变化」都关旧客户端，并同步丢弃 pending 项（否则旧 in-flight 会复活旧 key）。
+    // v1 二轮审查 m2-22：key 在这里算一次（原来是各调用点逐次重算）。
+    const nextKeys = new Map<string, string>()
+    for (const server of next.values()) {
+      nextKeys.set(server.id, McpService.computeServerKey(server))
     }
+
+    for (const [id, server] of this.servers) {
+      const oldKey = this.serverKeys.get(id) ?? McpService.computeServerKey(server)
+      const newKey = nextKeys.get(id)
+      if (newKey === oldKey) continue
+      void this.closeClientByKey(server, oldKey)
+      this.pendingClients.delete(oldKey)
+      this.serverKeys.delete(id)
+    }
+
     this.servers = next
+    this.serverKeys = nextKeys
     logger.info(`mcp: synced ${next.size} server config(s) from renderer`)
   }
 
@@ -136,7 +154,11 @@ export class McpService {
   // 客户端生命周期
   // ===========================================================================
 
-  private getServerKey(server: MCPServer): string {
+  /**
+   * 配置内容 → 客户端/缓存键（纯函数）。`env` 的键顺序变化会产生不同键，故键序稳定由调用方
+   * （渲染层投影的同一次同步）保证；本条与上游同形。
+   */
+  private static computeServerKey(server: MCPServer): string {
     return JSON.stringify({
       baseUrl: server.baseUrl ?? null,
       command: server.command ?? null,
@@ -145,6 +167,14 @@ export class McpService {
       id: server.id,
       registryUrl: server.registryUrl ?? null
     })
+  }
+
+  /**
+   * 取该服务器的配置内容键（m2-22：读 `setServers` 投影期缓存的那一份）。注册表里还没有的
+   * 服务器（如渲染层直传、尚未同步的入参）按同一纯函数就地计算，行为与缓存前一致。
+   */
+  private getServerKey(server: MCPServer): string {
+    return this.serverKeys.get(server.id) ?? McpService.computeServerKey(server)
   }
 
   async initClient(server: MCPServer): Promise<Client> {
@@ -352,7 +382,14 @@ export class McpService {
   }
 
   private async closeClient(server: MCPServer): Promise<void> {
-    const serverKey = this.getServerKey(server)
+    await this.closeClientByKey(server, this.getServerKey(server))
+  }
+
+  /**
+   * 按**显式 key** 关闭客户端并清缓存（m2-23：注册表替换时旧 key 已不在 `serverKeys` 里，
+   * 必须由调用方把它带进来）。
+   */
+  private async closeClientByKey(server: MCPServer, serverKey: string): Promise<void> {
     const client = this.clients.get(serverKey)
     if (client !== undefined) {
       this.clients.delete(serverKey)
@@ -543,12 +580,17 @@ export class McpService {
   async removeServer(server: MCPServer): Promise<void> {
     await this.closeClient(server)
     this.logBuffer.remove(this.getServerKey(server))
-    // DXT 服务器：连带删除解包目录（上游同语义；清理失败只记日志，不阻断移除流程）。
+    // DXT 服务器：连带删除解包目录。清理失败**不静默**（v1 二轮审查 m2-13）：配置一旦从
+    // 注册表消失，界面就再也看不到这个服务器，留在磁盘上的解包目录（含可执行物）成了孤儿。
+    // 失败即上抛——注册表条目保留，用户可重试（上游"只记日志、不阻断移除"会吞掉这个信号）。
     if (server.dxtPath) {
       const cleaned = this.dxtService.cleanupDxtServerByPath(server.dxtPath)
-      if (cleaned) {
-        logger.debug(`mcp "${server.name}": DXT server directory removed (${server.dxtPath})`)
+      // 目录本就不在（已被清过 / 用户手工删过）＝ 无需信号；目录仍在而清理失败＝ 如实报错，
+      // 让注册表条目保留、用户可重试。
+      if (!cleaned && this.dxtService.dxtServerDirExists(server.dxtPath)) {
+        throw new Error(`Failed to remove the DXT server directory: ${server.dxtPath}`)
       }
+      logger.debug(`mcp "${server.name}": DXT server directory cleaned (${server.dxtPath})`)
     }
     this.emitServerLog(server, { timestamp: Date.now(), level: 'info', message: 'Server removed', source: 'client' })
   }

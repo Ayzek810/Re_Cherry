@@ -16,7 +16,7 @@ import { getDataPath } from '@main/utils'
 const logger = loggerService.withContext('MemoryKernel')
 
 /** 与知识库 sanitizeBaseId 同语义：防路径穿越（残留 [a-zA-Z0-9_-]）。 */
-export function sanitizeMemoryScope(assistantId: string): string {
+function sanitizeMemoryScope(assistantId: string): string {
   return assistantId.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 

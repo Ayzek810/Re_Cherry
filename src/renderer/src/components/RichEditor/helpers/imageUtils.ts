@@ -22,13 +22,18 @@ export async function compressImage(file: File, options: ImageCompressionOptions
     const img = new Image()
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
+    const objectUrl = URL.createObjectURL(file)
 
     if (!ctx) {
+      URL.revokeObjectURL(objectUrl)
       reject(new Error('无法获取 Canvas 上下文'))
       return
     }
 
     img.onload = () => {
+      // c2-37：图片已解码，立刻释放 blob URL。否则 blob URL 注册表会把每张处理过的
+      // 图片字节留在内存里直到文档卸载（`compressImage` 对每张 >1MB 的粘贴图片都会跑）。
+      URL.revokeObjectURL(objectUrl)
       // 计算压缩后的尺寸
       let { width, height } = img
       const aspectRatio = width / height
@@ -65,11 +70,12 @@ export async function compressImage(file: File, options: ImageCompressionOptions
     }
 
     img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
       reject(new Error('图片加载失败'))
     }
 
     // 加载图片
-    img.src = URL.createObjectURL(file)
+    img.src = objectUrl
   })
 }
 
@@ -96,8 +102,11 @@ export async function getImageInfo(file: File): Promise<{
 }> {
   return new Promise((resolve, reject) => {
     const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
 
     img.onload = () => {
+      // c2-37：同上，解码完成后立刻释放。
+      URL.revokeObjectURL(objectUrl)
       resolve({
         width: img.width,
         height: img.height,
@@ -107,10 +116,11 @@ export async function getImageInfo(file: File): Promise<{
     }
 
     img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
       reject(new Error('无法加载图片'))
     }
 
-    img.src = URL.createObjectURL(file)
+    img.src = objectUrl
   })
 }
 

@@ -78,25 +78,32 @@ class ObsidianVaultService {
 
   /**
    * 获取Vault中的文件夹和Markdown文件结构
+   *
+   * v1 二轮审查 m2-24：`traverseDirectory` 此前用 `fs.readdirSync`/`fs.existsSync`/`fs.statSync`
+   * 在主进程同步递归整个 vault 目录树。vault 内笔记上千时，一次 IPC 会阻塞主进程消息循环
+   * （同仓 `FileStorage.getDirectoryStructure` 用的是异步 `scanDir`）。改为全异步 IO；
+   * 方法因此返回 Promise，IPC 层 await。
    */
-  getVaultStructure(vaultPath: string): FileInfo[] {
+  async getVaultStructure(vaultPath: string): Promise<FileInfo[]> {
     const results: FileInfo[] = []
 
     try {
       // 检查vault路径是否存在
-      if (!fs.existsSync(vaultPath)) {
+      try {
+        await fs.promises.access(vaultPath)
+      } catch {
         logger.error(`Vault path does not exist: ${vaultPath}`)
         return []
       }
 
       // 检查是否是目录
-      const stats = fs.statSync(vaultPath)
+      const stats = await fs.promises.stat(vaultPath)
       if (!stats.isDirectory()) {
         logger.error(`Vault path is not a directory: ${vaultPath}`)
         return []
       }
 
-      this.traverseDirectory(vaultPath, '', results)
+      await this.traverseDirectory(vaultPath, '', results)
     } catch (error) {
       logger.error('Failed to read Vault folder structure:', error as Error)
     }
@@ -105,9 +112,9 @@ class ObsidianVaultService {
   }
 
   /**
-   * 递归遍历目录获取所有文件夹和Markdown文件
+   * 递归遍历目录获取所有文件夹和Markdown文件（全异步 IO）。
    */
-  private traverseDirectory(dirPath: string, relativePath: string, results: FileInfo[]) {
+  private async traverseDirectory(dirPath: string, relativePath: string, results: FileInfo[]): Promise<void> {
     try {
       // 首先添加当前文件夹
       if (relativePath) {
@@ -118,15 +125,9 @@ class ObsidianVaultService {
         })
       }
 
-      // 确保目录存在且可访问
-      if (!fs.existsSync(dirPath)) {
-        logger.error(`Directory does not exist: ${dirPath}`)
-        return
-      }
-
-      let items
+      let items: fs.Dirent[]
       try {
-        items = fs.readdirSync(dirPath, { withFileTypes: true })
+        items = await fs.promises.readdir(dirPath, { withFileTypes: true })
       } catch (err) {
         logger.error(`Failed to read directory ${dirPath}:`, err as Error)
         return
@@ -142,7 +143,7 @@ class ObsidianVaultService {
         const fullPath = path.join(dirPath, item.name)
 
         if (item.isDirectory()) {
-          this.traverseDirectory(fullPath, newRelativePath, results)
+          await this.traverseDirectory(fullPath, newRelativePath, results)
         } else if (item.isFile() && item.name.endsWith('.md')) {
           // 收集.md文件
           results.push({
@@ -161,7 +162,7 @@ class ObsidianVaultService {
    * 获取指定Vault的文件夹和Markdown文件结构
    * @param vaultName vault名称
    */
-  getFilesByVaultName(vaultName: string): FileInfo[] {
+  async getFilesByVaultName(vaultName: string): Promise<FileInfo[]> {
     try {
       const vaults = this.getVaults()
       const vault = vaults.find((v) => v.name === vaultName)
@@ -172,7 +173,7 @@ class ObsidianVaultService {
       }
 
       logger.debug(`Get Vault file structure: ${vault.name} ${vault.path}`)
-      return this.getVaultStructure(vault.path)
+      return await this.getVaultStructure(vault.path)
     } catch (error) {
       logger.error('Failed to get Vault file structure:', error as Error)
       return []

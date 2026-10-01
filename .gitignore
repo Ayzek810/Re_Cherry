@@ -68,7 +68,9 @@ coverage
 .vitest-cache
 vitest.config.*.timestamp-*
 .context/vitest-temp/
-.tmp-kernel-*-tests*
+# 测试临时根一律走 .tmp- 前缀（无论建在 os.tmpdir() 还是工作区）。用例自带 afterEach 清理；
+# 这一条是硬崩溃时的兜底，避免半截产物把 git status 弄脏。
+.tmp-*
 
 # TypeScript incremental build
 .tsbuildinfo

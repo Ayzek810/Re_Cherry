@@ -90,7 +90,10 @@ describe('HomeWindow · r2-02 发送失败必收敛终态', () => {
     store.dispatch(setTranslateModel({ model: undefined }))
     ;(window as unknown as { api: Record<string, unknown> }).api = {
       ...(window as unknown as { api?: Record<string, unknown> }).api,
-      miniWindow: { setPin: vi.fn().mockResolvedValue(undefined) }
+      miniWindow: { setPin: vi.fn().mockResolvedValue(undefined), hide: vi.fn() },
+      // HomeWindow 挂载时会订阅「窗口显示」事件；未 stub 时渲染期直接
+      // `Cannot read properties of undefined (reading 'onShowMiniWindow')`（f2 遗留的测试桩缺口）。
+      events: { onShowMiniWindow: vi.fn(() => () => {}) }
     }
     const ipcRenderer = (window as unknown as { electron: { ipcRenderer: Record<string, unknown> } }).electron
       .ipcRenderer

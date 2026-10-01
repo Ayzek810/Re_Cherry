@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import pako from 'pako'
 import React, { memo, useCallback, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { useDebouncedRender } from './hooks/useDebouncedRender'
 import ImagePreviewLayout from './ImagePreviewLayout'
@@ -86,26 +87,28 @@ const PlantUmlPreview = ({
   ref
 }: BasicPreviewProps & { ref?: React.RefObject<BasicPreviewHandles | null> }) => {
   // 定义渲染函数
-  const renderPlantUml = useCallback(async (content: string, container: HTMLDivElement) => {
-    const url = getPlantUMLImageUrl('svg', content, false)
-    const response = await fetch(url)
-    if (!response.ok) {
-      if (response.status === 400) {
-        throw new Error(
-          'Diagram rendering failed (400): This is likely due to a syntax error in the diagram. Please check your code.'
-        )
+  // c2-41：错误正文是用户可见文案（会直接渲染在预览的错误区），不能硬编码英文。
+  // 复用既有的 i18n 键表达「渲染失败 / 服务端异常」，不再自造英文句子。
+  const { t } = useTranslation()
+  const renderPlantUml = useCallback(
+    async (content: string, container: HTMLDivElement) => {
+      const url = getPlantUMLImageUrl('svg', content, false)
+      const response = await fetch(url)
+      if (!response.ok) {
+        if (response.status === 400) {
+          throw new Error(t('error.render.description'))
+        }
+        if (response.status >= 500) {
+          throw new Error(t('error.diagnosis.server'))
+        }
+        throw new Error(`${t('error.render.description')} (${response.status} ${response.statusText})`)
       }
-      if (response.status >= 500) {
-        throw new Error(
-          `Diagram rendering failed (${response.status}): The PlantUML server is temporarily unavailable. Please try again later.`
-        )
-      }
-      throw new Error(`Diagram rendering failed, server returned: ${response.status} ${response.statusText}`)
-    }
 
-    const text = await response.text()
-    renderSvgInShadowHost(text, container)
-  }, [])
+      const text = await response.text()
+      renderSvgInShadowHost(text, container)
+    },
+    [t]
+  )
 
   // 使用预览渲染器 hook
   const { containerRef, error, isLoading } = useDebouncedRender(children, renderPlantUml, {

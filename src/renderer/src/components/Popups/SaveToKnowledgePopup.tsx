@@ -13,7 +13,7 @@ import {
   processMessageContent,
   processTopicContent
 } from '@renderer/utils/knowledge'
-import { Flex, Form, Modal, Select, Tooltip, Typography } from 'antd'
+import { Button, Flex, Form, Modal, Select, Tooltip, Typography } from 'antd'
 import { Check, CircleHelp } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -66,6 +66,28 @@ const TAG_COLORS = {
 
 type ContentStats = MessageContentStats | TopicContentStats
 
+/**
+ * c2-41：保存路径的错误分类不再依赖人类可读英文子串（`error.message.includes('not properly configured')`）。
+ * 抛错侧带稳定的错误码，渲染侧用显式 Record 映射到 i18n 键。
+ */
+type SaveErrorCode = 'base-not-configured' | 'note-read-failed' | 'note-empty'
+
+class SaveToKnowledgeError extends Error {
+  readonly code: SaveErrorCode
+
+  constructor(code: SaveErrorCode) {
+    super(code)
+    this.name = 'SaveToKnowledgeError'
+    this.code = code
+  }
+}
+
+const SAVE_ERROR_KEY: Record<SaveErrorCode, string> = {
+  'base-not-configured': 'chat.save.knowledge.error.invalid_base',
+  'note-read-failed': 'chat.save.knowledge.error.save_failed',
+  'note-empty': 'chat.save.knowledge.empty.no_content'
+}
+
 interface ContentTypeOption {
   type: ContentType
   count: number
@@ -101,6 +123,9 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const [selectedTypes, setSelectedTypes] = useState<ContentType[]>([])
   const [hasInitialized, setHasInitialized] = useState(false)
   const [contentStats, setContentStats] = useState<ContentStats | null>(null)
+  // c2-12：分析失败与「确实没有可保存内容」必须可区分。
+  const [analysisError, setAnalysisError] = useState(false)
+  const [analysisAttempt, setAnalysisAttempt] = useState(0)
   const { bases } = useKnowledgeBases()
   const { addNote, addFiles } = useKnowledge(selectedBaseId || '')
   const { t } = useTranslation()
@@ -117,30 +142,23 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       }
 
       setAnalysisLoading(true)
+      setAnalysisError(false)
       setContentStats(null)
       try {
         const stats = isTopicMode ? await analyzeTopicContent(source?.data) : analyzeMessageContent(source?.data)
         setContentStats(stats)
       } catch (error) {
         logger.error('analyze content failed:', error as Error)
-        setContentStats({
-          text: 0,
-          code: 0,
-          thinking: 0,
-          images: 0,
-          files: 0,
-          tools: 0,
-          citations: 0,
-          translations: 0,
-          errors: 0,
-          ...(isTopicMode && { messages: 0 })
-        })
+        // 家规「A failure must never look like an empty result」：这里**不**写全零统计——
+        // 全零会让 UI 走「此消息没有可保存的内容」空态，把一个失败渲染成与事实相反的结论。
+        // 保持 contentStats 为 null，只置错误态，由 UI 给出可见的错误 + 重试。
+        setAnalysisError(true)
       } finally {
         setAnalysisLoading(false)
       }
     }
     void analyze()
-  }, [source, isTopicMode, isNoteMode])
+  }, [source, isTopicMode, isNoteMode, analysisAttempt])
 
   // 生成内容类型选项
   const contentTypeOptions: ContentTypeOption[] = useMemo(() => {
@@ -222,6 +240,11 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       return { type: 'loading', message: t('chat.save.topic.knowledge.loading') }
     }
 
+    // c2-12：分析失败走独立的错误态（含重试），不再落到下面的「无内容」空态。
+    if (analysisError) {
+      return { type: 'error', message: t('error.unknown') }
+    }
+
     if (!formState.hasContent && !isNoteMode) {
       return {
         type: 'empty',
@@ -234,7 +257,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
     }
 
     return { type: 'form' }
-  }, [analysisLoading, formState.hasContent, bases.length, t, isTopicMode, isNoteMode])
+  }, [analysisLoading, analysisError, formState.hasContent, bases.length, t, isTopicMode, isNoteMode])
 
   const handleContentTypeToggle = (type: ContentType) => {
     setSelectedTypes((prev) => (prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]))
@@ -258,13 +281,13 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       }
 
       if (!selectedBase.version) {
-        throw new Error('Knowledge base is not properly configured. Please check the knowledge base settings.')
+        throw new SaveToKnowledgeError('base-not-configured')
       }
 
       if (isNoteMode) {
         const note = source.data
         if (!note.externalPath) {
-          throw new Error('Note external path is required for export')
+          throw new SaveToKnowledgeError('note-read-failed')
         }
 
         let content = ''
@@ -272,11 +295,11 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
           content = await window.api.file.readExternal(note.externalPath)
         } catch (error) {
           logger.error('Failed to read note file:', error as Error)
-          throw new Error('Failed to read note content. Please ensure the file exists and is accessible.')
+          throw new SaveToKnowledgeError('note-read-failed')
         }
 
         if (!content || content.trim() === '') {
-          throw new Error('Note content is empty. Cannot export empty notes to knowledge base.')
+          throw new SaveToKnowledgeError('note-empty')
         }
 
         logger.debug('Note content loaded', { contentLength: content.length })
@@ -305,20 +328,11 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
     } catch (error) {
       logger.error('save failed:', error as Error)
 
-      // Provide more specific error messages
-      let errorMessage = t(
-        isTopicMode ? 'chat.save.topic.knowledge.error.save_failed' : 'chat.save.knowledge.error.save_failed'
-      )
-
-      if (error instanceof Error) {
-        if (error.message.includes('not properly configured')) {
-          errorMessage = error.message
-        } else if (error.message.includes('empty')) {
-          errorMessage = error.message
-        } else if (error.message.includes('read note content')) {
-          errorMessage = error.message
-        }
-      }
+      // c2-41：错误分类走错误码，不再用英文子串匹配决策文案分支。
+      const errorMessage =
+        error instanceof SaveToKnowledgeError
+          ? t(SAVE_ERROR_KEY[error.code])
+          : t(isTopicMode ? 'chat.save.topic.knowledge.error.save_failed' : 'chat.save.knowledge.error.save_failed')
 
       window.toast.error(errorMessage)
       setLoading(false)
@@ -331,6 +345,15 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const renderEmptyState = () => (
     <EmptyContainer>
       <Text type="secondary">{uiState.message}</Text>
+    </EmptyContainer>
+  )
+
+  const renderErrorState = () => (
+    <EmptyContainer data-testid="save-to-knowledge-analysis-error">
+      <Text type="secondary">{uiState.message}</Text>
+      <Button size="small" onClick={() => setAnalysisAttempt((prev) => prev + 1)}>
+        {t('common.retry')}
+      </Button>
     </EmptyContainer>
   )
 
@@ -363,7 +386,17 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
                   key={option.type}
                   align="center"
                   justify="space-between"
-                  onClick={() => handleContentTypeToggle(option.type)}>
+                  role="checkbox"
+                  aria-checked={selectedTypes.includes(option.type)}
+                  tabIndex={0}
+                  onClick={() => handleContentTypeToggle(option.type)}
+                  onKeyDown={(event) => {
+                    // c2-24：内容类型行原本只有 onClick，键盘用户无法勾选，而「保存」的可用性
+                    // 由这些选择决定 —— 键盘用户会卡在一个永远禁用保存、且没有说明原因的弹窗里。
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    handleContentTypeToggle(option.type)
+                  }}>
                   <Flex align="center" gap={8}>
                     <CustomTag
                       color={selectedTypes.includes(option.type) ? TAG_COLORS.SELECTED : TAG_COLORS.UNSELECTED}
@@ -435,12 +468,19 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       okText={t('common.save')}
       cancelText={t('common.cancel')}
       okButtonProps={{ loading, disabled: !formState.canSubmit || analysisLoading }}>
-      {uiState.type === 'form' ? renderFormContent() : renderEmptyState()}
+      {uiState.type === 'form'
+        ? renderFormContent()
+        : uiState.type === 'error'
+          ? renderErrorState()
+          : renderEmptyState()}
     </Modal>
   )
 }
 
 const TopViewKey = 'SaveToKnowledgePopup'
+
+/** 行为测试用的具名导出（与 `BackupPopupContainer` 同形）。 */
+export { PopupContainer as SaveToKnowledgePopupContainer }
 
 export default class SaveToKnowledgePopup {
   static hide() {
@@ -477,6 +517,8 @@ export default class SaveToKnowledgePopup {
 
 const EmptyContainer = styled.div`
   display: flex;
+  flex-direction: column;
+  gap: 12px;
   justify-content: center;
   align-items: center;
   min-height: 100px;
@@ -493,6 +535,13 @@ const ContentTypeItem = styled(Flex)`
 
   &:hover {
     border-color: var(--color-primary);
+  }
+
+  /* c2-24：键盘路径必须有可见焦点。 */
+  &:focus-visible {
+    border-color: var(--color-primary);
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
   }
 `
 

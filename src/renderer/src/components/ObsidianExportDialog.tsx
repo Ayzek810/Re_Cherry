@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import type { Topic } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
@@ -11,7 +10,9 @@ import {
   topicToMarkdown
 } from '@renderer/utils/export'
 import { Alert, Empty, Form, Input, Modal, Select, Spin, Switch, TreeSelect } from 'antd'
+import type { TFunction } from 'i18next'
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('ObsidianExportDialog')
 
@@ -42,10 +43,11 @@ interface PopupContainerProps {
 }
 
 // 转换文件信息数组为树形结构
-const convertToTreeData = (files: FileInfo[]) => {
+// c2-47：`t` 由调用方传入，静态配置里不再对默认单例求值一次就永久固定。
+const convertToTreeData = (files: FileInfo[], t: TFunction) => {
   const treeData: any[] = [
     {
-      title: i18n.t('chat.topics.export.obsidian_root_directory'),
+      title: t('chat.topics.export.obsidian_root_directory'),
       value: '',
       isLeaf: false,
       selectable: true
@@ -145,6 +147,9 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   rawContent
 }) => {
   const defaultObsidianVault = store.getState().settings.defaultObsidianVault
+  // c2-47：统一走 `useTranslation()` —— 组件订阅语言变化，渲染期取词，
+  // 与同目录其他组件一致（原来混用默认单例 `i18n.t`，语言切换后弹窗停在旧语言）。
+  const { t } = useTranslation()
   const [state, setState] = useState({
     title,
     tags: obsidianTags || '',
@@ -169,19 +174,19 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
 
   useEffect(() => {
     if (files.length > 0) {
-      const treeData = convertToTreeData(files)
+      const treeData = convertToTreeData(files, t)
       setFileTreeData(treeData)
     } else {
       setFileTreeData([
         {
-          title: i18n.t('chat.topics.export.obsidian_root_directory'),
+          title: t('chat.topics.export.obsidian_root_directory'),
           value: '',
           isLeaf: false,
           selectable: true
         }
       ])
     }
-  }, [files])
+  }, [files, t])
 
   useEffect(() => {
     const fetchVaults = async () => {
@@ -190,7 +195,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
         setError(null)
         const vaultsData = await window.api.obsidian.getVaults()
         if (vaultsData.length === 0) {
-          setError(i18n.t('chat.topics.export.obsidian_no_vaults'))
+          setError(t('chat.topics.export.obsidian_no_vaults'))
           setLoading(false)
           return
         }
@@ -203,7 +208,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
         }
       } catch (error) {
         logger.error('Failed to fetch Obsidian vaults:', error as Error)
-        setError(i18n.t('chat.topics.export.obsidian_fetch_error'))
+        setError(t('chat.topics.export.obsidian_fetch_error'))
       } finally {
         setLoading(false)
       }
@@ -221,7 +226,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
           setFiles(filesData)
         } catch (error) {
           logger.error('Failed to fetch Obsidian files:', error as Error)
-          setError(i18n.t('chat.topics.export.obsidian_fetch_folders_error'))
+          setError(t('chat.topics.export.obsidian_fetch_folders_error'))
         } finally {
           setLoading(false)
         }
@@ -232,7 +237,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
 
   const handleOk = async () => {
     if (!selectedVault) {
-      setError(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
+      setError(t('chat.topics.export.obsidian_no_vault_selected'))
       return
     }
     let markdown = ''
@@ -254,7 +259,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
       content = `---\ntitle: ${state.title}\ncreated: ${state.createdAt}\nsource: ${state.source}\ntags: ${state.tags}\n---\n${markdown}`
     }
     if (content === '') {
-      window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+      window.toast.error(t('chat.topics.export.obsidian_export_failed'))
       return
     }
     await navigator.clipboard.writeText(content)
@@ -305,7 +310,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }
   return (
     <Modal
-      title={i18n.t('chat.topics.export.obsidian_atributes')}
+      title={t('chat.topics.export.obsidian_atributes')}
       open={openState}
       onOk={handleOk}
       onCancel={handleCancel}
@@ -318,24 +323,24 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
         type: 'primary',
         disabled: vaults.length === 0 || loading || !!error
       }}
-      okText={i18n.t('chat.topics.export.obsidian_btn')}
+      okText={t('chat.topics.export.obsidian_btn')}
       afterClose={() => setOpen(open)}>
       {error && <Alert message={error} type="error" showIcon style={{ marginBottom: 16 }} />}
       <Form layout="horizontal" labelCol={{ span: 6 }} wrapperCol={{ span: 18 }} labelAlign="left">
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_title')}>
+        <Form.Item label={t('chat.topics.export.obsidian_title')}>
           <Input
             value={state.title}
             onChange={(e) => handleTitleInputChange(e.target.value)}
-            placeholder={i18n.t('chat.topics.export.obsidian_title_placeholder')}
+            placeholder={t('chat.topics.export.obsidian_title_placeholder')}
           />
         </Form.Item>
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_vault')}>
+        <Form.Item label={t('chat.topics.export.obsidian_vault')}>
           {vaults.length > 0 ? (
             <Select
               loading={loading}
               value={selectedVault}
               onChange={handleVaultChange}
-              placeholder={i18n.t('chat.topics.export.obsidian_vault_placeholder')}
+              placeholder={t('chat.topics.export.obsidian_vault_placeholder')}
               style={{ width: '100%' }}>
               {vaults.map((vault) => (
                 <Option key={vault.name} value={vault.name}>
@@ -346,21 +351,19 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
           ) : (
             <Empty
               description={
-                loading
-                  ? i18n.t('chat.topics.export.obsidian_loading')
-                  : i18n.t('chat.topics.export.obsidian_no_vaults')
+                loading ? t('chat.topics.export.obsidian_loading') : t('chat.topics.export.obsidian_no_vaults')
               }
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           )}
         </Form.Item>
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_path')}>
+        <Form.Item label={t('chat.topics.export.obsidian_path')}>
           <Spin spinning={loading}>
             {selectedVault ? (
               <TreeSelect
                 value={state.folder}
                 onChange={handleFileSelect}
-                placeholder={i18n.t('chat.topics.export.obsidian_path_placeholder')}
+                placeholder={t('chat.topics.export.obsidian_path_placeholder')}
                 style={{ width: '100%' }}
                 showSearch
                 dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
@@ -369,52 +372,48 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
                 treeData={fileTreeData}></TreeSelect>
             ) : (
               <Empty
-                description={i18n.t('chat.topics.export.obsidian_select_vault_first')}
+                description={t('chat.topics.export.obsidian_select_vault_first')}
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
               />
             )}
           </Spin>
         </Form.Item>
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_tags')}>
+        <Form.Item label={t('chat.topics.export.obsidian_tags')}>
           <Input
             value={state.tags}
             onChange={(e) => handleChange('tags', e.target.value)}
-            placeholder={i18n.t('chat.topics.export.obsidian_tags_placeholder')}
+            placeholder={t('chat.topics.export.obsidian_tags_placeholder')}
           />
         </Form.Item>
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_created')}>
+        <Form.Item label={t('chat.topics.export.obsidian_created')}>
           <Input
             value={state.createdAt}
             onChange={(e) => handleChange('createdAt', e.target.value)}
-            placeholder={i18n.t('chat.topics.export.obsidian_created_placeholder')}
+            placeholder={t('chat.topics.export.obsidian_created_placeholder')}
           />
         </Form.Item>
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_source')}>
+        <Form.Item label={t('chat.topics.export.obsidian_source')}>
           <Input
             value={state.source}
             onChange={(e) => handleChange('source', e.target.value)}
-            placeholder={i18n.t('chat.topics.export.obsidian_source_placeholder')}
+            placeholder={t('chat.topics.export.obsidian_source_placeholder')}
           />
         </Form.Item>
-        <Form.Item label={i18n.t('chat.topics.export.obsidian_operate')}>
+        <Form.Item label={t('chat.topics.export.obsidian_operate')}>
           <Select
             value={state.processingMethod}
             onChange={(value) => handleChange('processingMethod', value)}
-            placeholder={i18n.t('chat.topics.export.obsidian_operate_placeholder')}
+            placeholder={t('chat.topics.export.obsidian_operate_placeholder')}
             allowClear>
-            <Option value={ObsidianProcessingMethod.APPEND}>
-              {i18n.t('chat.topics.export.obsidian_operate_append')}
-            </Option>
-            <Option value={ObsidianProcessingMethod.PREPEND}>
-              {i18n.t('chat.topics.export.obsidian_operate_prepend')}
-            </Option>
+            <Option value={ObsidianProcessingMethod.APPEND}>{t('chat.topics.export.obsidian_operate_append')}</Option>
+            <Option value={ObsidianProcessingMethod.PREPEND}>{t('chat.topics.export.obsidian_operate_prepend')}</Option>
             <Option value={ObsidianProcessingMethod.NEW_OR_OVERWRITE}>
-              {i18n.t('chat.topics.export.obsidian_operate_new_or_overwrite')}
+              {t('chat.topics.export.obsidian_operate_new_or_overwrite')}
             </Option>
           </Select>
         </Form.Item>
         {!rawContent && (
-          <Form.Item label={i18n.t('chat.topics.export.obsidian_reasoning')}>
+          <Form.Item label={t('chat.topics.export.obsidian_reasoning')}>
             <Switch checked={exportReasoning} onChange={setExportReasoning} />
           </Form.Item>
         )}

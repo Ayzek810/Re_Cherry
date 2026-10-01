@@ -1,9 +1,11 @@
 import type { Context } from '@opentelemetry/api'
-import { trace } from '@opentelemetry/api'
 import type { BufferConfig, ReadableSpan, Span, SpanExporter } from '@opentelemetry/sdk-trace-base'
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 
-export type SpanFunction = (span: ReadableSpan) => void
+import { buildStartSpanSnapshot } from '../core/spanSnapshot'
+
+/** Callback shape of `FunctionSpanProcessor` (not part of the public package surface — k2-21). */
+type SpanFunction = (span: ReadableSpan) => void
 
 export class FunctionSpanProcessor extends BatchSpanProcessor {
   private start: SpanFunction
@@ -22,23 +24,6 @@ export class FunctionSpanProcessor extends BatchSpanProcessor {
 
   override onStart(span: Span, parentContext: Context): void {
     super.onStart(span, parentContext)
-    this.start({
-      name: span.name,
-      kind: span.kind,
-      spanContext: () => span.spanContext(),
-      parentSpanContext: trace.getSpanContext(parentContext),
-      startTime: span.startTime,
-      status: span.status,
-      attributes: span.attributes,
-      links: span.links,
-      events: span.events,
-      duration: span.duration,
-      ended: span.ended,
-      resource: span.resource,
-      instrumentationScope: span.instrumentationScope,
-      droppedAttributesCount: span.droppedAttributesCount,
-      droppedEventsCount: span.droppedEventsCount,
-      droppedLinksCount: span.droppedLinksCount
-    } as ReadableSpan)
+    this.start(buildStartSpanSnapshot(span, parentContext))
   }
 }

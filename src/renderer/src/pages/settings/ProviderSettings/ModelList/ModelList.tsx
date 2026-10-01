@@ -14,7 +14,7 @@ import type { Model } from '@renderer/types'
 import { filterModelsByKeywords } from '@renderer/utils'
 import { getDuplicateModelNames } from '@renderer/utils/model'
 import { isNewApiProvider } from '@renderer/utils/provider'
-import { Button, Flex, Space, Spin, Tooltip } from 'antd'
+import { Button, Empty, Flex, Space, Spin, Tooltip } from 'antd'
 import { groupBy, isEmpty, sortBy, toPairs } from 'lodash'
 import { Plus, RefreshCw } from 'lucide-react'
 import React, { memo, startTransition, useCallback, useEffect, useMemo, useState } from 'react'
@@ -170,6 +170,14 @@ const ModelList: React.FC<ModelListProps> = ({ providerId }) => {
               />
             ))}
           </Flex>
+        )}
+        {/* v1 二轮审查 s2-44：搜索无命中 / provider 无模型时此前是纯空白面板，
+            用户无法区分「没有匹配」与「还在加载 / 出错了」。 */}
+        {!isLoading && (hasNoModels || isEmpty(displayedModelGroups)) && (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description={hasNoModels ? t('settings.models.empty') : t('common.no_results')}
+          />
         )}
       </Spin>
       <Flex justify="space-between" align="center">

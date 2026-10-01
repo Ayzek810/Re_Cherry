@@ -2,7 +2,7 @@ import type { Assistant, FileMetadata, Usage } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import { findFileBlocks, getMainTextContent, getThinkingContent } from '@renderer/utils/messageUtils/find'
-import { flatten, takeRight } from 'lodash'
+import { takeRight } from 'lodash'
 import { approximateTokenSize } from 'tokenx'
 
 import { getAssistantSettings } from './AssistantService'
@@ -73,6 +73,35 @@ export function estimateImageTokens(file: FileMetadata) {
 }
 
 /**
+ * 汇总文件列表里所有图片的 token 估算（r2-26：`estimateUserPromptUsage` 与
+ * `estimateMessageUsage` 里逐字重复的两段循环合并到这里）。
+ */
+function sumImageTokens(files: FileMetadata[]): number {
+  let imageTokens = 0
+  for (const file of files) {
+    if (file.type !== FILE_TYPE.IMAGE) continue
+    imageTokens += estimateImageTokens(file)
+  }
+  return imageTokens
+}
+
+/**
+ * 用量字段的唯一口径（r2-25/r2-26）。
+ *
+ * 用户输入只有"输入"没有"输出"：`completion_tokens` 恒为 0。此前两处估算都把它设成
+ * `prompt_tokens`，于是 `MessageTokens` 对 user 消息展示的 `total_tokens` 恰好是输入的
+ * **两倍**；`imageTokens - 7` 在图片小于约 700 字节时还会让 total 小于 prompt、极端为负。
+ * 这里统一 `total_tokens = prompt_tokens + 图片估算`，并用 `Math.max(0, …)` 兜底非负。
+ */
+function buildEstimatedUsage(tokens: number, imageTokens: number): Usage {
+  return {
+    prompt_tokens: tokens,
+    completion_tokens: 0,
+    total_tokens: Math.max(0, tokens + imageTokens)
+  }
+}
+
+/**
  * 估算用户输入内容（文本和文件）的 token 用量。
  *
  * 该函数只根据传入的 content（文本内容）和 files（文件列表）估算，
@@ -90,24 +119,10 @@ export async function estimateUserPromptUsage({
   content?: string
   files?: FileMetadata[]
 }): Promise<Usage> {
-  let imageTokens = 0
-
-  if (files && files.length > 0) {
-    const images = files.filter((f) => f.type === FILE_TYPE.IMAGE)
-    if (images.length > 0) {
-      for (const image of images) {
-        imageTokens = estimateImageTokens(image) + imageTokens
-      }
-    }
-  }
-
+  const imageTokens = sumImageTokens(files ?? [])
   const tokens = estimateTextTokens(content || '')
 
-  return {
-    prompt_tokens: tokens,
-    completion_tokens: tokens,
-    total_tokens: tokens + (imageTokens ? imageTokens - 7 : 0)
-  }
+  return buildEstimatedUsage(tokens, imageTokens)
 }
 
 /**
@@ -123,27 +138,14 @@ export async function estimateMessageUsage(message: Partial<Message>): Promise<U
   const fileBlocks = findFileBlocks(message as Message)
   const files = fileBlocks.map((f) => f.file)
 
-  let imageTokens = 0
-
-  if (files.length > 0) {
-    const images = files.filter((f) => f.type === FILE_TYPE.IMAGE)
-    if (images.length > 0) {
-      for (const image of images) {
-        imageTokens = estimateImageTokens(image) + imageTokens
-      }
-    }
-  }
+  const imageTokens = sumImageTokens(files)
 
   const content = getMainTextContent(message as Message)
   const reasoningContent = getThinkingContent(message as Message)
   const combinedContent = [content, reasoningContent].filter((s) => s !== undefined).join(' ')
   const tokens = estimateTextTokens(combinedContent)
 
-  return {
-    prompt_tokens: tokens,
-    completion_tokens: tokens,
-    total_tokens: tokens + (imageTokens ? imageTokens - 7 : 0)
-  }
+  return buildEstimatedUsage(tokens, imageTokens)
 }
 
 export async function estimateMessagesUsage({
@@ -156,7 +158,9 @@ export async function estimateMessagesUsage({
   const outputMessage = messages.pop()!
 
   const prompt_tokens = await estimateHistoryTokens(assistant, messages)
-  const { completion_tokens } = await estimateMessageUsage(outputMessage)
+  // r2-26：`estimateMessageUsage` 的 `completion_tokens` 口径改为 0（估算值只表达输入），
+  // 回复的输出量按同一套本地估算单独算出来，否则这条兜底 usage 会退化成 0 输出。
+  const completion_tokens = estimateTextTokens(getMainTextContent(outputMessage))
 
   return {
     prompt_tokens,
@@ -165,32 +169,56 @@ export async function estimateMessagesUsage({
   } as Usage
 }
 
+/**
+ * 历史上下文占用估算（`Messages.tsx` → `ESTIMATED_TOKEN_COUNT`，输入框的上下文百分比）。
+ *
+ * r2-27：旧实现把窗口内**每条**带 usage 消息的 `total_tokens` 直接相加。那是"该条消息
+ * 发出时那一刻的累积量"，本身已包含被 `takeRight(maxContextCount)` 截掉的早期消息——
+ * 逐条累加等于把历史长度重复计入，上报值会显著高于真实占用。
+ *
+ * 现口径（确定性、不依赖窗口外的数据）：
+ *   ① 基线 = 窗口内**第一条**带 usage 消息的 `prompt_tokens`（它是一次真实测量，覆盖到它为止的上下文）；
+ *   ② 该条之后的每条消息，按本地 `estimateMessageParams` 估算增量后相加（含 usage 的也照算，
+ *      因为 `completion_tokens` 已按 r2-26 归零，它的 `prompt_tokens` 只代表走到它的那段，
+ *      再计入就会重复）；
+ *   ③ 窗口内没有一条带 usage 消息时退化为纯本地估算（与旧实现同构：prompt + 全部消息文本）。
+ */
 export async function estimateHistoryTokens(assistant: Assistant, msgs: Message[]) {
   const { contextCount } = getAssistantSettings(assistant)
   const maxContextCount = contextCount
   const messages = filterMessages(filterAfterContextClearMessages(takeRight(msgs, maxContextCount)))
 
-  // 有 usage 数据的消息，快速计算总数
-  const uasageTokens = messages
-    .filter((m) => m.usage)
-    .reduce((acc, message) => {
-      const inputTokens = message.usage?.total_tokens ?? 0
-      const outputTokens = message.usage!.completion_tokens ?? 0
-      return acc + (message.role === 'user' ? inputTokens : outputTokens)
-    }, 0)
+  // 每条消息压成一段文本（`MessageItem[]` → 按 `\n` 连接），读不出来的记 `null` 表示"无从估算"。
+  const bodies = await Promise.all(messages.map((message) => estimateMessageBody(message)))
 
-  // 没有 usage 数据的消息，需要计算每条消息的 token
-  let allMessages: MessageItem[][] = []
+  // 基线：窗口内第一条既带 usage 又有正文的消息。它的 `prompt_tokens` 是一次真实测量，
+  // 且该测量**已经包含** assistant.prompt —— 所以基线路径不再把 prompt 单独计一次。
+  const baselineIndex = messages.findIndex((message, index) => bodies[index] !== null && message.usage !== undefined)
+  const baselineTokens = baselineIndex === -1 ? 0 : (messages[baselineIndex].usage?.prompt_tokens ?? 0)
 
-  for (const message of messages.filter((m) => !m.usage)) {
-    const items = await getMessageParam(message)
-    allMessages = allMessages.concat(items)
+  // 整窗无测量：退化为纯本地估算 = assistant.prompt + 全部消息文本（与旧实现同构）。
+  if (baselineIndex === -1) {
+    return estimateTextTokens(assistant.prompt + '\n' + joinBodies(bodies, 0))
   }
 
-  const prompt = assistant.prompt
-  const input = flatten(allMessages)
-    .map((m) => m.content)
-    .join('\n')
+  // 基线之后的增量：测到的部分不再重复计入（r2-27 的核心修复）。
+  return baselineTokens + estimateTextTokens(joinBodies(bodies, baselineIndex + 1))
+}
 
-  return estimateTextTokens(prompt + input) + uasageTokens
+/** 把窗口中从 `start` 起的消息正文按 `\n` 拼接（空/不可读消息保留空段，与旧实现同构）。 */
+function joinBodies(bodies: (string | null)[], start: number): string {
+  return bodies
+    .slice(start)
+    .map((text) => text ?? '')
+    .join('\n')
+}
+
+/** 消息 → 一段文本；读文件失败按"无从估算"返回 `null`。 */
+async function estimateMessageBody(message: Message): Promise<string | null> {
+  try {
+    const items = await getMessageParam(message)
+    return items.map((item) => item.content).join('\n')
+  } catch {
+    return null
+  }
 }

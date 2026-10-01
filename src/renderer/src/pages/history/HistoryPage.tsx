@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import { useAppDispatch } from '@renderer/store'
 import { loadTopicMessagesThunk } from '@renderer/store/thunk/messageThunk'
@@ -8,7 +9,7 @@ import { Divider, Input } from 'antd'
 import { last } from 'lodash'
 import { ChevronLeft, CornerDownLeft, Search } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -39,38 +40,59 @@ const HistoryPage: FC = () => {
   _topic = topic
   _message = message
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     const _stack = [...stack]
     const route = _stack.pop()
     setStack(_stack)
     route === 'search' && setSearch('')
     route === 'topic' && setTopic(undefined)
     route === 'message' && setMessage(undefined)
-  }
+  }, [stack])
 
-  const onSearch = () => {
+  const onSearch = useCallback(() => {
     setSearchKeywords(search)
     setStack(['topics', 'search'])
     setTopic(undefined)
-  }
+  }, [search])
 
   // topic 不包含 messages，用到的时候才会获取
-  const onTopicClick = (topic: Topic | null | undefined) => {
-    if (!topic) {
-      window.toast.error(t('history.error.topic_not_found'))
-      return
-    }
-    setStack((prev) => [...prev, 'topic'])
-    setTopic(topic)
-  }
+  const onTopicClick = useCallback(
+    (topic: Topic | null | undefined) => {
+      if (!topic) {
+        window.toast.error(t('history.error.topic_not_found'))
+        return
+      }
+      setStack((prev) => [...prev, 'topic'])
+      setTopic(topic)
+    },
+    [t]
+  )
 
-  const onMessageClick = (message: Message) => {
-    void dispatch(loadTopicMessagesThunk(message.topicId))
-    setStack(['topics', 'search', 'message'])
-    setMessage(message)
-  }
+  // 两个话题入口的面板签名不同（`TopicsHistory` 除回调外还接受 div 的鼠标事件），
+  // 各自包一层；`useCallback` 保证 memo 的比较基准稳定（f2-58）。
+  const handleTopicSelect = useCallback((topic: Topic) => onTopicClick(topic), [onTopicClick])
+  const handleHistoryTopicClick = useCallback((topic: Topic) => onTopicClick(topic), [onTopicClick])
 
-  const isShow = (route: Route) => (last(stack) === route ? 'flex' : 'none')
+  const onMessageClick = useCallback(
+    (message: Message) => {
+      void dispatch(loadTopicMessagesThunk(message.topicId)).catch((error) => {
+        // X9：同上，仅防未处理拒绝。
+        logger.warn(`HistoryPage: failed to load messages for topic ${message.topicId}`, error as Error)
+      })
+      setStack(['topics', 'search', 'message'])
+      setMessage(message)
+    },
+    [dispatch]
+  )
+
+  const isShow = (route: Route) => last(stack) === route
+  const panelStyle = (route: Route) => (isShow(route) ? { display: 'flex' } : { display: 'none' })
+
+  // 面板的 `style` 必须是稳定引用（f2-58）：`TopicsHistory` / `SearchResults` 已 memo，
+  // 每次渲染新建内联对象会让 memo 完全失效，搜索框每敲一个字符都重渲染四个面板。
+  const topicsPanelStyle = useMemo(() => panelStyle('topics'), [stack])
+  const searchPanelStyle = useMemo(() => panelStyle('search'), [stack])
+  const isSearchVisible = isShow('search')
 
   useEffect(() => {
     if (inputRef.current) {
@@ -109,20 +131,18 @@ const HistoryPage: FC = () => {
       </HStack>
       <Divider style={{ margin: 0, marginTop: 4, borderBlockStartWidth: 0.5 }} />
 
-      <TopicsHistory
-        keywords={search}
-        onClick={onTopicClick as any}
-        onSearch={onSearch}
-        style={{ display: isShow('topics') }}
-      />
-      <TopicMessages topic={topic} style={{ display: isShow('topic') }} />
+      <TopicsHistory keywords={search} onTopicClick={handleTopicSelect} onSearch={onSearch} style={topicsPanelStyle} />
+      <TopicMessages topic={topic} style={panelStyle('topic')} />
+      {/* 隐藏交给 `visible` + `style`，不再用"喂空串"表达不可见（f2-60）：
+          喂空串会清空结果与高亮词，返回搜索视图时又重发一次内核检索并闪一次 spinner。 */}
       <SearchResults
-        keywords={isShow('search') ? searchKeywords : ''}
+        keywords={searchKeywords}
+        visible={isSearchVisible}
         onMessageClick={onMessageClick}
-        onTopicClick={onTopicClick}
-        style={{ display: isShow('search') }}
+        onTopicClick={handleHistoryTopicClick}
+        style={searchPanelStyle}
       />
-      <SearchMessage message={message} style={{ display: isShow('message') }} />
+      <SearchMessage message={message} style={panelStyle('message')} />
     </Container>
   )
 }
@@ -152,5 +172,7 @@ const SearchIcon = styled.div`
     }
   }
 `
+
+const logger = loggerService.withContext('HistoryPage')
 
 export default HistoryPage

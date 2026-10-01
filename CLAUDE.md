@@ -6,7 +6,7 @@ Re_Cherry is a personal desktop AI assistant. It is a heavily trimmed fork of Ch
 The chat path uses one in-process kernel: **DSH** (DeepSeek Harness, Cordis-based, "everything is a plugin").
 The fork removed the upstream agent pages, apiServer, updater, Copilot, Pyodide, OVMS, selection toolbar, and Drizzle agents DB.
 The fork re-implemented MCP, knowledge base, web search, skills, translate, paint, notes, and files pages its own way.
-Current version: **1.0.0**. Read the code when a document disagrees with it.
+Current version: **0.5.2**. This is the third cleanup round before the 1.0.0 release. Read the code when a document disagrees with it.
 
 ## 2. Project structure
 
@@ -278,32 +278,34 @@ Do not change these without a reason and a test.
 
 ## 12. Open items
 
-- **Main-text streaming stall (E1).** The stall itself is not reproduced yet.
-  The forensic hook measures the gap between events of any type (`noteStreamActivity` in `kernelChat.ts`).
-  A thinking period or a tool period no longer counts as a stall. A gap over 5 seconds writes a warn line
-  with the text `no stream activity`. The text-gap hook was wrong: log evidence showed
-  `text delta gap 73217ms (accumulated 2 chars)` with interaction events around it.
-  The most likely renderer-side cause is known: `useSmoothStream` sends the **whole accumulated text** each frame,
-  and `Markdown` then re-parses the whole message through ReactMarkdown (about 2.4 MB of text per second for a 40 KB reply).
-  Fix that with a stable-prefix split and a reduced streaming pipeline. Prove the fix with a behavior test.
-- **First-paint payload.** The first-paint face is the resource list in `index.html` (about 12.5 MB raw bytes).
-  KaTeX and MathJax are lazy. Vite still writes a `modulepreload` hint for the KaTeX chunk, so the KaTeX change
-  removes parse and execute cost, not the file read. The executed startup code is the `store` chunk
-  (4.61 MB after the KaTeX change). The large files `svg-*`, `esm-*`, `traceWindow-*`, and `viz-*` are **not**
-  in the executed face — they are lazy chunks. `jsx-runtime-*` is a shared base (React, antd, i18n).
+- **Main-text streaming stall (E1).** The stall itself is still not reproduced. The two rendering causes
+  are fixed and measured (`reports/audit2-fixes/performance.md`, items p2-09 to p2-11): `Markdown` splits the
+  text into a stable prefix plus a growing tail, so the pipeline runs a few times instead of once per frame;
+  the smooth-stream callback is clamped to 30 Hz; and the store receives the new delta, not the whole text.
+  Do not re-parse the whole message per frame. The forensic hook stays (`noteStreamActivity` in `kernelChat.ts`).
+  It measures the gap between events of any type, so a thinking period or a tool period is not a stall.
+  A gap over 5 seconds writes a warn line with the text `no stream activity`. Remove the hook only after a
+  real stall is captured and fixed.
+- **First-paint payload.** The first-paint face is the resource list in `index.html`
+  (12,373,794 B raw bytes at 0.5.2, from 12,781,986 B at 0.5.1). The executed closure is 12,185,742 B.
+  KaTeX and MathJax are lazy. Vite still writes a `modulepreload` hint for the KaTeX chunk, so the KaTeX
+  change removes parse and execute cost, not the file read. The `store` chunk is 2,051,058 B (from 2,394,934 B).
+  The large files `svg-*`, `esm-*`, `traceWindow-*`, and `viz-*` are **not** in the executed face — they are
+  lazy chunks. `jsx-runtime-*` is a shared base (React, antd, i18n).
 - **Do not add renderer `manualChunks`.** A measurement rejected that idea: grouping vendor libraries by package
   raised the first-paint face from 12.50 MB to 14.95 MB (+22.7%). Forced grouping breaks the default chunk that
   the first paint and the lazy routes share, so an eager consumer pulls a whole library in. Measure the first-paint
   total before and after any chunking change. Use `tools/audit2-fixes/measure-eager.cjs`.
-- **Open audit findings.** The second-pass review produced 336 findings in `reports/audit2/*.md`.
-  Most of the high-severity items are fixed (see `reports/audit2-fixes/`). The remaining items are:
-  the renderer does not consume the kernel `purgeFailures` list (`useMessageOperations.ts`);
-  `CodeStyleProvider` and the Markdown code-block unmount path still do not call `cleanupTokenizers`;
-  `utils/shiki.ts` can load the same Shiki language chunk twice; a fresh install cannot create
-  `custom-minapps.json` because the renderer cannot tell "missing" from "unreadable";
-  and `settings.pinnedTabs` has no migration input other than the v1 backfill.
+- **Audit closure.** The second-pass review produced **337** findings in `reports/audit2/*.md`.
+  Every finding now carries one terminal status. `reports/audit2-closure.md` holds the item table.
+  Regenerate it with `node tools/audit2-closure.cjs`; the tail count must stay at zero.
+  `reports/audit2-fixes/final-adjudication.md` holds the manual rulings for the items where the two passes
+  disagreed. A new finding must be closed the same way. Do not register a handoff as a conclusion.
 
 ## 13. Related documents
+
+`reports/…` and `tools/…` live in the development workspace beside this repository. They are not part of the
+repository, and a fresh clone does not contain them. Treat them as development notes, not as shipped files.
 
 - `docs/v1-internal-docs.md` — delivery, gates, deployment, and the performance baseline.
 - `reports/v1-audit-ledger.md` — the v1 audit ledger with evidence and open items.

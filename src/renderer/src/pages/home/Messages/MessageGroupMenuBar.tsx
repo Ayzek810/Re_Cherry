@@ -6,6 +6,7 @@ import {
   NumberOutlined,
   ReloadOutlined
 } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useMessageOperations } from '@renderer/hooks/useMessageOperations'
@@ -22,6 +23,8 @@ import styled from 'styled-components'
 
 import MessageGroupModelList from './MessageGroupModelList'
 import MessageGroupSettings from './MessageGroupSettings'
+
+const logger = loggerService.withContext('MessageGroupMenuBar')
 
 interface Props {
   multiModelMessageStyle: MultiModelMessageStyle
@@ -86,13 +89,26 @@ const MessageGroupMenuBar: FC<Props> = ({
 
   const handleRetryAll = async () => {
     const candidates = messages.filter((m) => isFailedMessage(m) && !isTransmittingMessage(m))
+    if (candidates.length === 0) return
 
+    let succeeded = 0
+    let failed = 0
     for (const msg of candidates) {
       try {
         await regenerateAssistantMessage(msg, assistant)
-      } catch (e) {
-        // swallow per-item errors to continue others
+        succeeded += 1
+      } catch (error) {
+        failed += 1
+        logger.warn(`[retry-all] regenerate failed for message ${msg.id}`, error as Error)
       }
+    }
+
+    // 批量写动作必须报真实结果（CLAUDE.md §9）：旧实现逐条吞错，全部失败时界面与"点了没反应"同形
+    const result = { success: succeeded, failed }
+    if (failed > 0) {
+      window.toast.error(t('message.group.retry_all_result', result))
+    } else {
+      window.toast.success(t('message.group.retry_all_result', result))
     }
   }
 

@@ -45,7 +45,10 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
 
   useEffect(() => {
     if (activeTopic) {
-      void store.dispatch(loadTopicMessagesThunk(activeTopic.id))
+      void store.dispatch(loadTopicMessagesThunk(activeTopic.id)).catch((error) => {
+        // X9：加载失败已在 thunk 内记 error；此处只防未处理拒绝（消费方有各自错误态）。
+        logger.warn(`useTopic: failed to load messages for topic ${activeTopic.id}`, error as Error)
+      })
       void EventEmitter.emit(EVENT_NAMES.CHANGE_TOPIC, activeTopic)
     }
   }, [activeTopic])
@@ -89,6 +92,12 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
   // 判定只针对**根话题**且**来自上次会话的行**（`isRestoredTopicRow`）：本进程内新建的话题在首发前
   // 内核本来就不认识（不是失效）；fork 子行不在 `dshTopicList` 里（要查得用 `kernelKnowsTopic`，
   // 而分支落点由分支图负责，不在这里）。
+  //
+  // r2-72：依赖从整个 `assistant` 对象收窄到 `assistant?.topics`（本 effect 实际读到的唯一字段）。
+  // `assistant` 是被 `updateAssistant`/`updateTopics` 等 action 重建的新对象引用，任何助手字段更新
+  // （含流式期 `updateTopicUpdatedAt` 的 `updatedAt` bump）都会让这个 effect 重跑并进入上面的
+  // `kernelRootTopics()`（重试窗口内的 IPC）对账。`topics` 引用只在话题行真的变化时才换新，
+  // 所以收窄不改变判定与回落结果（`alive` 守卫 + 后续从 store 现读保持新鲜）。
   useEffect(() => {
     const currentId = activeTopic?.id
     const rows = assistant?.topics
@@ -99,7 +108,6 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
     let alive = true
     const pickFallback = (candidates: Topic[], kernelRoots: ReadonlyMap<string, KernelTopicRow>): Topic | undefined =>
       listRootTopics(candidates).find((candidate) => kernelRoots.has(candidate.id))
-
     void (async () => {
       const kernelRoots = await kernelRootTopics()
       if (!alive || kernelRoots === null || kernelRoots.has(currentId)) return
@@ -127,7 +135,7 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
     return () => {
       alive = false
     }
-  }, [activeTopic?.id, assistant, assistantId, t, setActiveTopic])
+  }, [activeTopic?.id, assistant?.topics, assistantId, t, setActiveTopic])
 
   useEffect(() => {
     if (!assistant?.topics?.length || !activeTopic) {
@@ -211,7 +219,11 @@ export const TopicManager = {
    * 加载并返回指定话题的消息（dsh 内核替换：从内核会话加载进 Redux 后读取）
    */
   async getTopicMessages(id: string) {
-    await store.dispatch(loadTopicMessagesThunk(id))
+    try {
+      await store.dispatch(loadTopicMessagesThunk(id))
+    } catch (error) {
+      logger.warn(`useTopic: failed to load messages for topic ${id}`, error as Error)
+    }
     const state = store.getState()
     return (state.messages.messageIdsByTopic[id] ?? [])
       .map((messageId) => state.messages.entities[messageId])

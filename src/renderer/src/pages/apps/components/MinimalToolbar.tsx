@@ -100,8 +100,10 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
   // Monitor webviewRef changes and update navigation state
   useEffect(() => {
     let checkTimeout: NodeJS.Timeout | null = null
+    let checkFrame: number | null = null
     let navigationListener: (() => void) | null = null
     let listenersAttached = false
+    let cancelled = false
     let currentInterval = WEBVIEW_CHECK_INITIAL_MS
     let attemptCount = 0
 
@@ -139,9 +141,15 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
     }
 
     const scheduleCheck = () => {
+      if (cancelled) return
       checkTimeout = setTimeout(() => {
+        checkTimeout = null
+        // 卸载后不得再排下一轮：定时器句柄必须置空，否则清理阶段无从取消（f2-57）。
+        if (cancelled) return
         // Use requestAnimationFrame to avoid blocking the main thread
-        requestAnimationFrame(() => {
+        checkFrame = requestAnimationFrame(() => {
+          checkFrame = null
+          if (cancelled) return
           attemptCount++
           if (!attachListeners()) {
             // Stop checking after max attempts to prevent infinite loops
@@ -179,9 +187,14 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
       attachListeners()
     }
 
-    // Cleanup
+    // Cleanup：定时器与 rAF 都要收口（f2-57）。旧实现只在 timeout 已排、rAF 未跑的瞬间之外
+    // 才清得掉东西：若在 timeout 已触发、rAF 未执行的窗口内卸载，rAF 回调仍会跑，
+    // `attachListeners()` 为 false 就再排一条**永无人清理**的 timeout 链（约 30 秒），
+    // 为 true 则对已卸载组件 setState，并把 did-navigate 监听挂到脱离文档的元素上（泄漏）。
     return () => {
+      cancelled = true
       if (checkTimeout) clearTimeout(checkTimeout)
+      if (checkFrame !== null) cancelAnimationFrame(checkFrame)
       if (navigationListener) navigationListener()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

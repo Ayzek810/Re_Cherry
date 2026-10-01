@@ -1,16 +1,29 @@
+import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
 import { getEmbeddingMaxContext } from '@renderer/config/embedings'
 import { usePreprocessProviders } from '@renderer/hooks/usePreprocess'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId } from '@renderer/services/ModelService'
-import type { KnowledgeBase } from '@renderer/types'
+import type { KnowledgeBase, Model } from '@renderer/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-const createInitialKnowledgeBase = (): KnowledgeBase => ({
+const logger = loggerService.withContext('useKnowledgeBaseForm')
+
+/**
+ * 表单态（r2-69）：`model` 在这里是「用户还没选」的空位（`undefined`），而不是
+ * `KnowledgeBase.model` 要求的已定模型。旧实现写 `model: null as any`，把这段窗口
+ * 藏出类型系统之外：编译器无法再强制提交路径的校验，而 `KnowledgeBase.model` 的
+ * 消费方会在"未选择"期间拿到 `null`（家规：`null` = no answer，`undefined` = retry later），
+ * 属于三值契约混用。提交路径负责窄化（`AddKnowledgeBasePopup.onOk` 先校验再构造
+ * `KnowledgeBase`）。
+ */
+export type KnowledgeBaseForm = Omit<KnowledgeBase, 'model'> & { model?: Model }
+
+const createInitialKnowledgeBase = (): KnowledgeBaseForm => ({
   id: nanoid(),
   name: '',
-  model: null as any, // model is required, but will be set by user interaction
+  model: undefined,
   items: [],
   created_at: Date.now(),
   updated_at: Date.now(),
@@ -37,7 +50,7 @@ const createInitialKnowledgeBase = (): KnowledgeBase => ({
  */
 export const useKnowledgeBaseForm = (base?: KnowledgeBase) => {
   const { t } = useTranslation()
-  const [newBase, setNewBase] = useState<KnowledgeBase>(base || createInitialKnowledgeBase())
+  const [newBase, setNewBase] = useState<KnowledgeBaseForm>(base || createInitialKnowledgeBase())
   const { providers } = useProviders()
   const { preprocessProviders } = usePreprocessProviders()
 
@@ -110,11 +123,29 @@ export const useKnowledgeBaseForm = (base?: KnowledgeBase) => {
       const modelId = newBase.model?.id || base?.model?.id
       if (!modelId) return
       const maxContext = getEmbeddingMaxContext(modelId)
-      if (!value || !maxContext || value <= maxContext) {
+      // 三值契约（r2-82 的消费侧，跨区请求⑬）：
+      //  · 数值   = 确定上限 → 校验；
+      //  · `null` = 「没有答案」（这个嵌入模型的上限查不到）。**不得**当成「没有上限」静默放过：
+      //             必须给用户可见信号（旧实现让它落进 `!maxContext` 分支，失败伪装成通过）；
+      //  · `undefined` = 「不适用/稍后重试」→ 沿用原有的无上限路径，不校验也不提示。
+      if (maxContext === null) {
+        logger.warn(`knowledge form: embedding max context is unknown for model "${modelId}"; chunk size not validated`)
+        window.toast.warning(t('message.error.chunk_size_unknown_limit'))
         setNewBase((prev) => ({ ...prev, chunkSize: value || undefined }))
+        return
+      }
+      if (maxContext === undefined) {
+        // 不适用：没有可判定的上限，任何值都不该被拒绝，也不该打扰用户。
+        setNewBase((prev) => ({ ...prev, chunkSize: value || undefined }))
+        return
+      }
+      if (!value || value <= maxContext) {
+        setNewBase((prev) => ({ ...prev, chunkSize: value || undefined }))
+      } else {
+        window.toast.error(t('message.error.chunk_size_too_large', { limit: maxContext }))
       }
     },
-    [newBase.model, base?.model]
+    [newBase.model, base?.model, t]
   )
 
   const handleChunkOverlapChange = useCallback(

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import i18n from '@renderer/i18n'
 import store from '@renderer/store'
 import { setNotesPath } from '@renderer/store/note'
 import type { NotesSortType, NotesTreeNode } from '@renderer/types/note'
@@ -15,6 +16,13 @@ export interface UploadResult {
   skippedFiles: number
   fileCount: number
   folderCount: number
+  /**
+   * 写入失败的文件数（r2-43）。`0` 才是"全部成功"；主进程批量接口对单文件失败只记日志
+   * 并把它排除在 `fileCount` 之外，旧实现把这个差额丢掉了——用户看到的是"上传成功"。
+   */
+  failedFiles: number
+  /** 是否走了渲染层兼容路径（无 `file.path` 的浏览器 File 对象，或批量接口整体失败）。 */
+  usedLegacyPath: boolean
 }
 
 export async function loadTree(rootPath: string): Promise<NotesTreeNode[]> {
@@ -207,7 +215,9 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
       totalFiles: 0,
       skippedFiles: 0,
       fileCount: 0,
-      folderCount: 0
+      folderCount: 0,
+      failedFiles: 0,
+      usedLegacyPath: false
     }
   }
 
@@ -226,7 +236,7 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
         // For browser File API, we'd need to use FileReader and create temp files
         // For now, fall back to the old method for these cases
         logger.warn('File without path detected, using fallback method')
-        return uploadNotesLegacy(files, targetPath)
+        return await runLegacyUpload(files, basePath, 'files without a native path')
       }
     }
 
@@ -236,23 +246,55 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
     try {
       // Use the new optimized batch upload API that runs in Main process
       const result = await window.api.file.batchUploadMarkdown(filePaths, basePath)
+      const failedFiles = Math.max(0, totalFiles - result.skippedFiles - result.fileCount)
+
+      // r2-43：主进程按批 `allSettled`，成功数与总数/跳过数的差额就是失败数。旧实现把它丢掉，
+      // 于是"3 成功 / 2 失败"在 UI 上与"5 成功"同形。
+      if (failedFiles > 0) {
+        logger.warn(
+          `uploadNotes: batch upload finished with ${result.fileCount} succeeded / ${failedFiles} failed (skipped ${result.skippedFiles})`
+        )
+        window.toast.warning(
+          i18n.t('notes.upload_partial', {
+            defaultValue: '{{succeeded}} uploaded, {{failed}} failed',
+            succeeded: result.fileCount,
+            failed: failedFiles
+          })
+        )
+      }
 
       return {
         uploadedNodes: [],
         totalFiles,
         skippedFiles: result.skippedFiles,
         fileCount: result.fileCount,
-        folderCount: result.folderCount
+        folderCount: result.folderCount,
+        failedFiles,
+        usedLegacyPath: false
       }
     } finally {
       // Resume watcher and trigger single refresh
       await window.api.file.resumeFileWatcher()
     }
   } catch (error) {
-    logger.error('Batch upload failed, falling back to legacy method:', error as Error)
-    // Fall back to old method if new method fails
-    return uploadNotesLegacy(files, targetPath)
+    // r2-43：批量接口整体失败（mkdir / 读取中断 / IPC 断链）时才走兼容路径。此时主进程一个
+    // 文件都没写成功（`fileCount` 只在成功返回时才有值），因此重传不会产生 `name (1).md` 副本。
+    // 旧实现在 **任何** reject 上都无条件回退，且两条路径都不上报失败计数。
+    logger.error('Batch upload failed as a whole, falling back to legacy method:', error as Error)
+    window.toast.warning(
+      i18n.t('notes.upload_fallback', {
+        defaultValue: 'Batch upload failed. Retrying with the compatibility path.'
+      })
+    )
+    return await runLegacyUpload(files, basePath, 'batch upload failed as a whole')
   }
+}
+
+/** 兼容路径的统一入口：记一条可取证日志，无论成功失败都把 `usedLegacyPath` 标出来。 */
+async function runLegacyUpload(files: File[], basePath: string, reason: string): Promise<UploadResult> {
+  logger.warn(`uploadNotes: using legacy renderer upload path (${reason})`)
+  const result = await uploadNotesLegacy(files, basePath)
+  return { ...result, usedLegacyPath: true }
 }
 
 /**
@@ -270,7 +312,9 @@ async function uploadNotesLegacy(files: File[], targetPath: string): Promise<Upl
       totalFiles: files.length,
       skippedFiles,
       fileCount: 0,
-      folderCount: 0
+      folderCount: 0,
+      failedFiles: 0,
+      usedLegacyPath: false
     }
   }
 
@@ -278,6 +322,7 @@ async function uploadNotesLegacy(files: File[], targetPath: string): Promise<Upl
   await createFolders(folders)
 
   let fileCount = 0
+  let failedFiles = 0
   const BATCH_SIZE = 5 // Process 5 files concurrently to balance performance and responsiveness
 
   // Process files in batches to avoid blocking the UI thread
@@ -302,6 +347,7 @@ async function uploadNotesLegacy(files: File[], targetPath: string): Promise<Upl
       if (result.status === 'fulfilled') {
         fileCount += 1
       } else {
+        failedFiles += 1
         logger.error('Failed to write uploaded file:', result.reason)
       }
     })
@@ -317,7 +363,9 @@ async function uploadNotesLegacy(files: File[], targetPath: string): Promise<Upl
     totalFiles: files.length,
     skippedFiles,
     fileCount,
-    folderCount: folders.size
+    folderCount: folders.size,
+    failedFiles,
+    usedLegacyPath: false
   }
 }
 

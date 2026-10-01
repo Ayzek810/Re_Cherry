@@ -20,6 +20,8 @@ import { DEFAULT_CONTEXTCOUNT, DEFAULT_TEMPERATURE } from '@renderer/config/cons
 import { TopicManager } from '@renderer/hooks/useTopic'
 import { getDefaultAssistant, getDefaultTopic } from '@renderer/services/AssistantService'
 import type { Assistant, AssistantSettings, Model, Topic } from '@renderer/types'
+// r2-71：血缘闭包与父→子索引只存在一份（`utils/topicBranch`），本切片的删除路径直接复用。
+import { collectSubtreeIds } from '@renderer/utils/topicBranch'
 import { isEmpty, uniqBy } from 'lodash'
 
 import type { RootState } from '.'
@@ -39,25 +41,6 @@ const initialState: AssistantsState = {
 }
 
 const normalizeTopics = (topics: unknown): Topic[] => (Array.isArray(topics) ? topics : [])
-
-/**
- * 收集这些话题及其全部 fork 后代的 id（血缘在删除根时一并消失）。
- * 删除类操作共用：removeTopic（用户删除）与 pruneTopics（内核对账剪除）。
- */
-const collectSubtreeIds = (topics: Topic[], roots: string[]): Set<string> => {
-  const ids = new Set<string>(roots)
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const topic of topics) {
-      if (topic.parentTopicId !== undefined && ids.has(topic.parentTopicId) && !ids.has(topic.id)) {
-        ids.add(topic.id)
-        changed = true
-      }
-    }
-  }
-  return ids
-}
 
 const assistantsSlice = createSlice({
   name: 'assistants',
@@ -130,18 +113,37 @@ const assistantsSlice = createSlice({
         [tag]: !prev[tag]
       }
     },
-    addTopic: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
-      const topic = action.payload.topic
-      topic.createdAt = topic.createdAt || new Date().toISOString()
-      topic.updatedAt = topic.updatedAt || new Date().toISOString()
-      state.assistants = state.assistants.map((assistant) =>
-        assistant.id === action.payload.assistantId
-          ? {
-              ...assistant,
-              topics: uniqBy([topic, ...normalizeTopics(assistant.topics)], 'id')
-            }
-          : assistant
-      )
+    addTopic: {
+      reducer: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
+        const { assistantId, topic } = action.payload
+        state.assistants = state.assistants.map((assistant) =>
+          assistant.id === assistantId
+            ? {
+                ...assistant,
+                topics: uniqBy([topic, ...normalizeTopics(assistant.topics)], 'id')
+              }
+            : assistant
+        )
+      },
+      /**
+       * r2-31：`createdAt`/`updatedAt` 的缺省值必须在 **action 创建时**定妥，reducer 只做赋值。
+       * 同一 action 会被 StoreSync 原样广播给 mini 窗（`store/index.ts` 的 syncList 含
+       * `'assistants/'`，见 `src/main/services/StoreSyncService.ts`），两个窗口各跑一次 reducer；
+       * reducer 内 `new Date()` 会让同一条话题在两窗拿到不同的时间戳——侧栏按 updatedAt 排序、
+       * `familyRowSignature` 含 updatedAt，于是两窗给出不同的家族缓存与顺序。
+       * 两枚时间戳都已存在时**原样返回 payload**，保持旧实现的引用语义（不制造无谓的新对象）。
+       */
+      prepare: (payload: { assistantId: string; topic: Topic }) => {
+        const { topic } = payload
+        if (topic.createdAt && topic.updatedAt) return { payload }
+        const now = new Date().toISOString()
+        return {
+          payload: {
+            assistantId: payload.assistantId,
+            topic: { ...topic, createdAt: topic.createdAt || now, updatedAt: topic.updatedAt || now }
+          }
+        }
+      }
     },
     removeTopic: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
       // 级联删除该话题 fork 出的全部子分支行（血缘在删除根时一并消失）
@@ -182,21 +184,35 @@ const assistantsSlice = createSlice({
           : assistant
       )
     },
-    updateTopic: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
-      const newTopic = action.payload.topic
-      newTopic.updatedAt = new Date().toISOString()
-      state.assistants = state.assistants.map((assistant) =>
-        assistant.id === action.payload.assistantId
-          ? {
-              ...assistant,
-              topics: normalizeTopics(assistant.topics).map((topic) => {
-                const _topic = topic.id === newTopic.id ? newTopic : topic
-                _topic.messages = []
-                return _topic
-              })
-            }
-          : assistant
-      )
+    updateTopic: {
+      reducer: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
+        const { assistantId, topic: newTopic } = action.payload
+        state.assistants = state.assistants.map((assistant) =>
+          assistant.id === assistantId
+            ? {
+                ...assistant,
+                topics: normalizeTopics(assistant.topics).map((topic) => {
+                  // r2-70：不再就地改 action payload（`newTopic` 会原样入 state）/不再无条件
+                  // `messages = []`。口径与下面的 `updateTopics` 对齐：侧栏 topic 行是轻量投影，
+                  // 带 messages 的才换新对象剔除之，否则保留引用。
+                  const candidate = topic.id === newTopic.id ? newTopic : topic
+                  return isEmpty(candidate.messages) ? candidate : { ...candidate, messages: [] }
+                })
+              }
+            : assistant
+        )
+      },
+      /**
+       * r2-31：updatedAt 在 action 创建时盖章（reducer 内 `new Date()` 的同一条理由：本 action
+       * 属于 `'assistants/'`，会被广播到 mini 窗，两窗必须算出同一个值）。语义与旧实现一致——
+       * 旧实现是在 reducer 里无条件 `newTopic.updatedAt = new Date().toISOString()`。
+       */
+      prepare: (payload: { assistantId: string; topic: Topic }) => ({
+        payload: {
+          assistantId: payload.assistantId,
+          topic: { ...payload.topic, updatedAt: new Date().toISOString() }
+        }
+      })
     },
     updateTopics: (state, action: PayloadAction<{ assistantId: string; topics: Topic[] }>) => {
       state.assistants = state.assistants.map((assistant) => {
@@ -235,18 +251,24 @@ const assistantsSlice = createSlice({
         return assistant
       })
     },
-    updateTopicUpdatedAt: (state, action: PayloadAction<{ topicId: string }>) => {
-      // 全持有者提升（v0.3.0-5）：隔离对账前的历史污染可能让多个助手持有同 id 行，
-      // first-match 只提升污染副本会让归属助手的 familyRefreshKey（图/页码条的失效签名）
-      // 停留不更新 → 陈旧家族缓存。每一份持有者都提升，幂等无副作用。
-      const now = new Date().toISOString()
-      for (const assistant of state.assistants) {
-        for (const topic of normalizeTopics(assistant.topics)) {
-          if (topic.id === action.payload.topicId) {
-            topic.updatedAt = now
+    updateTopicUpdatedAt: {
+      reducer: (state, action: PayloadAction<{ topicId: string; updatedAt: string }>) => {
+        // 全持有者提升（v0.3.0-5）：隔离对账前的历史污染可能让多个助手持有同 id 行，
+        // first-match 只提升污染副本会让归属助手的 familyRefreshKey（图/页码条的失效签名）
+        // 停留不更新 → 陈旧家族缓存。每一份持有者都提升，幂等无副作用。
+        const { topicId, updatedAt } = action.payload
+        for (const assistant of state.assistants) {
+          for (const topic of normalizeTopics(assistant.topics)) {
+            if (topic.id === topicId) {
+              topic.updatedAt = updatedAt
+            }
           }
         }
-      }
+      },
+      /** r2-31：时间戳在 action 创建时定妥（本 action 同属 `'assistants/'`，会广播到 mini 窗）。 */
+      prepare: (payload: { topicId: string }) => ({
+        payload: { topicId: payload.topicId, updatedAt: new Date().toISOString() }
+      })
     },
     updateTopicName: (state, action: PayloadAction<{ topicId: string; name: string }>) => {
       // 全持有者写入（与 updateTopicUpdatedAt 同理由，v0.3.0-5）：隔离对账前的历史污染

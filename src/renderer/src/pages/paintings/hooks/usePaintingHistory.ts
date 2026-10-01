@@ -44,6 +44,10 @@ export function usePaintingHistory(): PaintingHistoryResult {
   // keyset 游标：已载入最旧一行的 createdAt（reverse 后页尾）。
   const cursorRef = useRef<number | undefined>(undefined)
   const loadingRef = useRef(false)
+  // 二轮审查 f2-22：`reload()` 的调用点全是"写后刷新"（生成成功落盘、删除画作），而它此前在
+  // 分页在途时被直接丢弃——用户滚动加载下一页（或条未满自动补页）期间生成完成，落盘的新画作
+  // 不会出现在缩略条里，用户以为生成丢了。改为"待处理标志"：在途时记账，`finally` 里补跑一次首页。
+  const pendingReloadRef = useRef(false)
   // 卸载守卫：Dexie 查询在页面切走后回包时不再写状态。
   const mountedRef = useRef(true)
   useEffect(() => {
@@ -54,7 +58,12 @@ export function usePaintingHistory(): PaintingHistoryResult {
   }, [])
 
   const loadPage = useCallback(async (reset: boolean) => {
-    if (loadingRef.current) return
+    if (loadingRef.current) {
+      // 只有"写后刷新"能在在途时记账；补页（loadMore）本身已有 hasMore 闸，不重复排队。
+      if (reset) pendingReloadRef.current = true
+      return
+    }
+    pendingReloadRef.current = false
     loadingRef.current = true
     setIsLoading(true)
     try {
@@ -80,6 +89,11 @@ export function usePaintingHistory(): PaintingHistoryResult {
     } finally {
       loadingRef.current = false
       if (mountedRef.current) setIsLoading(false)
+      // 在途期间被丢弃的"写后刷新"在这里补跑，新落盘/新删除的画作才会立刻反映到缩略条。
+      if (pendingReloadRef.current) {
+        pendingReloadRef.current = false
+        void loadPage(true)
+      }
     }
   }, [])
 

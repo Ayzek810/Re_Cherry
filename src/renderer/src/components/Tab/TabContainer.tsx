@@ -20,7 +20,7 @@ import { classNames } from '@renderer/utils'
 import { Dropdown, Tooltip } from 'antd'
 import type { LRUCache } from 'lru-cache'
 import { Folder, Home, LayoutGrid, Monitor, Moon, NotepadText, Pin, Settings, Sun, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
@@ -88,8 +88,19 @@ const getTabIcon = (
   }
 }
 
-let lastSettingsPath = '/settings/provider'
+const DEFAULT_SETTINGS_PATH = '/settings/provider'
 const specialTabs = ['launchpad', 'settings']
+
+/**
+ * c2-22：顶栏的图标按钮原本是裸 `styled.div` —— 不可聚焦、不响应 Enter/Space、没有可读名。
+ * 这里沿用本仓既定写法（`CodeToolbar/button.tsx`、`composer/ComposerSurface.tsx`）：
+ * `role="button"` + `tabIndex={0}` + `aria-label` + Enter/Space 处理。
+ */
+const activateOnKey = (action: () => void) => (event: React.KeyboardEvent) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  action()
+}
 
 const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   const location = useLocation()
@@ -103,6 +114,9 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   const { minapps } = useMinapps()
   const { useSystemTitleBar } = useSettings()
   const { t } = useTranslation()
+  // c2-43：模块级可变变量是跨实例、跨挂载周期的隐式全局状态，语义上已不是「本次会话的路径」。
+  // 它只服务于「设置按钮记住上次的设置子页」，属组件内记忆，改用 ref。
+  const lastSettingsPathRef = useRef(DEFAULT_SETTINGS_PATH)
 
   const getTabId = (path: string): string => {
     if (path === '/') return 'home'
@@ -165,7 +179,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
 
     // 当访问设置页面时，记录路径
     if (location.pathname.startsWith('/settings/')) {
-      lastSettingsPath = location.pathname
+      lastSettingsPathRef.current = location.pathname
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, location.pathname])
@@ -223,7 +237,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
 
   const handleSettingsClick = () => {
     hideMinappPopup()
-    navigate(lastSettingsPath)
+    navigate(lastSettingsPathRef.current)
   }
 
   const handleTabClick = (tab: Tab) => {
@@ -282,6 +296,10 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
                       <CloseButton
                         className="close-button"
                         data-no-dnd
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t('tabs.close')}
+                        onKeyDown={activateOnKey(() => closeTab(tab.id))}
                         onClick={(e) => {
                           e.stopPropagation()
                           closeTab(tab.id)
@@ -294,7 +312,13 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
               )
             }}
           />
-          <AddTabButton onClick={handleAddTab} className={classNames({ active: activeTabId === 'launchpad' })}>
+          <AddTabButton
+            role="button"
+            tabIndex={0}
+            aria-label={t('common.add')}
+            onKeyDown={activateOnKey(handleAddTab)}
+            onClick={handleAddTab}
+            className={classNames({ active: activeTabId === 'launchpad' })}>
             <PlusOutlined />
           </AddTabButton>
         </HorizontalScrollContainer>
@@ -303,7 +327,12 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
             title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
             mouseEnterDelay={0.8}
             placement="bottom">
-            <ThemeButton onClick={toggleTheme}>
+            <ThemeButton
+              role="button"
+              tabIndex={0}
+              aria-label={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
+              onKeyDown={activateOnKey(toggleTheme)}
+              onClick={toggleTheme}>
               {settedTheme === ThemeMode.dark ? (
                 <Moon size={16} />
               ) : settedTheme === ThemeMode.light ? (
@@ -313,7 +342,13 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
               )}
             </ThemeButton>
           </Tooltip>
-          <SettingsButton onClick={handleSettingsClick} $active={activeTabId === 'settings'}>
+          <SettingsButton
+            role="button"
+            tabIndex={0}
+            aria-label={t('common.settings')}
+            onKeyDown={activateOnKey(handleSettingsClick)}
+            onClick={handleSettingsClick}
+            $active={activeTabId === 'settings'}>
             <Settings size={16} />
           </SettingsButton>
         </RightButtonsContainer>
@@ -379,6 +414,13 @@ const Tab = styled.div<{ active?: boolean }>`
   .close-button {
     opacity: 0;
     transition: opacity 0.2s;
+    border-radius: 4px;
+  }
+
+  .close-button:focus-visible {
+    opacity: 1;
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
   }
 
   &:hover {
@@ -445,6 +487,10 @@ const AddTabButton = styled.div`
   &:hover {
     background: var(--color-list-item);
   }
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
 `
 
 const RightButtonsContainer = styled.div`
@@ -469,6 +515,12 @@ const ThemeButton = styled.div`
     background: var(--color-list-item);
     border-radius: 8px;
   }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+    border-radius: 8px;
+  }
 `
 
 const SettingsButton = styled.div<{ $active: boolean }>`
@@ -483,6 +535,10 @@ const SettingsButton = styled.div<{ $active: boolean }>`
   background: ${(props) => (props.$active ? 'var(--color-list-item)' : 'transparent')};
   &:hover {
     background: var(--color-list-item);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
   }
 `
 

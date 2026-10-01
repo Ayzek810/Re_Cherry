@@ -29,7 +29,9 @@ vi.mock('react-i18next', () => ({
 vi.mock('@renderer/store', () => ({
   default: {
     getState: () => ({ assistants: { assistants: [{ id: 'assistant-1', topics: assistantTopics }] } }),
-    dispatch: (action: unknown) => dispatch(action)
+    // X14：`loadTopicMessagesThunk` 现在总返回 Promise（早退分支 = `Promise.resolve()`），
+    // `useTopic.ts:48` 直接 `dispatch(...).catch(...)` —— 桩 dispatch 必须回传 thenable。
+    dispatch: (action: unknown) => Promise.resolve(dispatch(action))
   }
 }))
 

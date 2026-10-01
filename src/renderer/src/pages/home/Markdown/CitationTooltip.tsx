@@ -11,6 +11,7 @@ import MarqueeText from '@renderer/components/MarqueeText'
 import type { Citation } from '@renderer/types'
 import { isLinkableCitationUrl } from '@renderer/utils/citation'
 import { Tooltip } from 'antd'
+import { t as translate } from 'i18next'
 import { FileSearch, Globe } from 'lucide-react'
 import React, { useMemo } from 'react'
 import styled from 'styled-components'
@@ -118,7 +119,7 @@ const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation })
                 <SourceIcon>
                   <FileSearch size={14} />
                 </SourceIcon>
-                <MarqueeText>{citation.title?.trim() || 'Knowledge Base'}</MarqueeText>
+                <MarqueeText>{citation.title?.trim() || translate('knowledge.knowledge_base')}</MarqueeText>
               </TitleRow>
               {citation.content?.trim() && <Snippet>{citation.content}</Snippet>}
             </>

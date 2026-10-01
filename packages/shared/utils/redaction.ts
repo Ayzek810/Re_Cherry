@@ -135,12 +135,23 @@ const SECRET_KEY_VALUE_PATTERN =
 // Bearer/Basic must run before the key=value pass — see the tests for why.
 const BEARER_SCHEME_PATTERN = /\b(Bearer|Basic)\s+("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',;}\]]+)/gi
 
+// Value-shape fallback (k2-26): provider error bodies echo the key itself
+// (`{"error":{"message":"Incorrect API key provided: sk-..."}}`), where no
+// `key: value` pair exists for SECRET_KEY_VALUE_PATTERN to anchor on. The
+// vendor prefixes below are self-identifying, so the shape is enough.
+// Over-matching is the safe direction for a redactor: a false positive only
+// costs log readability. The 8-character floor keeps prose like `sk-learn`
+// and version-like fragments out of the match.
+const SECRET_VALUE_PREFIX_PATTERN =
+  /\b(?:(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|(?:gh[pousr])_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{20,})/g
+
 const URL_USERINFO_PATTERN = /((?:\b[a-z][a-z\d+.-]*:)?\/\/)[^\s/\\?#]+@/gi
 
 /**
  * Redact likely-secret fragments embedded in free text: `key = value`,
- * `"key": value`, URL userinfo, and `Bearer <token>` schemes. `extraKeys` extends the key
- * alternation for scope-limited names like OAuth's `code`.
+ * `"key": value`, URL userinfo, `Bearer <token>` schemes, and bare values that
+ * carry a known vendor secret prefix (`sk-`, `ghp_`, `AIza`, …). `extraKeys`
+ * extends the key alternation for scope-limited names like OAuth's `code`.
  */
 export function redactSecretText(text: string, extraKeys: readonly string[] = []): string {
   // Escape each extra key — raw insertion of regex metacharacters would silently break the alternation.
@@ -153,6 +164,7 @@ export function redactSecretText(text: string, extraKeys: readonly string[] = []
     .replace(URL_USERINFO_PATTERN, `$1${REDACTED}@`)
     .replace(BEARER_SCHEME_PATTERN, `$1 ${REDACTED}`)
     .replace(withExtras, `$1"${REDACTED}"`)
+    .replace(SECRET_VALUE_PREFIX_PATTERN, REDACTED)
 }
 
 /** Redact an exact runtime-known secret literal wherever it occurs. */

@@ -57,6 +57,8 @@ const BlacklistSettings: FC = () => {
 
   /** 卸载守卫：解析是网络往返，卸载后不再写状态（s2-01/s2-20）。 */
   const isMountedRef = useRef(true)
+  /** s2-20：并发/慢请求竞态守卫——只有最新一次 updateSubscribe 的结果可以落地。 */
+  const updateSeqRef = useRef(0)
   useEffect(() => {
     return () => {
       isMountedRef.current = false
@@ -137,11 +139,13 @@ const BlacklistSettings: FC = () => {
     }
 
     setSubscribeChecking(true)
+    const seq = ++updateSeqRef.current
 
     try {
       const outcome = await parseSelectedSubscribeSources(selectedSources, parseSubscribeContent)
 
-      if (!isMountedRef.current) return
+      // s2-20：迟到的旧请求不得覆盖新请求的结果，也不得复位新请求的进行态。
+      if (!isMountedRef.current || seq !== updateSeqRef.current) return
 
       // 逐条失败只报警，不参与合并；整批失败必须在下面走失败态，不能弹成功。
       for (const failure of outcome.failed) {
@@ -197,7 +201,7 @@ const BlacklistSettings: FC = () => {
         timeout: 2000
       })
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && seq === updateSeqRef.current) {
         setSubscribeChecking(false)
       }
     }

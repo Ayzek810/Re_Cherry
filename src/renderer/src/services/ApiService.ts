@@ -149,6 +149,13 @@ export async function fetchMessagesSummary({
   const contextMessages = takeRight(messages, 5)
   const provider = getProviderByModel(model)
 
+  // r2-42：provider 查不到时**不**回落到清单里的任意 provider。回落会把请求发到
+  // 「外来 model.id + 别的 provider」的组合上，用户只看到误导性的报错。此处如实失败。
+  if (!provider) {
+    logger.warn('fetchMessagesSummary: no provider for model', { modelId: model?.id, providerId: model?.provider })
+    return { text: null, error: i18n.t('error.provider_not_found') }
+  }
+
   if (!hasApiKey(provider)) {
     return { text: null, error: i18n.t('error.no_api_key') }
   }
@@ -214,6 +221,15 @@ export async function fetchNoteSummary({
   }
 
   const provider = getProviderByModel(model)
+
+  // r2-42：查不到 provider 就如实失败。本函数用 `null` 表达失败，调用方
+  // `useNotesEditing.handleAutoRename` 已对 `null` 弹 `notes.auto_rename.failed`，
+  // 因此失败对用户可见；不静默回落到别的 provider 去猜。
+  if (!provider) {
+    logger.warn('fetchNoteSummary: no provider for model', { modelId: model?.id, providerId: model?.provider })
+    return null
+  }
+
   if (!hasApiKey(provider)) return null
 
   // V1 同口径：只取前 2000 字符、剥离图片引用
@@ -235,6 +251,13 @@ export async function fetchNoteSummary({
   }
 }
 
+/**
+ * 一次性生成（搜索编排 / 记忆 / 错误诊断等）。
+ *
+ * r2-41：结果形状与 `fetchMessagesSummary` 对齐——`{ text: null, error }` 表达调用失败，
+ * 而不是折叠成 `''`。旧实现把 401 / 超时 / 网络错都压成空字符串，调用方（错误诊断）只能把
+ * 它读成"模型返回空"，真实原因只剩一行 warn。
+ */
 export async function fetchGenerate({
   prompt,
   content,
@@ -243,14 +266,21 @@ export async function fetchGenerate({
   prompt: string
   content: string
   model?: Model
-}): Promise<string> {
+}): Promise<{ text: string | null; error?: string }> {
   if (!model) {
     model = getDefaultModel()
   }
   const provider = getProviderByModel(model)
 
+  // r2-42：provider 缺失是**调用失败**，不是「模型返回空」。回落到清单第一项会让
+  // 诊断/搜索编排拿到一个与 model.id 不匹配的 provider，错误原因完全误导。
+  if (!provider) {
+    logger.warn('fetchGenerate: no provider for model', { modelId: model.id, providerId: model.provider })
+    return { text: null, error: i18n.t('error.provider_not_found') }
+  }
+
   if (!hasApiKey(provider)) {
-    return ''
+    return { text: null, error: i18n.t('error.no_api_key') }
   }
 
   try {
@@ -262,10 +292,11 @@ export async function fetchGenerate({
       messages: [{ role: 'user', text: content }],
       source: 'cherry-generate'
     })
-    return text || ''
-  } catch (error: any) {
-    logger.warn('fetchGenerate failed via kernel', error)
-    return ''
+    const result = text?.trim() ?? ''
+    return result ? { text: result } : { text: null, error: i18n.t('error.no_response') }
+  } catch (error: unknown) {
+    logger.warn('fetchGenerate failed via kernel', error as Error)
+    return { text: null, error: getErrorMessage(error) }
   }
 }
 

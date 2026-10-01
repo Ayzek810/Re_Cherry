@@ -3,14 +3,20 @@
  * 页面状态托盘（生成结果图列表）+ antd Image 预览 + 下载/保存按钮。
  * 布局参考 V2 HorizontalScrollContainer（fork 既有同名组件）。
  * 另含参考图托盘（编辑输入）：V2 同文件 PaintingImageAddButton 语义。
+ *
+ * 二轮审查 f2-29：默认导出的「生成结果托盘」与它的
+ * `GalleryWrap`/`ResultTile`/`ResultImage`/`DownloadButton` 在全仓库无引用者
+ * （`components/composer/variants/painting/PaintingImageGallery.tsx` 只取
+ * `PaintingImageAddButton` 与 `PaintingInputTray`；唯一测试也只引 `PaintingInputTray`）——
+ * 按 §5.1 六形态核对后属真死码：`styled.div`/`styled(Image)`/`styled(Button)` 是模块顶层求值，
+ * 不会随未使用导出被摇掉，还会额外拉入 `antd Image` 与 `@renderer/utils/download`。已删除。
  */
-import { DownloadOutlined, PlusOutlined } from '@ant-design/icons'
+import { PlusOutlined } from '@ant-design/icons'
 import HorizontalScrollContainer from '@renderer/components/HorizontalScrollContainer'
 import ImageViewer from '@renderer/components/ImageViewer'
 import { getPaintingFileUrl } from '@renderer/pages/paintings/utils/paintingFileUrl'
 import type { FileMetadata } from '@renderer/types'
-import { download } from '@renderer/utils/download'
-import { Button, Image, Tooltip } from 'antd'
+import { Image, Tooltip } from 'antd'
 import { X } from 'lucide-react'
 import type { FC } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -68,39 +74,6 @@ export const PaintingInputTray: FC<{
         </HorizontalScrollContainer>
       </Image.PreviewGroup>
     </TrayWrap>
-  )
-}
-
-// ---- 生成结果托盘（页面状态；antd Image 预览 + 下载） ----
-
-interface PaintingImageGalleryProps {
-  files: FileMetadata[]
-}
-
-const PaintingImageGallery: FC<PaintingImageGalleryProps> = ({ files }) => {
-  const { t } = useTranslation()
-  if (files.length === 0) return null
-  return (
-    <GalleryWrap>
-      <HorizontalScrollContainer dependencies={[files.length]} gap="8px">
-        {files.map((file) => (
-          <ResultTile key={file.id}>
-            <ResultImage src={getPaintingFileUrl(file)} alt={file.origin_name} />
-            <DownloadButton
-              type="text"
-              size="small"
-              icon={<DownloadOutlined />}
-              aria-label={t('common.download')}
-              title={t('common.download')}
-              onClick={(event) => {
-                event.stopPropagation()
-                download(getPaintingFileUrl(file))
-              }}
-            />
-          </ResultTile>
-        ))}
-      </HorizontalScrollContainer>
-    </GalleryWrap>
   )
 }
 
@@ -189,52 +162,3 @@ const AddButton = styled.button`
     opacity: 0.5;
   }
 `
-
-const GalleryWrap = styled.div`
-  padding: 4px 0;
-`
-
-const ResultTile = styled.div`
-  position: relative;
-  display: inline-flex;
-  width: 96px;
-  height: 96px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-radius: 10px;
-  border: 0.5px solid var(--color-border);
-
-  &:hover .tile-download {
-    opacity: 1;
-  }
-`
-
-const ResultImage = styled(Image)`
-  width: 100%;
-  height: 100%;
-
-  .ant-image-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    cursor: zoom-in;
-  }
-`
-
-const DownloadButton = styled(Button).attrs({ className: 'tile-download' })`
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  z-index: 1;
-  opacity: 0;
-  transition: opacity 0.15s;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-
-  &:hover {
-    background: rgba(0, 0, 0, 0.65) !important;
-    color: #fff !important;
-  }
-`
-
-export default PaintingImageGallery

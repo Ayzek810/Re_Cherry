@@ -23,7 +23,8 @@ export type MessageMenubarScopeConfig = {
 
 export const DEFAULT_MESSAGE_MENUBAR_SCOPE: MessageMenubarScope = TopicType.Chat
 
-export const DEFAULT_MESSAGE_MENUBAR_BUTTON_IDS: MessageMenubarButtonId[] = [
+// 内部常量：全仓无外部消费方（见 H.md r2-102 的六种消费形态 grep 取证），故不再 export。
+const DEFAULT_MESSAGE_MENUBAR_BUTTON_IDS: MessageMenubarButtonId[] = [
   'user-regenerate',
   'user-edit',
   'copy',
@@ -37,11 +38,13 @@ export const DEFAULT_MESSAGE_MENUBAR_BUTTON_IDS: MessageMenubarButtonId[] = [
   'more-menu'
 ]
 
-export const SESSION_MESSAGE_MENUBAR_BUTTON_IDS: MessageMenubarButtonId[] = ['copy', 'delete', 'more-menu']
+const SESSION_MESSAGE_MENUBAR_BUTTON_IDS: MessageMenubarButtonId[] = ['copy', 'delete', 'more-menu']
 
+// r2-102：`DEFAULT_MESSAGE_MENUBAR_SCOPE` IS `TopicType.Chat`（见上），
+// 原先这里还有一行 `[TopicType.Chat, …]`，与 `[DEFAULT_MESSAGE_MENUBAR_SCOPE, …]` 是同一个 Map 键，
+// 后者覆盖前者 ⇒ 死条目，已删除。两行内容本就逐字相同，行为不变。
 const messageMenubarRegistry = new Map<MessageMenubarScope, MessageMenubarScopeConfig>([
   [DEFAULT_MESSAGE_MENUBAR_SCOPE, { buttonIds: [...DEFAULT_MESSAGE_MENUBAR_BUTTON_IDS] }],
-  [TopicType.Chat, { buttonIds: [...DEFAULT_MESSAGE_MENUBAR_BUTTON_IDS] }],
   [TopicType.Session, { buttonIds: [...SESSION_MESSAGE_MENUBAR_BUTTON_IDS], dropdownRootAllowKeys: ['save', 'export'] }]
 ])
 

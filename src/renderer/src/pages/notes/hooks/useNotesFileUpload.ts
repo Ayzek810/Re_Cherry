@@ -1,11 +1,41 @@
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface UseNotesFileUploadProps {
   onUploadFiles: (files: File[]) => void
   setIsDragOverSidebar: (isDragOver: boolean) => void
 }
 
+/**
+ * 读完一个目录条目的**全部**子项。
+ *
+ * `FileSystemDirectoryReader.readEntries()` 按规范分批返回（Chromium 每批 100 项），
+ * 只有拿到空批次才代表读完。二轮审查 f2-35/f2-37：旧实现只读第一批，拖入 100+ 项的
+ * 文件夹时后 100 项被静默丢弃，页面照常弹"上传成功"。
+ */
+function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    const all: FileSystemEntry[] = []
+    const readBatch = () => {
+      reader.readEntries(
+        (batch) => {
+          if (batch.length === 0) {
+            resolve(all)
+            return
+          }
+          all.push(...batch)
+          readBatch()
+        },
+        (error) => reject(error)
+      )
+    }
+    readBatch()
+  })
+}
+
 export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseNotesFileUploadProps) => {
+  const { t } = useTranslation()
+
   const handleDropFiles = useCallback(
     async (e: React.DragEvent) => {
       e.preventDefault()
@@ -32,13 +62,8 @@ export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseN
         } else if (entry.isDirectory) {
           const dirEntry = entry as FileSystemDirectoryEntry
           const reader = dirEntry.createReader()
-          return new Promise<void>((resolve) => {
-            reader.readEntries(async (entries) => {
-              const promises = entries.map((subEntry) => processEntry(subEntry, path + entry.name + '/'))
-              await Promise.all(promises)
-              resolve()
-            })
-          })
+          const entries = await readAllEntries(reader)
+          await Promise.all(entries.map((subEntry) => processEntry(subEntry, path + entry.name + '/')))
         }
       }
 
@@ -51,9 +76,12 @@ export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseN
 
         await Promise.all(promises)
 
-        if (files.length > 0) {
-          onUploadFiles(files)
+        if (files.length === 0) {
+          // §9：拖进来却什么都没上传，不得表现为"点了没反应"。
+          window.toast.warning(t('notes.no_valid_files'))
+          return
         }
+        onUploadFiles(files)
       } else {
         const regularFiles = Array.from(e.dataTransfer.files)
         if (regularFiles.length > 0) {
@@ -61,7 +89,7 @@ export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseN
         }
       }
     },
-    [onUploadFiles, setIsDragOverSidebar]
+    [onUploadFiles, setIsDragOverSidebar, t]
   )
 
   const handleSelectFiles = useCallback(() => {

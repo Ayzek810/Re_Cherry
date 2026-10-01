@@ -26,8 +26,12 @@ const PlaceholderBlock: React.FC<PlaceholderBlockProps> = ({ icon, message, onCl
   }
 
   return (
-    <div
+    // c2-42③：原来是裸可点 div（无 role/tabIndex/aria-label/键盘处理），
+    // 「插入图片 / 插入公式」在键盘路径上完全不可达。改成真正的 button。
+    <button
+      type="button"
       onClick={onClick}
+      aria-label={message}
       style={{
         border: `2px dashed ${colors.border}`,
         borderRadius: 6,
@@ -41,7 +45,10 @@ const PlaceholderBlock: React.FC<PlaceholderBlockProps> = ({ icon, message, onCl
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        minHeight: 80
+        minHeight: 80,
+        width: '100%',
+        font: 'inherit',
+        color: 'inherit'
       }}
       onMouseEnter={(e) => {
         const target = e.currentTarget as HTMLElement
@@ -55,7 +62,7 @@ const PlaceholderBlock: React.FC<PlaceholderBlockProps> = ({ icon, message, onCl
       }}>
       {icon}
       <span style={{ color: '#656d76', fontSize: 14 }}>{message}</span>
-    </div>
+    </button>
   )
 }
 

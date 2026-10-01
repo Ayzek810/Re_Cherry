@@ -131,10 +131,19 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   const { setFiles, setMentionedModels, setSelectedKnowledgeBases } = useInputbarToolsDispatch()
   const { setCouldAddImageFile } = useInputbarToolsInternalDispatch()
 
-  const { text, setText } = useInputText({
-    initialValue: CacheService.get<string>(INPUTBAR_DRAFT_CACHE_KEY) ?? '',
-    onChange: (value) => CacheService.set(INPUTBAR_DRAFT_CACHE_KEY, value, DRAFT_CACHE_TTL)
-  })
+  // 草稿缓存只在首次挂载时读取，onChange 引用固定：options 对象稳定后，
+  // useInputText 的 setText 只随文本变化，下游"安装一次"型 effect 不再每次渲染重建（f2-09）
+  const handleDraftChange = useCallback((value: string) => {
+    CacheService.set(INPUTBAR_DRAFT_CACHE_KEY, value, DRAFT_CACHE_TTL)
+  }, [])
+  const inputTextOptions = useMemo(
+    () => ({
+      initialValue: CacheService.get<string>(INPUTBAR_DRAFT_CACHE_KEY) ?? '',
+      onChange: handleDraftChange
+    }),
+    [handleDraftChange]
+  )
+  const { text, setText } = useInputText(inputTextOptions)
   const {
     textareaRef,
     resize: resizeTextArea,
@@ -387,16 +396,26 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
 
   useEffect(() => {
     const _setEstimateTokenCount = debounce(setEstimateTokenCount, 100, { leading: false, trailing: true })
+    // contextCount 与 tokensCount 过同一个 100ms 防抖：旧实现只防抖前者，上下文计数直接 setState
+    // （估算事件每个流式窗口都会推来一次，非防抖路径会立刻触发整棵 Inputbar 重渲染）
+    const _setContextCount = debounce(
+      (next: { current: number; max: number }) => setContextCount({ current: next.current, max: next.max }),
+      100,
+      { leading: false, trailing: true }
+    )
     const unsubscribes = [
       EventEmitter.on(EVENT_NAMES.ESTIMATED_TOKEN_COUNT, ({ tokensCount, contextCount }) => {
         _setEstimateTokenCount(tokensCount)
-        setContextCount({ current: contextCount.current, max: contextCount.max })
+        _setContextCount(contextCount)
       }),
       ...[EventEmitter.on(EVENT_NAMES.ADD_NEW_TOPIC, addNewTopic)]
     ]
 
     return () => {
       unsubscribes.forEach((unsubscribe) => unsubscribe())
+      // 卸载后不再有 setState（fire-and-forget 的尾部调用也不能打到已卸载组件）
+      _setEstimateTokenCount.cancel()
+      _setContextCount.cancel()
     }
   }, [addNewTopic])
 

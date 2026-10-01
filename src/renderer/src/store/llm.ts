@@ -69,7 +69,15 @@ export const initialState: LlmState = {
   imageDescriberPrompt: '',
   translateModel: undefined,
   paintingModel: undefined,
-  providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)),
+  // r2-81：`SYSTEM_PROVIDERS_CONFIG` 的值是 `config/providers.ts` 的模块级单例对象。
+  // migrate 分支会就地改写 provider（`provider.anthropicApiHost = …`、`provider.type = …`），
+  // 把同一批引用交给 state 就等于把模块默认表交给迁移去改。此处按 r2-28（websearch）同形克隆，
+  // models 数组一并克隆（迁移会整表替换 `provider.models = SYSTEM_MODELS.x`，但 reducer 的
+  // `provider.models[i] = …` 是就地写，数组共享仍会串到默认表）。
+  providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)).map((provider) => ({
+    ...provider,
+    models: Array.isArray(provider.models) ? provider.models.map((model) => ({ ...model })) : provider.models
+  })),
   settings: {
     ollama: {
       keepAliveTime: 0
@@ -124,6 +132,18 @@ const getIntegratedInitialState = () => {
   } as LlmState
 }
 
+/**
+ * 把 provider `id` 移到 **1-based 目标位置** `position`（结果数组里 `newProviders[position - 1]`
+ * 就是被移动的那个 provider）。
+ *
+ * r2-30 定本：`splice` 在**已移除自己**的数组上按 `position - 1` 插入，结果数组的
+ * `newProviders[position - 1]` 就是被移动的 provider——这正是「1-based 目标位置」的字面
+ * 语义，被移者在目标之前或之后都成立（见 `store/__tests__/moveProvider.test.ts`）。
+ * 审计曾疑「移除后偏移一位」，那是把语义读成了「按**移除前**的下标插入」；按该读法实现
+ * 会把调用方给的 1-based 位置整体前移一格。迁移的 15 个调用点（'73' '78' '80' '92'
+ * '104' '106' '112'×3 '118' '119' '157' '170' '183'）的可见结果均以本语义为准，
+ * 故本次只补文档与顺序断言，不改行为。
+ */
 export const moveProvider = (providers: Provider[], id: string, position: number) => {
   const index = providers.findIndex((p) => p.id === id)
   if (index === -1) return providers

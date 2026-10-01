@@ -1,6 +1,6 @@
 {
   "name": "Re_Cherry",
-  "version": "1.0.1",
+  "version": "0.5.2",
   "private": true,
   "description": "A personalized AI assistant forked from Cherry Studio.",
   "desktopName": "Re_Cherry.desktop",
@@ -186,6 +186,7 @@
     "@opentelemetry/context-async-hooks": "2.0.1",
     "@opentelemetry/core": "2.0.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/resources": "2.2.0",
     "@opentelemetry/sdk-trace-base": "^2.0.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/sdk-trace-web": "^2.0.0",

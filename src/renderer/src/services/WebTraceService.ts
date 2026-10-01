@@ -1,19 +1,22 @@
-import { loggerService } from '@logger'
 import { convertSpanToSpanEntity, FunctionSpanExporter, FunctionSpanProcessor } from '@mcp-trace/trace-core'
 import { WebTracer } from '@mcp-trace/trace-web'
-import { trace } from '@opentelemetry/api'
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
-
-const logger = loggerService.withContext('WebTraceService')
 
 const TRACER_NAME = 'CherryStudio'
 
 class WebTraceService {
+  /** 幂等门禁（v1 二轮性能审计 p2-05）：`init()` 现在可能在 store rehydrate 后被再次触发。 */
+  private initialized = false
+
   init() {
-    const exporter = new FunctionSpanExporter((spans: ReadableSpan[]): Promise<void> => {
-      // Implement your save logic here if needed
-      // For now, just resolve immediately
-      logger.info(`Saving spans: ${spans.length}`)
+    if (this.initialized) return
+    this.initialized = true
+
+    // r2-61：这个 exporter 是**刻意**的空实现——真实落盘在下面的 onEnd
+    // （`window.api.trace.saveEntity`）。此前它打 `logger.info('Saving spans: …')`：既不落盘
+    // （渲染层 info 进不了日志文件），又谎称在保存 span，与 onEnd 的真实写入构成两处"真相"。
+    // 保留空实现是因为 `BatchSpanProcessor` 构造必须收一个 exporter；这里显式说明它没有副作用。
+    const exporter = new FunctionSpanExporter((_spans: ReadableSpan[]): Promise<void> => {
       return Promise.resolve()
     })
 
@@ -37,10 +40,6 @@ class WebTraceService {
       },
       processor
     )
-  }
-
-  getTracer() {
-    return trace.getTracer(TRACER_NAME, '1.0.0')
   }
 }
 

@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import Ellipsis from '@renderer/components/Ellipsis'
 import { CopyIcon, DeleteIcon, EditIcon } from '@renderer/components/Icons'
 import PromptPopup from '@renderer/components/Popups/PromptPopup'
@@ -25,6 +26,8 @@ import {
   ResponsiveButton,
   StatusIconWrapper
 } from '../KnowledgeContent'
+
+const logger = loggerService.withContext('KnowledgeUrls')
 
 interface KnowledgeContentProps {
   selectedBase: KnowledgeBase
@@ -70,22 +73,40 @@ const KnowledgeUrls: FC<KnowledgeContentProps> = ({ selectedBase }) => {
     if (urlInput) {
       // Split input by newlines and filter out empty lines
       const urls = urlInput.split('\n').filter((url) => url.trim())
+      // 二轮审查 f2-21：非法/重复输入此前被静默丢弃（`catch { continue }`）——用户一次粘贴 10 行、
+      // 其中 7 行非法时界面只多 3 条，没有任何"7 条被跳过"的信号，也无法区分"我粘错了"与"程序没处理"。
+      // §9「Never fail silently」+ 批量操作要报「N succeeded / M failed」：循环后一次性发真实信号。
+      const invalid: string[] = []
+      const duplicates: string[] = []
 
       for (const url of urls) {
+        const trimmed = url.trim()
         try {
-          new URL(url.trim())
-          if (!urlItems.find((item) => item.content === url.trim())) {
-            addUrl(url.trim())
-          } else {
-            window.toast.warning({
-              title: t('knowledge.url_added'),
-              key: `url-added`
-            })
-          }
-        } catch (e) {
-          // Skip invalid URLs silently
+          new URL(trimmed)
+        } catch {
+          invalid.push(trimmed)
+          logger.warn(`Skipped invalid URL input: ${trimmed}`)
           continue
         }
+        if (urlItems.find((item) => item.content === trimmed)) {
+          duplicates.push(trimmed)
+          continue
+        }
+        addUrl(trimmed)
+      }
+
+      if (invalid.length > 0 || duplicates.length > 0) {
+        window.toast.warning({
+          title: t('knowledge.url_batch_skipped', {
+            invalid: invalid.length,
+            duplicate: duplicates.length,
+            defaultValue: 'Skipped {{invalid}} invalid and {{duplicate}} duplicate URL(s)'
+          }),
+          key: 'url-added'
+        })
+        logger.warn(
+          `Knowledge URL batch add skipped ${invalid.length} invalid and ${duplicates.length} duplicate entries`
+        )
       }
     }
   }

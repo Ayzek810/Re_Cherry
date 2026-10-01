@@ -1,7 +1,7 @@
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import Scrollbar from '@renderer/components/Scrollbar'
 import ModelSettings from '@renderer/pages/settings/ModelSettings/ModelSettings'
-import { Divider as AntDivider } from 'antd'
+import { Divider as AntDivider, Skeleton } from 'antd'
 import {
   BarChart3,
   Blocks,
@@ -19,23 +19,40 @@ import {
   Zap
 } from 'lucide-react'
 import type { FC } from 'react'
+import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Route, Routes, useLocation } from 'react-router-dom'
 import styled from 'styled-components'
 
 import AboutSettings from './AboutSettings'
-import DataSettings from './DataSettings/DataSettings'
 import DisplaySettings from './DisplaySettings/DisplaySettings'
 import DocProcessSettings from './DocProcessSettings'
 import GeneralSettings from './GeneralSettings'
 import MCPSettings from './MCPSettings'
-import { ProviderList } from './ProviderSettings'
 import QuickAssistantSettings from './QuickAssistantSettings'
 import QuickPhraseSettings from './QuickPhraseSettings'
 import ShortcutSettings from './ShortcutSettings'
-import SkillsSettings from './SkillsSettings'
 import UsageSettings from './UsageSettings/UsageSettings'
 import WebSearchSettings from './WebSearchSettings'
+
+/**
+ * 设置内部再分割（v1 二轮审查 s2-21）。
+ *
+ * v1 已做路由级懒加载（`Router.tsx` 的 `./pages/settings/SettingsPage`），但设置内部再无切分：
+ * 打开「设置 → 通用」会同时求值技能页（1253 行）、12 个 DataSettings 面板、全部 ProviderSettings
+ * 面板。这三类各自连着一批重依赖，且只在对应路由下才会被看到，改为按需加载。
+ * `ProviderList` 是 barrel 的具名导出，故用 `.then()` 取 default。
+ */
+const ProviderList = lazy(() => import('./ProviderSettings').then((module) => ({ default: module.ProviderList })))
+const DataSettings = lazy(() => import('./DataSettings/DataSettings'))
+const SkillsSettings = lazy(() => import('./SkillsSettings'))
+
+/** 子页懒加载占位：骨架（内容区专属，导航保持可见；静默空白是最差失败形态）。 */
+const SettingsLoadingFallback: FC = () => (
+  <div style={{ padding: 24, width: '100%' }} role="status" aria-busy="true" aria-live="polite">
+    <Skeleton active paragraph={{ rows: 6 }} />
+  </div>
+)
 
 const SettingsPage: FC = () => {
   const { pathname } = useLocation()
@@ -140,23 +157,26 @@ const SettingsPage: FC = () => {
           </MenuItemLink>
         </SettingMenus>
         <SettingContent>
-          <Routes>
-            <Route path="provider" element={<ProviderList />} />
-            <Route path="model" element={<ModelSettings />} />
-            <Route path="websearch/*" element={<WebSearchSettings />} />
-            <Route path="docprocess" element={<DocProcessSettings />} />
-            <Route path="mcp/*" element={<MCPSettings />} />
-            <Route path="skills" element={<SkillsSettings />} />
+          {/* 局部 Suspense：只替换内容区，设置导航不闪烁（外层 RouteLoadingFallback 会盖住整页）。 */}
+          <Suspense fallback={<SettingsLoadingFallback />}>
+            <Routes>
+              <Route path="provider" element={<ProviderList />} />
+              <Route path="model" element={<ModelSettings />} />
+              <Route path="websearch/*" element={<WebSearchSettings />} />
+              <Route path="docprocess" element={<DocProcessSettings />} />
+              <Route path="mcp/*" element={<MCPSettings />} />
+              <Route path="skills" element={<SkillsSettings />} />
 
-            <Route path="quickphrase" element={<QuickPhraseSettings />} />
-            <Route path="usage" element={<UsageSettings />} />
-            <Route path="general/*" element={<GeneralSettings />} />
-            <Route path="display" element={<DisplaySettings />} />
-            <Route path="shortcut" element={<ShortcutSettings />} />
-            <Route path="quickAssistant" element={<QuickAssistantSettings />} />
-            <Route path="data" element={<DataSettings />} />
-            <Route path="about" element={<AboutSettings />} />
-          </Routes>
+              <Route path="quickphrase" element={<QuickPhraseSettings />} />
+              <Route path="usage" element={<UsageSettings />} />
+              <Route path="general/*" element={<GeneralSettings />} />
+              <Route path="display" element={<DisplaySettings />} />
+              <Route path="shortcut" element={<ShortcutSettings />} />
+              <Route path="quickAssistant" element={<QuickAssistantSettings />} />
+              <Route path="data" element={<DataSettings />} />
+              <Route path="about" element={<AboutSettings />} />
+            </Routes>
+          </Suspense>
         </SettingContent>
       </ContentContainer>
     </Container>

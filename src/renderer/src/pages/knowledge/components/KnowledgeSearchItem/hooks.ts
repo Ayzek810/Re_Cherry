@@ -38,7 +38,10 @@ export const useCopyText = () => {
       message.success(t('message.copied'))
     } catch (error) {
       logger.error('Failed to copy text:', error as Error)
-      window.toast.error(t('message.error.copy') || 'Failed to copy text')
+      // 二轮审查 f2-27：`t('message.error.copy') || 'Failed to copy text'` 是 i18next 反模式
+      // （CLAUDE.md §9：键缺失时 i18next 返回键本身，`||` 兜底永不执行）。键在两语都存在，
+      // 但形态会误导后来者"这里已有兜底"；要去掉 `||`，确需兜底就用 `defaultValue`。
+      window.toast.error(t('message.error.copy', { defaultValue: 'Copy failed' }))
     }
   }
 

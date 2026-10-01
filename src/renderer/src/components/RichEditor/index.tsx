@@ -76,12 +76,21 @@ function findElementByLine(editorDom: HTMLElement, lineNumber: number, lineConte
 }
 
 /**
+ * 当前浮层在滚动容器上的 cleanup。c2-35①：旧浮层是被 `remove()` 直接摘掉的，
+ * 它的 `animationend` 永不触发，于是 `container.removeEventListener` 从不执行 ——
+ * scroll 监听器被永久留在长生命周期的编辑器滚动容器上（同时保留已移除的 DOM 节点）。
+ */
+type HighlightOverlayHost = HTMLElement & { __highlightOverlayCleanup?: () => void }
+
+/**
  * Create fixed-position highlight overlay at element location
  * with boundary detection to prevent overflow and toolbar overlap
  */
 function createHighlightOverlay(element: HTMLElement, container: HTMLElement): void {
   try {
-    // Remove previous overlay
+    const host = container as HighlightOverlayHost
+    // 先拆掉上一个浮层（无论它属于哪个容器），再摘 DOM 节点。
+    host.__highlightOverlayCleanup?.()
     const previousOverlay = document.body.querySelector('.highlight-overlay')
     if (previousOverlay) {
       previousOverlay.remove()
@@ -139,11 +148,18 @@ function createHighlightOverlay(element: HTMLElement, container: HTMLElement): v
     container.addEventListener('scroll', updatePosition)
 
     // Auto-remove after animation
-    const handleAnimationEnd = () => {
-      overlay.remove()
+    const cleanup = () => {
       container.removeEventListener('scroll', updatePosition)
       overlay.removeEventListener('animationend', handleAnimationEnd)
+      overlay.remove()
+      if (host.__highlightOverlayCleanup === cleanup) {
+        host.__highlightOverlayCleanup = undefined
+      }
     }
+    function handleAnimationEnd() {
+      cleanup()
+    }
+    host.__highlightOverlayCleanup = cleanup
     overlay.addEventListener('animationend', handleAnimationEnd)
   } catch (error) {
     logger.error('Failed to create highlight overlay:', error as Error)

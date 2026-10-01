@@ -42,9 +42,17 @@ const PreprocessProviderSettings: FC<Props> = ({ provider: _provider }) => {
     setApiHost(preprocessProvider?.apiHost ?? '')
   }, [preprocessProvider?.apiKey, preprocessProvider?.apiHost, preprocessProvider?.options])
 
-  // 真实切片下 id 恒在默认五家之内；防线仅为类型诚实（未知 id 无表单可渲）。
-  // 位置在全部 hooks 之后——hook 顺序不得条件化。
-  if (!preprocessProvider) return null
+  // v1 二轮审查 s2-11：找不到该 provider 时渲染显式占位，不再 `return null`
+  //（静默整块消失是家规点名的「最坏失败模式」）。位置仍在全部 hooks 之后——hook 顺序不得条件化。
+  if (!preprocessProvider) {
+    return (
+      <SettingHelpTextRow>
+        <SettingHelpText>
+          {t('settings.tool.preprocess.provider_not_found', { defaultValue: '未找到该文档处理服务商' })}
+        </SettingHelpText>
+      </SettingHelpTextRow>
+    )
+  }
 
   const providerConfig = PREPROCESS_PROVIDER_CONFIG[preprocessProvider.id]
   const officialWebsite = providerConfig?.official

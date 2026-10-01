@@ -2,7 +2,7 @@ import { loggerService } from '@logger'
 import MinAppIcon from '@renderer/components/Icons/MinAppIcon'
 import IndicatorLight from '@renderer/components/IndicatorLight'
 import MarqueeText from '@renderer/components/MarqueeText'
-import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
+import { ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps, updateCustomMiniApps } from '@renderer/config/minapps'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useRuntime } from '@renderer/hooks/useRuntime'
@@ -100,13 +100,15 @@ const MinApp: FC<Props> = ({ app, onClick, size = 60, isLast }) => {
             danger: true,
             onClick: async () => {
               try {
-                const content = await window.api.file.read('custom-minapps.json')
-                const customApps = JSON.parse(content)
-                const updatedApps = customApps.filter((customApp: MinAppType) => customApp.id !== app.id)
-                await window.api.file.writeWithId('custom-minapps.json', JSON.stringify(updatedApps, null, 2))
+                // r2-79/⑥：删除走同一个写点。此前直接 `read` + `JSON.parse`：全新安装下
+                // （还没有 custom-minapps.json）读抛通用错误 → 用户看到"移除失败"，
+                // 而实际上这时候 redux 侧本来就没有任何自定义应用可删。
+                // `missing` 现在是合法缺省（从空列表开始），`error`（读不出来）仍抛出且不写盘。
+                const nextCustomApps = await updateCustomMiniApps((customApps) =>
+                  customApps.filter((customApp) => customApp.id !== app.id)
+                )
                 window.toast.success(t('settings.miniapps.custom.remove_success'))
-                const reloadedApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
-                updateAllMinApps(reloadedApps)
+                updateAllMinApps([...ORIGIN_DEFAULT_MIN_APPS, ...nextCustomApps])
                 updateMinapps(minapps.filter((item) => item.id !== app.id))
                 updatePinnedMinapps(pinned.filter((item) => item.id !== app.id))
                 updateDisabledMinapps(disabled.filter((item) => item.id !== app.id))

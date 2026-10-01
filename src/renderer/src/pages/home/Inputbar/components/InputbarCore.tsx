@@ -13,7 +13,6 @@ import type { FileMetadata } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { formatQuotedText } from '@renderer/utils/formats'
 import { isSendMessageKeyPressed } from '@renderer/utils/input'
-import { IpcChannel } from '@shared/IpcChannel'
 import { Tooltip } from 'antd'
 import TextArea from 'antd/es/input/TextArea'
 import type { TextAreaRef } from 'antd/lib/input/TextArea'
@@ -30,6 +29,7 @@ import {
   useInputbarToolsInternalDispatch,
   useInputbarToolsState
 } from '../context/InputbarToolsProvider'
+import { useDragResizeHandle } from '../hooks/useDragResizeHandle'
 import { useFileDragDrop } from '../hooks/useFileDragDrop'
 import { usePasteHandler } from '../hooks/usePasteHandler'
 import { getInputbarConfig } from '../registry'
@@ -148,8 +148,6 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
 
   const dispatch = useAppDispatch()
   const { searching } = useRuntime()
-  const startDragY = useRef<number>(0)
-  const startHeight = useRef<number>(0)
   const { setTimeoutTimer } = useTimer()
 
   // 全局 QuickPanel Hook (用于控制面板显示状态)
@@ -464,31 +462,12 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
     PasteService.setLastFocusedComponent('inputbar')
   }, [dispatch, quickPanel])
 
-  const handleDragStart = useCallback(
-    (event: React.MouseEvent) => {
-      if (!config.enableDragDrop) {
-        return
-      }
-
-      startDragY.current = event.clientY
-      startHeight.current = textareaRef.current?.resizableTextArea?.textArea?.offsetHeight || 0
-
-      const handleMouseMove = (e: MouseEvent) => {
-        const deltaY = startDragY.current - e.clientY
-        const newHeight = Math.max(40, Math.min(500, startHeight.current + deltaY))
-        onHeightChange(newHeight)
-      }
-
-      const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
-      }
-
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-    },
-    [config.enableDragDrop, onHeightChange, textareaRef]
-  )
+  // 拖拽拉伸把手：全局监听的生命周期收口在 useDragResizeHandle（卸载即清理，f2-12）
+  const handleDragStart = useDragResizeHandle({
+    enabled: config.enableDragDrop,
+    getStartHeight: () => textareaRef.current?.resizableTextArea?.textArea?.offsetHeight || 0,
+    onHeightChange
+  })
 
   const onQuote = useCallback(
     (quoted: string) => {
@@ -504,12 +483,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   )
 
   useEffect(() => {
-    const quoteListener = window.electron?.ipcRenderer.on(IpcChannel.App_QuoteToMain, (_, selectedText: string) =>
-      onQuote(selectedText)
-    )
-    return () => {
-      quoteListener?.()
-    }
+    return window.api.events.onQuoteToMain((selectedText) => onQuote(selectedText))
   }, [onQuote])
 
   useEffect(() => {
@@ -533,15 +507,22 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
     return () => window.removeEventListener('focus', onFocus)
   }, [focusTextarea])
 
+  // 剪贴板处理器只注册一次：handlePaste 的引用随 setText（useInputText 的 [text, options] 依赖）
+  // 每次输入变化，以它为依赖会让"安装一次"的语义失效（每次按键 unregister + register 一遍，f2-09）
+  const handlePasteRef = useRef(handlePaste)
   useEffect(() => {
-    PasteService.init()
+    handlePasteRef.current = handlePaste
+  }, [handlePaste])
 
-    PasteService.registerHandler('inputbar', handlePaste)
+  useEffect(() => {
+    // r2-58：不再调用 `PasteService.init()`（全局 paste 监听路径不可达，已删除）；
+    // 保留注册表登记，供 `getLastFocusedComponent` 的路由语义与测试桩使用。
+    PasteService.registerHandler('inputbar', (event) => handlePasteRef.current(event))
 
     return () => {
       PasteService.unregisterHandler('inputbar')
     }
-  }, [handlePaste])
+  }, [])
 
   const rightSectionExtras = useMemo(() => {
     const extras: React.ReactNode[] = []

@@ -319,54 +319,78 @@ describe('DynamicVirtualList', () => {
     })
   })
 
-  describe('auto hide scrollbar', () => {
-    it('should always show scrollbar when autoHideScrollbar is false', () => {
+  describe('scroll region accessibility', () => {
+    // c2-10：`aria-hidden` 原先绑在「滚动条要不要显示」上。一旦调用方使用 `autoHideScrollbar`，
+    // 停止滚动 2 秒后整块列表（内含可聚焦内容）会被 `aria-hidden` —— 这是 WCAG 4.1.2 违规。
+    // 新契约：滚动条显隐只走 `$autoHide`/`$show` 样式，列表对辅助技术始终可见。
+    it('never hides the list from assistive technology when autoHideScrollbar is false', () => {
       render(<DynamicVirtualList {...defaultProps} autoHideScrollbar={false} />)
 
       const scrollContainer = document.querySelector('.dynamic-virtual-list') as HTMLElement
       expect(scrollContainer).toBeInTheDocument()
-
-      // When autoHideScrollbar is false, scrollbar should always be visible
-      expect(scrollContainer).not.toHaveAttribute('aria-hidden', 'true')
+      expect(scrollContainer).not.toHaveAttribute('aria-hidden')
     })
 
-    it('should hide scrollbar initially and show during scrolling when autoHideScrollbar is true', async () => {
+    it('never hides the list from assistive technology while the scrollbar auto-hides', () => {
       vi.useFakeTimers()
 
       render(<DynamicVirtualList {...defaultProps} autoHideScrollbar={true} />)
 
       const scrollContainer = document.querySelector('.dynamic-virtual-list') as HTMLElement
       expect(scrollContainer).toBeInTheDocument()
+      expect(scrollContainer).not.toHaveAttribute('aria-hidden')
 
-      // Initially hidden
-      expect(scrollContainer).toHaveAttribute('aria-hidden', 'true')
-
-      // We can't easily simulate real scroll events in JSDOM, so we'll test the internal logic directly
-      // by calling the onChange handler which should update the state
       const onChangeCallback = mocks.useVirtualizer.mock.calls[0][0].onChange
 
-      // Simulate scroll start
       act(() => {
         onChangeCallback({ isScrolling: true }, true)
       })
+      expect(scrollContainer).not.toHaveAttribute('aria-hidden')
 
-      // After scrolling starts, scrollbar should be visible
-      expect(scrollContainer).toHaveAttribute('aria-hidden', 'false')
-
-      // Simulate scroll end
       act(() => {
         onChangeCallback({ isScrolling: false }, true)
       })
-
-      // Advance timers to trigger the hide timeout
       act(() => {
         vi.advanceTimersByTime(10000)
       })
 
-      // After timeout, scrollbar should be hidden again
-      expect(scrollContainer).toHaveAttribute('aria-hidden', 'true')
+      // 自动隐藏滚动条之后，列表依然不能被 aria-hidden。
+      expect(scrollContainer).not.toHaveAttribute('aria-hidden')
 
       vi.useRealTimers()
+    })
+
+    it('exposes a labelled landmark only when ariaLabel is provided', () => {
+      const { unmount } = render(<DynamicVirtualList {...defaultProps} />)
+      expect(document.querySelector('.dynamic-virtual-list')).not.toHaveAttribute('role')
+      unmount()
+
+      render(<DynamicVirtualList {...defaultProps} ariaLabel="Models" />)
+      const scrollContainer = document.querySelector('.dynamic-virtual-list') as HTMLElement
+      expect(scrollContainer).toHaveAttribute('role', 'region')
+      expect(scrollContainer).toHaveAttribute('aria-label', 'Models')
+    })
+  })
+
+  describe('header placement (c2-32)', () => {
+    // c2-32：header 原先渲染在滚动容器内、测量容器外，高度不参与 `virtualItem.start`，
+    // 第一条虚拟行会落在 header 之下（重叠），滚到顶时第 0 行藏在 header 后面。
+    it('renders the header outside the scroll container so row offsets stay correct', () => {
+      render(<DynamicVirtualList {...defaultProps} header={<div data-testid="list-header">header</div>} />)
+
+      const header = screen.getByTestId('list-header')
+      const scrollContainer = document.querySelector('.dynamic-virtual-list') as HTMLElement
+
+      expect(scrollContainer).not.toContainElement(header)
+      expect(document.querySelector('.dynamic-virtual-list-header')).toContainElement(header)
+
+      // 第 0 行仍定位在 0 —— 没有被 header 的高度顶下去。
+      expect(screen.getByTestId('item-0').parentElement).toHaveStyle({ transform: 'translateY(0px)' })
+    })
+
+    it('keeps the previous DOM shape when no header is given', () => {
+      render(<DynamicVirtualList {...defaultProps} />)
+      expect(document.querySelector('.dynamic-virtual-list-with-header')).toBeNull()
     })
   })
 })

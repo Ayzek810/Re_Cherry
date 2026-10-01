@@ -177,16 +177,13 @@ export function useCodeCliPageViewProps(
   )
   const enabledProvider = selectedProvider ?? defaultGatewayProvider
   const enabledProviderConfig = selectedProvider ? currentProviderConfig : defaultGatewayConfig
-  const {
-    connection: currentCliConfigConnection,
-    setConnection: setCurrentCliConfigConnection,
-    reload: reloadCliConfigConnection
-  } = useCurrentCliConfigConnection({
-    enabledProvider,
-    selectedCliTool,
-    currentProviderConfig: enabledProviderConfig,
-    apiGatewayProvider: apiGatewayBundle
-  })
+  const { setConnection: setCurrentCliConfigConnection, reload: reloadCliConfigConnection } =
+    useCurrentCliConfigConnection({
+      enabledProvider,
+      selectedCliTool,
+      currentProviderConfig: enabledProviderConfig,
+      apiGatewayProvider: apiGatewayBundle
+    })
 
   const { statuses, resolved } = useCliVersionStatuses(CLI_TOOL_IDS)
   // v0.4.5：手动检查更新 + paper-agent 生命周期控制器（版本状态合并需要前者，故先于此声明）。
@@ -383,7 +380,12 @@ export function useCodeCliPageViewProps(
           supportedProviders,
           providerConfigs,
           currentProviderId,
-          currentProviderModelName: currentCliConfigConnection ? t('code.cli_config.unknown_provider') : undefined,
+          // 二轮审查 f2-45：此处原为 `currentCliConfigConnection ? t('code.cli_config.unknown_provider')
+          // : undefined`。但 `currentCliConfigConnection` 非 null 的语义是"磁盘上的 CLI 配置文件
+          // **不属于**当前选中的服务商"（useCurrentCliConfigConnection.ts:107-112 只在"不匹配"时赋值），
+          // 把它当模型名注入，选中卡片的第二行就显示成"我选的服务商 = 未知供应商"。
+          // 外来配置的信息由配置面板的警示块承担（useConfigEditPanelBodyProps.tsx:86），
+          // 这里不再借"模型名"通道表达它——卡片的模型名一律取 `resolveProviderMeta`。
           providerActionsDisabled,
           resolveProviderMeta,
           // fork 缝⑤（续）：无失败目标的 retry 面；name-only 安装即 fork 安装器的全部语义。

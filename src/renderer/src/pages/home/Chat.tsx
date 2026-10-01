@@ -8,13 +8,13 @@ import { SelectChatModelPopup } from '@renderer/components/Popups/SelectModelPop
 import { QuickPanelProvider } from '@renderer/components/QuickPanel'
 import { isChatCandidateModel, isWebSearchModel } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
-import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useShowTopics } from '@renderer/hooks/useStore'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { syncTopicNameToKernel } from '@renderer/services/topicNaming'
+import { useAppSelector } from '@renderer/store'
 import type { Assistant, Model, Topic } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { Flex } from 'antd'
@@ -28,6 +28,7 @@ import styled from 'styled-components'
 
 import ChatNavbar from './components/ChatNavBar'
 import Inputbar from './Inputbar/Inputbar'
+import { ChatContextProvider } from './Messages/ChatContextProvider'
 import ChatNavigation from './Messages/ChatNavigation'
 import Messages from './Messages/Messages'
 import Tabs from './Tabs'
@@ -46,7 +47,9 @@ const Chat: FC<Props> = (props) => {
   const { t } = useTranslation()
   const { topicPosition, messageStyle, messageNavigation } = useSettings()
   const { showTopics } = useShowTopics()
-  const { isMultiSelectMode } = useChatContext(props.activeTopic)
+  // 多选态是本组件唯一需要的聊天上下文产物（容器类名 + 弹窗开关），直接窄订阅；
+  // 整个 useChatContext 只在 Messages/ChatContextProvider 里实例化一份（f2-02）。
+  const isMultiSelectMode = useAppSelector((state) => state.runtime.chat.isMultiSelectMode)
   const { isTopNavbar } = useNavbarPosition()
 
   const mainRef = React.useRef<HTMLDivElement>(null)
@@ -98,7 +101,8 @@ const Chat: FC<Props> = (props) => {
       const enabledWebSearch = isWebSearchModel(selectedModel)
       updateAssistant({
         model: selectedModel,
-        enableWebSearch: enabledWebSearch && assistant.enableWebSearch
+        // r2-80：`undefined` = provider 还不知道（冷启动窗口）——只换模型，**不得**写回持久化开关。
+        ...(enabledWebSearch === undefined ? {} : { enableWebSearch: enabledWebSearch && assistant.enableWebSearch })
       })
     }
   })
@@ -181,37 +185,40 @@ const Chat: FC<Props> = (props) => {
             flex={1}
             justify="space-between"
             style={{ height: mainHeight, width: '100%' }}>
-            <QuickPanelProvider>
-              <ChatNavbar
-                activeAssistant={props.assistant}
-                activeTopic={props.activeTopic}
-                setActiveTopic={props.setActiveTopic}
-                setActiveAssistant={props.setActiveAssistant}
-                position="left"
-              />
-              <div
-                className="flex flex-1 flex-col justify-between"
-                style={{ height: `calc(${mainHeight} - var(--navbar-height))` }}>
-                <Messages
-                  key={props.activeTopic.id}
-                  assistant={assistant}
-                  topic={props.activeTopic}
+            {/* 聊天上下文（useChatContext 的唯一实例）在此下发：消息区所有子组件改读 context */}
+            <ChatContextProvider topic={props.activeTopic}>
+              <QuickPanelProvider>
+                <ChatNavbar
+                  activeAssistant={props.assistant}
+                  activeTopic={props.activeTopic}
                   setActiveTopic={props.setActiveTopic}
-                  onComponentUpdate={messagesComponentUpdateHandler}
-                  onFirstUpdate={messagesComponentFirstUpdateHandler}
+                  setActiveAssistant={props.setActiveAssistant}
+                  position="left"
                 />
-                <ContentSearch
-                  ref={contentSearchRef}
-                  searchTarget={mainRef as React.RefObject<HTMLElement>}
-                  filter={contentSearchFilter}
-                  includeUser={filterIncludeUser}
-                  onIncludeUserChange={userOutlinedItemClickHandler}
-                />
-                {messageNavigation === 'buttons' && <ChatNavigation containerId="messages" />}
-                <Inputbar assistant={assistant} setActiveTopic={props.setActiveTopic} topic={props.activeTopic} />
-                {isMultiSelectMode && <MultiSelectActionPopup topic={props.activeTopic} />}
-              </div>
-            </QuickPanelProvider>
+                <div
+                  className="flex flex-1 flex-col justify-between"
+                  style={{ height: `calc(${mainHeight} - var(--navbar-height))` }}>
+                  <Messages
+                    key={props.activeTopic.id}
+                    assistant={assistant}
+                    topic={props.activeTopic}
+                    setActiveTopic={props.setActiveTopic}
+                    onComponentUpdate={messagesComponentUpdateHandler}
+                    onFirstUpdate={messagesComponentFirstUpdateHandler}
+                  />
+                  <ContentSearch
+                    ref={contentSearchRef}
+                    searchTarget={mainRef as React.RefObject<HTMLElement>}
+                    filter={contentSearchFilter}
+                    includeUser={filterIncludeUser}
+                    onIncludeUserChange={userOutlinedItemClickHandler}
+                  />
+                  {messageNavigation === 'buttons' && <ChatNavigation containerId="messages" />}
+                  <Inputbar assistant={assistant} setActiveTopic={props.setActiveTopic} topic={props.activeTopic} />
+                  {isMultiSelectMode && <MultiSelectActionPopup topic={props.activeTopic} />}
+                </div>
+              </QuickPanelProvider>
+            </ChatContextProvider>
           </Main>
         </motion.div>
         <AnimatePresence initial={false}>

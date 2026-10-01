@@ -15,7 +15,7 @@ import { getLeadingEmoji } from '@renderer/utils'
 import { Button, Input, Popover, Segmented, Upload } from 'antd'
 import { Edit, HelpCircle, ImagePlus, PlusIcon, Save } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import styled from 'styled-components'
@@ -45,6 +45,28 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
   const [tokenCount, setTokenCount] = useState(0)
 
   const defaultModel = assistant.model ?? assistant.defaultModel
+
+  /**
+   * 提示词草稿的卸载兜底（v1 二轮审查 s2-09）。
+   *
+   * 提示词编辑区只有区内那个「保存」键会提交；弹窗底部的「确认」只关窗（`BaseSettingsPopup`
+   * 的 `handleConfirm` 不提交任何东西）。用户在编辑器里改完提示词直接按「确认」→ 本组件卸载
+   * → 改动没有任何写入路径；「新建助手」流程交回的草稿也就静默缺少提示词。这里照
+   * `ChatSettingsSection` 对 `customParameters` 的既有写法，在卸载时把未提交的草稿 flush 掉。
+   */
+  const promptRef = useRef(prompt)
+  promptRef.current = prompt
+  const assistantPromptRef = useRef(assistant.prompt)
+  assistantPromptRef.current = assistant.prompt
+  const updateAssistantRef = useRef(updateAssistant)
+  updateAssistantRef.current = updateAssistant
+  useEffect(() => {
+    return () => {
+      if (promptRef.current !== assistantPromptRef.current) {
+        updateAssistantRef.current({ prompt: promptRef.current })
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setTokenCount(estimateTextTokens(prompt))

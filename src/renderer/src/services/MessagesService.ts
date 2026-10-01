@@ -66,16 +66,25 @@ export async function safeDeleteFiles(filesToDelete: FileMetadata[]): Promise<vo
   }
 }
 
-export function isGenerating() {
-  return new Promise((resolve, reject) => {
-    const generating = store.getState().runtime.generating
-    generating && window.toast.warning(i18n.t('message.switch.disabled'))
-    generating ? reject(false) : resolve(true)
-  })
+/**
+ * "生成中"闸门。
+ *
+ * r2-62：旧实现在生成中 `reject(false)`——拒绝值不是 `Error`，两个调用点又都是 UI 事件直呼
+ * 且不接错误，于是每次点击都产生一条 `Uncaught (in promise) false`，日志里也看不出这是
+ * 有意的拦截。改为 `Promise<boolean>`：`true` = 可以继续，`false` = 正在生成（已弹提示）。
+ * 调用方必须读返回值并据此提前返回；`await` 不再会抛出。
+ */
+export async function isGenerating(): Promise<boolean> {
+  const generating = store.getState().runtime.generating
+  if (generating) {
+    window.toast.warning(i18n.t('message.switch.disabled'))
+    return false
+  }
+  return true
 }
 
 export async function locateToMessage(navigate: NavigateFunction, message: Message) {
-  await isGenerating()
+  if (!(await isGenerating())) return
 
   SearchPopup.hide()
   const assistant = getAssistantById(message.assistantId)
@@ -208,7 +217,9 @@ export async function getMessageTitle(message: Message, length = 30): Promise<st
       })
 
       const titlePromise = fetchMessagesSummary({ messages: [tempMessage] })
-      window.toast.loading({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
+      // oxlint 的 no-floating-promises 看不到「promise 被交给 antd toast.loading」这一消费方式；
+      // 显式 `void` 表明是有意不 await（该 promise 由 toast 与下一行 await 共同消费）。
+      void window.toast.loading({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
       const { text: title } = await titlePromise
 
       // store.dispatch(messageBlocksActions.upsertOneBlock(tempTextBlock))
@@ -236,7 +247,15 @@ export async function getMessageTitle(message: Message, length = 30): Promise<st
 export function checkRateLimit(assistant: Assistant): boolean {
   const provider = getAssistantProvider(assistant)
 
-  if (!provider?.rateLimit) {
+  // r2-42：助手模型与默认模型都指不到现存 provider 时，无法确定限流值。
+  // 限流是**提示性**检查：拿不到 provider 就放行，不谎报限流，也不假装成功——
+  // 真正的发送会因 provider 缺失以可见错误失败。
+  if (!provider) {
+    logger.warn('checkRateLimit: no provider resolved, rate limit cannot be enforced', { assistantId: assistant.id })
+    return false
+  }
+
+  if (!provider.rateLimit) {
     return false
   }
 

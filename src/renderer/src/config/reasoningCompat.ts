@@ -5,6 +5,7 @@ import {
   isSupportedThinkingTokenZhipuModel
 } from '@renderer/config/models'
 import type { Model } from '@renderer/types'
+import type { ProviderReasoningCompat, ThinkingFormat } from '@shared/types/reasoning'
 
 /**
  * 第三方 OpenAI 兼容网关的思考协议修正 —— 三层解析（泛用解）。
@@ -30,26 +31,13 @@ import type { Model } from '@renderer/types'
  * 属于引擎领域；家族模型 + 无名网关才是 C 层的辖区。
  */
 
-export type ThinkingFormat =
-  | 'openai'
-  | 'deepseek'
-  | 'openrouter'
-  | 'together'
-  | 'zai'
-  | 'qwen'
-  | 'chat-template'
-  | 'qwen-chat-template'
-  | 'string-thinking'
-  | 'ant-ling'
-
-/** 与内核 KernelModelCompatInput 对应；仅出现的键会被 pi-ai 采用。 */
-export interface ProviderReasoningCompat {
-  thinkingFormat?: ThinkingFormat
-  supportsReasoningEffort?: boolean
-  requiresReasoningContentOnAssistantMessages?: boolean
-  /** 该网关是否接受 role: "developer"（OpenAI 新式系统角色）；不支持须显式关掉。 */
-  supportsDeveloperRole?: boolean
-}
+/**
+ * 思考协议格式与兼容覆盖由 `@shared/types/reasoning` 定义（r2-88 跨包上提）。
+ *
+ * 这是渲染进程构造、主进程消费的**跨进程契约**：两侧引用同一份声明，任一侧新增或改名
+ * 都会在另一侧变成编译错误。此处原样转出，保持本模块既有的对外导出面不变。
+ */
+export type { ProviderReasoningCompat, ThinkingFormat }
 
 /**
  * providerReasoningCompat 需要的 provider 形状（结构性类型：Redux Provider 的子集，

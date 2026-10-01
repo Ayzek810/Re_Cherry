@@ -2,7 +2,6 @@ import { isMac, isWin } from '@renderer/config/constant'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import useUserTheme from '@renderer/hooks/useUserTheme'
 import { ThemeMode } from '@renderer/types'
-import { IpcChannel } from '@shared/IpcChannel'
 import type { PropsWithChildren } from 'react'
 import React, { createContext, use, useEffect, useState } from 'react'
 
@@ -71,7 +70,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     initUserTheme()
 
     // listen for theme updates from main process
-    return window.electron.ipcRenderer.on(IpcChannel.ThemeUpdated, (_, actualTheme: ThemeMode) => {
+    return window.api.events.onThemeUpdated((actualTheme: ThemeMode) => {
       document.body.setAttribute('theme-mode', actualTheme)
       setActualTheme(actualTheme)
     })

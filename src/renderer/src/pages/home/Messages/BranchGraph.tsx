@@ -106,7 +106,7 @@ const BranchGraphNode: React.FC<{ data: TreeNodeData }> = ({ data }) => {
     : isUser
       ? 'rgba(var(--color-primary-rgb), 0.06)'
       : 'transparent'
-  const displayName = isUser ? 'USER' : data.modelName || 'ASSISTANT'
+  const displayName = isUser ? t('chat.history.user_node') : data.modelName || t('chat.history.assistant_node')
   const modelObject = useMemo<Model | undefined>(
     () => (data.modelId ? ({ id: data.modelId, name: data.modelName || data.modelId } as Model) : undefined),
     [data.modelId, data.modelName]

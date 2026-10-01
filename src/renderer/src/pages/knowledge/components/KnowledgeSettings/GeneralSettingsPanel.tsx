@@ -3,17 +3,18 @@ import ModelSelector from '@renderer/components/ModelSelector'
 import { InfoTooltip } from '@renderer/components/TooltipIcons'
 import { DEFAULT_KNOWLEDGE_DOCUMENT_COUNT } from '@renderer/config/constant'
 import { isEmbeddingModel } from '@renderer/config/models'
+import type { KnowledgeBaseForm } from '@renderer/hooks/useKnowledgeBaseForm'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId } from '@renderer/services/ModelService'
-import type { KnowledgeBase } from '@renderer/types'
 import { Input, Slider } from 'antd'
 import { useTranslation } from 'react-i18next'
 
 import { SettingsItem, SettingsPanel } from './styles'
 
+// r2-69：面板操作的是**表单态**（`model` 允许空位 = 用户还没选），不是已提交的 `KnowledgeBase`。
 interface GeneralSettingsPanelProps {
-  newBase: KnowledgeBase
-  setNewBase: React.Dispatch<React.SetStateAction<KnowledgeBase>>
+  newBase: KnowledgeBaseForm
+  setNewBase: React.Dispatch<React.SetStateAction<KnowledgeBaseForm>>
   handlers: {
     handleEmbeddingModelChange: (value: string) => void
     handleDimensionChange: (value: number | null) => void
@@ -46,7 +47,7 @@ const GeneralSettingsPanel: React.FC<GeneralSettingsPanelProps> = ({ newBase, se
           predicate={isEmbeddingModel}
           style={{ width: '100%' }}
           placeholder={t('settings.models.empty')}
-          value={getModelUniqId(newBase.model)}
+          value={newBase.model ? getModelUniqId(newBase.model) : undefined}
           onChange={handleEmbeddingModelChange}
         />
       </SettingsItem>

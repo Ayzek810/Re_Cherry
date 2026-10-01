@@ -69,6 +69,20 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
     persist({ translateCustomPrompt: promptDraft })
   }
 
+  /**
+   * 抽屉关闭（Esc / 点遮罩 / 关闭按钮）也必须结算草稿。
+   *
+   * 二轮审查 f2-31：`savePrompt` 此前只挂 `Input.TextArea` 的 `onBlur`，而 antd Drawer 默认
+   * `destroyOnClose=false`——Esc/遮罩关闭时子节点不卸载，`blur` 不会触发。结果是：设置未保存，
+   * 但 `promptDraft` 仍在，再次打开抽屉时文本框显示的是**未生效的草稿**，界面与 redux 真实值不一致。
+   * 这里关抽屉时先提交草稿，再清掉草稿让文本框回到 redux 真实值。
+   */
+  const handleClose = () => {
+    savePrompt()
+    setPromptDraft(null)
+    onClose()
+  }
+
   const resetPrompt = () => {
     setPromptDraft('')
     persist({ translateCustomPrompt: '' })
@@ -98,7 +112,7 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
   }
 
   return (
-    <Drawer open={visible} onClose={onClose} placement="right" width={360} title={t('translate.settings')}>
+    <Drawer open={visible} onClose={handleClose} placement="right" width={360} title={t('translate.settings')}>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm">{t('translate.model')}</span>

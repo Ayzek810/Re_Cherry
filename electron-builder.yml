@@ -133,7 +133,47 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Re_Cherry 1.0.1 - Second review fixes
+    Re_Cherry 0.5.2 - Pre-release cleanup, round 3
+
+    The second full review produced 337 findings. Every finding now carries one terminal status.
+
+    🛡️ Safety and correctness
+    - The message-delete path reports a partial erasure. It no longer hides a failed disk delete.
+    - The trace window subscribes to the language once. A reload no longer stacks duplicate sends.
+    - The rich-editor toolbar keeps a stable hook order. It no longer breaks when the editor attaches late.
+    - The notes editor keeps one save timer. A rename or a move no longer revives the old file path.
+    - The knowledge-base search reports a failure as a failure. It no longer shows an empty list.
+    - The Hermes dashboard start has no unreachable cancellation branch.
+    - Dead surfaces are gone: the API-gateway lease trio, the always-false lifecycle flag, and one unused helper.
+
+    ⚡ Performance
+    - Each message block and each code block subscribes to its own settings fields. A settings change no longer re-renders the whole message tree.
+    - One Shiki language chunk per language. The duplicate set is gone (-4.14 MB, 309 files).
+    - The first paint no longer runs the Notion client or the OpenTelemetry web trace.
+    - First-paint payload: 12.782 MB to 12.368 MB.
+
+    <!--LANG:zh-CN-->
+    Re_Cherry 0.5.2 - 正式版前的第三轮整理
+
+    第二轮全量审查共 337 条发现，现已逐条给出终局结论（修复 / 复核不成立 / 有意保留）。
+
+    🛡️ 安全与正确性
+    - 消息删除路径会如实报告「部分数据仍在磁盘上」，不再把落盘失败藏起来。
+    - trace 窗口的语言订阅只挂一次；重新加载不再叠加重复推送。
+    - 富文本工具栏的 Hook 顺序固定，编辑器晚到时不再崩。
+    - 笔记编辑器只保留一个保存定时器；改名或移动后不会按旧路径把文件复活。
+    - 知识库检索把失败如实报为失败，不再显示成「没有结果」。
+    - Hermes 面板启动路径里不可达的取消分支已删除。
+    - 清理死表面：API 网关的租约三件套、恒 false 的生命周期字段、一个零调用的工具函数。
+
+    ⚡ 性能
+    - 每个消息块与代码块只订阅自己用到的设置字段；改一次设置不再重渲染整棵消息树。
+    - 每种语言只留一份 Shiki chunk，重复副本消除（-4.14 MB，309 个文件）。
+    - 首屏不再执行 Notion 客户端与 OpenTelemetry web trace。
+    - 首屏载荷 12.782 MB → 12.368 MB。
+
+    <!--LANG:en-->
+    Re_Cherry 0.5.1 - Pre-release cleanup, round 2
 
     A second full review produced 336 findings. This release fixes the open high-severity items.
 
@@ -153,7 +193,7 @@ releaseInfo:
     - First-paint payload: 12.502 MB to 12.184 MB.
 
     <!--LANG:zh-CN-->
-    Re_Cherry 1.0.1 - 第二轮审查修复
+    Re_Cherry 0.5.1 - 正式版前的第二轮整理
 
     第二轮全量审查产出 336 条发现，本版修复其中的高严重度未闭环项。
 
@@ -173,7 +213,7 @@ releaseInfo:
     - 首屏载荷 12.502 MB → 12.184 MB。
 
     <!--LANG:en-->
-    Re_Cherry 1.0.0 - v1 Release
+    Re_Cherry 0.5.0 - Pre-release cleanup, round 1
 
     Full code review, performance work and cleanup before the official release.
 
@@ -192,7 +232,7 @@ releaseInfo:
     - 257 unused translation keys removed; lint warnings across the repository reduced to zero.
 
     <!--LANG:zh-CN-->
-    Re_Cherry 1.0.0 - v1 正式版
+    Re_Cherry 0.5.0 - 正式版前的第一轮整理
 
     正式上线前的全量代码审查、性能优化与清理。
 

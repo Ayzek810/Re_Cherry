@@ -80,6 +80,10 @@ function topicTree(ctx: Context): TopicTreeService {
 
 let kernelContext: Context | undefined
 let interactionHub: KernelInteractionHub | undefined
+/** k2-29：内核 IPC 的注销函数（`registerKernelIpc` 返回值；停机时逐 channel 撤销）。 */
+let kernelIpcDispose: (() => void) | undefined
+/** k2-29：`ctx.userQuestions.registerProvider` 的注销函数（停机时配对调用）。 */
+let interactionUnregister: (() => void) | undefined
 
 /** 已启动的内核上下文；未启动或已销毁时为 undefined。 */
 export function getKernel(): Context | undefined {
@@ -95,6 +99,25 @@ export async function stopKernel(): Promise<void> {
   const ctx = kernelContext
   if (ctx === undefined) return
   kernelContext = undefined
+  // k2-29：先撤销 IPC handler 与问答 provider，再拆 fiber。内核 IPC 注册以前不撤销任何
+  // channel，于是二次 `bootKernel()`（模块重载 / 测试宿主）会撞 Electron 的
+  // "Attempted to register a second handler"。撤销后 `requireKernel()` 仍以
+  // `kernel not booted` 拒绝，不会留下指向已销毁 ctx 的脏 handler。
+  try {
+    kernelIpcDispose?.()
+  } catch (error) {
+    logger.warn('dsh kernel: ipc handler dispose failed', error instanceof Error ? error : new Error(String(error)))
+  }
+  kernelIpcDispose = undefined
+  try {
+    interactionUnregister?.()
+  } catch (error) {
+    logger.warn(
+      'dsh kernel: user-questions provider unregister failed',
+      error instanceof Error ? error : new Error(String(error))
+    )
+  }
+  interactionUnregister = undefined
   interactionHub?.disposeAll()
   interactionHub = undefined
   clearLiveHandles()
@@ -262,12 +285,15 @@ export async function bootKernel(): Promise<Context> {
     registerEventForwarding(ctx)
 
     // 审批/问答往返：请求帧推给所有窗口，回执经 IPC 回来（未决请求随内核停机作废）
-    interactionHub = registerInteractionHost(ctx, (message) => {
+    const interaction = registerInteractionHost(ctx, (message) => {
       const { kind, payload } = message as { kind: 'approval' | 'question'; payload: unknown }
       if (kind === 'approval') broadcast(IpcChannel.Dsh_ApprovalRequest, payload)
       else if (kind === 'question') broadcast(IpcChannel.Dsh_QuestionRequest, payload)
     })
-    registerKernelIpc()
+    interactionHub = interaction.hub
+    // k2-29：把撤销函数一起存下来，`stopKernel()` 才能配对拆掉 handler 与问答 provider。
+    interactionUnregister = interaction.unregister
+    kernelIpcDispose = registerKernelIpc()
 
     kernelContext = ctx
     logger.info('dsh kernel booted')
@@ -303,15 +329,23 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-/** 内核 IPC：provider 同步、冒烟、话题 CRUD 与聊天。 */
-function registerKernelIpc(): void {
+/** 内核 IPC：provider 同步、冒烟、话题 CRUD 与聊天。返回值是逐 channel 撤销的注销函数（k2-29）。 */
+function registerKernelIpc(): () => void {
   const requireKernel = (): Context => {
     const ctx = getKernel()
     if (ctx === undefined) throw new Error('kernel not booted')
     return ctx
   }
 
-  ipcMain.handle(IpcChannel.Dsh_SyncProviders, async (_event, providers: KernelProviderInput[]) => {
+  // k2-29：注册即记账。handler 的注册面全在本函数内（29 处），统一经这个包装登记，
+  // 避免"加了新通道却忘了加进撤销清单"这种漏项。
+  const registeredChannels: string[] = []
+  const handle = (channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void => {
+    registeredChannels.push(channel)
+    ipcMain.handle(channel, listener)
+  }
+
+  handle(IpcChannel.Dsh_SyncProviders, async (_event, providers: KernelProviderInput[]) => {
     await syncCherryProviders(requireKernel(), providers)
     // 批次4 知识库：嵌入客户端复用同一路由快照（apiHost/apiKey 只进主进程内存）。
     knowledgeService.setProviders(providers)
@@ -326,7 +360,7 @@ function registerKernelIpc(): void {
   // prompt 为空字符串 = 内置默认提示词（@shared/config/imageDescriber）。
   // 内核不做路由存在性校验——provider 同步（Dsh_SyncProviders）才是路由的真相源，
   // 这里只落 ctx.imageDescriber；describe_images 执行时路由缺失自然明错。
-  ipcMain.handle(
+  handle(
     IpcChannel.Dsh_SyncImageDescriber,
     async (_event, config: { provider: unknown; model: unknown; prompt: unknown } | null) => {
       const ctx = requireKernel()
@@ -359,7 +393,7 @@ function registerKernelIpc(): void {
   // 网络搜索配置同步（批次2）：渲染层 websearch 切片整体投影（providers 含 apiKey /
   // blacklist / searchWithTime）。只落 ctx.webSearch（引擎 setConfig），不做字段级校验
   // ——引擎执行时对缺失提供商自然明错；apiKey 仅存主进程内存。
-  ipcMain.handle(IpcChannel.Dsh_SyncWebSearch, async (_event, config: KernelWebSearchConfig) => {
+  handle(IpcChannel.Dsh_SyncWebSearch, async (_event, config: KernelWebSearchConfig) => {
     const ctx = requireKernel()
     const webSearch = (ctx as unknown as { webSearch?: { setConfig: (config: KernelWebSearchConfig) => void } })
       .webSearch
@@ -370,7 +404,7 @@ function registerKernelIpc(): void {
 
   // 网络搜索连通性检查（批次2）：'test query' 真跑一次引擎（同一条真实执行路径，
   // 比上游渲染层侧测更诚实）。引擎未同步该提供商时按其就绪判定自然失败。
-  ipcMain.handle(IpcChannel.WebSearch_Check, async (_event, providerId: string) => {
+  handle(IpcChannel.WebSearch_Check, async (_event, providerId: string) => {
     const { webSearchService } = await import('../services/WebSearchService')
     return { ok: await webSearchService.check(providerId) }
   })
@@ -378,7 +412,7 @@ function registerKernelIpc(): void {
   // MCP 服务器配置同步（批次3）：渲染层 mcp 切片整体投影进主进程 MCPService 内存
   //（命令/args/env 可能含密钥，与 webSearch 同先例只进主进程内存，不落盘不进会话）。
   // 内核 MCP 桥（mcpBridge.ts）挂载时按 serverId 从这里反查配置。
-  ipcMain.handle(IpcChannel.Dsh_SyncMcpServers, async (_event, servers: unknown) => {
+  handle(IpcChannel.Dsh_SyncMcpServers, async (_event, servers: unknown) => {
     const { mcpService } = await import('../services/mcp/MCPService')
     if (!Array.isArray(servers)) throw new Error('kernel: invalid mcp servers sync payload')
     mcpService.setServers(servers as MCPServer[])
@@ -390,7 +424,7 @@ function registerKernelIpc(): void {
   // 摄取的 PDF 路由按此配置表反查服务商（V2 对齐：配置即路由）。
   // v0.4.4：投影按字段白名单收敛（渲染层输入一律校验）——vision-model 条目的
   // 视觉模型引用取 { provider, model } 两个非空字符串，畸形即视为未配置。
-  ipcMain.handle(IpcChannel.Dsh_SyncPreprocess, async (_event, providers: unknown) => {
+  handle(IpcChannel.Dsh_SyncPreprocess, async (_event, providers: unknown) => {
     if (!Array.isArray(providers)) throw new Error('kernel: invalid preprocess sync payload')
     const configs = providers.map((provider) => {
       if (typeof provider !== 'object' || provider === null || typeof (provider as { id?: unknown }).id !== 'string') {
@@ -435,7 +469,7 @@ function registerKernelIpc(): void {
     return { ok: true }
   })
 
-  ipcMain.handle(
+  handle(
     IpcChannel.Dsh_StreamSmoke,
     async (
       _event,
@@ -458,11 +492,11 @@ function registerKernelIpc(): void {
 
   // ---- 轻量 LLM 服务（一次性/流式补全；实现见 lightLlm.ts，handler 只做薄转发） ----
 
-  ipcMain.handle(IpcChannel.Dsh_Complete, async (_event, payload: LightLlmCall) => {
+  handle(IpcChannel.Dsh_Complete, async (_event, payload: LightLlmCall) => {
     return await lightOneShot(requireKernel(), payload)
   })
 
-  ipcMain.handle(IpcChannel.Dsh_StreamComplete, async (event, payload: { requestId: string } & LightLlmCall) => {
+  handle(IpcChannel.Dsh_StreamComplete, async (event, payload: { requestId: string } & LightLlmCall) => {
     const ctx = requireKernel()
     const { requestId } = payload
     const send = (data: object): void => {
@@ -489,7 +523,7 @@ function registerKernelIpc(): void {
   })
 
   // fork 缝：流式补全取消（渲染层「停止/暂停」的真取消缝；未命中 requestId 为无害空操作）。
-  ipcMain.handle(IpcChannel.Dsh_StreamAbort, (_event, requestId: unknown) => {
+  handle(IpcChannel.Dsh_StreamAbort, (_event, requestId: unknown) => {
     if (typeof requestId === 'string' && requestId.length > 0) {
       abortLightStream(requestId)
     }
@@ -498,7 +532,7 @@ function registerKernelIpc(): void {
 
   // ---- 轻量图像模态（绘画页/生图工具的执行缝；实现见 lightLlmModalities.ts） ----
 
-  ipcMain.handle(
+  handle(
     IpcChannel.Dsh_LightImage,
     async (
       _event,
@@ -511,7 +545,7 @@ function registerKernelIpc(): void {
     }
   )
 
-  ipcMain.handle(IpcChannel.Dsh_LightImageAbort, (_event, requestId: unknown) => {
+  handle(IpcChannel.Dsh_LightImageAbort, (_event, requestId: unknown) => {
     if (typeof requestId === 'string' && requestId.length > 0) {
       abortLightImage(requestId)
     }
@@ -520,11 +554,11 @@ function registerKernelIpc(): void {
 
   // ---- 话题 ----
 
-  ipcMain.handle(IpcChannel.Dsh_TopicList, () => {
+  handle(IpcChannel.Dsh_TopicList, () => {
     return { topics: listTopics() }
   })
 
-  ipcMain.handle(
+  handle(
     IpcChannel.Dsh_TopicCreate,
     async (
       _event,
@@ -543,11 +577,11 @@ function registerKernelIpc(): void {
     }
   )
 
-  ipcMain.handle(IpcChannel.Dsh_TopicRename, async (_event, id: string, name: string) => {
+  handle(IpcChannel.Dsh_TopicRename, async (_event, id: string, name: string) => {
     return { topic: await topicTree(requireKernel()).rename(id, name) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicDelete, async (_event, id: string) => {
+  handle(IpcChannel.Dsh_TopicDelete, async (_event, id: string) => {
     // `ok` = 注册表行已删（话题从 UI 消失）；`purged` = 磁盘上的会话数据也清掉了。
     // 旧写法无条件回 `{ ok: true }`，把"物理清盘失败"（k2-09）伪装成完全成功。
     const purged = await topicTree(requireKernel()).delete(id)
@@ -559,24 +593,24 @@ function registerKernelIpc(): void {
     return { ok: true, purged }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicDestroyTurns, async (_event, id: string, anchorUserSeqs: number[]) => {
+  handle(IpcChannel.Dsh_TopicDestroyTurns, async (_event, id: string, anchorUserSeqs: number[]) => {
     return await topicTree(requireKernel()).destroyTurns(id, anchorUserSeqs)
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicOpen, async (_event, id: string) => {
+  handle(IpcChannel.Dsh_TopicOpen, async (_event, id: string) => {
     await topicTree(requireKernel()).open(id)
     return { ok: true }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicFork, async (_event, sourceTopicId: string, anchorUserMessageSeq: number) => {
+  handle(IpcChannel.Dsh_TopicFork, async (_event, sourceTopicId: string, anchorUserMessageSeq: number) => {
     return { topic: await topicTree(requireKernel()).fork(sourceTopicId, anchorUserMessageSeq) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicBranches, (_event, rootTopicId: string) => {
+  handle(IpcChannel.Dsh_TopicBranches, (_event, rootTopicId: string) => {
     return { topics: listTopicBranches(rootTopicId) }
   })
 
-  ipcMain.handle(
+  handle(
     IpcChannel.Dsh_TopicSend,
     async (
       _event,
@@ -766,7 +800,7 @@ function registerKernelIpc(): void {
   // 内核图片附件回放同步（v0.3.1 识图通道）：按 ref 从附件仓读回并核验字节，
   // 确定性落进渲染层文件仓（<attachmentId>.<ext>，同 id 同字节幂等），返回 FileMetadata。
   // 渲染层把它 upsert 进 Dexie 后即可按普通图片块渲染（file:// 直读）。
-  ipcMain.handle(IpcChannel.Dsh_AttachmentSync, async (_event, ref: unknown) => {
+  handle(IpcChannel.Dsh_AttachmentSync, async (_event, ref: unknown) => {
     const parsed = parseImageAttachmentRef(ref)
     const ctx = requireKernel()
     const stored = await ctx.attachments.readImage(parsed)
@@ -792,16 +826,16 @@ function registerKernelIpc(): void {
     return { file }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicStop, (_event, id: string) => {
+  handle(IpcChannel.Dsh_TopicStop, (_event, id: string) => {
     topicTree(requireKernel()).stop(id)
     return { ok: true }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicRunning, (_event, id: string) => {
+  handle(IpcChannel.Dsh_TopicRunning, (_event, id: string) => {
     return { running: topicTree(requireKernel()).isRunning(id) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicEvents, async (_event, id: string) => {
+  handle(IpcChannel.Dsh_TopicEvents, async (_event, id: string) => {
     const ctx = requireKernel()
     const tree = topicTree(ctx)
     // 必须 await：重启后 agent 需从持久化异步 resume，
@@ -820,17 +854,17 @@ function registerKernelIpc(): void {
     return { events: tree.uiEvents(id) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_TopicGet, (_event, id: string) => {
+  handle(IpcChannel.Dsh_TopicGet, (_event, id: string) => {
     return { topic: getTopic(id) }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_SearchMessages, async (_event, terms: string[]) => {
+  handle(IpcChannel.Dsh_SearchMessages, async (_event, terms: string[]) => {
     return { hits: await searchSessions(requireKernel(), terms) }
   })
 
   // ---- 审批/问答回执（Step 2）----
 
-  ipcMain.handle(IpcChannel.Dsh_ApprovalDecide, (_event, decision: KernelApprovalDecisionPayload) => {
+  handle(IpcChannel.Dsh_ApprovalDecide, (_event, decision: KernelApprovalDecisionPayload) => {
     if (
       decision === null ||
       typeof decision !== 'object' ||
@@ -842,7 +876,7 @@ function registerKernelIpc(): void {
     return { ok: interactionHub?.decideApproval(decision) ?? false }
   })
 
-  ipcMain.handle(IpcChannel.Dsh_QuestionAnswer, (_event, answer: KernelQuestionAnswerPayload) => {
+  handle(IpcChannel.Dsh_QuestionAnswer, (_event, answer: KernelQuestionAnswerPayload) => {
     if (
       answer === null ||
       typeof answer !== 'object' ||
@@ -853,4 +887,11 @@ function registerKernelIpc(): void {
     }
     return { ok: interactionHub?.answerQuestion(answer) ?? false }
   })
+
+  // k2-29：停机时逐 channel 撤销。`removeHandler` 对未注册通道是安全的空操作。
+  return () => {
+    for (const channel of registeredChannels) {
+      ipcMain.removeHandler(channel)
+    }
+  }
 }

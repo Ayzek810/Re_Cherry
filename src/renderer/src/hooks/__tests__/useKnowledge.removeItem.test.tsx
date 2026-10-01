@@ -19,13 +19,15 @@ import type { ReactNode } from 'react'
 import { Provider } from 'react-redux'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { remove, deleteFiles } = vi.hoisted(() => ({
+const { remove, deleteBase, deleteFiles, assistantsState } = vi.hoisted(() => ({
   remove: vi.fn(),
-  deleteFiles: vi.fn()
+  deleteBase: vi.fn(),
+  deleteFiles: vi.fn(),
+  assistantsState: { list: [] as unknown[], updateAssistants: vi.fn() }
 }))
 
 vi.mock('@renderer/services/knowledgeBaseApi', () => ({
-  knowledgeBaseApi: { remove },
+  knowledgeBaseApi: { remove, delete: deleteBase },
   // `enqueueItem` 的既有依赖（本测试不走处理链，仅供模块解析）。
   getEmbeddingRef: vi.fn()
 }))
@@ -35,12 +37,12 @@ vi.mock('@renderer/services/FileManager', () => ({
 }))
 
 vi.mock('@renderer/hooks/useAssistant', () => ({
-  useAssistants: () => ({ assistants: [], updateAssistants: vi.fn() })
+  useAssistants: () => ({ assistants: assistantsState.list, updateAssistants: assistantsState.updateAssistants })
 }))
 
 import knowledgeReducer from '@renderer/store/knowledge'
 
-import { useKnowledge } from '../useKnowledge'
+import { useKnowledge, useKnowledgeBases } from '../useKnowledge'
 
 const baseId = 'base-1'
 
@@ -83,7 +85,6 @@ describe('useKnowledge.removeItem（f2-14：乐观写必须可回滚 + 可见）
     toast.warning.mockReset()
     ;(window as unknown as { toast: unknown }).toast = toast
   })
-
   it('成功：返回 true 且条目从库中摘除', async () => {
     remove.mockResolvedValue(undefined)
     const store = makeStore()
@@ -142,5 +143,75 @@ describe('useKnowledge.removeItem（f2-14：乐观写必须可回滚 + 可见）
     })
     expect(toast.warning.mock.calls[0][0]).toBe('The index entry was deleted, but local files were not cleaned up.')
     expect(toast.error).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * r2-10（整库一半）：`deleteKnowledgeBase` 旧实现返回 void、只乐观派发 `deleteBase`，
+ * 真实删除由 reducer 内的 fire-and-forget IPC 承担（失败只 warn）——失败时界面显示「删成功」，
+ * 调用点也拿不到任何可判断的返回值。现在返回 `Promise<boolean>`，失败时 redux 一行都不动
+ * 并弹 `toast.error`。
+ *
+ * 行为级断言：
+ *   ① 成功 → true，库从 redux 摘除，助手引用被清理；
+ *   ② 真实删除失败 → false，库**仍在**（未做乐观删除，因此无需回滚），弹 toast.error；
+ *   ③ 未知 baseId → false，且不发起删除。
+ */
+describe('useKnowledgeBases.deleteKnowledgeBase（r2-10：整库删除必须可判成败 + 可见）', () => {
+  beforeEach(() => {
+    deleteBase.mockReset()
+    assistantsState.list = []
+    assistantsState.updateAssistants.mockReset()
+    toast.error.mockReset()
+    ;(window as unknown as { toast: unknown }).toast = toast
+  })
+
+  it('成功：返回 true、库从 redux 摘除、助手引用被清理', async () => {
+    deleteBase.mockResolvedValue(undefined)
+    assistantsState.list = [{ id: 'as-1', knowledge_bases: [{ id: baseId }, { id: 'other' }] }]
+    const store = makeStore()
+    const { result } = renderHook(() => useKnowledgeBases(), { wrapper: wrapperFor(store) })
+
+    let ok: boolean | undefined
+    await act(async () => {
+      ok = await result.current.deleteKnowledgeBase(baseId)
+    })
+
+    expect(ok).toBe(true)
+    expect(store.getState().knowledge.bases).toHaveLength(0)
+    expect(assistantsState.updateAssistants).toHaveBeenCalledTimes(1)
+    const updated = assistantsState.updateAssistants.mock.calls[0][0] as { knowledge_bases: { id: string }[] }[]
+    expect(updated[0].knowledge_bases.map((kb) => kb.id)).toEqual(['other'])
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('真实删除失败：返回 false、库仍在（未乐观删，无需回滚）并弹 toast.error', async () => {
+    deleteBase.mockRejectedValue(new Error('vector store locked'))
+    const store = makeStore()
+    const { result } = renderHook(() => useKnowledgeBases(), { wrapper: wrapperFor(store) })
+
+    let ok: boolean | undefined
+    await act(async () => {
+      ok = await result.current.deleteKnowledgeBase(baseId)
+    })
+
+    expect(ok).toBe(false)
+    expect(store.getState().knowledge.bases.map((b) => b.id)).toEqual([baseId])
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error.mock.calls[0][0]).toBe('Failed to delete the knowledge base.')
+    expect(assistantsState.updateAssistants).not.toHaveBeenCalled()
+  })
+
+  it('未知 baseId：返回 false 且不发起删除', async () => {
+    const store = makeStore()
+    const { result } = renderHook(() => useKnowledgeBases(), { wrapper: wrapperFor(store) })
+
+    let ok: boolean | undefined
+    await act(async () => {
+      ok = await result.current.deleteKnowledgeBase('nope')
+    })
+
+    expect(ok).toBe(false)
+    expect(deleteBase).not.toHaveBeenCalled()
   })
 })

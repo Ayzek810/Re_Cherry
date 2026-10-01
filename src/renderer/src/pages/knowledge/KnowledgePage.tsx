@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { DraggableList } from '@renderer/components/DraggableList'
 import { DeleteIcon, EditIcon } from '@renderer/components/Icons'
@@ -20,6 +21,8 @@ import AddKnowledgeBasePopup from './components/AddKnowledgeBasePopup'
 import EditKnowledgeBasePopup from './components/EditKnowledgeBasePopup'
 import KnowledgeContent from './KnowledgeContent'
 
+const logger = loggerService.withContext('KnowledgePage')
+
 const KnowledgePage: FC = () => {
   const { t } = useTranslation()
   const { bases, renameKnowledgeBase, deleteKnowledgeBase, updateKnowledgeBases } = useKnowledgeBases()
@@ -35,7 +38,12 @@ const KnowledgePage: FC = () => {
 
   const handleEditKnowledgeBase = useCallback(async (base: KnowledgeBase) => {
     const newBase = await EditKnowledgeBasePopup.show({ base })
-    if (newBase && newBase?.id !== base.id) {
+    // 二轮审查 f2-26：这里曾只在 `newBase.id !== base.id`（迁移换库）时更新——普通编辑（同 id）
+    // 让 `selectedBase` 长期指向编辑前的旧对象。它被传给 `KnowledgeSearchPopup.show`，
+    // 而 `knowledgeBaseApi.searchKnowledgeBase` 直接用传入对象的 `threshold`/`documentCount`
+    // 做阈值过滤与截断 → 页面快捷键打开的检索用**旧阈值/旧截断数**，与导航栏图标入口行为不一致，
+    // 表现为"设置了不生效"。改为编辑返回后无条件采用新对象。
+    if (newBase) {
       setSelectedBase(newBase)
     }
   }, [])
@@ -43,6 +51,18 @@ const KnowledgePage: FC = () => {
   useEffect(() => {
     const hasSelectedBase = bases.find((base) => base.id === selectedBase?.id)
     !hasSelectedBase && setSelectedBase(bases[0])
+  }, [bases, selectedBase])
+
+  // 二轮审查 f2-26（第二面）：`selectedBase` 是快照，库里同一 id 的对象被别处更新（改名、改
+  // threshold/documentCount、预处理回填）后它不会跟着变。这里在 `bases` 换引用时把新对象同步回来，
+  // 保证页面快捷键检索（`KnowledgeSearchPopup.show({ base: selectedBase })`）用的是当前配置。
+  // 只在"同一 id 的对象引用变了"时 setState，故不会自持成环。
+  useEffect(() => {
+    if (!selectedBase) return
+    const current = bases.find((base) => base.id === selectedBase.id)
+    if (current && current !== selectedBase) {
+      setSelectedBase(current)
+    }
   }, [bases, selectedBase])
 
   const getMenuItems = useCallback(
@@ -79,9 +99,19 @@ const KnowledgePage: FC = () => {
             window.modal.confirm({
               title: t('knowledge.delete_confirm'),
               centered: true,
-              onOk: () => {
-                setSelectedBase(undefined)
-                deleteKnowledgeBase(base.id)
+              // r2-10：`deleteKnowledgeBase` 返回 `Promise<boolean>`。必须等真实结果再改选中态：
+              // 旧写法先 `setSelectedBase(undefined)` 再 `void` 掉 promise，删除失败时界面停在
+              // 「库还在、主区却没有选中项」的分歧态，用户以为已经删掉了。
+              onOk: async () => {
+                try {
+                  const deleted = await deleteKnowledgeBase(base.id)
+                  setSelectedBase(deleted ? undefined : base)
+                } catch (error) {
+                  // hook 承诺不 reject；走到这里说明投影阶段出了意外，同样不得静默。
+                  logger.error(`Failed to delete knowledge base ${base.id}`, error as Error)
+                  window.toast.error(t('knowledge.delete_base_failed'))
+                  setSelectedBase(base)
+                }
               }
             })
           }

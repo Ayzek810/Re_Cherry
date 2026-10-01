@@ -1,6 +1,9 @@
+import { loggerService } from '@logger'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ThemedToken } from 'shiki/core'
+
+const logger = loggerService.withContext('useCodeHighlight')
 
 interface UseCodeHighlightOptions {
   rawLines: string[]
@@ -57,19 +60,29 @@ export const useCodeHighlight = ({ rawLines, language, callerId }: UseCodeHighli
 
           // 传入完整内容，让 ShikiStreamService 检测变化并处理增量高亮
           const result = await highlightStreamingCode(contentToProcess, language, callerId)
+          try {
+            // 已经卸载：丢掉结果并打断循环，不再写 state
+            if (!mountedRef.current) return
 
-          // 已经卸载：丢掉结果并打断循环，不再写 state
-          if (!mountedRef.current) return
-
-          // 如有结果，更新 tokenLines
-          if (result.lines.length > 0 || result.recall !== 0) {
-            setTokenLines((prev) => {
-              return result.recall === -1
-                ? result.lines
-                : [...prev.slice(0, Math.max(0, prev.length - result.recall)), ...result.lines]
-            })
+            // 如有结果，更新 tokenLines
+            if (result.lines.length > 0 || result.recall !== 0) {
+              setTokenLines((prev) => {
+                return result.recall === -1
+                  ? result.lines
+                  : [...prev.slice(0, Math.max(0, prev.length - result.recall)), ...result.lines]
+              })
+            }
+          } catch {
+            // r2-09：高亮服务改为对失败 throw。这里必须兜住——否则 `void highlightLines()`
+            // 的调用点会变成未处理拒绝。降级为纯文本（空 token 行，消费方已有 `?? []` 回落）。
+            setTokenLines([])
+            break
           }
         }
+      } catch (error) {
+        // r2-09：高亮失败不再返回伪造成"看起来合法"的单行 token。
+        logger.warn('[useCodeHighlight] streaming highlight failed; degrading this block to plain text', error as Error)
+        setTokenLines([])
       } finally {
         processingRef.current = false
       }

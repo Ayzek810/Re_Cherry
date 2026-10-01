@@ -203,10 +203,18 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({
         <Button
           onClick={() => setIsFullscreen(!isFullscreen)}
           type="text"
+          // c2-40：图标按钮只有 icon、没有 children/title/aria-label，读屏读成无名按钮。
+          aria-label={isFullscreen ? t('settings.shortcuts.exit_fullscreen') : t('appMenu.toggleFullscreen')}
           icon={isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           className="nodrag"
         />
-        <Button onClick={onClose} type="text" icon={<X size={16} />} className="nodrag" />
+        <Button
+          onClick={onClose}
+          type="text"
+          aria-label={t('common.close')}
+          icon={<X size={16} />}
+          className="nodrag"
+        />
       </HeaderRight>
     </ModalHeader>
   )

@@ -24,16 +24,35 @@ export interface DiagnosisContext {
   modelId?: string
 }
 
+/**
+ * 诊断候选模型（r2-41）。
+ *
+ * 旧实现只放一个 `defaultModel`，且用 `!models.some(...)` 检查**刚刚建好的空数组**——
+ * 那是恒真死分支，所以列表最多 1 个元素；当失败模型就是默认模型、或用户没配默认模型时
+ * 列表为空，`for` 一次都不跑就直接抛「All diagnosis models failed」（且 `lastError` 是 `null`），
+ * 向用户报告「所有诊断模型都失败」而实际一个都没试。
+ *
+ * 现在的语义：候选 = 快速模型 ∪ 默认模型，跳过正在失败的那个模型，去重。
+ * 列表为空时返回空数组，由调用方给出**明确**的「未配置可用于诊断的模型」，不伪装成「都失败了」。
+ */
 async function buildModelsToTry(context?: DiagnosisContext): Promise<Model[]> {
-  const defaultModel = store.getState().llm.defaultModel
+  const llm = store.getState().llm
+  const candidates = [llm.quickModel, llm.defaultModel]
   const models: Model[] = []
 
-  // User's default model as fallback (skip if same as failing model)
-  if (defaultModel && defaultModel.id !== context?.modelId && !models.some((m) => m.id === defaultModel.id)) {
-    models.push(defaultModel)
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    if (candidate.id === context?.modelId) continue
+    if (models.some((m) => m.id === candidate.id)) continue
+    models.push(candidate)
   }
 
   return models
+}
+
+/** 没有可用诊断模型时的显式错误（区别于「都试过了但都失败」）。 */
+function noDiagnosisModelError(): Error {
+  return new Error('No model is configured for error diagnosis; set a default or quick model in settings')
 }
 
 function buildContextHint(errorInfo: Record<string, unknown>, context?: DiagnosisContext): string {
@@ -171,17 +190,23 @@ Output: {"summary":"OpenAI API key is invalid or expired","category":"auth","exp
   const content = JSON.stringify(errorInfo)
 
   const modelsToTry = await buildModelsToTry(context)
+  if (modelsToTry.length === 0) {
+    throw noDiagnosisModelError()
+  }
   let lastError: Error | null = null
 
   for (const model of modelsToTry) {
     try {
-      const response = await fetchGenerate({ prompt, content, model })
-      if (!response) {
-        logger.warn(`Empty response from model ${model.id}, trying next`)
-        lastError = new Error(`Empty response from model: ${model.id}`)
+      // r2-41：`fetchGenerate` 用返回值表达失败（不 reject），必须解构 error 才能区分
+      // 「模型返回空」与「调用失败（401/超时/网络）」——旧实现把两者都读成「空响应」。
+      const { text, error: generateError } = await fetchGenerate({ prompt, content, model })
+      if (!text) {
+        const reason = generateError ?? `Empty response from model: ${model.id}`
+        logger.warn(`Diagnosis got no usable text from model ${model.id}: ${reason}`)
+        lastError = new Error(reason)
         continue
       }
-      return parseResponse(response)
+      return parseResponse(text)
     } catch (err) {
       logger.warn(`Diagnosis failed with model ${model.id}`, err as Error)
       lastError = err as Error
@@ -202,12 +227,17 @@ export async function classifyErrorByAI(error: SerializedError, language: string
   const content = `Error: ${error.name}: ${error.message}`
 
   const modelsToTry = await buildModelsToTry()
+  // 未配置模型不是失败：本函数契约是「拿不到摘要就返回空串」，由调用方回落规则分类。
+  if (modelsToTry.length === 0) {
+    logger.warn('classifyErrorByAI: no model configured for error diagnosis, skipping AI classification')
+    return ''
+  }
 
   for (const model of modelsToTry) {
     try {
-      const response = await fetchGenerate({ prompt, content, model })
-      if (response?.trim()) {
-        return response.trim()
+      const { text } = await fetchGenerate({ prompt, content, model })
+      if (text?.trim()) {
+        return text.trim()
       }
     } catch {
       continue

@@ -301,45 +301,36 @@ export const EmptyState: FC<CherryEmptyStateProps> = ({ preset, title, descripti
   )
 }
 
-// fork 缝：V2 ReorderableList → 顺序列表。拖拽排序未实现（fork 未引入 dnd 面）：items 的顺序
-// 即渲染顺序，ConfigList 的 onReorder 通道保留（move-to-top 按钮可用）；dragging 恒 false。
-// itemStyle/gap 接收不消费（间距由消费点的 className 决定）。
+// fork 缝：V2 ReorderableList → 顺序列表（**无拖拽**）。
+//
+// 二轮审查 f2-46：旧实现把 `onReorder/disabled/gap` 显式丢弃（`void onReorder`），却在每张卡片上
+// 渲染一个 `cursor-grab` 的拖拽把手、并把 `dragging` 恒置 false——"渲染承诺了交互但语义为空"，
+// 用户按住把手拖动毫无反应且没有任何提示。这里按审查给出的降级臂处理：**去掉假通道**，
+// 顺序只由消费点常显的"置顶"按钮改变（ConfigList.handleMoveToTop → onReorder 真正生效）。
+// 形态保留 V2 的 `{items, visibleItems, getId, renderItem}`：items 的顺序就是渲染顺序，
+// visibleItems 是过滤后的可见子集（搜索态下仍能按源顺序取 index）。
 interface CherryReorderableListProps<T> {
   items: T[]
   visibleItems?: T[]
   getId: (item: T) => string
-  onReorder: (nextItems: T[]) => void | Promise<void>
-  disabled?: boolean
-  gap?: string
   itemStyle?: CSSProperties
-  renderItem: (item: T, index: number, state: { dragging: boolean }) => ReactNode
+  renderItem: (item: T, index: number) => ReactNode
 }
 
 export function ReorderableList<T>({
   items,
   visibleItems,
   getId,
-  onReorder,
-  disabled,
-  gap,
   itemStyle,
   renderItem
 }: CherryReorderableListProps<T>) {
-  void getId
-  void onReorder
-  void disabled
-  void gap
   const shown = visibleItems ?? items
   const indexById = new Map(items.map((item, index) => [item as unknown, index]))
   return (
     <div className="space-y-2" style={itemStyle}>
       {shown.map((item, visibleIndex) => {
         const sourceIndex = indexById.get(item as unknown) ?? visibleIndex
-        return (
-          <div key={getId(item)} data-dragging={false}>
-            {renderItem(item, sourceIndex, { dragging: false })}
-          </div>
-        )
+        return <div key={getId(item)}>{renderItem(item, sourceIndex)}</div>
       })}
     </div>
   )

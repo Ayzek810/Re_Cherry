@@ -3,7 +3,7 @@ import { ActionIconButton } from '@renderer/components/Buttons'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import { isGenerateImageModel, isVisionModel } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useSetting } from '@renderer/hooks/useSettings'
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import FileManager from '@renderer/services/FileManager'
 import PasteService from '@renderer/services/PasteService'
@@ -50,7 +50,11 @@ const MessageBlockEditor: FC<Props> = ({ message, topicId, onSave, onResend, onC
   const model = assistant.model || assistant.defaultModel
   // v0.3.1 识图通道补全：转述模型（无视觉路由用它把图转成文字）。未配置=同另两栏，需用时明错。
   const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
-  const { pasteLongTextAsFile, pasteLongTextThreshold, fontSize, sendMessageShortcut, enableSpellCheck } = useSettings()
+  const pasteLongTextAsFile = useSetting('pasteLongTextAsFile')
+  const pasteLongTextThreshold = useSetting('pasteLongTextThreshold')
+  const fontSize = useSetting('fontSize')
+  const sendMessageShortcut = useSetting('sendMessageShortcut')
+  const enableSpellCheck = useSetting('enableSpellCheck')
   const { t } = useTranslation()
   const textareaRef = useRef<TextAreaRef>(null)
   const isUserMessage = message.role === 'user'
@@ -217,15 +221,35 @@ const MessageBlockEditor: FC<Props> = ({ message, topicId, onSave, onResend, onC
   const handleSave = async () => {
     if (isProcessing) return
     setIsProcessing(true)
-    const updatedBlocks = await processEditedBlocks()
-    onSave(updatedBlocks)
+    try {
+      const updatedBlocks = await processEditedBlocks()
+      // oxlint 的 await-thenable 依据 prop 的声明类型（`=> void`）判定，但这里 await 是**必要**的：
+      // 解构出的回调即使同步抛错也能被本 catch 接到（去掉 await 会漏掉同步抛出、只留未处理拒绝）。
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await onSave(updatedBlocks)
+    } catch (error) {
+      // processEditedBlocks 的附件上传失败会从这里冒泡（旧实现无人 catch）；onSave 内部自报错误并保持编辑器打开
+      logger.error('Failed to save edited message blocks:', error as Error)
+      window.toast.error(t('message.edit.save_failed'))
+    } finally {
+      // 任何路径都必须解锁：旧实现没有 finally，失败后保存/重发键永久置灰，用户只能关掉编辑器丢掉编辑
+      setIsProcessing(false)
+    }
   }
 
   const handleResend = async () => {
     if (isProcessing) return
     setIsProcessing(true)
-    const updatedBlocks = await processEditedBlocks()
-    onResend(updatedBlocks)
+    try {
+      const updatedBlocks = await processEditedBlocks()
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      await onResend(updatedBlocks)
+    } catch (error) {
+      logger.error('Failed to resend edited message:', error as Error)
+      window.toast.error(t('message.edit.resend_failed'))
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {

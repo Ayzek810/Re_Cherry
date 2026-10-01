@@ -17,9 +17,6 @@ const handlers: {
   messageEditor?: PasteHandler
 } = {}
 
-// 初始化标志
-let isInitialized = false
-
 /**
  * 处理粘贴事件的通用服务
  * 处理各种粘贴场景，包括文本和文件
@@ -130,23 +127,14 @@ export const getLastFocusedComponent = (): ComponentType => {
 }
 
 /**
- * 初始化全局粘贴事件监听
- * 应用启动时只调用一次
- */
-export const init = () => {
-  if (isInitialized) return
-
-  // 添加全局粘贴事件监听
-  document.addEventListener('paste', async (event) => {
-    await handleGlobalPaste(event)
-  })
-
-  isInitialized = true
-  logger.verbose('Global paste handler initialized')
-}
-
-/**
  * 注册组件的粘贴处理函数
+ *
+ * r2-58：原先还有一个 `init()` 在 document 上挂全局 `paste` 监听并路由到这里的 handler。
+ * 那条路径**不可达**：唯一的初始化点是 inputbar，而 inputbar 的活跃元素恒为 textarea，
+ * `handleGlobalPaste` 开头的守卫（INPUT/TEXTAREA/contenteditable ⇒ 直接 return false）
+ * 让路由与兜底分支永远拿不到事件；真正的粘贴入口是各组件自己的 `onPaste`
+ *（`InputbarCore.tsx:577`、`MessageEditor.tsx`）。故删除 `init`/`handleGlobalPaste`/`isInitialized`，
+ * 只保留注册表本身。
  */
 export const registerHandler = (component: ComponentType, handler: PasteHandler) => {
   if (!component) return
@@ -166,45 +154,10 @@ export const unregisterHandler = (component: ComponentType) => {
   delete handlers[component]
 }
 
-/**
- * 全局粘贴处理函数，根据最后聚焦的组件路由粘贴事件
- */
-const handleGlobalPaste = async (event: ClipboardEvent): Promise<boolean> => {
-  // 如果当前有活动元素且是输入区域，不执行全局处理
-  const activeElement = document.activeElement
-  if (
-    activeElement &&
-    (activeElement.tagName === 'INPUT' ||
-      activeElement.tagName === 'TEXTAREA' ||
-      activeElement.getAttribute('contenteditable') === 'true')
-  ) {
-    return false
-  }
-
-  // 根据最后聚焦的组件调用相应处理程序
-  if (lastFocusedComponent && handlers[lastFocusedComponent]) {
-    const handler = handlers[lastFocusedComponent]
-    if (handler) {
-      return await handler(event)
-    }
-  }
-
-  // 如果没有匹配的处理程序，默认使用inputbar处理
-  if (handlers.inputbar) {
-    const handler = handlers.inputbar
-    if (handler) {
-      return await handler(event)
-    }
-  }
-
-  return false
-}
-
 export default {
   handlePaste,
   setLastFocusedComponent,
   getLastFocusedComponent,
-  init,
   registerHandler,
   unregisterHandler
 }

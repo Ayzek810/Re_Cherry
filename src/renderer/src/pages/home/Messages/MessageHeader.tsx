@@ -6,7 +6,6 @@ import { APP_NAME, AppLogo, isLocalAi } from '@renderer/config/env'
 import { getModelLogoById } from '@renderer/config/models'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import useAvatar from '@renderer/hooks/useAvatar'
-import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMessageStyle, useSettings } from '@renderer/hooks/useSettings'
 import { getMessageModelId } from '@renderer/services/MessagesService'
@@ -22,6 +21,8 @@ import { memo, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
+import { useChatContextValue } from './ChatContextProvider'
+
 interface Props {
   message: Message
   assistant: Assistant
@@ -35,7 +36,7 @@ const getAvatarSource = (isLocalAi: boolean, modelId: string | undefined) => {
   return modelId ? getModelLogoById(modelId) : undefined
 }
 
-const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGroupContextMessage }) => {
+const MessageHeader: FC<Props> = memo(({ assistant, model, message, isGroupContextMessage }) => {
   const avatar = useAvatar()
   const { theme } = useTheme()
   const { userName, sidebarIcons } = useSettings()
@@ -43,7 +44,7 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, topic, isGro
   const { isBubbleStyle } = useMessageStyle()
   const { openMinappById } = useMinappPopup()
 
-  const { isMultiSelectMode, selectedMessageIds, handleSelectMessage } = useChatContext(topic)
+  const { isMultiSelectMode, selectedMessageIds, handleSelectMessage } = useChatContextValue()
 
   const isSelected = selectedMessageIds?.includes(message.id)
 

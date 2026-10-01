@@ -82,6 +82,8 @@ const NotesPage: FC = () => {
   const lastFilePathRef = useRef<string | undefined>(undefined)
   const isRenamingRef = useRef(false)
   const isCreatingNoteRef = useRef(false)
+  // f2-38：树装载的单调序号——只有最后一次请求的结果可以写回 notesTree。
+  const refreshSequenceRef = useRef(0)
   const pendingScrollRef = useRef<{ lineNumber: number; lineContent?: string } | null>(null)
 
   const activeFilePathRef = useRef<string | undefined>(activeFilePath)
@@ -143,7 +145,13 @@ const NotesPage: FC = () => {
    *
    * 失败语义（二轮审查 f2-33 第 6 条写路径）：读失败**不得**静默——否则用户看到的是"刚建的笔记
    * 不在列表里"这种与数据丢失同形的画面。这里保留旧树（stale-while-error），只补一条可见信号。
-   * @returns true = 本次装载成功；false = 失败（已弹 toast.warning）。
+   *
+   * 乱序语义（二轮审查 f2-38）：本函数被文件 watcher 与每个写操作后调用，是可并发触发的**整体替换**。
+   * 先发起的读若后返回（大目录 readdir + IPC 抖动），会把旧快照装回去——刚建的笔记从列表消失、
+   * 已删的笔记复现，且下面那条"activeFilePath 不在树里就清空"的效应会误判用户在编辑的笔记
+   * 已被删除。故只接受**最后一次**请求的结果（序号守卫），与 `useCurrentCliConfigConnection`
+   * 的 `readGenerationRef` 同法。
+   * @returns true = 本次装载被采纳（或已被更新的一次请求取代）；false = 失败（已弹 toast.warning）。
    */
   const refreshTree = useCallback(async (): Promise<boolean> => {
     if (!notesPath) {
@@ -151,14 +159,22 @@ const NotesPage: FC = () => {
       return true
     }
 
+    const sequence = ++refreshSequenceRef.current
+
     try {
       const rawTree = await loadTree(notesPath)
+      if (sequence !== refreshSequenceRef.current) {
+        return true
+      }
       const sortedTree = sortTree(rawTree, sortType)
       setNotesTree(mergeTreeState(sortedTree))
       return true
     } catch (error) {
       logger.error('Failed to refresh notes tree:', error as Error)
-      window.toast.warning(t('notes.refresh_failed_stale'))
+      // 迟到的失败也不得给用户报错：它已被更新的一次请求取代。
+      if (sequence === refreshSequenceRef.current) {
+        window.toast.warning(t('notes.refresh_failed_stale'))
+      }
       return false
     }
   }, [mergeTreeState, notesPath, sortType, t])
@@ -202,17 +218,20 @@ const NotesPage: FC = () => {
     [activeFilePath, currentContent, invalidateFileContent, t]
   )
 
-  // 防抖保存函数，在停止输入后才保存，避免输入过程中的文件写入
+  // 防抖保存函数，在停止输入后才保存，避免输入过程中的文件写入。
+  // 实例必须"一辈子一个"：改名 / 移动 / 切换文件 / 卸载 / watcher 清理处的 cancel() 只认这一个实例。
+  // 若实例随 `saveCurrentNote` 重建（其依赖含 `currentContent`，保存回包会改它），
+  // 第二次输入的 800ms 定时器就挂在旧实例上，cancel 新实例对它无效 —— 定时器照常触发并按旧路径写文件，
+  // 把刚改名/移动掉的笔记复活出来，形成两个分叉文件。防抖体内部读 ref，实例本身永不更换。
+  const saveCurrentNoteRef = useRef(saveCurrentNote)
   const debouncedSave = useMemo(
     () =>
       debounce((content: string, filePath: string | undefined) => {
-        void saveCurrentNote(content, filePath)
+        void saveCurrentNoteRef.current(content, filePath)
       }, 800), // 800ms防抖延迟
-    [saveCurrentNote]
+    []
   )
 
-  const saveCurrentNoteRef = useRef(saveCurrentNote)
-  const debouncedSaveRef = useRef(debouncedSave)
   const invalidateFileContentRef = useRef(invalidateFileContent)
   const refreshTreeRef = useRef(refreshTree)
 
@@ -238,10 +257,6 @@ const NotesPage: FC = () => {
   useEffect(() => {
     saveCurrentNoteRef.current = saveCurrentNote
   }, [saveCurrentNote])
-
-  useEffect(() => {
-    debouncedSaveRef.current = debouncedSave
-  }, [debouncedSave])
 
   useEffect(() => {
     invalidateFileContentRef.current = invalidateFileContent
@@ -412,9 +427,9 @@ const NotesPage: FC = () => {
       }
 
       // 清理防抖函数
-      debouncedSaveRef.current?.cancel()
+      debouncedSave.cancel()
     }
-  }, [dispatch, notesPath])
+  }, [debouncedSave, dispatch, notesPath])
 
   useEffect(() => {
     const editor = editorRef.current
@@ -599,10 +614,13 @@ const NotesPage: FC = () => {
         const nodeToDelete = findNode(notesTree, nodeId)
         if (!nodeToDelete) return
 
-        // delNode 返回 Promise<boolean>（§9 删除纪律）：false 不是"已删除"的同一件事——
-        // 不改本地状态，交给 refreshTree 对齐真实树。
+        // delNode 返回 Promise<boolean>（§9 删除纪律）：false 不是"已删除"的同一件事。
+        // 本路径没有乐观行可回滚，`refreshTree` 把树对齐到真实状态即是恢复动作；
+        // 但失败仍必须有用户可见信号——否则用户看到的是"点了没反应"。
         const deleted = await delNode(nodeToDelete)
         if (!deleted) {
+          logger.warn(`delNode returned false, node kept: ${nodeToDelete.externalPath}`)
+          window.toast.error(t('notes.delete_failed'))
           await refreshTree()
           return
         }
@@ -655,13 +673,13 @@ const NotesPage: FC = () => {
         }
 
         if (node.type === 'file' && activeFilePath === oldPath) {
-          debouncedSaveRef.current?.cancel()
+          debouncedSave.cancel()
           lastFilePathRef.current = renamed.path
           dispatch(setActiveFilePath(renamed.path))
         } else if (node.type === 'folder' && activeFilePath && activeFilePath.startsWith(`${oldPath}/`)) {
           const suffix = activeFilePath.slice(oldPath.length)
           const nextActivePath = `${renamed.path}${suffix}`
-          debouncedSaveRef.current?.cancel()
+          debouncedSave.cancel()
           lastFilePathRef.current = nextActivePath
           dispatch(setActiveFilePath(nextActivePath))
         }
@@ -679,7 +697,7 @@ const NotesPage: FC = () => {
         }, 500)
       }
     },
-    [activeFilePath, dispatch, notesTree, refreshTree, t, updateStarredPaths, updateExpandedPaths]
+    [activeFilePath, debouncedSave, dispatch, notesTree, refreshTree, t, updateStarredPaths, updateExpandedPaths]
   )
 
   // 处理文件上传
@@ -813,14 +831,14 @@ const NotesPage: FC = () => {
         if (normalizedActivePath) {
           if (normalizedActivePath === sourceNode.externalPath) {
             // Cancel debounced save to prevent saving to old path
-            debouncedSaveRef.current?.cancel()
+            debouncedSave.cancel()
             lastFilePathRef.current = destinationPath
             dispatch(setActiveFilePath(destinationPath))
           } else if (sourceNode.type === 'folder' && normalizedActivePath.startsWith(`${sourceNode.externalPath}/`)) {
             const suffix = normalizedActivePath.slice(sourceNode.externalPath.length)
             const newActivePath = `${destinationPath}${suffix}`
             // Cancel debounced save to prevent saving to old path
-            debouncedSaveRef.current?.cancel()
+            debouncedSave.cancel()
             lastFilePathRef.current = newActivePath
             dispatch(setActiveFilePath(newActivePath))
           }
@@ -832,7 +850,17 @@ const NotesPage: FC = () => {
         window.toast.error(t('notes.move_failed'))
       }
     },
-    [activeFilePath, dispatch, notesPath, notesTree, refreshTree, t, updateStarredPaths, updateExpandedPaths]
+    [
+      activeFilePath,
+      debouncedSave,
+      dispatch,
+      notesPath,
+      notesTree,
+      refreshTree,
+      t,
+      updateStarredPaths,
+      updateExpandedPaths
+    ]
   )
 
   // 处理节点排序

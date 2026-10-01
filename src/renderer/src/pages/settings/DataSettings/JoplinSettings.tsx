@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import { useCommittedInput } from './useCommittedInput'
 
 const JoplinSettings: FC = () => {
   const { t } = useTranslation()
@@ -24,22 +25,16 @@ const JoplinSettings: FC = () => {
   const joplinUrl = useSelector((state: RootState) => state.settings.joplinUrl)
   const joplinExportReasoning = useSelector((state: RootState) => state.settings.joplinExportReasoning)
 
-  const handleJoplinTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setJoplinToken(e.target.value))
-  }
-
-  const handleJoplinUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setJoplinUrl(e.target.value))
-  }
-
-  const handleJoplinUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    let url = e.target.value
-    // 确保URL以/结尾，但只在失去焦点时执行
-    if (url && !url.endsWith('/')) {
-      url = `${url}/`
-      dispatch(setJoplinUrl(url))
+  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片（此前 token / url 是 onChange 直接 dispatch，
+  // 每个字符一次整片持久化，且 token 还挂了 onChange + onBlur 两次提交同一个值）。
+  // URL 的既有规范化（补结尾 /）保留在提交回调里。
+  const tokenField = useCommittedInput(joplinToken, (next) => dispatch(setJoplinToken(next)))
+  const urlField = useCommittedInput(joplinUrl, (next) => {
+    const normalized = next && !next.endsWith('/') ? `${next}/` : next
+    if (normalized !== (joplinUrl ?? '')) {
+      dispatch(setJoplinUrl(normalized))
     }
-  }
+  })
 
   const handleJoplinConnectionCheck = async () => {
     try {
@@ -70,7 +65,8 @@ const JoplinSettings: FC = () => {
   const handleJoplinHelpClick = () => {
     openSmartMinapp({
       id: 'joplin-help',
-      name: 'Joplin Help',
+      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
+      name: t('settings.data.joplin.title'),
       url: 'https://joplinapp.org/help/apps/clipper',
       logo: AppLogo
     })
@@ -89,9 +85,9 @@ const JoplinSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Input
             type="text"
-            value={joplinUrl || ''}
-            onChange={handleJoplinUrlChange}
-            onBlur={handleJoplinUrlBlur}
+            value={urlField.value}
+            onChange={urlField.onChange}
+            onBlur={urlField.onBlur}
             style={{ width: 315 }}
             placeholder={t('settings.data.joplin.url_placeholder')}
           />
@@ -111,9 +107,9 @@ const JoplinSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Space.Compact style={{ width: '100%' }}>
             <Input.Password
-              value={joplinToken || ''}
-              onChange={handleJoplinTokenChange}
-              onBlur={handleJoplinTokenChange}
+              value={tokenField.value}
+              onChange={tokenField.onChange}
+              onBlur={tokenField.onBlur}
               placeholder={t('settings.data.joplin.token_placeholder')}
               style={{ width: '100%' }}
             />

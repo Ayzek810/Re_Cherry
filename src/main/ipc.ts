@@ -85,7 +85,35 @@ const exportService = new ExportService()
 // obsidian vault 只读枚举（V1 移植）：配置路径在首次调用时惰性解析，不占启动序
 const obsidianVaultService = new ObsidianVaultService()
 
+// v1 二轮审查 m2-15：`registerIpc` 函数体里有**进程级**副作用，此前无任何幂等保护。
+// `ipcMain.handle` 重复注册只是覆盖（无害），但 `on` / `subscribe` 是**累积**的：
+// `mcpService.onServerLog` 返回的解绑函数被丢弃、`mainWindow.on('maximize')` 按窗口闭包挂载。
+// 任何第二次调用（macOS 激活重建主窗、将来加多窗口、dev 下模块重求值）都会让日志事件被重复
+// 转发、旧窗口闭包随监听一起被内存持有。两处各自收口：全局订阅只接一次并被登记，
+// 窗口监听按窗口实例记账（WeakSet，同一窗口不重复挂）。
+let mcpLogUnsubscribe: (() => void) | null = null
+
+const wiredWindowListeners = new WeakSet<BrowserWindow>()
+
+function wireMainWindowListeners(mainWindow: BrowserWindow): void {
+  if (wiredWindowListeners.has(mainWindow)) return
+  wiredWindowListeners.add(mainWindow)
+
+  // Send maximized state changes to renderer（回调捕获本次传入的窗口；窗口销毁后不再 send）
+  mainWindow.on('maximize', () => {
+    if (mainWindow.isDestroyed()) return
+    mainWindow.webContents.send(IpcChannel.Windows_MaximizedChanged, true)
+  })
+
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow.isDestroyed()) return
+    mainWindow.webContents.send(IpcChannel.Windows_MaximizedChanged, false)
+  })
+}
+
 export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
+  wireMainWindowListeners(mainWindow)
+
   const notificationService = new NotificationService()
 
   const checkMainWindow = () => {
@@ -430,6 +458,8 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.File_Upload, fileManager.uploadFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Clear, fileManager.clear.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Read, fileManager.readFile.bind(fileManager))
+  // r2-79/⑥：区分「不存在」与「读失败」的读通道（渲染层播种自定义小应用要用）
+  ipcMain.handle(IpcChannel.File_ReadById, fileManager.readFileById.bind(fileManager))
   ipcMain.handle(IpcChannel.File_ReadExternal, fileManager.readExternalFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Delete, fileManager.deleteFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_DeleteDir, fileManager.deleteDir.bind(fileManager))
@@ -490,15 +520,16 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   // export
   ipcMain.handle(IpcChannel.Export_Word, exportService.exportToWord.bind(exportService))
 
-  // obsidian（V1 移植）：vault 枚举与目录结构只读查询
+  // obsidian（V1 移植）：vault 枚举与目录结构只读查询。
+  // v1 二轮审查 m2-24：目录结构遍历改为异步 IO（千级笔记不再阻塞主进程消息循环），故 await。
   ipcMain.handle(IpcChannel.Obsidian_GetVaults, () => {
     return obsidianVaultService.getVaults()
   })
-  ipcMain.handle(IpcChannel.Obsidian_GetFiles, (_event, vaultName: string) => {
+  ipcMain.handle(IpcChannel.Obsidian_GetFiles, async (_event, vaultName: string) => {
     if (typeof vaultName !== 'string' || vaultName.trim().length === 0) {
       return []
     }
-    return obsidianVaultService.getFilesByVaultName(vaultName)
+    return await obsidianVaultService.getFilesByVaultName(vaultName)
   })
 
   // open path
@@ -570,14 +601,8 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     return mainWindow.isMaximized()
   })
 
-  // Send maximized state changes to renderer
-  mainWindow.on('maximize', () => {
-    mainWindow.webContents.send(IpcChannel.Windows_MaximizedChanged, true)
-  })
-
-  mainWindow.on('unmaximize', () => {
-    mainWindow.webContents.send(IpcChannel.Windows_MaximizedChanged, false)
-  })
+  // Send maximized state changes to renderer：监听器在 registerIpc 入口按窗口记账挂载
+  // （wireMainWindowListeners，v1 二轮审查 m2-15），此处不再重复挂。
 
   // VertexAI
   // mini window
@@ -709,11 +734,17 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     })
 
     // 服务器日志事件（主 → 渲染）：MCPService 只维护回调注册表，转发由调用方接线。
-    mcpService.onServerLog((log) => {
-      if (!mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(IpcChannel.Mcp_ServerLog, log)
-      }
-    })
+    // m2-15：订阅只接一次；解绑函数登记下来（原来被丢弃，订阅只增不减）。
+    // 目标窗口在**发送时**从 windowService 取（而非闭包捕获首次传入的窗口）——主窗可在运行期
+    // 重建，被捕获的旧窗口只会让日志静默丢失。
+    if (mcpLogUnsubscribe === null) {
+      mcpLogUnsubscribe = mcpService.onServerLog((log) => {
+        const target = windowService.getMainWindow()
+        if (target && !target.isDestroyed()) {
+          target.webContents.send(IpcChannel.Mcp_ServerLog, log)
+        }
+      })
+    }
   }
 
   // webview

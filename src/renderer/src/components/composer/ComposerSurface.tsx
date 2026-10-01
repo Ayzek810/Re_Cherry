@@ -119,6 +119,25 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
     }
   }, [])
 
+  // c2-08：受控 textarea 的 `rows={1}` 不会自增高——长草稿被压在单行里。这里让编辑区真正消费
+  // `useComposerEditorFrameSizing` 发布的 `--composer-editor-max-height`：折叠态按内容长高，
+  // 到 `max(220px,40vh)` 封顶后由 textarea 自己滚动；展开/手动拖高态由 frame 的固定高度决定，
+  // 编辑区回落到 `height: 100%`（与 `editorContentStyle.height` 一致），不再自增高。
+  const syncTextareaHeight = useCallback(() => {
+    const element = textareaRef.current
+    if (!element) return
+    if (hasCustomHeight) {
+      element.style.height = '100%'
+      return
+    }
+    element.style.height = 'auto'
+    element.style.height = `${element.scrollHeight}px`
+  }, [hasCustomHeight])
+
+  useEffect(() => {
+    syncTextareaHeight()
+  }, [props.text, syncTextareaHeight])
+
   const getDraft = useCallback(
     (): ComposerSerializedDraft => ({
       text: props.text,
@@ -376,6 +395,9 @@ const ComposerSurface = (props: ComposerSurfaceProps) => {
               // TipTap 类名 ⇒ 该变量无人消费，文字贴着边框。这里就地消费同一变量（值仍由
               // useComposerEditorFrameSizing 这个单一来源给出），不改 V2 的数值。
               padding: 'var(--composer-editor-padding)',
+              // c2-08：同一处消费高度契约的封顶值。缺了它，「输入长草稿不增高、也不在该高度滚动」
+              // 的根因就一直在（配合上面的 syncTextareaHeight 自增高）。
+              maxHeight: 'var(--composer-editor-max-height)',
               fontSize: props.fontSize,
               lineHeight: 1.4
             }}

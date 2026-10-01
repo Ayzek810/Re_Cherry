@@ -56,6 +56,65 @@ import { defaultWebSearchProviders } from './websearch'
 
 const logger = loggerService.withContext('Migrate')
 
+/**
+ * r2-73 迁移层纪律（**未闭环，登记在案**）：
+ *
+ * ## 失败语义（写分支前必须知道的两件事）
+ *
+ * 1. **失败的分支保留旧 state**：每个分支的 `catch` 只记 error 并 `return state`，
+ *    没有 rethrow。所以该次迁移对这份状态**没有生效**。
+ * 2. **版本照常推进**：`createMigrate` 不检查返回值。只要 `migrate(state, version)` 正常
+ *    resolve，redux-persist 就把 `_persist.version` 写成 `store/index.ts` 的 `version`
+ *    （当前 229），而该分支**下次启动不会再跑**。
+ *
+ * 两条合起来的结论：
+ *
+ * > **一个分支只运行一次。跑失败 = 这次迁移永久丢失，
+ * >  且 `_persist.version` 已推进到最高键，此后无法通过再次启动自愈。**
+ *
+ * 因此每个分支必须写成「只跑一次也安全」：
+ * - 允许失败即返回原 state 的分支只做**加法/幂等改写**（补种缺省项、去重、修字段），
+ *   因为下次启动它不再跑；绝不能让「没跑成」在当前进程留下半成品状态。
+ * - 不可幂等、必须成功的迁移不要放进这条链（它没有重试机制）。
+ * - 失败与「迁移成功但无事可做」只差一条日志，所以**每个 catch 必须带自己的 key**
+ *   （`logger.error('migrate <key> error')`），否则事后无法判断哪一支丢失了。
+ *
+ * ## 为什么不 rethrow
+ *
+ * `createMigrate` 返回的 Promise 一旦 reject，redux-persist 的 `_rehydrate` 会拒绝，
+ * rehydrate 流程中断——对老用户是「启动即丢整份持久化态」，比"丢掉一支迁移"更糟。
+ * 在把「迁移失败」升级为「启动失败」之前，需要先给出可回滚的落盘策略（备份 + 明确用户提示），
+ * 那是独立一轮的工作。因此本文件把该缺口显式登记，而不是在 catch 里假装成功。
+ *
+ * ## 本轮计数（r2-73 复核，可复现：按 `^  '\d+':` 数分支头、按 `catch (` 数 catch）
+ *
+ * | 项 | before | after |
+ * |----|--------|-------|
+ * | 迁移分支数 | 213 | 213（未增删） |
+ * | 最高键 | `'229'` | `'229'`（= `store/index.ts` 的 `version: 229`） |
+ * | `catch` 数 | 204 | 213 |
+ * | 带 `logger.error('migrate <key> error')` 面包屑 | 112 | 213（**0 静默**） |
+ * | 无 try/catch 的分支（异常直接冒泡 = 中断 rehydrate） | 9（`'34'`/`'44'`/`'45'`/`'46'`/`'51'`/`'65'`/`'111'`/`'137'`/`'152'`） | **0** |
+ *
+ * 两点取证：
+ * 1. `'159'` 的 catch 曾把面包屑写成 `158`（同一日志里出现两次 158），已改为自己的键。
+ * 2. 「无保护分支会中断 rehydrate」不是推断：`node_modules/redux-persist/lib/createMigrate.js:39-47`
+ *    把 `migrationKeys.reduce(...)`（逐支调用 `migrations[versionKey](state)`）整体包在
+ *    `try { … } catch (err) { return Promise.reject(err) }` 里——分支同步抛出 ⇒
+ *    `migrate()` 返回 rejected Promise ⇒ `_rehydrate` 拒绝 ⇒ 本次 rehydrate 中断
+ *    （老用户启动即丢整份持久化态）。这 9 支已全部补齐 try/catch：失败只记日志并保留旧 state，
+ *    与其他 204 支同语义。
+ *
+ * 已核对、无需硬抛的分支：这 9 支都是「无副作用占位」或「给 settings 补一个标量默认值」
+ * （`'45'` 写 `enableTopicNaming`、`'51'` 清 `topicNamingPrompt`），不产生任何后续分支**依赖的
+ * 输入形状**。因此它们的失败可以（也应当）吞掉：吞掉的后果最多是某个默认值没补上，远小于
+ * 「整份持久化丢失」。没有任何一支需要「失败即中断」。
+ *
+ * 后续若要真正闭环，必须与 `store/index.ts` 的 `version` 一起改（家规 §7：两者恒等），
+ * 例如新增一个 > 229 的「迁移失败对账」键并在 `store/index.ts` 挂失败哨兵——
+ * 该改动跨越本工作区的写权限，见 `reports/audit2-fixes/_stage/G.md` 的「跨区请求」。
+ */
+
 // remove logo base64 data to reduce the size of the state
 function removeMiniAppIconsFromState(state: RootState) {
   if (state.minapps) {
@@ -87,9 +146,24 @@ function addMiniApp(state: RootState, id: string) {
     const app = allMinApps.find((app) => app.id === id)
     if (app) {
       if (!state.minapps.enabled.find((app) => app.id === id)) {
-        state.minapps.enabled.push(app)
+        // r2-29：`{ ...app }` 副本是必需的——`allMinApps` 是 `config/minapps.ts` 的模块表，
+        // push 同一引用会让持久化状态与配置模板共用元素（同文件 removeMiniAppIconsFromState
+        // 早已用 `map((app) => ({ ...app, logo: undefined }))` 克隆，addMiniApp 是漏网的那半）。
+        state.minapps.enabled.push({ ...app })
       }
     }
+  }
+}
+
+/** r2-81：把默认表的 provider **克隆**进 state（models 数组与元素一并克隆）。
+ *  `SYSTEM_PROVIDERS` / `SYSTEM_PROVIDERS_CONFIG` 的值是 `config/providers.ts` 的模块单例；
+ *  同一迁移链里后面的分支会就地改写 provider（`provider.anthropicApiHost = …`、
+ *  `provider.type = …`），共享引用会让改写落到模块默认表上，被 `store/llm.ts` 的 initialState
+ *  继承（同 r2-28/r2-29；websearch 侧 addWebSearchProvider 已用 `{ ...provider }`）。 */
+function cloneProvider(provider: Provider): Provider {
+  return {
+    ...provider,
+    models: Array.isArray(provider.models) ? provider.models.map((model) => ({ ...model })) : provider.models
   }
 }
 
@@ -98,7 +172,7 @@ function addProvider(state: RootState, id: string) {
   if (!state.llm.providers.find((p) => p.id === id)) {
     const _provider = SYSTEM_PROVIDERS.find((p) => p.id === id)
     if (_provider) {
-      state.llm.providers.push(_provider)
+      state.llm.providers.push(cloneProvider(_provider))
     }
   }
 }
@@ -107,7 +181,7 @@ function addProvider(state: RootState, id: string) {
 function fixMissingProvider(state: RootState) {
   SYSTEM_PROVIDERS.forEach((p) => {
     if (!state.llm.providers.find((provider) => provider.id === p.id)) {
-      state.llm.providers.push(p)
+      state.llm.providers.push(cloneProvider(p))
     }
   })
 }
@@ -212,6 +286,7 @@ const migrateConfig = {
       addProvider(state, 'yi')
       return state
     } catch (error) {
+      logger.error('migrate 2 error', error as Error)
       return state
     }
   },
@@ -220,6 +295,7 @@ const migrateConfig = {
       addProvider(state, 'zhipu')
       return state
     } catch (error) {
+      logger.error('migrate 3 error', error as Error)
       return state
     }
   },
@@ -228,6 +304,7 @@ const migrateConfig = {
       addProvider(state, 'ollama')
       return state
     } catch (error) {
+      logger.error('migrate 4 error', error as Error)
       return state
     }
   },
@@ -236,6 +313,7 @@ const migrateConfig = {
       addProvider(state, 'moonshot')
       return state
     } catch (error) {
+      logger.error('migrate 5 error', error as Error)
       return state
     }
   },
@@ -244,6 +322,7 @@ const migrateConfig = {
       addProvider(state, 'openrouter')
       return state
     } catch (error) {
+      logger.error('migrate 6 error', error as Error)
       return state
     }
   },
@@ -257,6 +336,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 7 error', error as Error)
       return state
     }
   },
@@ -287,6 +367,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 8 error', error as Error)
       return state
     }
   },
@@ -305,6 +386,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 9 error', error as Error)
       return state
     }
   },
@@ -313,6 +395,7 @@ const migrateConfig = {
       addProvider(state, 'baichuan')
       return state
     } catch (error) {
+      logger.error('migrate 10 error', error as Error)
       return state
     }
   },
@@ -322,6 +405,7 @@ const migrateConfig = {
       addProvider(state, 'anthropic')
       return state
     } catch (error) {
+      logger.error('migrate 11 error', error as Error)
       return state
     }
   },
@@ -330,6 +414,7 @@ const migrateConfig = {
       addProvider(state, 'aihubmix')
       return state
     } catch (error) {
+      logger.error('migrate 12 error', error as Error)
       return state
     }
   },
@@ -348,6 +433,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 13 error', error as Error)
       return state
     }
   },
@@ -362,6 +448,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 14 error', error as Error)
       return state
     }
   },
@@ -376,6 +463,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 15 error', error as Error)
       return state
     }
   },
@@ -390,6 +478,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 16 error', error as Error)
       return state
     }
   },
@@ -403,6 +492,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 17 error', error as Error)
       return state
     }
   },
@@ -423,6 +513,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 19 error', error as Error)
       return state
     }
   },
@@ -436,6 +527,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 20 error', error as Error)
       return state
     }
   },
@@ -446,6 +538,7 @@ const migrateConfig = {
       addProvider(state, 'doubao')
       return state
     } catch (error) {
+      logger.error('migrate 21 error', error as Error)
       return state
     }
   },
@@ -454,6 +547,7 @@ const migrateConfig = {
       addProvider(state, 'minimax')
       return state
     } catch (error) {
+      logger.error('migrate 22 error', error as Error)
       return state
     }
   },
@@ -468,6 +562,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 23 error', error as Error)
       return state
     }
   },
@@ -492,6 +587,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 24 error', error as Error)
       return state
     }
   },
@@ -500,6 +596,7 @@ const migrateConfig = {
       addProvider(state, 'github')
       return state
     } catch (error) {
+      logger.error('migrate 25 error', error as Error)
       return state
     }
   },
@@ -508,6 +605,7 @@ const migrateConfig = {
       addProvider(state, 'ocoolai')
       return state
     } catch (error) {
+      logger.error('migrate 26 error', error as Error)
       return state
     }
   },
@@ -521,6 +619,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 27 error', error as Error)
       return state
     }
   },
@@ -533,6 +632,7 @@ const migrateConfig = {
       addProvider(state, 'nvidia')
       return state
     } catch (error) {
+      logger.error('migrate 28 error', error as Error)
       return state
     }
   },
@@ -552,6 +652,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 29 error', error as Error)
       return state
     }
   },
@@ -560,6 +661,7 @@ const migrateConfig = {
       addProvider(state, 'azure-openai')
       return state
     } catch (error) {
+      logger.error('migrate 30 error', error as Error)
       return state
     }
   },
@@ -581,6 +683,7 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 31 error', error as Error)
       return state
     }
   },
@@ -589,6 +692,7 @@ const migrateConfig = {
       addProvider(state, 'hunyuan')
       return state
     } catch (error) {
+      logger.error('migrate 32 error', error as Error)
       return state
     }
   },
@@ -612,18 +716,26 @@ const migrateConfig = {
         }
       }
     } catch (error) {
+      logger.error('migrate 33 error', error as Error)
       return state
     }
   },
   '34': (state: RootState) => {
     // Dexie 已废弃 + 旧数据政策：该版本原为旧话题补 assistantId（读写 Dexie），置空保留版本号
-    return state
+    // （r2-73 补齐：空分支也包 try/catch，让「无保护分支」归零；这里没有失败面，行为逐字不变）
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 34 error', error as Error)
+      return state
+    }
   },
   '35': (state: RootState) => {
     try {
       state.settings.mathEngine = 'KaTeX'
       return state
     } catch (error) {
+      logger.error('migrate 35 error', error as Error)
       return state
     }
   },
@@ -632,6 +744,7 @@ const migrateConfig = {
       state.settings.topicPosition = 'left'
       return state
     } catch (error) {
+      logger.error('migrate 36 error', error as Error)
       return state
     }
   },
@@ -640,6 +753,7 @@ const migrateConfig = {
       state.settings.messageStyle = 'plain'
       return state
     } catch (error) {
+      logger.error('migrate 37 error', error as Error)
       return state
     }
   },
@@ -650,6 +764,7 @@ const migrateConfig = {
       addProvider(state, 'mistral')
       return state
     } catch (error) {
+      logger.error('migrate 38 error', error as Error)
       return state
     }
   },
@@ -659,6 +774,7 @@ const migrateConfig = {
       state.settings.codeStyle = 'auto'
       return state
     } catch (error) {
+      logger.error('migrate 39 error', error as Error)
       return state
     }
   },
@@ -667,6 +783,7 @@ const migrateConfig = {
       state.settings.tray = true
       return state
     } catch (error) {
+      logger.error('migrate 40 error', error as Error)
       return state
     }
   },
@@ -683,6 +800,7 @@ const migrateConfig = {
       })
       return state
     } catch (error) {
+      logger.error('migrate 41 error', error as Error)
       return state
     }
   },
@@ -691,6 +809,7 @@ const migrateConfig = {
       state.settings.proxyMode = state.settings.proxyUrl ? 'custom' : 'none'
       return state
     } catch (error) {
+      logger.error('migrate 42 error', error as Error)
       return state
     }
   },
@@ -701,18 +820,38 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 43 error', error as Error)
       return state
     }
   },
   '44': (state: RootState) => {
-    return state
+    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 分支体逐字不变——这里没有失败面。
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 44 error', error as Error)
+      return state
+    }
   },
   '45': (state: RootState) => {
-    state.settings.enableTopicNaming = true
-    return state
+    try {
+      state.settings.enableTopicNaming = true
+      return state
+    } catch (error) {
+      logger.error('migrate 45 error', error as Error)
+      return state
+    }
   },
   '46': (state: RootState) => {
-    return state
+    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 分支体逐字不变——这里没有失败面。
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 46 error', error as Error)
+      return state
+    }
   },
   '47': (state: RootState) => {
     try {
@@ -723,6 +862,7 @@ const migrateConfig = {
       })
       return state
     } catch (error) {
+      logger.error('migrate 47 error', error as Error)
       return state
     }
   },
@@ -749,6 +889,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 48 error', error as Error)
       return state
     }
   },
@@ -769,6 +910,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 49 error', error as Error)
       return state
     }
   },
@@ -777,12 +919,18 @@ const migrateConfig = {
       addProvider(state, 'jina')
       return state
     } catch (error) {
+      logger.error('migrate 50 error', error as Error)
       return state
     }
   },
   '51': (state: RootState) => {
-    state.settings.topicNamingPrompt = ''
-    return state
+    try {
+      state.settings.topicNamingPrompt = ''
+      return state
+    } catch (error) {
+      logger.error('migrate 51 error', error as Error)
+      return state
+    }
   },
   '54': (state: RootState) => {
     try {
@@ -801,6 +949,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 54 error', error as Error)
       return state
     }
   },
@@ -814,6 +963,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 55 error', error as Error)
       return state
     }
   },
@@ -841,6 +991,7 @@ const migrateConfig = {
 
       return state
     } catch (error) {
+      logger.error('migrate 57 error', error as Error)
       return state
     }
   },
@@ -866,6 +1017,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 58 error', error as Error)
       return state
     }
   },
@@ -874,6 +1026,7 @@ const migrateConfig = {
       addMiniApp(state, 'flowith')
       return state
     } catch (error) {
+      logger.error('migrate 59 error', error as Error)
       return state
     }
   },
@@ -882,6 +1035,7 @@ const migrateConfig = {
       state.settings.multiModelMessageStyle = 'fold'
       return state
     } catch (error) {
+      logger.error('migrate 60 error', error as Error)
       return state
     }
   },
@@ -895,6 +1049,7 @@ const migrateConfig = {
       })
       return state
     } catch (error) {
+      logger.error('migrate 61 error', error as Error)
       return state
     }
   },
@@ -907,6 +1062,7 @@ const migrateConfig = {
       })
       return state
     } catch (error) {
+      logger.error('migrate 62 error', error as Error)
       return state
     }
   },
@@ -915,6 +1071,7 @@ const migrateConfig = {
       addMiniApp(state, '3mintop')
       return state
     } catch (error) {
+      logger.error('migrate 63 error', error as Error)
       return state
     }
   },
@@ -924,11 +1081,19 @@ const migrateConfig = {
       addProvider(state, 'baidu-cloud')
       return state
     } catch (error) {
+      logger.error('migrate 64 error', error as Error)
       return state
     }
   },
   '65': (state: RootState) => {
-    return state
+    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 分支体逐字不变——这里没有失败面。
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 65 error', error as Error)
+      return state
+    }
   },
   '66': (state: RootState) => {
     try {
@@ -939,6 +1104,7 @@ const migrateConfig = {
 
       return state
     } catch (error) {
+      logger.error('migrate 66 error', error as Error)
       return state
     }
   },
@@ -957,6 +1123,7 @@ const migrateConfig = {
 
       return state
     } catch (error) {
+      logger.error('migrate 67 error', error as Error)
       return state
     }
   },
@@ -967,6 +1134,7 @@ const migrateConfig = {
       addProvider(state, 'lmstudio')
       return state
     } catch (error) {
+      logger.error('migrate 68 error', error as Error)
       return state
     }
   },
@@ -977,6 +1145,7 @@ const migrateConfig = {
       state.settings.gridPopoverTrigger = 'hover'
       return state
     } catch (error) {
+      logger.error('migrate 69 error', error as Error)
       return state
     }
   },
@@ -989,6 +1158,7 @@ const migrateConfig = {
       })
       return state
     } catch (error) {
+      logger.error('migrate 70 error', error as Error)
       return state
     }
   },
@@ -1000,7 +1170,8 @@ const migrateConfig = {
         appIds.forEach((id) => {
           const app = allMinApps.find((app) => app.id === id)
           if (app) {
-            state.minapps.enabled.push(app)
+            // r2-29 同类：不 push `config/minapps` 的模块对象（addMiniApp 已改克隆，此处同步）。
+            state.minapps.enabled.push({ ...app })
           }
         })
         // remove zhihu-zhiada
@@ -1012,6 +1183,7 @@ const migrateConfig = {
 
       return state
     } catch (error) {
+      logger.error('migrate 71 error', error as Error)
       return state
     }
   },
@@ -1030,6 +1202,7 @@ const migrateConfig = {
 
       return state
     } catch (error) {
+      logger.error('migrate 72 error', error as Error)
       return state
     }
   },
@@ -1065,6 +1238,7 @@ const migrateConfig = {
 
       return state
     } catch (error) {
+      logger.error('migrate 73 error', error as Error)
       return state
     }
   },
@@ -1073,6 +1247,7 @@ const migrateConfig = {
       addProvider(state, 'xirang')
       return state
     } catch (error) {
+      logger.error('migrate 74 error', error as Error)
       return state
     }
   },
@@ -1083,6 +1258,7 @@ const migrateConfig = {
       addMiniApp(state, 'zhihu')
       return state
     } catch (error) {
+      logger.error('migrate 75 error', error as Error)
       return state
     }
   },
@@ -1091,6 +1267,7 @@ const migrateConfig = {
       addProvider(state, 'tencent-cloud-ti')
       return state
     } catch (error) {
+      logger.error('migrate 76 error', error as Error)
       return state
     }
   },
@@ -1106,6 +1283,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 77 error', error as Error)
       return state
     }
   },
@@ -1116,6 +1294,7 @@ const migrateConfig = {
       removeMiniAppIconsFromState(state)
       return state
     } catch (error) {
+      logger.error('migrate 78 error', error as Error)
       return state
     }
   },
@@ -1124,6 +1303,7 @@ const migrateConfig = {
       addProvider(state, 'gpustack')
       return state
     } catch (error) {
+      logger.error('migrate 79 error', error as Error)
       return state
     }
   },
@@ -1133,6 +1313,7 @@ const migrateConfig = {
       state.llm.providers = moveProvider(state.llm.providers, 'alayanew', 10)
       return state
     } catch (error) {
+      logger.error('migrate 80 error', error as Error)
       return state
     }
   },
@@ -1141,6 +1322,7 @@ const migrateConfig = {
       addProvider(state, 'copilot')
       return state
     } catch (error) {
+      logger.error('migrate 81 error', error as Error)
       return state
     }
   },
@@ -1161,6 +1343,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 82 error', error as Error)
       return state
     }
   },
@@ -1194,6 +1377,7 @@ const migrateConfig = {
       state.settings.gridPopoverTrigger = 'click'
       return state
     } catch (error) {
+      logger.error('migrate 85 error', error as Error)
       return state
     }
   },
@@ -1206,6 +1390,7 @@ const migrateConfig = {
         }))
       }
     } catch (error) {
+      logger.error('migrate 86 error', error as Error)
       return state
     }
     return state
@@ -1216,6 +1401,7 @@ const migrateConfig = {
       state.settings.showOpenedMinappsInSidebar = true
       return state
     } catch (error) {
+      logger.error('migrate 87 error', error as Error)
       return state
     }
   },
@@ -1225,6 +1411,7 @@ const migrateConfig = {
       void (state as any)
       return state
     } catch (error) {
+      logger.error('migrate 88 error', error as Error)
       return state
     }
   },
@@ -1233,6 +1420,7 @@ const migrateConfig = {
       removeMiniAppFromState(state, 'aistudio')
       return state
     } catch (error) {
+      logger.error('migrate 89 error', error as Error)
       return state
     }
   },
@@ -1241,6 +1429,7 @@ const migrateConfig = {
       state.settings.enableDataCollection = true
       return state
     } catch (error) {
+      logger.error('migrate 90 error', error as Error)
       return state
     }
   },
@@ -1257,6 +1446,7 @@ const migrateConfig = {
       addProvider(state, 'qiniu')
       return state
     } catch (error) {
+      logger.error('migrate 91 error', error as Error)
       return state
     }
   },
@@ -1266,6 +1456,7 @@ const migrateConfig = {
       state.llm.providers = moveProvider(state.llm.providers, 'qiniu', 12)
       return state
     } catch (error) {
+      logger.error('migrate 92 error', error as Error)
       return state
     }
   },
@@ -1277,6 +1468,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 93 error', error as Error)
       return state
     }
   },
@@ -1285,6 +1477,7 @@ const migrateConfig = {
       state.settings.enableQuickPanelTriggers = false
       return state
     } catch (error) {
+      logger.error('migrate 94 error', error as Error)
       return state
     }
   },
@@ -1306,6 +1499,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 95 error', error as Error)
       return state
     }
   },
@@ -1317,6 +1511,7 @@ const migrateConfig = {
       delete state.settings.showAssistantIcon
       return state
     } catch (error) {
+      logger.error('migrate 96 error', error as Error)
       return state
     }
   },
@@ -1332,6 +1527,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 97 error', error as Error)
       return state
     }
   },
@@ -1345,6 +1541,7 @@ const migrateConfig = {
       })
       return state
     } catch (error) {
+      logger.error('migrate 98 error', error as Error)
       return state
     }
   },
@@ -1377,6 +1574,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 99 error', error as Error)
       return state
     }
   },
@@ -1577,7 +1775,14 @@ const migrateConfig = {
     }
   },
   '111': (state: RootState) => {
-    return state
+    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 分支体逐字不变——这里没有失败面。
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 111 error', error as Error)
+      return state
+    }
   },
   '112': (state: RootState) => {
     try {
@@ -2124,7 +2329,14 @@ const migrateConfig = {
     }
   },
   '137': (state: RootState) => {
-    return state
+    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 分支体逐字不变——这里没有失败面。
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 137 error', error as Error)
+      return state
+    }
   },
   '138': (state: RootState) => {
     try {
@@ -2199,6 +2411,7 @@ const migrateConfig = {
       addMiniApp(state, 'longcat')
       return state
     } catch (error) {
+      logger.error('migrate 143 error', error as Error)
       return state
     }
   },
@@ -2306,7 +2519,14 @@ const migrateConfig = {
     }
   },
   '152': (state: RootState) => {
-    return state
+    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 分支体逐字不变——这里没有失败面。
+    try {
+      return state
+    } catch (error) {
+      logger.error('migrate 152 error', error as Error)
+      return state
+    }
   },
   '153': (state: RootState) => {
     try {
@@ -2386,7 +2606,7 @@ const migrateConfig = {
       fixMissingProvider(state)
       return state
     } catch (error) {
-      logger.error('migrate 158 error', error as Error)
+      logger.error('migrate 159 error', error as Error)
       return state
     }
   },
@@ -3152,6 +3372,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 210 error', error as Error)
       return state
     }
   },
@@ -3165,6 +3386,7 @@ const migrateConfig = {
       state.settings.enableQuickAssistant = false
       return state
     } catch (error) {
+      logger.error('migrate 211 error', error as Error)
       return state
     }
   },
@@ -3174,6 +3396,7 @@ const migrateConfig = {
       state.settings.readClipboardAtStartup = false
       return state
     } catch (error) {
+      logger.error('migrate 212 error', error as Error)
       return state
     }
   },
@@ -3190,6 +3413,7 @@ const migrateConfig = {
       )
       return state
     } catch (error) {
+      logger.error('migrate 213 error', error as Error)
       return state
     }
   },
@@ -3202,6 +3426,7 @@ const migrateConfig = {
       }
       return state
     } catch (error) {
+      logger.error('migrate 214 error', error as Error)
       return state
     }
   },

@@ -112,13 +112,19 @@ const StatusDot = styled.div<{ $status: 'pending' | 'processing' | 'new' }>`
 `
 
 export default React.memo(StatusIcon, (prevProps, nextProps) => {
+  const prevItem = prevProps.base.items.find((item) => item.id === prevProps.sourceId)
+  const nextItem = nextProps.base.items.find((item) => item.id === nextProps.sourceId)
   return (
     prevProps.sourceId === nextProps.sourceId &&
     prevProps.type === nextProps.type &&
     prevProps.base.id === nextProps.base.id &&
     prevProps.progress === nextProps.progress &&
+    // 输出依赖 `item.uniqueId`（绿勾 vs 灰点）与 `isPreprocessed`（Tooltip 文案，
+    // 二轮审查 f2-17）——漏比这两个输入会让比较器在预处理完成时判定"props 相等"，
+    // 组件跳过渲染，图标与 Tooltip 永远停在"嵌入完成"。
+    prevItem?.uniqueId === nextItem?.uniqueId &&
+    prevProps.isPreprocessed === nextProps.isPreprocessed &&
     prevProps.getProcessingStatus(prevProps.sourceId) === nextProps.getProcessingStatus(nextProps.sourceId) &&
-    prevProps.base.items.find((item) => item.id === prevProps.sourceId)?.processingError ===
-      nextProps.base.items.find((item) => item.id === nextProps.sourceId)?.processingError
+    prevItem?.processingError === nextItem?.processingError
   )
 })

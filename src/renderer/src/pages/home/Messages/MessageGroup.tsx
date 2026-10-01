@@ -1,9 +1,8 @@
 import { loggerService } from '@logger'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { MessageEditingProvider } from '@renderer/context/MessageEditingContext'
-import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMessageOperations } from '@renderer/hooks/useMessageOperations'
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useSetting } from '@renderer/hooks/useSettings'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { MultiModelMessageStyle } from '@renderer/store/settings'
@@ -16,6 +15,7 @@ import type { ComponentProps, WheelEvent as ReactWheelEvent } from 'react'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 
+import { useChatContextValue } from './ChatContextProvider'
 import MessageItem from './Message'
 import MessageGroupMenuBar from './MessageGroupMenuBar'
 import ResendPageBar from './ResendPageBar'
@@ -32,8 +32,10 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
 
   // Hooks
   const { editMessage } = useMessageOperations(topic)
-  const { multiModelMessageStyle: multiModelMessageStyleSetting, gridColumns, gridPopoverTrigger } = useSettings()
-  const { isMultiSelectMode } = useChatContext(topic)
+  const multiModelMessageStyleSetting = useSetting('multiModelMessageStyle')
+  const gridColumns = useSetting('gridColumns')
+  const gridPopoverTrigger = useSetting('gridPopoverTrigger')
+  const { isMultiSelectMode } = useChatContextValue()
   const { setTimeoutTimer } = useTimer()
 
   const isGrouped = isMultiSelectMode ? false : messageLength > 1 && messages.every((m) => m.role === 'assistant')

@@ -155,7 +155,7 @@ const MessageErrorInfo: React.FC<{ block: ErrorMessageBlock; message: Message }>
         type="button"
         className="absolute top-2 right-2 flex h-5.5 w-5.5 cursor-pointer items-center justify-center rounded border-none bg-transparent opacity-0 transition-all duration-150 hover:bg-[color-mix(in_srgb,var(--color-status-warning)_12%,transparent)] hover:text-(--color-status-warning) group-hover:opacity-100"
         onClick={onRemoveBlock}
-        aria-label="close"
+        aria-label={t('common.close')}
         title={t('common.close')}>
         <X size={14} />
       </button>

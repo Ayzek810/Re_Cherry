@@ -99,10 +99,14 @@ export class WindowService {
       ...(isLinux ? { icon: linuxIcon } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
+        // 以下三项是**有意保留**的载荷面（v1 二轮 k2-06 复核结论，勿"顺手"收紧）：
+        //  · sandbox:false —— preload 需要 Node 能力（contextBridge + electronAPI 收窄后的白名单）；
+        //  · webSecurity:false —— 渲染层直接向各 provider 发跨源请求（模型列表/流式对话），关掉同源策略
+        //    是这条通路的既有前提；收紧要同时把 provider 调用整体搬到主进程；
+        //  · webviewTag:true —— 小程序（MinApp）就是 webview 容器。
         sandbox: false,
         webSecurity: false,
         webviewTag: true,
-        allowRunningInsecureContent: true,
         zoomFactor: configManager.getZoomFactor(),
         backgroundThrottling: false
       }

@@ -6,7 +6,7 @@ import type { Topic } from '@renderer/types'
 import { Button, Divider, Empty, Segmented } from 'antd'
 import dayjs from 'dayjs'
 import { groupBy, isEmpty, orderBy } from 'lodash'
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import styled from 'styled-components'
@@ -15,11 +15,13 @@ type SortType = 'createdAt' | 'updatedAt'
 
 type Props = {
   keywords: string
-  onClick: (topic: Topic) => void
+  /** 选中话题。名字不叫 `onClick`：`React.HTMLAttributes` 里已有一个鼠标事件版本的 `onClick`，
+   * 两者交叉成一个不可能满足的类型（父组件此前只能靠 `as any` 绕过）。（f2-58） */
+  onTopicClick: (topic: Topic) => void
   onSearch: () => void
 } & React.HTMLAttributes<HTMLDivElement>
 
-const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props }) => {
+const TopicsHistory: React.FC<Props> = ({ keywords, onTopicClick, onSearch, ...props }) => {
   const { t } = useTranslation()
   const { handleScroll, containerRef } = useScrollPosition('TopicsHistory')
   const [sortType, setSortType] = useState<SortType>('createdAt')
@@ -27,13 +29,20 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props 
   // FIXME: db 中没有 topic.name 等信息，只能从 store 获取
   const topics = useSelector(selectAllTopics)
 
-  const filteredTopics = topics.filter((topic) => {
-    return topic.name.toLowerCase().includes(keywords.toLowerCase())
-  })
+  // 全量扫描只随输入/排序变化重算（f2-58）：本组件已 memo，但面板自身的任何重渲染
+  // （消息加载、滚动容器变化）都不该再跑一次 filter + orderBy + groupBy + dayjs。
+  const filteredTopics = useMemo(
+    () => topics.filter((topic) => topic.name.toLowerCase().includes(keywords.toLowerCase())),
+    [topics, keywords]
+  )
 
-  const groupedTopics = groupBy(orderBy(filteredTopics, sortType, 'desc'), (topic) => {
-    return dayjs(topic[sortType]).format('MM/DD')
-  })
+  const groupedTopics = useMemo(
+    () =>
+      groupBy(orderBy(filteredTopics, sortType, 'desc'), (topic) => {
+        return dayjs(topic[sortType]).format('MM/DD')
+      }),
+    [filteredTopics, sortType]
+  )
 
   if (isEmpty(filteredTopics)) {
     return (
@@ -66,7 +75,7 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props 
             <Date>{date}</Date>
             <Divider style={{ margin: '5px 0' }} />
             {items.map((topic) => (
-              <TopicItem key={topic.id} onClick={() => onClick(topic)}>
+              <TopicItem key={topic.id} onClick={() => onTopicClick(topic)}>
                 <TopicName>{topic.name.substring(0, 50)}</TopicName>
                 <TopicDate>{dayjs(topic[sortType]).format('HH:mm')}</TopicDate>
               </TopicItem>
@@ -136,4 +145,5 @@ const TopicDate = styled.div`
   margin-left: 10px;
 `
 
-export default TopicsHistory
+// memo（f2-58）：父组件 HistoryPage 每敲一个字符都会重渲染，本组件否则要跟着全量重排一次。
+export default memo(TopicsHistory)

@@ -92,7 +92,12 @@ export async function autoNameKernelTopic(topicId: string): Promise<void> {
     let name = ''
     if (getStoreSetting('enableTopicNaming')) {
       try {
-        const { text } = await fetchMessagesSummary({ messages })
+        // r2-63：`fetchMessagesSummary` 用返回值 `{text:null, error}` 表达调用失败（不 reject），
+        // 旧实现只解构 `text`，于是真正的失败连一条日志都没有、静默走兜底名。
+        const { text, error: summaryError } = await fetchMessagesSummary({ messages })
+        if (summaryError) {
+          logger.warn('topicNaming: summary call returned an error for topic ' + topicId + ': ' + summaryError)
+        }
         name = (text ?? '').trim()
       } catch (error) {
         // 后台自动动作不弹 toast（要醒目去用手动"自动命名"菜单）；降级到兜底

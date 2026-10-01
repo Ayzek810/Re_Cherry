@@ -32,6 +32,8 @@ type KernelHitResult = Omit<SearchResult, 'snippet'>
 
 interface Props extends React.HTMLAttributes<HTMLDivElement> {
   keywords: string
+  /** 面板是否可见。隐藏只影响展示，**不**影响检索入参（f2-60）。 */
+  visible?: boolean
   onMessageClick: (message: Message) => void
   onTopicClick: (topic: Topic) => void
 }
@@ -188,7 +190,7 @@ const buildSearchSnippet = (text: string, terms: string[], matchMode: KeywordMat
   return outputLines.join('\n')
 }
 
-const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...props }) => {
+const SearchResults: FC<Props> = ({ keywords, visible = true, onMessageClick, onTopicClick, ...props }) => {
   const { t } = useTranslation()
   const { handleScroll, containerRef } = useScrollPosition('SearchResults')
   const observerRef = useRef<MutationObserver | null>(null)
@@ -374,10 +376,13 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
         <List
           itemLayout="vertical"
           dataSource={sortedSearchResults}
+          data-testid="history-search-list"
           pagination={{
             pageSize: 10,
             hideOnSinglePage: true
           }}
+          // `display: none` 的容器里不再保留可被读屏/自动化命中的内容（f2-60）。
+          aria-hidden={!visible}
           style={{ opacity: isLoading ? 0 : 1 }}
           renderItem={({ message, topic, snippet }) => (
             <List.Item>

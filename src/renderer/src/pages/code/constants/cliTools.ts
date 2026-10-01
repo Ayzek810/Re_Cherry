@@ -58,11 +58,17 @@ export const CLI_TOOL_PROVIDER_MAP: Record<CodeCli, (providers: Provider[]) => P
   // 叶子消费对号：fork 无 authOptional/apiKeys 表（主进程缝②无 key 显式报错）→ 凭据臂收窄为
   // apiKey 非空；fork 无端点方言表（resolveEndpointDialect 未移植，协议/developer-role 修正由
   // 内核按 provider.type + compat 运行时决定）→ `(developerRole || hasAnthropic)` 臂不保留。
+  //
+  // 二轮审查 f2-44：判据必须落在 **key 值** 上。`toCliProvider`（cliConfig/providerView.ts:124）
+  // 投影出的 `apiKeys: [{ key: provider.apiKey ?? '', isEnabled: true }]` 里 `isEnabled` 是硬编码
+  // true，未配 key 的服务商 key 是空串 ⇒ 只看 `isEnabled` 的谓词恒真，缝注声明的"无 key 的服务商
+  // 不进列表"从未生效，用户会选中一个主进程必然拒绝的服务商
+  //（DeepSeekHarnessService.ts:370 `Provider … has no enabled API key`）。
   [CodeCli.DEEPSEEK_HARNESS]: (providers) =>
     providers.filter(
       (p) =>
         !isLoginBasedProvider(p) &&
-        (p.apiKeys?.some((key) => key.isEnabled) ?? false) &&
+        (p.apiKeys?.some((key) => key.isEnabled && key.key.trim().length > 0) ?? false) &&
         (hasAnthropic(p) || hasOpenAILike(p))
     ),
   // hermes 谓词逐字（叶子见上方 fork 缝）。

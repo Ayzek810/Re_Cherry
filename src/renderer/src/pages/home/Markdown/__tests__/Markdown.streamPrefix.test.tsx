@@ -44,9 +44,11 @@ vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: vi.fn() }
 }))
 
-vi.mock('@renderer/hooks/useSettings', () => ({
-  useSettings: () => ({ mathEngine: 'none', mathEnableSingleDollar: true })
-}))
+vi.mock('@renderer/hooks/useSettings', () => {
+  const settings = { mathEngine: 'none', mathEnableSingleDollar: true }
+  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  return { useSettings: () => settings, useSetting: (key: string) => settings[key as keyof typeof settings] }
+})
 
 vi.mock('@renderer/services/EventService', () => ({
   EVENT_NAMES: { EDIT_CODE_BLOCK: 'EDIT_CODE_BLOCK' },

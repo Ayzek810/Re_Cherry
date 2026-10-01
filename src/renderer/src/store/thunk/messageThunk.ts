@@ -18,10 +18,7 @@ import { loggerService } from '@logger'
 import { isVisionModel } from '@renderer/config/models'
 import i18n from '@renderer/i18n'
 import FileManager from '@renderer/services/FileManager'
-import { BlockManager } from '@renderer/services/messageStreaming/BlockManager'
-import { createCallbacks } from '@renderer/services/messageStreaming/callbacks'
 import { endSpan } from '@renderer/services/SpanManagerService'
-import type { StreamProcessorCallbacks } from '@renderer/services/StreamProcessingService'
 import { isWebSearchEnabled } from '@renderer/services/WebSearchService'
 import store from '@renderer/store'
 import { moveTopicToHead, updateTopicUpdatedAt } from '@renderer/store/assistants'
@@ -30,7 +27,8 @@ import { type Assistant, type FileMetadata, type Model, type Topic } from '@rend
 import type { FileMessageBlock, ImageMessageBlock, Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { addAbortController } from '@renderer/utils/abortController'
-import { createAssistantMessage, resetAssistantMessage } from '@renderer/utils/messageUtils/create'
+import { serializeError } from '@renderer/utils/error'
+import { createAssistantMessage, createErrorBlock, resetAssistantMessage } from '@renderer/utils/messageUtils/create'
 import { getTopicQueue, waitForTopicQueue } from '@renderer/utils/queue'
 import { isRestoredTopicRow } from '@renderer/utils/topicBranch'
 import { BUILTIN_TOOL_IDS, EXTERNAL_TOOL_IDS } from '@shared/config/agentTools'
@@ -222,8 +220,6 @@ const dispatchMultiModelResponses = async (
 }
 
 // --- End Helper Function ---
-/** 数据库已废弃：旧流式路径的持久化钩子改为 no-op（UI 由内核事件驱动）。 */
-const noopSave = async (): Promise<void> => {}
 
 // 发送和处理助手响应的实现函数，话题提示词在此拼接
 const fetchAndProcessAssistantResponseImpl = async (
@@ -247,35 +243,12 @@ const fetchAndProcessAssistantResponseImpl = async (
     ? { ...origAssistant, prompt: `${basePrompt}\n${topic.prompt}` }
     : { ...origAssistant, prompt: basePrompt }
   const assistantMsgId = assistantMessage.id
-  let callbacks: StreamProcessorCallbacks = {}
   try {
     dispatch(newMessagesActions.setTopicLoading({ topicId, loading: true }))
-
-    // 创建 BlockManager 实例（持久化钩子为 no-op：Dexie 已废弃，UI 由内核事件驱动）
-    const blockManager = new BlockManager({
-      dispatch,
-      getState,
-      saveUpdatedBlockToDB: noopSave,
-      saveUpdatesToDB: noopSave,
-      assistantMsgId,
-      topicId,
-      throttledBlockUpdate,
-      cancelThrottledBlockUpdate
-    })
 
     const allMessagesForTopic = selectMessagesForTopic(getState(), topicId)
 
     const userMessageId = assistantMessage.askId
-
-    callbacks = createCallbacks({
-      blockManager,
-      dispatch,
-      getState,
-      topicId,
-      assistantMsgId,
-      saveUpdatesToDB: noopSave,
-      assistant
-    })
 
     // r2-13：中止登记按**话题**收口（发新回合即摘掉上一回合的键）。此前这里还新建了一个
     // 从未被接线的 `AbortController`（真正的取消走 dshTopicStop），每条用户消息留下一个
@@ -456,13 +429,33 @@ const fetchAndProcessAssistantResponseImpl = async (
       error: error,
       modelName: assistant.model?.name
     })
-    // 统一错误处理：确保 loading 状态被正确设置，避免队列任务卡住
+    // r2-40：V1 回调编排（callbacks/* + BlockManager）已整树删除——它除 `onError` 外没有任何
+    // 调用者。发送路径（会话建册 / 附件规范化 / dshTopicSend）抛错时内核不会发 turn/end，
+    // 所以 kernelChat.finishTurn 的终态收尾（错误块 + 消息状态 + loading）不会发生。
+    // 这里就地补齐**等价且可见**的终态，绝不静默（CLAUDE.md §9）：消息会一直停在 PENDING 且
+    // 零块，渲染出来就是一条「空回复」——失败伪装成空结果。
     try {
-      callbacks.onError?.(error)
-    } catch (callbackError) {
-      logger.error('Error in onError callback:', callbackError as Error)
+      const errorBlock = createErrorBlock(assistantMsgId, serializeError(error))
+      dispatch(upsertManyBlocks([errorBlock]))
+      dispatch(
+        newMessagesActions.upsertBlockReference({
+          messageId: assistantMsgId,
+          blockId: errorBlock.id,
+          status: errorBlock.status,
+          blockType: errorBlock.type
+        })
+      )
+      dispatch(
+        newMessagesActions.updateMessage({
+          topicId,
+          messageId: assistantMsgId,
+          updates: { status: AssistantMessageStatus.ERROR }
+        })
+      )
+    } catch (finalizeError) {
+      logger.error('Error finalizing failed send:', finalizeError as Error)
     } finally {
-      // 确保无论如何都设置 loading 为 false（onError 回调中已设置，这里是保险）
+      // 确保无论如何都设置 loading 为 false（失败回合不得把加载动画挂在话题上）
       dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
     }
   }
@@ -963,8 +956,11 @@ export const loadTopicMessagesThunk =
     dispatch(newMessagesActions.setCurrentTopicId(topicId))
 
     // Skip if already cached and not forcing reload
+    // X14：显式 `return Promise.resolve()`（不是裸 `return`）——本 thunk 在任一分支上都必须返回
+    // 可 `.catch()` 的 Promise：消费方（`hooks/useTopic.ts`）用「挂载即对账加载 + 防未处理拒绝」
+    // 的形态直接 `.catch()` 调用结果，裸 `return` 会得到 `undefined` → 渲染期 TypeError。
     if (!forceReload && state.messages.messageIdsByTopic[topicId]) {
-      return
+      return Promise.resolve()
     }
 
     try {
@@ -984,7 +980,8 @@ export const loadTopicMessagesThunk =
           blockCount: kernelData.blocks.length
         })
       } else if (isRestoredTopicRow(topicId)) {
-        logger.warn(`Failed to load topic "${topicId}" from kernel, showing empty history`)
+        // X9：恢复行却读不出来 = 失败，不是"空历史"——如实抛出，由消费方渲染错误态与重试。
+        throw new Error(`kernel has no readable session for restored topic ${topicId}`)
       } else {
         // 本进程内新建、尚未首发建册：内核本来就没有它的会话，"没有历史"是正常状态而不是失败
         // （旧写法在这里一律 warn，真机日志里把"新建话题点一下"污染成了一条 not found 报错）。
@@ -992,7 +989,8 @@ export const loadTopicMessagesThunk =
       }
     } catch (error) {
       logger.error(`Failed to load messages for topic ${topicId}:`, error as Error)
-      // Could dispatch an error action here if needed
+      // X9：失败必须能被消费方看见（失败不得伪装成"确实没有消息"）。调用方按 rejection 决定错误态。
+      throw error
     } finally {
       dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
     }

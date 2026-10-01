@@ -454,9 +454,33 @@ export const useKnowledgeBases = () => {
     dispatch(renameBase({ baseId, name }))
   }
 
-  const deleteKnowledgeBase = (baseId: string) => {
+  /**
+   * 删除知识库（整库）。
+   *
+   * 删除纪律（CLAUDE.md §9 / 二轮审查 r2-10）：**返回 `Promise<boolean>`**，失败必须给出
+   * 用户可见信号，且不得留下「界面已删、库还在」的分歧。
+   *
+   * 实现顺序是**先真实删除、后改投影**（而不是像 `removeItem` 那样乐观删+回滚）：整库删除的
+   * IPC 由 `store/knowledge.ts` 的 `deleteBase` reducer 以 fire-and-forget 方式发起（越界文件，
+   * 不可改），hook 若也乐观删并同时发起第二次 IPC，两次 `close()` 会并发打在同一句柄上——
+   * 第二次失败会导致「删成功却回滚」的更坏结果。先 await 再 dispatch 时，reducer 那次调用落在
+   * 已关闭的 store / 已删除的目录上（主进程 deleteBase 对它 force+catch，是幂等 no-op），
+   * 因此失败路径不需要回滚：**失败时 redux 一行都没动**。
+   *
+   * @returns true = 已删除；false = 失败（redux 未变更，已弹 toast.error）。
+   */
+  const deleteKnowledgeBase = async (baseId: string): Promise<boolean> => {
     const base = bases.find((b) => b.id === baseId)
-    if (!base) return
+    if (!base) return false
+
+    try {
+      await knowledgeBaseApi.delete(baseId)
+    } catch (error) {
+      logger.error(`Failed to delete knowledge base ${baseId}`, error as Error)
+      window.toast.error(t('knowledge.delete_base_failed', { defaultValue: 'Failed to delete the knowledge base.' }))
+      return false
+    }
+
     dispatch(deleteBase({ baseId }))
 
     // remove assistant knowledge_base
@@ -472,6 +496,7 @@ export const useKnowledgeBases = () => {
     })
 
     updateAssistants(_assistants)
+    return true
   }
 
   const updateKnowledgeBases = (bases: KnowledgeBase[]) => {

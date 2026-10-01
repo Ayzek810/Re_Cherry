@@ -1,7 +1,11 @@
+import { loggerService } from '@logger'
+import i18n from '@renderer/i18n'
 import type { RequireSome } from '@renderer/types'
 import { message as antdMessage } from 'antd'
 import type { MessageInstance } from 'antd/es/message/interface'
 import type React from 'react'
+
+const logger = loggerService.withContext('TopViewToast')
 
 // Global message instance for static usage
 let messageApi: MessageInstance | null = null
@@ -129,27 +133,29 @@ export const info = createToast('default')
 /**
  * Display a loading toast notification that resolves with a promise
  * @param args - Toast options object containing a promise to resolve
+ * @returns 该 promise 的结果链。失败不再 `throw`（原先的 rethrow 让链无人接管，
+ *          变成 unhandled rejection，调用方也拿不到成功/失败的收口）。
  */
-export const loading = (args: RequireSome<LoadingToastConfig, 'promise'>): string | null => {
+export const loading = (args: RequireSome<LoadingToastConfig, 'promise'>): Promise<unknown> => {
   const api = getMessageApi()
   const { title, description, icon, promise, timeout, ...restConfig } = args
 
   // Generate unique key for this loading message
   const key = args.key || `loading-${Date.now()}-${Math.random()}`
 
-  // Show loading message
+  // c2-28：四个默认串是用户可见文案，必须过 i18next（中文界面下原样显示英文）。
   api.loading({
-    content: <ToastContent title={title || 'Loading...'} description={description} icon={icon} />,
+    content: <ToastContent title={title || i18n.t('common.loading')} description={description} icon={icon} />,
     duration: 0, // Don't auto-close
     key,
     ...restConfig
   })
 
   // Handle promise resolution
-  promise
+  return promise
     .then((result) => {
       api.success({
-        content: <ToastContent title={title || 'Success'} description={description} />,
+        content: <ToastContent title={title || i18n.t('common.success')} description={description} />,
         duration: timeout !== undefined ? timeout / 1000 : 2,
         key,
         ...restConfig
@@ -157,18 +163,20 @@ export const loading = (args: RequireSome<LoadingToastConfig, 'promise'>): strin
       return result
     })
     .catch((err) => {
+      logger.error('Loading toast promise rejected', err as Error)
       api.error({
         content: (
-          <ToastContent title={title || 'Error'} description={err?.message || description || 'An error occurred'} />
+          <ToastContent
+            title={title || i18n.t('common.error')}
+            description={err?.message || description || i18n.t('error.unknown')}
+          />
         ),
         duration: timeout !== undefined ? timeout / 1000 : 3,
         key,
         ...restConfig
       })
-      throw err
+      return undefined
     })
-
-  return key as string
 }
 
 /**

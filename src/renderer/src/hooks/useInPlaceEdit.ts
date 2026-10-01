@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('useInPlaceEdit')
@@ -121,19 +121,24 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
     }
   }, [saveEdit, isSaving])
 
-  return {
-    isEditing,
-    isSaving,
-    startEdit,
-    saveEdit,
-    cancelEdit,
-    inputProps: {
-      ref: inputRef,
-      value: editValue,
-      onChange: handleInputChange,
-      onKeyDown: handleKeyDown,
-      onBlur: handleBlur,
-      disabled: isSaving // 保存时禁用输入
-    }
-  }
+  // X8：返回值（含 inputProps）每次渲染都是新对象，会把消费方的 memo 全部打穿。
+  // 逐项依赖都是稳定引用/原语，故 memo 只在真实状态变化时换新对象。
+  return useMemo(
+    () => ({
+      isEditing,
+      isSaving,
+      startEdit,
+      saveEdit,
+      cancelEdit,
+      inputProps: {
+        ref: inputRef,
+        value: editValue,
+        onChange: handleInputChange,
+        onKeyDown: handleKeyDown,
+        onBlur: handleBlur,
+        disabled: isSaving // 保存时禁用输入
+      }
+    }),
+    [isEditing, isSaving, startEdit, saveEdit, cancelEdit, editValue, handleInputChange, handleKeyDown, handleBlur]
+  )
 }

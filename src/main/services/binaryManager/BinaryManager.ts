@@ -296,15 +296,21 @@ export class BinaryManager {
     // 打开时的"安装"按钮假象来自 3-5s 的探针窗口（hermes 系统 .exe 的 --version 挂到
     // 超时）。有缓存即秒回旧状态，后台重探完成后 broadcastChanged → 渲染层经
     // onChanged 回路自动刷新。冷却 15s 防重探风暴；安装/卸载后强制重探。
-    if (this.snapshotProbeInFlight) {
-      await this.snapshotProbeInFlight
-      return this.snapshotCache?.data ?? {}
-    }
-    if (this.snapshotCache) {
-      if (Date.now() - this.snapshotCache.at > SNAPSHOT_REFRESH_COOLDOWN_MS) {
+    //
+    // v1 二轮审查 m2-25：判定顺序此前是「重探在飞 ⇒ await 它再返回」，于是**恰好在最该秒回
+    // 的窗口**（后台重探进行中，时长可达探针超时级）读路径反而挂起，同一时刻多个渲染层请求
+    // 一起悬着。改为「有缓存即以缓存作答」，重探结果只经 broadcastChanged 通知刷新；
+    // 只有**完全无缓存**时才 await 首次探针。
+    const cached = this.snapshotCache
+    if (cached) {
+      if (Date.now() - cached.at > SNAPSHOT_REFRESH_COOLDOWN_MS && this.snapshotProbeInFlight === null) {
         this.startBackgroundSnapshotRefresh()
       }
-      return this.snapshotCache.data
+      return cached.data
+    }
+    if (this.snapshotProbeInFlight !== null) {
+      await this.snapshotProbeInFlight
+      return this.snapshotCache?.data ?? {}
     }
     const seeded = await this.readSnapshotCacheFile()
     if (seeded) {

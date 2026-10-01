@@ -2,6 +2,7 @@ import '@renderer/databases'
 
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { getToastUtilities } from '@renderer/components/TopView/toast'
+import { useInjectCustomCss } from '@renderer/hooks/useInjectCustomCss'
 import { useSettings } from '@renderer/hooks/useSettings'
 import store, { persistor } from '@renderer/store'
 import { useEffect } from 'react'
@@ -17,19 +18,8 @@ import HomeWindow from './home/HomeWindow'
 function MiniWindowContent(): React.ReactElement {
   const { customCss } = useSettings()
 
-  useEffect(() => {
-    let customCssElement = document.getElementById('user-defined-custom-css') as HTMLStyleElement
-    if (customCssElement) {
-      customCssElement.remove()
-    }
-
-    if (customCss) {
-      customCssElement = document.createElement('style')
-      customCssElement.id = 'user-defined-custom-css'
-      customCssElement.textContent = customCss
-      document.head.appendChild(customCssElement)
-    }
-  }, [customCss])
+  // r2-65：与主窗口共用同一份注入实现（此前两端各写一遍，任一侧修改都会漂移）。
+  useInjectCustomCss(customCss)
 
   return <HomeWindow />
 }

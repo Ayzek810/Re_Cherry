@@ -119,7 +119,7 @@ const VideoPopupContainer: React.FC<Props> = ({ title, resolve }) => {
       setFileList([{ ...tempFile, status: 'done', url: uploadedFile.path }])
     } catch (error) {
       logger.error(`Failed to upload ${uploadType} file: ${error}`)
-      setFileList([{ ...tempFile, status: 'error', response: '上传失败' }])
+      setFileList([{ ...tempFile, status: 'error', response: t('common.upload_failed', 'Upload failed') }])
       setFile(null)
     }
   }

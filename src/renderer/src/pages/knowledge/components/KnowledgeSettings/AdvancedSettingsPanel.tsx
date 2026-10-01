@@ -1,9 +1,10 @@
 import ModelSelector from '@renderer/components/ModelSelector'
 import { InfoTooltip } from '@renderer/components/TooltipIcons'
 import { isRerankModel } from '@renderer/config/models'
+import type { KnowledgeBaseForm } from '@renderer/hooks/useKnowledgeBaseForm'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getModelUniqId } from '@renderer/services/ModelService'
-import type { KnowledgeBase, PreprocessProvider } from '@renderer/types'
+import type { PreprocessProvider } from '@renderer/types'
 import type { SelectProps } from 'antd'
 import { Alert, InputNumber, Select } from 'antd'
 import { TriangleAlert } from 'lucide-react'
@@ -11,8 +12,9 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingsItem, SettingsPanel } from './styles'
 
+// r2-69：面板操作的是**表单态**（`model` 允许空位 = 用户还没选），不是已提交的 `KnowledgeBase`。
 interface AdvancedSettingsPanelProps {
-  newBase: KnowledgeBase
+  newBase: KnowledgeBaseForm
   selectedDocPreprocessProvider?: PreprocessProvider
   docPreprocessSelectOptions: SelectProps['options']
   handlers: {
@@ -66,7 +68,7 @@ const AdvancedSettingsPanel: React.FC<AdvancedSettingsPanelProps> = ({
           providers={providers}
           predicate={isRerankModel}
           style={{ width: '100%' }}
-          value={getModelUniqId(newBase.rerankModel) || undefined}
+          value={newBase.rerankModel ? getModelUniqId(newBase.rerankModel) : undefined}
           placeholder={t('settings.models.empty')}
           onChange={handleRerankModelChange}
           allowClear

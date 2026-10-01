@@ -4,7 +4,7 @@
  *（withCitationTags 把 [n] 变 sup 药丸）→ registry out-of-band 传给 Markdown
  * 的 Link/CitationSup 挂悬浮胶囊。数据载体块不可见（不渲染为卡）。
  */
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useSetting } from '@renderer/hooks/useSettings'
 import { getModelUniqId } from '@renderer/services/ModelService'
 import type { RootState } from '@renderer/store'
 import { selectFormattedCitationsByBlockId } from '@renderer/store/messageBlock'
@@ -26,7 +26,7 @@ interface Props {
 }
 
 const MainTextBlock: React.FC<Props> = ({ block, citationBlockId, role, mentions = [] }) => {
-  const { renderInputMessageAsMarkdown } = useSettings()
+  const renderInputMessageAsMarkdown = useSetting('renderInputMessageAsMarkdown')
 
   const rawCitations = useSelector((state: RootState) => selectFormattedCitationsByBlockId(state, citationBlockId))
 

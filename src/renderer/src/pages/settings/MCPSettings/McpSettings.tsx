@@ -52,20 +52,21 @@ interface MCPFormValues {
 }
 
 interface Registry {
-  name: string
+  /** i18n 键（v1 二轮审查 s2-40：用户可见的单选标签此前是硬编码中文，en-US 下会露出来）。 */
+  labelKey: string
   url: string
 }
 
 const NpmRegistry: Registry[] = [
-  { name: '淘宝 NPM Mirror', url: 'https://registry.npmmirror.com' },
-  { name: '自定义', url: 'custom' }
+  { labelKey: 'settings.mcp.registry.npm_taobao', url: 'https://registry.npmmirror.com' },
+  { labelKey: 'settings.mcp.registry.custom', url: 'custom' }
 ]
 const PipRegistry: Registry[] = [
-  { name: '清华大学', url: 'https://pypi.tuna.tsinghua.edu.cn/simple' },
-  { name: '阿里云', url: 'http://mirrors.aliyun.com/pypi/simple/' },
-  { name: '中国科学技术大学', url: 'https://mirrors.ustc.edu.cn/pypi/simple/' },
-  { name: '华为云', url: 'https://repo.huaweicloud.com/repository/pypi/simple/' },
-  { name: '腾讯云', url: 'https://mirrors.cloud.tencent.com/pypi/simple/' }
+  { labelKey: 'settings.mcp.registry.pip_tsinghua', url: 'https://pypi.tuna.tsinghua.edu.cn/simple' },
+  { labelKey: 'settings.mcp.registry.pip_aliyun', url: 'http://mirrors.aliyun.com/pypi/simple/' },
+  { labelKey: 'settings.mcp.registry.pip_ustc', url: 'https://mirrors.ustc.edu.cn/pypi/simple/' },
+  { labelKey: 'settings.mcp.registry.pip_huaweicloud', url: 'https://repo.huaweicloud.com/repository/pypi/simple/' },
+  { labelKey: 'settings.mcp.registry.pip_tencent', url: 'https://mirrors.cloud.tencent.com/pypi/simple/' }
 ]
 
 type TabKey = 'settings' | 'description' | 'tools' | 'prompts' | 'resources'
@@ -179,7 +180,14 @@ const McpSettings: React.FC = () => {
       logoUrl: server.logoUrl || '',
       tags: server.tags || []
     })
-  }, [server, form])
+    // v1 二轮审查 s2-17：依赖从 `server`（对象身份）改为 `server.id`。
+    // `useMCPServer` 对该 id 做 find、`updateMCPServer` 整行替换——页面内自己就会换掉这一行的
+    // 身份（工具页的 `handleToggleTool` / `handleToggleAutoApprove` 都 dispatch）。改之前：
+    // 在「常规」页改了 name/args/env，切到「工具」页关一个工具 → 本 effect 重跑，
+    // 常规页字段被静默重置回库里的旧值，而 `isFormChanged` 仍为 true，点保存把回退值写回库。
+    // 只在**切换服务器**（id 变化）时重新初始化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [server.id, form])
 
   // Watch for serverType changes
   useEffect(() => {
@@ -197,7 +205,16 @@ const McpSettings: React.FC = () => {
         const localTools = await mcpApi.listTools(server)
         setTools(localTools)
       } catch (error) {
-        setLoadingServer(server.id)
+        // v1 二轮审查 s2-18：这里此前是 `setLoadingServer(server.id)` 的复制粘贴笔误——
+        // 既不记日志也不清状态，随即被 finally 抹掉，等于 catch 里什么都没做。
+        // 不清空的话，切到服务器 B 探测失败时界面显示的是服务器 A 的工具集挂在 B 名下。
+        logger.warn('Failed to list MCP tools', error as Error)
+        setTools([])
+        window.toast.error({
+          key: 'mcp-fetch-failed',
+          timeout: 8000,
+          title: t('settings.mcp.fetchFailed', { defaultValue: 'Failed to load MCP server data' })
+        })
       } finally {
         setLoadingServer(null)
       }
@@ -211,7 +228,13 @@ const McpSettings: React.FC = () => {
         const localPrompts = await mcpApi.listPrompts(server)
         setPrompts(localPrompts)
       } catch (error) {
+        logger.warn('Failed to list MCP prompts', error as Error)
         setPrompts([])
+        window.toast.error({
+          key: 'mcp-fetch-failed',
+          timeout: 8000,
+          title: t('settings.mcp.fetchFailed', { defaultValue: 'Failed to load MCP server data' })
+        })
       } finally {
         setLoadingServer(null)
       }
@@ -225,7 +248,13 @@ const McpSettings: React.FC = () => {
         const localResources = await mcpApi.listResources(server)
         setResources(localResources)
       } catch (error) {
+        logger.warn('Failed to list MCP resources', error as Error)
         setResources([])
+        window.toast.error({
+          key: 'mcp-fetch-failed',
+          timeout: 8000,
+          title: t('settings.mcp.fetchFailed', { defaultValue: 'Failed to load MCP server data' })
+        })
       } finally {
         setLoadingServer(null)
       }
@@ -238,6 +267,7 @@ const McpSettings: React.FC = () => {
         const version = await mcpApi.getServerVersion(server)
         setServerVersion(version)
       } catch (error) {
+        logger.warn('Failed to get MCP server version', error as Error)
         setServerVersion(null)
       }
     }
@@ -269,8 +299,14 @@ const McpSettings: React.FC = () => {
     }
   }, [server.id])
 
+  // v1 二轮审查 s2-18：切换服务器时清空上一次服务器的列举结果（旧实现只重置了 logs）。
+  // 不过期数据比空数据危险：界面会把 A 的工具集显示在 B 名下。
   useEffect(() => {
     setLogs([])
+    setTools([])
+    setPrompts([])
+    setResources([])
+    setServerVersion(null)
   }, [server.id])
 
   useEffect(() => {
@@ -404,22 +440,27 @@ const McpSettings: React.FC = () => {
   }
 
   const onDeleteMcpServer = useCallback(
-    async (server: MCPServer) => {
-      try {
-        window.modal.confirm({
-          title: t('settings.mcp.deleteServer'),
-          content: t('settings.mcp.deleteServerConfirm'),
-          centered: true,
-          onOk: async () => {
+    (server: MCPServer) => {
+      window.modal.confirm({
+        title: t('settings.mcp.deleteServer'),
+        content: t('settings.mcp.deleteServerConfirm'),
+        centered: true,
+        onOk: async () => {
+          // v1 二轮审查 s2-22：`onOk` 的 rejection 不会冒泡到外面的 try/catch（antd 内部
+          // `setLoading(false, true); return Promise.reject(e)`），删除失败会零用户可见信号。
+          try {
             await mcpApi.removeServer(server)
             deleteMCPServer(server.id)
             window.toast.success(t('settings.mcp.deleteSuccess'))
             navigate('/settings/mcp')
+          } catch (error: unknown) {
+            logger.error('Failed to delete MCP server', error as Error)
+            window.toast.error(
+              `${t('settings.mcp.deleteError')}: ${error instanceof Error ? error.message : String(error)}`
+            )
           }
-        })
-      } catch (error: any) {
-        window.toast.error(`${t('settings.mcp.deleteError')}: ${error.message}`)
-      }
+        }
+      })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [server, t]
@@ -614,7 +655,7 @@ const McpSettings: React.FC = () => {
               {isShowRegistry && registry && (
                 <Form.Item
                   name="registryUrl"
-                  label={t('settings.mcp.registry')}
+                  label={t('settings.mcp.registry.label')}
                   tooltip={t('settings.mcp.registryTooltip')}>
                   <Radio.Group
                     value={selectedRegistryType === 'custom' ? 'custom' : form.getFieldValue('registryUrl') || ''}>
@@ -633,7 +674,7 @@ const McpSettings: React.FC = () => {
                         onChange={(e) => {
                           onSelectRegistry(e.target.value)
                         }}>
-                        {reg.name}
+                        {t(reg.labelKey)}
                       </Radio>
                     ))}
                   </Radio.Group>

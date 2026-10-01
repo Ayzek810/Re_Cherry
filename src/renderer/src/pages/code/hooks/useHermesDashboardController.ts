@@ -4,6 +4,7 @@ import { CodeCli } from '@shared/types/codeCli'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { withDetail } from '../utils/errorDetail'
 import { useHermesDashboardStatus } from './useCodeCliStatus'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useHermesDashboardController.ts
@@ -20,7 +21,6 @@ import { useHermesDashboardStatus } from './useCodeCliStatus'
 // ⑤ toast 缝：`@renderer/services/toast` → fork `window.toast`；logger 缝：'@logger'。
 
 const logger = loggerService.withContext('useHermesDashboardController')
-const ERROR_DETAIL_LIMIT = 200
 
 // fork 缝④：V2 src/shared/ipc/schemas/hermesDashboard.ts HERMES_DASHBOARD_START_FAILURE_REASONS 逐字。
 export const HERMES_DASHBOARD_START_FAILURE_REASONS = [
@@ -38,10 +38,9 @@ const START_ERROR_KEYS: Record<HermesDashboardStartFailureReason, string> = {
   startup_failed: 'code.hermes_dashboard.error.startup_failed'
 }
 
-function withDetail(title: string, detail: string | undefined): string {
-  const trimmed = detail?.trim()
-  return trimmed ? `${title}: ${trimmed.slice(0, ERROR_DETAIL_LIMIT)}` : title
-}
+// 二轮审查 f2-48：此处原有逐字相同的 `ERROR_DETAIL_LIMIT` + `withDetail` 副本，绕开了
+// `../utils/errorDetail` 这个单点工具（同目录 usePaperAgentController / useToolUpdateCheck /
+// useBinaryActions 都已改用共享件）。截断长度与清洗规则的漂移风险由此消除。
 
 interface HermesDashboardControllerOptions {
   onConfigMayHaveChanged?: () => void

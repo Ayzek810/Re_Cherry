@@ -12,7 +12,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
-import { SettingContainer } from '..'
+import { SettingContainer, SettingDivider, SettingGroup, SettingHelpText, SettingTitle } from '..'
 import BasicDataSettings from './BasicDataSettings'
 import ExportMenuOptions from './ExportMenuSettings'
 import JoplinSettings from './JoplinSettings'
@@ -102,6 +102,11 @@ const DataSettings: FC = () => {
         {menu === 'data' && <BasicDataSettings />}
         {menu === 'webdav' && <WebDavSettings />}
         {menu === 'nutstore' && <NutstoreSettings />}
+        {/* v1 二轮审查 s2-10：此前没有 `s3` 分支——点「S3」右侧是永久空白面板（无占位、无说明）。
+            S3 的配置面在 fork 里没有编辑器（`settings.s3` 只有类型 + 初始值 + migrate 分支，
+            `init.ts` 启动时仍会读 `s3.autoSync`），故这里如实说明「本版没有该界面」，
+            而不是继续用空白面板暗示「这里什么都没有」。 */}
+        {menu === 's3' && <S3SettingsPlaceholder />}
         {menu === 'import_settings' && <ImportMenuOptions />}
         {menu === 'export_menu' && <ExportMenuOptions />}
         {menu === 'markdown_export' && <MarkdownExportSettings />}
@@ -113,6 +118,23 @@ const DataSettings: FC = () => {
         {menu === 'local_backup' && <LocalBackupSettings />}
       </SettingContainer>
     </Container>
+  )
+}
+
+/** S3 条目的显式占位（见 s2-10 注释）：如实说明本版没有该界面，而不是渲染空白。 */
+const S3SettingsPlaceholder: FC = () => {
+  const { t } = useTranslation()
+  const { theme } = useTheme()
+  return (
+    <SettingGroup theme={theme}>
+      <SettingTitle>{t('settings.data.s3.title.label')}</SettingTitle>
+      <SettingDivider />
+      <SettingHelpText>
+        {t('settings.data.s3.not_available', {
+          defaultValue: 'This build has no settings UI for S3 storage.'
+        })}
+      </SettingHelpText>
+    </SettingGroup>
   )
 }
 

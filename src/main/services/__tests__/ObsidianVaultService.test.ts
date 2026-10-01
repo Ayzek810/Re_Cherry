@@ -93,7 +93,7 @@ describe('ObsidianVaultService.getVaults', () => {
 })
 
 describe('ObsidianVaultService.getVaultStructure', () => {
-  it('collects nested folders and markdown files with forward-slash relative paths', () => {
+  it('collects nested folders and markdown files with forward-slash relative paths', async () => {
     const vaultPath = createVault('TreeVault')
     const sub = join(vaultPath, 'Projects', 'Deep')
     mkdirSync(sub, { recursive: true })
@@ -102,7 +102,7 @@ describe('ObsidianVaultService.getVaultStructure', () => {
     writeFileSync(join(vaultPath, 'ignored.txt'), 'not markdown', 'utf8')
 
     const service = new ObsidianVaultService(join(tempRoot, 'obsidian.json'))
-    const result = service.getVaultStructure(vaultPath)
+    const result = await service.getVaultStructure(vaultPath)
 
     const paths = result.map((f) => f.path)
     expect(paths).toContain('Projects')
@@ -118,7 +118,7 @@ describe('ObsidianVaultService.getVaultStructure', () => {
     expect(markdowns.map((f) => f.name)).toEqual(expect.arrayContaining(['root.md', 'note.md']))
   })
 
-  it('ignores dot-directories (e.g. .obsidian) and their contents', () => {
+  it('ignores dot-directories (e.g. .obsidian) and their contents', async () => {
     const vaultPath = createVault('HiddenVault')
     const hidden = join(vaultPath, '.obsidian')
     mkdirSync(hidden, { recursive: true })
@@ -126,60 +126,60 @@ describe('ObsidianVaultService.getVaultStructure', () => {
     writeFileSync(join(vaultPath, 'visible.md'), 'visible', 'utf8')
 
     const service = new ObsidianVaultService(join(tempRoot, 'obsidian.json'))
-    const result = service.getVaultStructure(vaultPath)
+    const result = await service.getVaultStructure(vaultPath)
 
     expect(result.map((f) => f.path)).toEqual(['visible.md'])
   })
 
-  it('ignores dot-files at any level', () => {
+  it('ignores dot-files at any level', async () => {
     const vaultPath = createVault('DotFileVault')
     writeFileSync(join(vaultPath, 'keep.md'), 'keep', 'utf8')
     writeFileSync(join(vaultPath, '.hidden.md'), 'hidden', 'utf8')
 
     const service = new ObsidianVaultService(join(tempRoot, 'obsidian.json'))
-    const result = service.getVaultStructure(vaultPath)
+    const result = await service.getVaultStructure(vaultPath)
 
     expect(result.map((f) => f.path)).toEqual(['keep.md'])
   })
 
-  it('returns empty for a nonexistent vault path', () => {
+  it('returns empty for a nonexistent vault path', async () => {
     const service = new ObsidianVaultService(join(tempRoot, 'obsidian.json'))
-    expect(service.getVaultStructure(join(tempRoot, 'nope'))).toEqual([])
+    await expect(service.getVaultStructure(join(tempRoot, 'nope'))).resolves.toEqual([])
   })
 
-  it('returns empty when the path is a file, not a directory', () => {
+  it('returns empty when the path is a file, not a directory', async () => {
     const filePath = join(tempRoot, 'a-file.md')
     writeFileSync(filePath, 'x', 'utf8')
 
     const service = new ObsidianVaultService(join(tempRoot, 'obsidian.json'))
-    expect(service.getVaultStructure(filePath)).toEqual([])
+    await expect(service.getVaultStructure(filePath)).resolves.toEqual([])
   })
 
-  it('returns empty for an empty vault', () => {
+  it('returns empty for an empty vault', async () => {
     const vaultPath = createVault('EmptyVault')
 
     const service = new ObsidianVaultService(join(tempRoot, 'obsidian.json'))
-    expect(service.getVaultStructure(vaultPath)).toEqual([])
+    await expect(service.getVaultStructure(vaultPath)).resolves.toEqual([])
   })
 })
 
 describe('ObsidianVaultService.getFilesByVaultName', () => {
-  it('resolves the vault by name and returns its structure', () => {
+  it('resolves the vault by name and returns its structure', async () => {
     const vaultPath = createVault('ByNameVault')
     writeFileSync(join(vaultPath, 'doc.md'), '# doc', 'utf8')
     const configPath = writeObsidianConfig({ id1: { path: vaultPath, name: 'ByNameVault' } })
 
     const service = new ObsidianVaultService(configPath)
-    const result = service.getFilesByVaultName('ByNameVault')
+    const result = await service.getFilesByVaultName('ByNameVault')
 
     expect(result.map((f) => f.path)).toEqual(['doc.md'])
   })
 
-  it('returns empty for an unknown vault name', () => {
+  it('returns empty for an unknown vault name', async () => {
     const vaultPath = createVault('KnownVault')
     const configPath = writeObsidianConfig({ id1: { path: vaultPath, name: 'KnownVault' } })
 
     const service = new ObsidianVaultService(configPath)
-    expect(service.getFilesByVaultName('NoSuchVault')).toEqual([])
+    await expect(service.getFilesByVaultName('NoSuchVault')).resolves.toEqual([])
   })
 })

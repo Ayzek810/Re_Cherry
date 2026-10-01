@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import { useCommittedInput } from './useCommittedInput'
 const NotionSettings: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
@@ -30,24 +31,21 @@ const NotionSettings: FC = () => {
   const notionPageNameKey = useSelector((state: RootState) => state.settings.notionPageNameKey)
   const notionExportReasoning = useSelector((state: RootState) => state.settings.notionExportReasoning)
 
-  const handleNotionTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setNotionApiKey(e.target.value))
-  }
-
-  const handleNotionDatabaseIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setNotionDatabaseID(e.target.value))
-  }
-
-  const handleNotionPageNameKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setNotionPageNameKey(e.target.value))
-  }
+  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片。
+  const tokenField = useCommittedInput(notionApiKey, (next) => dispatch(setNotionApiKey(next)))
+  const databaseIdField = useCommittedInput(notionDatabaseID, (next) => dispatch(setNotionDatabaseID(next)))
+  const pageNameKeyField = useCommittedInput(notionPageNameKey, (next) => dispatch(setNotionPageNameKey(next)))
 
   const handleNotionConnectionCheck = () => {
-    if (notionApiKey === null) {
+    // v1 二轮审查 s2-33：守卫此前写成 `=== null`，而持久化默认值是空串（`store/settings.ts`
+    // 的 `notionApiKey: ''` / `notionDatabaseID: ''`），所以永远不触发——空 key 会真的发出
+    // `databases.retrieve`，用户最终看到的是无关的「连接失败」，而不是「请先填 API Key」。
+    // Joplin / Siyuan 对同一校验用的是 falsy 判断，这里对齐。
+    if (!notionApiKey) {
       window.toast.error(t('settings.data.notion.check.empty_api_key'))
       return
     }
-    if (notionDatabaseID === null) {
+    if (!notionDatabaseID) {
       window.toast.error(t('settings.data.notion.check.empty_database_id'))
       return
     }
@@ -71,7 +69,8 @@ const NotionSettings: FC = () => {
   const handleNotionTitleClick = () => {
     openSmartMinapp({
       id: 'notion-help',
-      name: 'Notion Help',
+      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
+      name: t('settings.data.notion.title'),
       url: 'https://docs.cherry-ai.com/advanced-basic/notion',
       logo: AppLogo
     })
@@ -98,9 +97,9 @@ const NotionSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Input
             type="text"
-            value={notionDatabaseID || ''}
-            onChange={handleNotionDatabaseIdChange}
-            onBlur={handleNotionDatabaseIdChange}
+            value={databaseIdField.value}
+            onChange={databaseIdField.onChange}
+            onBlur={databaseIdField.onBlur}
             style={{ width: 315 }}
             placeholder={t('settings.data.notion.database_id_placeholder')}
           />
@@ -112,9 +111,9 @@ const NotionSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Input
             type="text"
-            value={notionPageNameKey || ''}
-            onChange={handleNotionPageNameKeyChange}
-            onBlur={handleNotionPageNameKeyChange}
+            value={pageNameKeyField.value}
+            onChange={pageNameKeyField.onChange}
+            onBlur={pageNameKeyField.onBlur}
             style={{ width: 315 }}
             placeholder={t('settings.data.notion.page_name_key_placeholder')}
           />
@@ -126,9 +125,9 @@ const NotionSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Space.Compact style={{ width: '100%' }}>
             <Input.Password
-              value={notionApiKey || ''}
-              onChange={handleNotionTokenChange}
-              onBlur={handleNotionTokenChange}
+              value={tokenField.value}
+              onChange={tokenField.onChange}
+              onBlur={tokenField.onBlur}
               placeholder={t('settings.data.notion.api_key_placeholder')}
               style={{ width: '100%' }}
             />

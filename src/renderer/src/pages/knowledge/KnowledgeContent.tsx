@@ -1,5 +1,4 @@
 import { RedoOutlined } from '@ant-design/icons'
-import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import { useKnowledge } from '@renderer/hooks/useKnowledge'
@@ -8,7 +7,7 @@ import type { KnowledgeBase } from '@renderer/types'
 import { Button, Empty, Tabs, Tag, Tooltip } from 'antd'
 import { Book, Folder, Globe, Link, Notebook, Search, Settings, Video } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -22,7 +21,6 @@ import KnowledgeSitemaps from './items/KnowledgeSitemaps'
 import KnowledgeUrls from './items/KnowledgeUrls'
 import KnowledgeVideos from './items/KnowledgeVideos'
 
-const logger = loggerService.withContext('KnowledgeContent')
 interface KnowledgeContentProps {
   selectedBase: KnowledgeBase
 }
@@ -33,35 +31,15 @@ const KnowledgeContent: FC<KnowledgeContentProps> = ({ selectedBase }) => {
     selectedBase.id || ''
   )
   const [activeKey, setActiveKey] = useState('files')
-  const [progressMap, setProgressMap] = useState<Map<string, number>>(new Map())
-  const [preprocessMap, setPreprocessMap] = useState<Map<string, boolean>>(new Map())
+  // 进度/预处理态的两个 map 保持"空 = 未知"：四条曾经的进度通道
+  //（`file-preprocess-finished` / `file-preprocess-progress` / `file-ocr-progress` /
+  // `directory-processing-percent`）在主进程**零发送点**，监听永远不会触发（k2-07）。
+  // 与其留一条永久静默的订阅，不如让能力面为空——子组件对 `undefined` 的处置本来就是
+  // 回落到条目自身的 `isPreprocessed` / `getProcessingStatus`（KnowledgeFiles.tsx:214-215）。
+  const [progressMap] = useState<Map<string, number>>(new Map())
+  const [preprocessMap] = useState<Map<string, boolean>>(new Map())
 
   const providerName = getProviderName(base?.model)
-
-  useEffect(() => {
-    const handlers = [
-      window.electron.ipcRenderer.on('file-preprocess-finished', (_, { itemId }) => {
-        setPreprocessMap((prev) => new Map(prev).set(itemId, true))
-      }),
-
-      window.electron.ipcRenderer.on('file-preprocess-progress', (_, { itemId, progress }) => {
-        setProgressMap((prev) => new Map(prev).set(itemId, progress))
-      }),
-
-      window.electron.ipcRenderer.on('file-ocr-progress', (_, { itemId, progress }) => {
-        setProgressMap((prev) => new Map(prev).set(itemId, progress))
-      }),
-
-      window.electron.ipcRenderer.on('directory-processing-percent', (_, { itemId, percent }) => {
-        logger.debug('[Progress] Directory:', itemId, percent)
-        setProgressMap((prev) => new Map(prev).set(itemId, percent))
-      })
-    ]
-
-    return () => {
-      handlers.forEach((cleanup) => cleanup())
-    }
-  }, [])
   const knowledgeItems = [
     {
       key: 'files',

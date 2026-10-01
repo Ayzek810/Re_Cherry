@@ -38,12 +38,28 @@ export const getFilesFromDropEvent = async (e: React.DragEvent<HTMLDivElement>):
     return list
   } else {
     return new Promise((resolve) => {
-      let existCodefilesFormat = false
       for (const item of e.dataTransfer.items) {
         const { type } = item
         if (type === 'codefiles') {
           item.getAsString(async (filePathListString) => {
-            const filePathList: string[] = JSON.parse(filePathListString)
+            // getAsString 的数据来自外部拖放源，JSON 可能是任意内容。解析失败必须
+            // 给出一个终态（resolve([])）——否则 async 回调抛错，resolve 永不执行，
+            // 调用方的 await 永久挂起（audit2 r2-94）。
+            let filePathList: string[]
+            try {
+              const parsed = JSON.parse(filePathListString)
+              if (Array.isArray(parsed)) {
+                filePathList = parsed.filter((p): p is string => typeof p === 'string')
+              } else {
+                logger.warn('getFilesFromDropEvent: codefiles payload is not an array, ignoring it')
+                filePathList = []
+              }
+            } catch (error) {
+              logger.warn('getFilesFromDropEvent: malformed codefiles JSON payload, ignoring it', error as Error)
+              resolve([])
+              return
+            }
+
             const filePathListPromises = filePathList.map((filePath) => window.api.file.get(filePath))
             resolve(
               await Promise.allSettled(filePathListPromises).then((results) =>
@@ -54,15 +70,12 @@ export const getFilesFromDropEvent = async (e: React.DragEvent<HTMLDivElement>):
               )
             )
           })
-
-          existCodefilesFormat = true
-          break
+          return
         }
       }
 
-      if (!existCodefilesFormat) {
-        resolve([])
-      }
+      // 没有 codefiles 形态：正常空结果（不是失败）。
+      resolve([])
     })
   }
 }

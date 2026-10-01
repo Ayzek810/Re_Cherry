@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isOpenAIReasoningModel } from '../openai'
 import { isQwenMTModel } from '../qwen'
 import {
-  agentModelFilter,
   getModelSupportedVerbosity,
   groupQwenModels,
   isAnthropicModel,
@@ -25,9 +24,9 @@ import {
   isNotSupportSystemMessageModel,
   isNotSupportTextDeltaModel,
   isSupportAdaptiveThinkingClaudeModel,
-  isSupportedFlexServiceTier,
   isSupportedModel,
   isSupportFlexServiceTierModel,
+  isSupportSamplingParam,
   isSupportTemperatureModel,
   isSupportTopPModel,
   isTemperatureTopPMutuallyExclusiveModel,
@@ -35,7 +34,6 @@ import {
   isZhipuModel
 } from '../utils'
 import { isChatCandidateModel, isGenerateImageModel, isTextToImageModel, isVisionModel } from '../vision'
-import { isOpenAIWebSearchChatCompletionOnlyModel } from '../websearch'
 
 vi.mock('@renderer/hooks/useStore', () => ({
   getStoreProviders: vi.fn(() => [])
@@ -95,10 +93,6 @@ vi.mock(import('../openai'), async (importOriginal) => {
   }
 })
 
-vi.mock('../websearch', () => ({
-  isOpenAIWebSearchChatCompletionOnlyModel: vi.fn()
-}))
-
 const createModel = (overrides: Partial<Model> = {}): Model => ({
   id: 'gpt-4o',
   name: 'gpt-4o',
@@ -114,7 +108,6 @@ const chatCandidateMock = vi.mocked(isChatCandidateModel)
 const textToImageMock = vi.mocked(isTextToImageModel)
 const generateImageMock = vi.mocked(isGenerateImageModel)
 const reasoningMock = vi.mocked(isOpenAIReasoningModel)
-const openAIWebSearchOnlyMock = vi.mocked(isOpenAIWebSearchChatCompletionOnlyModel)
 
 describe('model utils', () => {
   beforeEach(() => {
@@ -126,7 +119,6 @@ describe('model utils', () => {
     textToImageMock.mockReturnValue(false)
     generateImageMock.mockReturnValue(true)
     reasoningMock.mockReturnValue(false)
-    openAIWebSearchOnlyMock.mockReturnValue(false)
   })
 
   describe('Verbosity support', () => {
@@ -196,12 +188,6 @@ describe('model utils', () => {
 
       it('returns false for unsupported models', () => {
         expect(isSupportFlexServiceTierModel(createModel({ id: 'o3-mini' }))).toBe(false)
-      })
-    })
-
-    describe('isSupportedFlexServiceTier', () => {
-      it('returns false for non-flex models', () => {
-        expect(isSupportedFlexServiceTier(createModel({ id: 'gpt-4o' }))).toBe(false)
       })
     })
   })
@@ -310,6 +296,30 @@ describe('model utils', () => {
       it('returns true for regular GPT models', () => {
         const model = createModel({ id: 'gpt-4' })
         expect(isSupportTopPModel(model)).toBe(true)
+      })
+    })
+
+    describe('isSupportSamplingParam (r2-103)', () => {
+      // 两个旧名字必须是同一个实现的薄包装：同一输入下逐条一致
+      it('keeps temperature and top_p in lockstep through the shared implementation', () => {
+        const cases: Model[] = [
+          createModel({ id: 'gpt-4' }),
+          createModel({ id: 'kimi-k2.5' }),
+          createModel({ id: 'qwen-mt-large', provider: 'aliyun' }),
+          createModel({ id: 'o1-preview' }),
+          createModel({ id: 'gpt-oss-debug' })
+        ]
+
+        for (const model of cases) {
+          expect(isSupportTemperatureModel(model)).toBe(isSupportSamplingParam(model, undefined, 'temperature'))
+          expect(isSupportTopPModel(model)).toBe(isSupportSamplingParam(model, undefined, 'top_p'))
+          expect(isSupportTemperatureModel(model)).toBe(isSupportTopPModel(model))
+        }
+      })
+
+      it('returns false for null/undefined on both parameters', () => {
+        expect(isSupportSamplingParam(null, undefined, 'temperature')).toBe(false)
+        expect(isSupportSamplingParam(undefined, undefined, 'top_p')).toBe(false)
       })
     })
 
@@ -556,6 +566,13 @@ describe('model utils', () => {
         expect(isGemini31ProModel(createModel({ id: 'gemini-3-flash-preview' }))).toBe(false)
       })
 
+      it('returns false when the version separator is not a literal dot (r2-84)', () => {
+        // `.` 未转义时这两条会命中，与同文件 `gemini-3\.1-flash-lite` 的写法不一致
+        expect(isGemini31ProModel(createModel({ id: 'gemini-3x1-pro' }))).toBe(false)
+        expect(isGemini31ProModel(createModel({ id: 'gemini-3-1-pro' }))).toBe(false)
+        expect(isGemini31ProModel(createModel({ id: 'gemini-3X1-PRO-PREVIEW' }))).toBe(false)
+      })
+
       it('returns false for null/undefined models', () => {
         expect(isGemini31ProModel(null)).toBe(false)
         expect(isGemini31ProModel(undefined)).toBe(false)
@@ -666,23 +683,21 @@ describe('model utils', () => {
       })
     })
 
-    describe('agentModelFilter', () => {
-      // 与所有"挑对话模型"的出口同一判据，逐字委托给 isChatCandidateModel
-      it('delegates to the shared chat-candidate predicate', () => {
+    describe('isChatCandidateModel（r2-110：agentModelFilter 别名已删除，测试直接指向真身）', () => {
+      it('accepts a plain chat model', () => {
         const model = createModel()
-        expect(agentModelFilter(model)).toBe(true)
-        expect(chatCandidateMock).toHaveBeenCalledWith(model)
+        expect(isChatCandidateModel(model)).toBe(true)
       })
 
-      it('filters out models the shared predicate rejects', () => {
+      it('rejects embedding / rerank / image-generation models', () => {
         chatCandidateMock.mockReturnValueOnce(false)
-        expect(agentModelFilter(createModel({ id: 'text-embedding' }))).toBe(false)
+        expect(isChatCandidateModel(createModel({ id: 'text-embedding' }))).toBe(false)
 
         chatCandidateMock.mockReturnValueOnce(false)
-        expect(agentModelFilter(createModel({ id: 'rerank' }))).toBe(false)
+        expect(isChatCandidateModel(createModel({ id: 'rerank' }))).toBe(false)
 
         chatCandidateMock.mockReturnValueOnce(false)
-        expect(agentModelFilter(createModel({ id: 'gpt-image-1' }))).toBe(false)
+        expect(isChatCandidateModel(createModel({ id: 'gpt-image-1' }))).toBe(false)
       })
     })
   })

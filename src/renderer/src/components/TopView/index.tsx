@@ -94,7 +94,9 @@ const TopViewContainer: React.FC<Props> = ({ children }) => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  })
+    // c2-11：依赖数组必不可少。TopViewContainer 是路由树的根宿主，流式输出期间频繁重渲染；
+    // 没有依赖数组时每次渲染都摘一次再挂一次，其间 Esc 退出全屏会丢事件。
+  }, [enableQuitFullScreen])
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface UseInputTextOptions {
   initialValue?: string
@@ -38,16 +38,35 @@ export interface UseInputTextReturn {
 export function useInputText(options: UseInputTextOptions = {}): UseInputTextReturn {
   const [text, setText] = useState(options.initialValue ?? '')
   const prevTextRef = useRef(text)
+  const optionsRef = useRef(options)
+  useEffect(() => {
+    optionsRef.current = options
+  })
 
-  const handleSetText = useCallback(
-    (value: string | ((prev: string) => string)) => {
-      const newText = typeof value === 'function' ? value(text) : value
-      prevTextRef.current = text
-      setText(newText)
-      options.onChange?.(newText)
-    },
-    [text, options]
-  )
+  /**
+   * r2-68：函数式更新必须交给 React 求值。旧实现
+   * `const newText = typeof value === 'function' ? value(text) : value` 读的是渲染期闭包：
+   * 同一 tick 的两次函数式更新都基于同一个旧 `text` 计算，第二次覆盖第一次（丢更新）——
+   * 这不是 `React.SetStateAction<string>` 的语义。
+   *
+   * `prevText`/`onChange` 在提交后按最终值维护：同一 tick 的多次更新只通知一次最终值。
+   * `prevTextRef` 在提交后同步为当前 `text`，于是下一次渲染读到的 `prevText` 就是变更前的文本。
+   */
+  const isFirstCommitRef = useRef(true)
+  useEffect(() => {
+    if (isFirstCommitRef.current) {
+      isFirstCommitRef.current = false
+      return
+    }
+    if (prevTextRef.current !== text) {
+      optionsRef.current.onChange?.(text)
+    }
+    prevTextRef.current = text
+  }, [text])
+
+  const handleSetText = useCallback((value: string | ((prev: string) => string)) => {
+    setText((prev) => (typeof value === 'function' ? value(prev) : value))
+  }, [])
 
   const clear = useCallback(() => {
     handleSetText('')

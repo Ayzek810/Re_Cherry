@@ -122,4 +122,127 @@ describe('checkModelsHealth 的失败语义', () => {
 
     expect(seen.sort()).toEqual([0, 1])
   })
+
+  // ---- r2-39：`isConcurrent:false` 必须是真串行 --------------------------------------
+  //
+  // 旧实现 `models.map(async …)` 在 map 阶段就把全部请求发出去了（`checkModelWithMultipleKeys`
+  // 内的 `apiKeys.map` 同样全并发），`else` 分支只是"按序 await"——等待有序而请求早已并发，
+  // 用户关掉开关仍会一次打出「模型数 × key 数」个请求。下面的断言用一个"闸门 promise"把
+  // 第一个请求按住在途状态：并发实现会在闸门放开前就启动第二个。
+
+  const gated = () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    return { gate, release: () => release() }
+  }
+  const flush = async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+  }
+
+  it('isConcurrent:false 时模型串行：第二个模型在第一个结算前不启动', async () => {
+    const started: string[] = []
+    const { gate, release } = gated()
+    checkModelMock.mockImplementation(async (_provider, m) => {
+      started.push(m.id)
+      if (m.id === 'a') await gate
+      return { latency: 1 }
+    })
+
+    const run = checkModelsHealth({
+      provider,
+      models: [model('a'), model('b')],
+      apiKeys: ['k'],
+      isConcurrent: false
+    })
+    await flush()
+    expect(started).toEqual(['a'])
+
+    release()
+    const results = await run
+    expect(started).toEqual(['a', 'b'])
+    expect(results.map((r) => r.model.id)).toEqual(['a', 'b'])
+  })
+
+  it('isConcurrent:true 时模型并发（对照：两个都在第一个结算前启动）', async () => {
+    const started: string[] = []
+    const { gate, release } = gated()
+    checkModelMock.mockImplementation(async (_provider, m) => {
+      started.push(m.id)
+      if (m.id === 'a') await gate
+      return { latency: 1 }
+    })
+
+    const run = checkModelsHealth({ provider, models: [model('a'), model('b')], apiKeys: ['k'], isConcurrent: true })
+    await flush()
+    expect(started).toEqual(['a', 'b'])
+
+    release()
+    await run
+  })
+
+  it('isConcurrent:false 时同一模型的多个 key 也串行（不再一次打完）', async () => {
+    const started: string[] = []
+    const { gate, release } = gated()
+    checkModelMock.mockImplementation(async (p) => {
+      const key = (p as unknown as { apiKey: string }).apiKey
+      started.push(key)
+      if (key === 'k1') await gate
+      return { latency: 1 }
+    })
+
+    const run = checkModelsHealth({
+      provider,
+      models: [model('a')],
+      apiKeys: ['k1', 'k2'],
+      isConcurrent: false
+    })
+    await flush()
+    expect(started).toEqual(['k1'])
+
+    release()
+    const results = await run
+    expect(started).toEqual(['k1', 'k2'])
+    // 下标对齐仍然成立（key 顺序与 apiKeys 一致）
+    expect(results[0].keyResults.map((kr) => kr.key)).toEqual(['k1', 'k2'])
+  })
+
+  it('isConcurrent:true 时多个 key 并发（对照）', async () => {
+    const started: string[] = []
+    const { gate, release } = gated()
+    checkModelMock.mockImplementation(async (p) => {
+      const key = (p as unknown as { apiKey: string }).apiKey
+      started.push(key)
+      if (key === 'k1') await gate
+      return { latency: 1 }
+    })
+
+    const run = checkModelsHealth({ provider, models: [model('a')], apiKeys: ['k1', 'k2'], isConcurrent: true })
+    await flush()
+    expect(started).toEqual(['k1', 'k2'])
+
+    release()
+    await run
+  })
+
+  it('isConcurrent:false 顺序失败也不影响定长与下标对齐', async () => {
+    checkModelMock.mockImplementation((_provider, m) =>
+      m.id === 'b' ? Promise.reject(new Error('502')) : Promise.resolve({ latency: 1 })
+    )
+
+    const results = await checkModelsHealth({
+      provider,
+      models: [model('a'), model('b'), model('c')],
+      apiKeys: ['k'],
+      isConcurrent: false
+    })
+
+    expect(results).toHaveLength(3)
+    expect(results.map((r) => r.model.id)).toEqual(['a', 'b', 'c'])
+    expect(results[1].status).toBe(HealthStatus.FAILED)
+    expect(results[1].error).toContain('502')
+  })
 })

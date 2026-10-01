@@ -19,7 +19,6 @@ import TavilyLogo from '@renderer/assets/images/search/tavily.png'
 import ZhipuLogo from '@renderer/assets/images/search/zhipu.png'
 import { HStack } from '@renderer/components/Layout'
 import { WEB_SEARCH_PROVIDER_CONFIG } from '@renderer/config/webSearchProviders'
-import { useTimer } from '@renderer/hooks/useTimer'
 import { useDefaultWebSearchProvider, useWebSearchProvider } from '@renderer/hooks/useWebSearchProviders'
 import { checkSearch } from '@renderer/services/WebSearchService'
 import type { WebSearchProviderId } from '@renderer/types'
@@ -145,7 +144,6 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
   // 批次2：「检查」= 主进程引擎以 'test query' 真跑一次（同 web_search 工具执行路径）
   const [apiChecking, setApiChecking] = useState(false)
   const [apiValid, setApiValid] = useState(false)
-  const { setTimeoutTimer } = useTimer()
   const handleCheckSearch = async () => {
     if (apiChecking) return
     try {
@@ -162,8 +160,20 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
       window.toast.error({ timeout: 8000, title: t('settings.tool.websearch.check_failed') })
     } finally {
       setApiChecking(false)
-      setTimeoutTimer('checkSearch', () => setApiValid(false), 2500)
     }
+  }
+
+  /**
+   * v1 二轮审查 s2-39：校验结果不再被定时器无条件抹掉。
+   *
+   * 旧实现在 `finally` 里排了一个 2.5 秒的 `setApiValid(false)`：校验结果是用户判断
+   * 「这个 key 能不能用」的唯一持久信号，绿灯一闪即灭会让人以为没生效而重复点击。
+   * `apiChecking` 只挡并发，不挡「上一次的定时器在这一次的结果之后触发」。
+   * 现在绿/红态保留到下一次检测，或被「改动了 key」这个动作显式作废。
+   */
+  const handleApiKeyChange = (value: string) => {
+    setApiKey(formatApiKeys(value))
+    setApiValid(false)
   }
 
   return (
@@ -213,7 +223,7 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
             <Input.Password
               value={apiKey}
               placeholder={t('settings.provider.api_key.label')}
-              onChange={(e) => setApiKey(formatApiKeys(e.target.value))}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
               onBlur={onUpdateApiKey}
               spellCheck={false}
               type="password"

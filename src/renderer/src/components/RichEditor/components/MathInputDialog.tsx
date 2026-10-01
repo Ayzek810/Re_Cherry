@@ -89,6 +89,13 @@ const MathInputDialog: React.FC<MathInputDialogProps> = ({
   const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       handleSubmit()
+      return
+    }
+    // c2-42③：Esc 原来无效——数学浮层只能靠鼠标关。
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      onCancel()
     }
   }
 
@@ -133,7 +140,14 @@ const MathInputDialog: React.FC<MathInputDialogProps> = ({
   }
 
   return (
-    <div style={styles} ref={containerRef}>
+    // c2-42③：浮层原来的语义是普通 div —— 没有对话框角色、没有可读名。
+    <div
+      style={styles}
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('richEditor.commands.blockMath.title')}
+      data-testid="rich-editor-math-dialog">
       <Input.TextArea
         value={value}
         rows={4}

@@ -45,8 +45,18 @@ const LocalBackupSettings: React.FC = () => {
 
   const [appInfo, setAppInfo] = useState<AppInfo>()
 
+  const [appInfoFailed, setAppInfoFailed] = useState(false)
+
   useEffect(() => {
-    void window.api.getAppInfo().then(setAppInfo)
+    // v1 二轮审查 s2-34：此前无 catch。`appInfo!.appDataPath` 是个非空断言——「未知」在事件
+    // 处理器里变成 TypeError，用户选的目录不落库且没有任何提示。
+    void window.api
+      .getAppInfo()
+      .then(setAppInfo)
+      .catch((error: unknown) => {
+        logger.warn('Failed to read app info', error as Error)
+        setAppInfoFailed(true)
+      })
   }, [])
 
   useEffect(() => {
@@ -78,18 +88,30 @@ const LocalBackupSettings: React.FC = () => {
       return false
     }
 
+    // v1 二轮审查 s2-34：应用信息读不到时不能拿 `!` 断言去取值（TypeError），
+    // 也不该静默失败——如实拒绝并说明原因。
+    if (!appInfo) {
+      logger.warn('Cannot validate backup directory: application paths are unavailable')
+      window.toast.error(
+        t('settings.data.local.directory.app_info_unavailable', {
+          defaultValue: 'Cannot check the directory: application paths are unavailable. Retry later.'
+        })
+      )
+      return false
+    }
+
     const resolvedDir = await window.api.resolvePath(dir)
 
     // check new local backup dir is not in app data path
     // if is in app data path, show error
-    if (await window.api.isPathInside(resolvedDir, appInfo!.appDataPath)) {
+    if (await window.api.isPathInside(resolvedDir, appInfo.appDataPath)) {
       window.toast.error(t('settings.data.local.directory.select_error_app_data_path'))
       return false
     }
 
     // check new local backup dir is not in app install path
     // if is in app install path, show error
-    if (await window.api.isPathInside(resolvedDir, appInfo!.installPath)) {
+    if (await window.api.isPathInside(resolvedDir, appInfo.installPath)) {
       window.toast.error(t('settings.data.local.directory.select_error_in_app_install_path'))
       return false
     }
@@ -158,10 +180,24 @@ const LocalBackupSettings: React.FC = () => {
   }
 
   const handleClearDirectory = () => {
-    setLocalBackupDir('')
-    dispatch(_setLocalBackupDir(''))
-    dispatch(setLocalBackupAutoSync(false))
-    stopAutoSync('local')
+    // v1 二轮审查 s2-35：「清空」会同时丢掉输入框里未提交的草稿（`localBackupDir`）、
+    // 清掉已保存的路径并把自动同步关掉——此前没有任何确认（同文件对更轻的复制数据操作
+    // 反而有确认）。清空动作不可撤销，这里先问一次。
+    window.modal.confirm({
+      title: t('settings.data.local.directory.clear_confirm_title', { defaultValue: 'Clear backup directory?' }),
+      content: t('settings.data.local.directory.clear_confirm_content', {
+        defaultValue: 'The saved directory is cleared and auto backup is turned off. Unsaved edits are discarded.'
+      }),
+      okText: t('common.clear'),
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: () => {
+        setLocalBackupDir('')
+        dispatch(_setLocalBackupDir(''))
+        dispatch(setLocalBackupAutoSync(false))
+        stopAutoSync('local')
+      }
+    })
   }
 
   const renderSyncStatus = () => {
@@ -221,6 +257,15 @@ const LocalBackupSettings: React.FC = () => {
           </Button>
         </HStack>
       </SettingRow>
+      {appInfoFailed && (
+        <SettingRow>
+          <SettingHelpText>
+            {t('settings.data.local.directory.app_info_unavailable', {
+              defaultValue: 'Cannot check the directory: application paths are unavailable. Retry later.'
+            })}
+          </SettingHelpText>
+        </SettingRow>
+      )}
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.general.backup.title')}</SettingRowTitle>

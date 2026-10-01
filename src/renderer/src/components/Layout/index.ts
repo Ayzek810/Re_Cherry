@@ -78,13 +78,18 @@ const getElementValue = (value?: PxValue) => {
   return value + 'px'
 }
 
+/**
+ * c2-31：`'default'` 不是任何 CSS 属性的合法值，浏览器会把整条声明丢弃；`gap` 还被声明了两次，
+ * 前者是死代码（后续只改一处会静默失效）。这里改成合法的等价兜底值 —— 渲染结果与「声明被丢弃」
+ * 完全一致（颜色继承、背景透明、定位 static、其余间距 0），但 CSS 不再有无效声明。
+ */
 export const Box = styled.div<BoxProps>`
   width: ${(props) => (props.width || props.w ? getElementValue(props.width ?? props.w) : 'auto')};
   height: ${(props) => (props.height || props.h ? getElementValue(props.height || props.h) : 'auto')};
-  color: ${(props) => props.color || 'default'};
-  background: ${(props) => props.background || 'default'};
-  flex: ${(props) => props.flex || 'none'};
-  position: ${(props) => props.position || 'default'};
+  color: ${(props) => props.color ?? 'inherit'};
+  background: ${(props) => props.background ?? 'transparent'};
+  flex: ${(props) => props.flex ?? 'none'};
+  position: ${(props) => props.position ?? 'static'};
   left: ${(props) => getElementValue(props.left) || 'auto'};
   right: ${(props) => getElementValue(props.right) || 'auto'};
   bottom: ${(props) => getElementValue(props.bottom) || 'auto'};
@@ -94,21 +99,17 @@ export const Box = styled.div<BoxProps>`
   border-radius: ${(props) => getElementValue(props.borderRadius) || 0};
   box-sizing: border-box;
   border: ${(props) => props?.border || 'none'};
-  gap: ${(p) => (p.gap ? getElementValue(p.gap) : 0)};
-  margin: ${(props) => (props.m || props.margin ? (props.m ?? props.margin) : 'none')};
-  margin-top: ${(props) => (props.mt || props.marginTop ? getElementValue(props.mt || props.marginTop) : 'default')};
-  margin-bottom: ${(props) =>
-    props.mb || props.marginBottom ? getElementValue(props.mb ?? props.marginBottom) : 'default'};
-  margin-left: ${(props) => (props.ml || props.marginLeft ? getElementValue(props.ml ?? props.marginLeft) : 'default')};
-  margin-right: ${(props) =>
-    props.mr || props.marginRight ? getElementValue(props.mr ?? props.marginRight) : 'default'};
-  padding: ${(props) => (props.p || props.padding ? (props.p ?? props.padding) : 'none')};
-  padding-top: ${(props) => (props.pt || props.paddingTop ? getElementValue(props.pt ?? props.paddingTop) : 'auto')};
+  margin: ${(props) => (props.m || props.margin ? (props.m ?? props.margin) : 0)};
+  margin-top: ${(props) => (props.mt || props.marginTop ? getElementValue(props.mt ?? props.marginTop) : 0)};
+  margin-bottom: ${(props) => (props.mb || props.marginBottom ? getElementValue(props.mb ?? props.marginBottom) : 0)};
+  margin-left: ${(props) => (props.ml || props.marginLeft ? getElementValue(props.ml ?? props.marginLeft) : 0)};
+  margin-right: ${(props) => (props.mr || props.marginRight ? getElementValue(props.mr ?? props.marginRight) : 0)};
+  padding: ${(props) => (props.p || props.padding ? (props.p ?? props.padding) : 0)};
+  padding-top: ${(props) => (props.pt || props.paddingTop ? getElementValue(props.pt ?? props.paddingTop) : 0)};
   padding-bottom: ${(props) =>
-    props.pb || props.paddingBottom ? getElementValue(props.pb ?? props.paddingBottom) : 'auto'};
-  padding-left: ${(props) => (props.pl || props.paddingLeft ? getElementValue(props.pl ?? props.paddingLeft) : 'auto')};
-  padding-right: ${(props) =>
-    props.pr || props.paddingRight ? getElementValue(props.pr ?? props.paddingRight) : 'auto'};
+    props.pb || props.paddingBottom ? getElementValue(props.pb ?? props.paddingBottom) : 0};
+  padding-left: ${(props) => (props.pl || props.paddingLeft ? getElementValue(props.pl ?? props.paddingLeft) : 0)};
+  padding-right: ${(props) => (props.pr || props.paddingRight ? getElementValue(props.pr ?? props.paddingRight) : 0)};
 `
 
 export const Stack = styled(Box)<StackProps>`

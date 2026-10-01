@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import CodeEditor from '@renderer/components/CodeEditor'
 import { ResetIcon } from '@renderer/components/Icons'
 import { HStack } from '@renderer/components/Layout'
@@ -20,6 +21,8 @@ import styled from 'styled-components'
 
 import { SettingContainer, SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 import SidebarIconsManager from './SidebarIconsManager'
+
+const logger = loggerService.withContext('DisplaySettings')
 
 const ColorCircleWrapper = styled.div`
   width: 24px;
@@ -152,19 +155,42 @@ const DisplaySettings: FC = () => {
   )
 
   useEffect(() => {
-    // 初始化获取所有系统字体
-    void window.api.getSystemFonts().then((fonts: string[]) => {
-      setFontList(fonts)
-    })
+    // 初始化获取所有系统字体（v1 二轮审查 s2-28：两个初始请求此前没有 catch —— 失败时
+    // fontList / currentZoom 静默停在默认值，无占位无提示）
+    void window.api
+      .getSystemFonts()
+      .then((fonts: string[]) => {
+        setFontList(fonts)
+      })
+      .catch((error: unknown) => {
+        logger.warn('Failed to read system fonts', error as Error)
+      })
 
     // 初始化获取当前缩放值
-    void window.api.handleZoomFactor(0).then((factor) => {
-      setCurrentZoom(factor)
-    })
-
-    const handleResize = () => {
-      void window.api.handleZoomFactor(0).then((factor) => {
+    void window.api
+      .handleZoomFactor(0)
+      .then((factor) => {
         setCurrentZoom(factor)
+      })
+      .catch((error: unknown) => {
+        logger.warn('Failed to read zoom factor', error as Error)
+      })
+
+    // v1 二轮审查 s2-28：拖窗口边缘时 resize 以每帧频率触发，此前每次都打一次 IPC + setState。
+    // 用 requestAnimationFrame 合并到一帧一次。
+    let resizeFrame: number | null = null
+    const handleResize = () => {
+      if (resizeFrame !== null) return
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        void window.api
+          .handleZoomFactor(0)
+          .then((factor) => {
+            setCurrentZoom(factor)
+          })
+          .catch((error: unknown) => {
+            logger.warn('Failed to read zoom factor', error as Error)
+          })
       })
     }
     // 添加resize事件监听
@@ -172,6 +198,7 @@ const DisplaySettings: FC = () => {
 
     // 清理事件监听，防止内存泄漏
     return () => {
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
       window.removeEventListener('resize', handleResize)
     }
   }, [])

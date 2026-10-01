@@ -1,15 +1,19 @@
+import { loggerService } from '@logger'
 import PrivacyPopup from '@renderer/components/Popups/PrivacyPopup'
 import WindowControls from '@renderer/components/WindowControls'
-import { useAppDispatch } from '@renderer/store'
+import type { RootState } from '@renderer/store'
+import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setEnableDataCollection } from '@renderer/store/settings'
 import { Checkbox } from 'antd'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import SelectModelPage from './components/SelectModelPage'
 import SkipButton from './components/SkipButton'
 import WelcomePage from './components/WelcomePage'
+
+const logger = loggerService.withContext('OnboardingPage')
 
 export type OnboardingStep = 'welcome' | 'select-model'
 
@@ -20,16 +24,24 @@ interface OnboardingPageProps {
 const OnboardingPage: FC<OnboardingPageProps> = ({ onComplete }) => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
+  // 初值取**已持久化的**值（f2-56）：本组件挂在 PersistGate 之内，rehydrate 已完成，读 settings 安全。
+  // 旧写法 `useState(true)` 让复选框默认已勾选，且挂载即强制写 true，把用户此前持久化的拒绝覆盖掉。
+  const persistedDataCollection = useAppSelector((state: RootState) => state.settings.enableDataCollection)
   const [step, setStep] = useState<OnboardingStep>('welcome')
-  const [privacyAccepted, setPrivacyAccepted] = useState(true)
+  const [privacyAccepted, setPrivacyAccepted] = useState(persistedDataCollection)
 
   const updateDataCollection = useCallback(
     (enabled: boolean) => {
       setPrivacyAccepted(enabled)
       dispatch(setEnableDataCollection(enabled))
-      void window.api.config.set('enableDataCollection', enabled)
+      // fire-and-forget 写入也必须有信号（CLAUDE.md §9）：写盘失败时 redux 已是新值，
+      // 静默失败会让内存与磁盘无声分叉。
+      void window.api.config.set('enableDataCollection', enabled).catch((error: unknown) => {
+        logger.error('Failed to persist enableDataCollection', error as Error)
+        window.toast.error(t('common.save_failed'))
+      })
     },
-    [dispatch]
+    [dispatch, t]
   )
 
   const handleShowPrivacy = useCallback(async () => {
@@ -47,10 +59,6 @@ const OnboardingPage: FC<OnboardingPageProps> = ({ onComplete }) => {
       updateDataCollection(false)
     }
   }, [t, updateDataCollection])
-
-  useEffect(() => {
-    updateDataCollection(true)
-  }, [updateDataCollection])
 
   return (
     <div className="flex h-screen w-screen flex-col">

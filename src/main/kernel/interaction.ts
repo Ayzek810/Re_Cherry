@@ -158,7 +158,10 @@ interface UserQuestionsHost {
 }
 
 /** 装配审批 answerer 与问答 provider（幂等保护由 cordis effect 与审批服务自身承担）。 */
-export function registerInteractionHost(ctx: Context, push: (payload: unknown) => void): KernelInteractionHub {
+export function registerInteractionHost(
+  ctx: Context,
+  push: (payload: unknown) => void
+): { hub: KernelInteractionHub; unregister: () => void } {
   const hub = new KernelInteractionHub(push)
 
   ctx.on('approval/request', async (req, next) => {
@@ -171,10 +174,12 @@ export function registerInteractionHost(ctx: Context, push: (payload: unknown) =
   if (questions === undefined) {
     throw new Error('kernel: ctx.userQuestions not registered (dsh-user-questions missing)')
   }
-  questions.registerProvider({
+  // k2-29：`registerProvider` 的返回值是注销函数。以前丢弃它，于是停机后这个 provider 仍挂在
+  // `ctx.userQuestions` 上；把它交回调用方，`stopKernel()` 才能配对撤销。
+  const unregister = questions.registerProvider({
     // dsh 的 provider 契约返回 { answers }；hub 内部只搬运数组
     ask: async (request) => ({ answers: await hub.ask(request) })
   })
 
-  return hub
+  return { hub, unregister }
 }

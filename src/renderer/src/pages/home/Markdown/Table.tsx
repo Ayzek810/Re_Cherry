@@ -6,7 +6,6 @@ import { messageBlocksSelectors } from '@renderer/store/messageBlock'
 import { exportTableToExcel } from '@renderer/utils/exportExcel'
 import { Tooltip } from 'antd'
 import { Check, FileSpreadsheet } from 'lucide-react'
-import MarkdownIt from 'markdown-it'
 import React, { memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
@@ -35,7 +34,7 @@ const Table: React.FC<Props> = ({ children, node, blockId }) => {
     }
 
     try {
-      const tableHtml = convertMarkdownTableToHtml(tableMarkdown)
+      const tableHtml = await convertMarkdownTableToHtml(tableMarkdown)
 
       if (navigator.clipboard && window.ClipboardItem) {
         const clipboardItem = new ClipboardItem({
@@ -110,7 +109,16 @@ export function extractTableMarkdown(blockId: string, position: any): string {
   return tableLines.join('\n').trim()
 }
 
-function convertMarkdownTableToHtml(markdownTable: string): string {
+/**
+ * 把 Markdown 表格转成 HTML（用于剪贴板的 `text/html` 口味）。
+ *
+ * `markdown-it` 自 v1 二轮性能审计 p2-02 起改为**函数内动态导入**：本模块在首屏消息树上
+ * （`Markdown.tsx` 的 `components.table`），顶层值导入会把 163KB 的 `markdown-it` 折进
+ * 首屏静态导入闭包，而它的唯一用途是"用户点复制表格"这一次交互。产品里另有一条
+ * `utils/markdownConverter.ts` 的懒加载路径需要同一份库，改动后两份合并为同一懒 chunk。
+ */
+async function convertMarkdownTableToHtml(markdownTable: string): Promise<string> {
+  const { default: MarkdownIt } = await import('markdown-it')
   const md = new MarkdownIt({
     html: true,
     breaks: false,

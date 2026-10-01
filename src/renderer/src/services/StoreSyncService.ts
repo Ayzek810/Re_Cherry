@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 import type { Middleware } from '@reduxjs/toolkit'
-import { IpcChannel } from '@shared/IpcChannel'
 import type { StoreSyncAction } from '@types'
 
 const logger = loggerService.withContext('StoreSyncService')
@@ -25,6 +24,14 @@ export class StoreSyncService {
     syncList: []
   }
   private broadcastSyncRemover: (() => void) | null = null
+  /**
+   * `beforeunload` 处理器（v1 二轮性能审计 p2-14）。必须有稳定引用，`unsubscribe()`
+   * 才能 `removeEventListener` 摘掉它；否则每次 `subscribe()` 都会多挂一个监听器，
+   * 旧的还一直持有本 service 引用。
+   */
+  private readonly beforeUnloadHandler = (): void => {
+    this.unsubscribe()
+  }
 
   private constructor() {
     return
@@ -92,29 +99,31 @@ export class StoreSyncService {
    * Sets up IPC listener and registers cleanup on window close
    */
   public subscribe(): void {
-    if (this.broadcastSyncRemover || !window.api?.storeSync) {
+    // 幂等入口（v1 二轮性能审计 p2-14）：重复 subscribe 前先摘干净上一轮，
+    // 否则每次都会多挂一个 beforeunload 监听器。
+    this.unsubscribe()
+
+    if (!window.api?.storeSync) {
       return
     }
 
-    this.broadcastSyncRemover = window.electron.ipcRenderer.on(
-      IpcChannel.StoreSync_BroadcastSync,
-      (_, action: StoreSyncAction) => {
-        try {
-          // Dispatch to the store
-          if (window.store) {
-            window.store.dispatch(action)
-          }
-        } catch (error) {
-          logger.error('Error dispatching synced action:', error as Error)
+    this.broadcastSyncRemover = window.api.events.onStoreSyncBroadcast((action) => {
+      try {
+        // Dispatch to the store
+        if (window.store) {
+          window.store.dispatch(action as StoreSyncAction)
         }
+      } catch (error) {
+        logger.error('Error dispatching synced action:', error as Error)
       }
-    )
+    })
 
     void window.api.storeSync.subscribe()
 
-    window.addEventListener('beforeunload', () => {
-      this.unsubscribe()
-    })
+    // p2-14：handler 存成实例字段，`unsubscribe()` 才能摘掉它。此前传的是匿名箭头函数，
+    // 无引用留存 ⇒ `unsubscribe()` 只摘 IPC remover，`beforeunload` 监听器永久累积
+    // （每次重新 subscribe 多一个，且旧的仍持有本 service 引用）。
+    window.addEventListener('beforeunload', this.beforeUnloadHandler)
   }
 
   /**
@@ -130,6 +139,8 @@ export class StoreSyncService {
       this.broadcastSyncRemover()
       this.broadcastSyncRemover = null
     }
+
+    window.removeEventListener('beforeunload', this.beforeUnloadHandler)
   }
 }
 

@@ -35,7 +35,9 @@ export function useModelTagFilter() {
       embedding: isEmbeddingModel,
       reasoning: isReasoningModel,
       function_calling: isFunctionCallingModel,
-      web_search: isWebSearchModel,
+      // r2-80：`isWebSearchModel` 现在是三值（`undefined` = provider 还不知道）。
+      // 标签筛选只认**确定**答案，与改动前的 `false` 行为逐字一致。
+      web_search: (m) => isWebSearchModel(m) === true,
       rerank: isRerankModel,
       // 「生图」= 专用/文生图（V2 narrow：IMAGE_GENERATION && !REASONING），与行内标签同一判据
       image_generation: isTextToImageModel,

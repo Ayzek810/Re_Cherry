@@ -39,10 +39,18 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
   const providers = useAppSelector((state) => state.llm.providers)
   const { setGenerationState } = usePaintingSession()
   const visibleIdRef = useRef(painting.id)
+  // Live draft mirror: the composer stays editable while a generation runs, so a
+  // completion must merge into the *current* draft, never overwrite it with the
+  // submit-time snapshot (二轮审查 f2-16).
+  const livePaintingRef = useRef(painting)
 
   useEffect(() => {
     visibleIdRef.current = painting.id
   }, [painting.id])
+
+  useEffect(() => {
+    livePaintingRef.current = painting
+  }, [painting])
 
   // No unmount-abort: the page-level session mirror (`generatingById`) lets a
   // navigated-away generation finish, and the spinner rehydrates when the user
@@ -131,7 +139,15 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
         setGenerationState(targetPainting.id, null)
         // Merge the freshly-generated output into the in-memory draft; do not
         // re-read from the DB record (which would drop params / mode again).
-        applyIfVisible({ ...targetPainting, files: generatedFiles } as PaintingData)
+        // `targetPainting` is the submit-time snapshot, so only `files` and the
+        // cleared generation state may come from it — merging it whole would
+        // silently roll back every prompt / param / model edit the user made
+        // while the run was in flight (二轮审查 f2-16). That is the same
+        // "sync files only" invariant `usePaintingResultSync` already applies to
+        // the background path.
+        const live = livePaintingRef.current
+        const result = live.id === targetPainting.id ? live : targetPainting
+        applyIfVisible({ ...result, files: generatedFiles, generationStatus: null, generationError: null })
         // fork 缝：output 已回填 Dexie，此处刷新历史栏——PaintingsStrip 才能立即出现新条，
         // 不必退出页面重进（V2 DataApi mutation refresh:['/paintings'] 的等价物）。
         // 只在成功落盘路径调用；失败/取消走下方 catch，不刷新。
@@ -144,7 +160,12 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
           generationError: isCanceled ? null : error instanceof Error ? error.message : String(error)
         }
         setGenerationState(targetPainting.id, failedState)
-        applyIfVisible({ ...targetPainting, ...failedState } as PaintingData)
+        // Same snapshot rule as the success path above: only the generation
+        // state may overwrite the draft. Spreading the submit-time snapshot here
+        // would drop the edits made while the run was in flight.
+        const liveOnFailure = livePaintingRef.current
+        const failureTarget = liveOnFailure.id === targetPainting.id ? liveOnFailure : targetPainting
+        applyIfVisible({ ...failureTarget, ...failedState } as PaintingData)
         if (!isCanceled) {
           presentPaintingGenerateError(error)
         }

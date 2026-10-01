@@ -1,6 +1,11 @@
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
-import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
+import {
+  ORIGIN_DEFAULT_MIN_APPS,
+  readCustomMiniApps,
+  updateAllMinApps,
+  updateCustomMiniApps
+} from '@renderer/config/minapps'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import type { MinAppType } from '@renderer/types'
 import { Button, Form, Input, Modal, Radio, Upload } from 'antd'
@@ -32,15 +37,20 @@ const NewAppButton: FC<Props> = ({ size = 60 }) => {
 
   const handleAddCustomApp = async (values: any) => {
     try {
-      const content = await window.api.file.read('custom-minapps.json')
-      const customApps = JSON.parse(content)
+      // r2-79/⑥：先只读一次做 id 冲突判定（`missing` = 全新安装的合法缺省 → 空列表）；
+      // 冲突时**不写盘**。`error`（存在但读不出来）在这里抛出 → 报错且原文件原样保留。
+      const existing = await readCustomMiniApps()
+      if (existing.status === 'error') {
+        throw existing.error
+      }
+      const currentApps = existing.status === 'ok' ? existing.apps : []
 
       // Check for duplicate ID
-      if (customApps.some((app: MinAppType) => app.id === values.id)) {
+      if (currentApps.some((app) => app.id === values.id)) {
         window.toast.error(t('settings.miniapps.custom.duplicate_ids', { ids: values.id }))
         return
       }
-      if (ORIGIN_DEFAULT_MIN_APPS.some((app: MinAppType) => app.id === values.id)) {
+      if (ORIGIN_DEFAULT_MIN_APPS.some((app) => app.id === values.id)) {
         window.toast.error(t('settings.miniapps.custom.conflicting_ids', { ids: values.id }))
         return
       }
@@ -53,18 +63,19 @@ const NewAppButton: FC<Props> = ({ size = 60 }) => {
         type: 'Custom',
         addTime: new Date().toISOString()
       }
-      customApps.push(newApp)
-      await window.api.file.writeWithId('custom-minapps.json', JSON.stringify(customApps, null, 2))
+      // 唯一的写点：对「不存在」从空列表开始建（首次创建），对「读不出来」抛出
+      // ——失败绝不长得像空结果，原文件不被覆盖。
+      const nextCustomApps = await updateCustomMiniApps((apps) => [...apps, newApp])
+
       window.toast.success(t('settings.miniapps.custom.save_success'))
       setIsModalVisible(false)
       form.resetFields()
       setFileList([])
-      const reloadedApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
-      updateAllMinApps(reloadedApps)
+      updateAllMinApps([...ORIGIN_DEFAULT_MIN_APPS, ...nextCustomApps])
       updateMinapps([...minapps, newApp])
     } catch (error) {
-      window.toast.error(t('settings.miniapps.custom.save_error'))
       logger.error('Failed to save custom mini app:', error as Error)
+      window.toast.error(t('settings.miniapps.custom.save_error'))
     }
   }
 
@@ -81,6 +92,16 @@ const NewAppButton: FC<Props> = ({ size = 60 }) => {
             window.toast.success(t('settings.miniapps.custom.logo_upload_success'))
             form.setFieldValue('logo', base64Data)
           }
+        }
+        // FileReader 的失败是**异步事件**，外层 try/catch 捕获不到（f2-61）。缺了 onerror
+        // 时"读不出来"与"用户没选文件"完全同形：既不报错也不成功，保存后得到无图标的小程序。
+        reader.onerror = () => {
+          logger.error('Failed to read file:', { name: reader.error?.name, message: reader.error?.message })
+          window.toast.error(t('settings.miniapps.custom.logo_upload_error'))
+        }
+        reader.onabort = () => {
+          logger.warn('FileReader aborted while reading the mini-app logo')
+          window.toast.error(t('settings.miniapps.custom.logo_upload_error'))
         }
         reader.readAsDataURL(file)
       } catch (error) {

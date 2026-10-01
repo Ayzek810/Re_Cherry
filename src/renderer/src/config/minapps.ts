@@ -12,44 +12,141 @@ import QwenModelLogo from '@renderer/assets/images/models/qwen.png?url'
 import DeepSeekProviderLogo from '@renderer/assets/images/providers/deepseek.png?url'
 import OpenAiProviderLogo from '@renderer/assets/images/providers/openai.png?url'
 import SiliconFlowProviderLogo from '@renderer/assets/images/providers/silicon.png?url'
+import i18n from '@renderer/i18n'
 import type { MinAppType } from '@renderer/types'
+import type { FileReadByIdResult } from '@shared/types/fileRead'
 
 const logger = loggerService.withContext('Config:minapps')
 
-// 加载自定义小应用
-const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
-  let content: string
+const CUSTOM_MINI_APPS_FILE = 'custom-minapps.json'
+
+/**
+ * 启动播种失败时待展示的提示文案（`null` = 没有失败）。
+ *
+ * 为什么不当场弹 toast：本模块在渲染层启动期求值（`store/migrate.ts` 依赖它），此刻
+ * `window.toast` 还没赋值——`TopView/index.tsx` 在**挂载 effect** 里才设置它。当场调用会
+ * 静默 no-op，失败就只剩一条日志（家规 §9：失败必须有用户可见信号）。因此这里只记住事实，
+ * 由应用页（用户能看到自定义小应用的地方）在挂载时取走并展示，展示后清空以免重复打扰。
+ */
+let pendingLoadErrorMessage: string | null = null
+
+/** 取走启动播种失败的提示（一次性）。 */
+export const takeCustomMiniAppsLoadError = (): string | null => {
+  const message = pendingLoadErrorMessage
+  pendingLoadErrorMessage = null
+  return message
+}
+
+/**
+ * 读自定义小应用的判别式结果（r2-79 的消费侧，跨区请求⑥）。
+ *
+ * 此前这里只有「数组」一种形状：读失败被折成空列表，于是两个相反的事实同形 ——
+ * 「文件不存在」（全新安装的合法缺省，用户第一次添加小应用时**应当**创建文件）与
+ * 「文件存在但读不出来」（不可判定状态，绝不允许被当成空的而覆盖写）。
+ * 三值语义（家规 §9）：`ok` = 确定内容；`missing` = 确定的「不存在」（唯一可授权创建的事实）；
+ * `error` = 存在但读不出来（失败，必须可见）。
+ */
+export type CustomMiniAppsRead =
+  | { status: 'ok'; apps: MinAppType[] }
+  | { status: 'missing' }
+  | { status: 'error'; error: Error }
+
+/** 判定「按 id 读文件」的返回值是不是三值契约的形状。 */
+function isFileReadByIdResult(value: unknown): value is FileReadByIdResult {
+  if (typeof value !== 'object' || value === null) return false
+  const status = (value as { status?: unknown }).status
+  return status === 'ok' || status === 'missing' || status === 'error'
+}
+
+/**
+ * 读 `custom-minapps.json` 并区分「不存在」与「读不出来」。
+ *
+ * 只读，任何分支都不写盘：`error` 分支返回失败事实由调用方报错，绝不降级成空列表。
+ */
+const readCustomMiniApps = async (): Promise<CustomMiniAppsRead> => {
+  let result: unknown
   try {
-    content = await window.api.file.read('custom-minapps.json')
+    result = await window.api.file.readById(CUSTOM_MINI_APPS_FILE)
   } catch (error) {
-    // r2-79：主进程 readFile 对**任何**失败都抛（占用/权限/编码/IO），此前这里一律按
-    // "文件不存在"处理并向同一路径覆盖写 '[]' —— 一次瞬时读失败就永久清空用户的自定义
-    // 小应用（家规不变式 6：不可判定的状态不得授权破坏性动作）。现在**绝不写盘**：
-    // 只记 warn 并返回空列表（文件确实不存在时也走这里——文件由用户首次添加小应用时创建，
-    // 没有种子文件不影响默认应用，见 `pages/apps/NewAppButton`）。
-    logger.warn('Failed to read custom mini apps; keeping the file untouched and using none', error as Error)
-    return []
+    // 通道本身不可用（旧 preload、IPC 拒绝）：同样是"读不出来"，不得当成空列表。
+    const cause = error instanceof Error ? error : new Error(String(error))
+    logger.warn('Failed to read custom mini apps (IPC call rejected); keeping the file untouched', cause)
+    return { status: 'error', error: cause }
+  }
+
+  if (!isFileReadByIdResult(result)) {
+    const shapeError = new Error('custom mini apps read returned an unexpected payload shape')
+    logger.warn('Failed to read custom mini apps (unexpected payload shape)', shapeError)
+    return { status: 'error', error: shapeError }
+  }
+
+  if (result.status === 'missing') {
+    // 确定的「不存在」：全新安装的合法缺省，不是失败。文件由用户首次添加自定义小应用时创建。
+    logger.info('custom-minapps.json does not exist yet; using an empty custom list')
+    return { status: 'missing' }
+  }
+
+  if (result.status === 'error') {
+    const readError = new Error(result.message)
+    logger.warn('custom-minapps.json exists but could not be read; keeping the file untouched', readError)
+    return { status: 'error', error: readError }
   }
 
   try {
-    const customApps = JSON.parse(content)
-    if (!Array.isArray(customApps)) {
+    const parsed = JSON.parse(result.content)
+    if (!Array.isArray(parsed)) {
       throw new Error('custom-minapps.json does not contain an array')
     }
     const now = new Date().toISOString()
 
-    return customApps.map((app: any) => ({
-      ...app,
-      type: 'Custom',
-      logo: app.logo && app.logo !== '' ? app.logo : ApplicationLogo,
-      addTime: app.addTime || now,
-      supportedRegions: ['CN', 'Global'] // Custom mini apps should always be visible for all regions
-    }))
+    return {
+      status: 'ok',
+      apps: parsed.map((app: any) => ({
+        ...app,
+        type: 'Custom',
+        logo: app.logo && app.logo !== '' ? app.logo : ApplicationLogo,
+        addTime: app.addTime || now,
+        supportedRegions: ['CN', 'Global'] // Custom mini apps should always be visible for all regions
+      }))
+    }
   } catch (error) {
     // JSON 损坏同样不得降级为"用户没有小应用"后重写文件：保留原文件，如实记 warn。
-    logger.warn('Failed to parse custom mini apps; keeping the file untouched and using none', error as Error)
-    return []
+    const parseError = error instanceof Error ? error : new Error(String(error))
+    logger.warn('Failed to parse custom mini apps; keeping the file untouched', parseError)
+    return { status: 'error', error: parseError }
   }
+}
+
+// 加载自定义小应用（启动播种路径）。
+// `missing` 是合法缺省（返回空列表）；其余失败一律抛出——启动路径的调用方收到失败即空列表 +
+// 用户提示，**任何分支都不写盘**（家规不变式 6：不可判定的状态不得授权破坏性动作）。
+const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
+  const result = await readCustomMiniApps()
+  if (result.status === 'ok') return result.apps
+  if (result.status === 'missing') return []
+  throw result.error
+}
+
+/**
+ * 用户显式动作下的自定义小应用**原子更新**（r2-79/⑥）。
+ *
+ * 主进程的读通道把「不存在」与「读不出来」分开了，这里据此给出两个相反的动作：
+ * - `missing`（确定不存在）：从空列表开始，写文件即"首次创建"——这正是全新安装下
+ *   用户第一次添加自定义小应用能成功的唯一路径（旧实现无论添加还是删除都会抛在
+ *   `File_Read` 的通用错误上，然后弹一句"保存失败"）。
+ * - `error`（存在但读不出来）：**抛出**。调用方的 catch 负责报错与不写盘，
+ *   用户文件原样保留。失败绝不长得像空结果（家规 §9）。
+ */
+const updateCustomMiniApps = async (mutate: (apps: MinAppType[]) => MinAppType[]): Promise<MinAppType[]> => {
+  const result = await readCustomMiniApps()
+  if (result.status === 'error') {
+    throw result.error
+  }
+
+  const current = result.status === 'ok' ? result.apps : []
+  const next = mutate([...current])
+  await window.api.file.writeWithId(CUSTOM_MINI_APPS_FILE, JSON.stringify(next, null, 2))
+  return next
 }
 
 // 初始化默认小应用
@@ -172,11 +269,27 @@ const ORIGIN_DEFAULT_MIN_APPS: MinAppType[] = [
   }
 ]
 
-// All mini apps: built-in defaults + custom apps loaded from user config
-let allMinApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
+// All mini apps: built-in defaults + custom apps loaded from user config.
+// 启动播种（r2-79/⑥）：读不出来（文件存在但不可读 / IPC 失败）时降级为"只有内置应用"，
+// 但**不写盘**，并记一条 error 与用户可见提示——失败绝不静默，也绝不长得像"用户没有自定义应用"。
+let allMinApps = [...ORIGIN_DEFAULT_MIN_APPS]
+try {
+  allMinApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
+} catch (error) {
+  const cause = error instanceof Error ? error : new Error(String(error))
+  logger.error('Failed to load custom mini apps at startup; built-in apps only, file untouched', cause)
+  pendingLoadErrorMessage = i18n.t('settings.miniapps.custom.load_error')
+}
 
 function updateAllMinApps(apps: MinAppType[]) {
   allMinApps = apps
 }
 
-export { allMinApps, loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps }
+export {
+  allMinApps,
+  loadCustomMiniApp,
+  ORIGIN_DEFAULT_MIN_APPS,
+  readCustomMiniApps,
+  updateAllMinApps,
+  updateCustomMiniApps
+}

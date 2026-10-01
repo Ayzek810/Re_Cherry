@@ -27,6 +27,16 @@ import { Dexie, type EntityTable } from 'dexie'
 
 import { upgradeToV5, upgradeToV7, upgradeToV8 } from './upgrades'
 
+// ---------------------------------------------------------------------------
+// r2-74 Dexie 版本纪律：**版本块只能追加，不能删除、不能合并、不能改写**。
+// Dexie 用声明式版本表算升级路径：已升到 vN 的用户库，其 `_dbSchema` 里记着 vN 的表集，
+// 打开时必须能从旧表集沿**声明链**走到新表集。删掉/合并任何一个中间版本块，都会让停在
+// 该版本的库找不到自己的升级起点而打不开（IndexedDB 里数据还在，但应用永久无法读取）。
+// 同理，已发布的版本块里 `stores({...})` 的表集合也不能再改——只能新增更高的版本块。
+// 与 redux-persist 侧的迁移纪律同源（`store/migrate.ts`：分支只增不删，`store/index.ts`
+// 的 version 与该文件最高键保持相等）。
+// 典型案例见下方 v13/v14：v13 上线又撤销，两个版本块都必须原地保留。
+// ---------------------------------------------------------------------------
 // Database declaration (move this to its own module also)
 export const db = new Dexie('CherryStudio', {
   chromeTransactionDurability: 'strict'

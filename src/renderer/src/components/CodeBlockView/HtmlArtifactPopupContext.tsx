@@ -1,5 +1,6 @@
 import type { HtmlArtifactKind } from '@renderer/pages/home/Markdown/plugins/remarkHtmlArtifact'
 import { htmlArtifactRequiresUserConsent } from '@renderer/utils/htmlArtifact'
+import { Modal, Spin } from 'antd'
 import { createContext, lazy, type ReactNode, Suspense, use, useCallback, useMemo, useState } from 'react'
 
 export interface HtmlArtifactPopupSession {
@@ -26,6 +27,27 @@ export interface HtmlArtifactPopupContextValue {
 const HtmlArtifactPopupContext = createContext<HtmlArtifactPopupContextValue | null>(null)
 
 const HtmlArtifactPopupOutlet = lazy(() => import('./HtmlArtifactsPopup'))
+
+/**
+ * c2-40②：弹窗是 `lazy(() => import(...))` 且会连带拉入 CodeMirror。fallback 渲染 `null` 时，
+ * 用户点「最大化」后 chunk 未就绪期间是一次显式点击换来零反馈 —— 家规点名的 silent invisibility。
+ * 这里给一个真实的 Modal 外壳 + loading 占位。
+ */
+function HtmlArtifactPopupFallback() {
+  return (
+    <Modal
+      open
+      footer={null}
+      closable={false}
+      centered
+      maskClosable={false}
+      width={600}
+      data-testid="html-artifact-popup-loading"
+      styles={{ body: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160 } }}>
+      <Spin />
+    </Modal>
+  )
+}
 
 export function useOptionalHtmlArtifactPopupContext(): HtmlArtifactPopupContextValue | null {
   return use(HtmlArtifactPopupContext)
@@ -91,7 +113,7 @@ export function HtmlArtifactPopupHost({ children }: { children: ReactNode }) {
     <HtmlArtifactPopupContext value={contextValue}>
       {children}
       {popupSession ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<HtmlArtifactPopupFallback />}>
           <HtmlArtifactPopupOutlet
             open
             title={popupSession.title}

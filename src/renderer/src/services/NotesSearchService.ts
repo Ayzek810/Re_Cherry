@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import type { NotesTreeNode } from '@renderer/types/note'
+import { escapeRegex } from '@renderer/utils/keywordSearch'
 
 const logger = loggerService.withContext('NotesSearchService')
 
@@ -35,13 +36,6 @@ export interface SearchOptions {
 }
 
 /**
- * Escape regex special characters
- */
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/**
  * Calculate relevance score
  * - Filename match has higher priority
  * - More matches increase score
@@ -70,13 +64,32 @@ export function calculateRelevanceScore(node: NotesTreeNode, keyword: string, ma
 }
 
 /**
+ * 单文件检索结果（二轮审查 r2-05：判别式，失败与「零命中」必须可分）
+ * - `matched`：命中；
+ * - `no-match`：文件读到了、内容也扫了，就是没有匹配（正常的零命中）；
+ * - `error`：读文件 / 构造正则失败 —— **不是**零命中（旧实现把两者都返回 `null`，
+ *   调用方只能看到「无结果」，读失败被静默吞成空态）。
+ */
+export type SearchFileOutcome =
+  | { kind: 'matched'; result: SearchResult }
+  | { kind: 'no-match' }
+  | { kind: 'error'; error: Error }
+
+/** 全库检索结果：命中 + 逐文件失败清单（失败不得伪装成空结果，CLAUDE.md §9）。 */
+export interface SearchAllFilesOutcome {
+  results: SearchResult[]
+  /** 读取/扫描失败的文件（含原因），供调用方给出「N 个文件读取失败」的可见信号。 */
+  failures: { node: NotesTreeNode; error: Error }[]
+}
+
+/**
  * Search file content for keyword matches
  */
 export async function searchFileContent(
   node: NotesTreeNode,
   keyword: string,
   options: SearchOptions = {}
-): Promise<SearchResult | null> {
+): Promise<SearchFileOutcome> {
   const {
     caseSensitive = false,
     useRegex = false,
@@ -87,18 +100,19 @@ export async function searchFileContent(
 
   try {
     if (node.type !== 'file') {
-      return null
+      return { kind: 'no-match' }
     }
 
     const content = await window.api.file.readExternal(node.externalPath)
 
     if (!content) {
-      return null
+      return { kind: 'no-match' }
     }
 
     if (content.length > maxFileSize) {
+      // 策略性跳过（不是读失败）：文件读到了但超出检索体积上限，留 warn 取证。
       logger.warn(`File too large to search: ${node.externalPath} (${content.length} bytes)`)
-      return null
+      return { kind: 'no-match' }
     }
 
     const flags = caseSensitive ? 'g' : 'gi'
@@ -144,20 +158,26 @@ export async function searchFileContent(
     }
 
     if (matches.length === 0) {
-      return null
+      return { kind: 'no-match' }
     }
 
     const score = calculateRelevanceScore(node, keyword, matches)
 
     return {
-      ...node,
-      matchType: 'content',
-      matches,
-      score
+      kind: 'matched',
+      result: {
+        ...node,
+        matchType: 'content',
+        matches,
+        score
+      }
     }
   } catch (error) {
-    logger.error(`Failed to search file content for ${node.externalPath}:`, error as Error)
-    return null
+    const failure = error instanceof Error ? error : new Error(String(error))
+    logger.error(`Failed to search file content for ${node.externalPath}:`, failure)
+    // r2-05：失败以 `error` 判别返回，由 searchAllFiles 汇总进 failures；
+    // 不再与「零命中」同值，调用方的 setError 因此可达。
+    return { kind: 'error', error: failure }
   }
 }
 
@@ -193,16 +213,21 @@ export function flattenTreeToFiles(nodes: NotesTreeNode[]): NotesTreeNode[] {
 
 /**
  * Search all files concurrently
+ *
+ * r2-05：返回值改为 `{ results, failures }` 汇总。此前失败与「零命中」同为 `null`，
+ * 调用方（`useFullTextSearch`）的 `setError` 永不执行——读文件失败时全库检索静默显示「无结果」。
+ * 现在逐文件失败被收集成显式清单，调用方可以给出「N 个文件读取失败」的信号。
  */
 export async function searchAllFiles(
   nodes: NotesTreeNode[],
   keyword: string,
   options: SearchOptions = {},
   signal?: AbortSignal
-): Promise<SearchResult[]> {
+): Promise<SearchAllFilesOutcome> {
   const startTime = performance.now()
   const CONCURRENCY = 5
   const results: SearchResult[] = []
+  const failures: { node: NotesTreeNode; error: Error }[] = []
 
   const fileNodes = flattenTreeToFiles(nodes)
 
@@ -222,7 +247,12 @@ export async function searchAllFiles(
       if (!node) break
 
       const nameMatch = matchFileName(node, keyword, options.caseSensitive)
-      const contentResult = await searchFileContent(node, keyword, options)
+      const outcome = await searchFileContent(node, keyword, options)
+
+      if (outcome.kind === 'error') {
+        failures.push({ node, error: outcome.error })
+      }
+      const contentResult = outcome.kind === 'matched' ? outcome.result : null
 
       if (nameMatch && contentResult) {
         results.push({
@@ -253,10 +283,11 @@ export async function searchAllFiles(
   logger.debug(
     `Full-text search completed: keyword="${keyword}", duration=${duration}ms, ` +
       `totalFiles=${fileNodes.length}, resultsFound=${sortedResults.length}, ` +
+      `failedFiles=${failures.length}, ` +
       `filenameMatches=${sortedResults.filter((r) => r.matchType === 'filename').length}, ` +
       `contentMatches=${sortedResults.filter((r) => r.matchType === 'content').length}, ` +
       `bothMatches=${sortedResults.filter((r) => r.matchType === 'both').length}`
   )
 
-  return sortedResults
+  return { results: sortedResults, failures }
 }

@@ -1,5 +1,4 @@
 import { useAppSelector } from '@renderer/store'
-import { IpcChannel } from '@shared/IpcChannel'
 import { useEffect } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -33,7 +32,7 @@ const NavigationHandler: React.FC = () => {
       navigate('/settings/about')
     }
 
-    const removeListener = window.electron.ipcRenderer.on(IpcChannel.Windows_NavigateToAbout, handleNavigateToAbout)
+    const removeListener = window.api.events.onNavigateToAbout(handleNavigateToAbout)
 
     return () => {
       removeListener()

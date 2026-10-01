@@ -36,7 +36,8 @@ const SelectModelButton: FC<Props> = ({ assistant }) => {
         const enabledWebSearch = isWebSearchModel(selectedModel)
         updateAssistant({
           model: selectedModel,
-          enableWebSearch: enabledWebSearch && assistant.enableWebSearch
+          // r2-80：`undefined` = provider 还不知道（冷启动窗口）——只换模型，**不得**写回持久化开关。
+          ...(enabledWebSearch === undefined ? {} : { enableWebSearch: enabledWebSearch && assistant.enableWebSearch })
         })
       }, 200)
     }

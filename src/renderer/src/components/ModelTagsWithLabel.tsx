@@ -7,11 +7,11 @@ import {
   isVisionModel,
   isWebSearchModel
 } from '@renderer/config/models'
-import i18n from '@renderer/i18n'
 import type { Model } from '@renderer/types'
 import { isFreeModel } from '@renderer/utils/model'
 import type { FC } from 'react'
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 import {
@@ -49,8 +49,12 @@ const ModelTagsWithLabel: FC<ModelTagsProps> = ({
   const [shouldShowLabel, setShouldShowLabel] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
+  // c2-26：`i18n.language` 是可变的全局值。原来经默认单例读取且依赖数组为空，
+  // 语言切换后 `maxWidth` 仍是旧值（英文标签更长，被压在 zh 的阈值下不显示），
+  // 直到重启才恢复。走 `useTranslation()`，组件订阅语言变化并把它放进依赖。
+  const { i18n } = useTranslation()
 
-  const maxWidth = useMemo(() => (i18n.language.startsWith('zh') ? 300 : 350), [])
+  const maxWidth = useMemo(() => ((i18n?.language ?? '').startsWith('zh') ? 300 : 350), [i18n?.language])
 
   useLayoutEffect(() => {
     const currentElement = containerRef.current

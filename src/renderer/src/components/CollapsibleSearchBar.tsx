@@ -1,9 +1,9 @@
-import i18n from '@renderer/i18n'
 import type { InputRef } from 'antd'
 import { Input, Tooltip } from 'antd'
 import { Search } from 'lucide-react'
 import { motion } from 'motion/react'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface CollapsibleSearchBarProps {
   onSearch: (text: string) => void
@@ -20,8 +20,8 @@ interface CollapsibleSearchBarProps {
  */
 const CollapsibleSearchBar = ({
   onSearch,
-  placeholder = i18n.t('common.search'),
-  tooltip = i18n.t('common.search'),
+  placeholder,
+  tooltip,
   icon = <Search size={14} color="var(--color-icon)" />,
   maxWidth = '100%',
   style
@@ -29,6 +29,12 @@ const CollapsibleSearchBar = ({
   const [searchVisible, setSearchVisible] = useState(false)
   const [searchText, setSearchText] = useState('')
   const inputRef = useRef<InputRef>(null)
+  // c2-26：默认值原来经默认单例 `i18n.t(...)` 在默认参数里求值；组件被 `memo()` 包住且
+  // 三个消费点都不传这两个 prop，于是文案只在父组件恰好重渲染时才刷新。改用 `useTranslation()`，
+  // 组件订阅语言变化，默认值在渲染期取。
+  const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('common.search')
+  const resolvedTooltip = tooltip ?? t('common.search')
 
   const handleTextChange = useCallback(
     (text: string) => {
@@ -63,7 +69,7 @@ const CollapsibleSearchBar = ({
         <Input
           ref={inputRef}
           type="text"
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           size="small"
           suffix={icon}
           value={searchText}
@@ -93,7 +99,7 @@ const CollapsibleSearchBar = ({
         }}
         style={{ cursor: 'pointer', display: 'flex' }}
         onClick={() => setSearchVisible(true)}>
-        <Tooltip title={tooltip} mouseEnterDelay={0.5} mouseLeaveDelay={0}>
+        <Tooltip title={resolvedTooltip} mouseEnterDelay={0.5} mouseLeaveDelay={0}>
           {icon}
         </Tooltip>
       </motion.div>

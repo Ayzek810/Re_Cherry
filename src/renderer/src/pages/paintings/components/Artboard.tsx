@@ -514,6 +514,12 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
 
   const promptBar = painting.prompt ? <ArtboardPromptBar prompt={painting.prompt} sizeLabel={sizeLabel} /> : undefined
 
+  // 二轮审查 f2-23：`generationError` 此前只写不读（全 paintings 目录无任何渲染者）。失败当刻的
+  // modal/toast 是唯一信号；切走再回来（或后台完成）后用户看到的是**一块空占位、没有任何失败说明**，
+  // 也无法看到错误详情。这里补一个失败/取消态：无图可显示且本轮以失败/取消收尾时给一行解释。
+  const failedGeneration = painting.generationStatus === 'failed'
+  const canceledGeneration = painting.generationStatus === 'canceled'
+
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col p-2">
       <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center [container-type:size]">
@@ -624,6 +630,22 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
           </div>
         ) : imageCover ? (
           imageCover
+        ) : failedGeneration || canceledGeneration ? (
+          <div
+            data-testid="artboard-generation-failed"
+            role="status"
+            className="flex max-w-md flex-col items-center gap-1 px-4 text-center">
+            <span className="text-muted-foreground text-sm">
+              {failedGeneration
+                ? t('paintings.generate_failed')
+                : t('paintings.generation_canceled', { defaultValue: 'Generation canceled' })}
+            </span>
+            {failedGeneration && painting.generationError ? (
+              <span className="break-all text-muted-foreground/80 text-xs" title={painting.generationError}>
+                {painting.generationError}
+              </span>
+            ) : null}
+          </div>
         ) : (
           <div
             role="img"

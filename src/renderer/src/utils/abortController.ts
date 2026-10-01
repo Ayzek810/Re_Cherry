@@ -67,6 +67,15 @@ export const clearAbortControllersForTopic = (topicId: string) => {
   if (key !== undefined) removeAbortController(key)
 }
 
+/**
+ * 该键当前是否有已登记的中止回调（只读查询，r2-47 用）。
+ *
+ * `pauseMessages` 收集的键来自 streaming 消息的 `askId`，而登记键是**用户消息 id**；
+ * 两者可能不一致（空 `askId`、或消息 id 被重映射后注册已摘除）。中止是"命中才算数"的副作用，
+ * 调用方需要知道它有没有真的命中，才能决定是否退回话题级 `dshTopicStop`。
+ */
+export const hasAbortRegistration = (id: string): boolean => (abortMap.get(id)?.length ?? 0) > 0
+
 export const abortCompletion = (id: string) => {
   const abortFns = abortMap.get(id)
   if (abortFns?.length) {

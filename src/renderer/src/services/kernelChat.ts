@@ -40,7 +40,11 @@ import {
   MessageBlockType,
   type ToolMessageBlock
 } from '@renderer/types/newMessage'
-import { clearAbortControllersForTopic, renameAbortController } from '@renderer/utils/abortController'
+import {
+  clearAbortControllersForTopic,
+  removeAbortController,
+  renameAbortController
+} from '@renderer/utils/abortController'
 import {
   createCitationBlock,
   createErrorBlock,
@@ -124,10 +128,15 @@ interface TurnState {
 const streams = new Map<string, TurnState>()
 
 // --- 分支锚点簿记（最小版，无 UI） ---
-// 本地上送的 user 消息（uuid）在回执 user/message 事件到达前拿不到内核 seq；
-// 这里按会话 FIFO 记录 "尚未回执的发送"，事件到达时把 seq 记到 uuid 上，供将来对该消息 fork。
+// 本地上送的 user 消息（uuid）在回执 user/message 事件到达前拿不到内核 seq；这里按会话 FIFO
+// 记录"尚未回执的发送"，回执到达时把本地消息 id 改写成 kernel-<topic>-<seq>（`remapMessageToKernelId`）。
+//
+// r2-20/r2-21：旧实现另有一张 `liveUserSeq`（topicId\0messageId → seq）登记表，但它在写入的
+// **同一行**（回执到达）就被删除，随后消息 id 被改写成 kernel- 前缀——该表对用户消息永远查不到，
+// 是"回执前 fork"这条腿的**死登记**（回执前 seq 恰恰不可知，登记不可能存在）。故删除此表：
+// 锚点只从 `kernel-` 前缀 id 解析，`kernelAnchorOf` 对非 kernel- id 明确返回 undefined
+//（= "回执前 fork 不支持"，由调用方按已有的 anchor 缺失路径处理）。
 const pendingUserIds = new Map<string, string[]>()
-const liveUserSeq = new Map<string, number>() // key = `${topicId}\u0000${messageId}`
 
 /** 发送前登记：该 user 消息即将以内核新事件落库（会话内 FIFO）。 */
 function rememberPendingUser(topicId: string, userMessageId: string): void {
@@ -136,12 +145,12 @@ function rememberPendingUser(topicId: string, userMessageId: string): void {
   pendingUserIds.set(topicId, queue)
 }
 
-/** user/message 事件回执：把最早一条未回执发送的 seq 关联上，返回该本地消息 id（无则 undefined）。 */
-function recordUserMessageSeq(topicId: string, seq: number): string | undefined {
+/** user/message 事件回执：弹出最早一条未回执的本地消息 id（无则 undefined），供 id 改写用。 */
+function takePendingUser(topicId: string): string | undefined {
   const queue = pendingUserIds.get(topicId)
   if (queue === undefined || queue.length === 0) return undefined
   const userMessageId = queue.shift() as string
-  liveUserSeq.set(topicId + '\u0000' + userMessageId, seq)
+  if (queue.length === 0) pendingUserIds.delete(topicId) // 空队列不留键（无界增长的半个来源）
   return userMessageId
 }
 
@@ -150,10 +159,15 @@ export interface KernelAnchor {
   seq: number
 }
 
-/** 消息 → 内核锚点 (sessionId, seq)。
- * kernel-<session>-<seq> 形态直接解析；本地 uuid（尚未重载的内核消息）走回执登记表。
+/**
+ * 消息 → 内核锚点 (sessionId, seq)。
+ * 只认 `kernel-<session>-<seq>` 形态：本地 uuid（回执未到、seq 未知）没有锚点——
+ * **"回执前 fork"不支持**（自 r2-21 起为显式语义，旧实现的死登记表已删除）。
+ *
+ * `_topicId` 保留在签名里是为了调用点语义稳定（调用方按话题查询），自 r2-21 起不再参与解析
+ * —— 锚点完全由消息 id 决定，所以不可能出现"按错话题查到别的锚点"。
  */
-export function kernelAnchorOf(topicId: string, message: Message): KernelAnchor | undefined {
+export function kernelAnchorOf(_topicId: string, message: Message): KernelAnchor | undefined {
   const id = message.id
   if (id.startsWith('kernel-')) {
     const body = id.slice('kernel-'.length)
@@ -163,8 +177,7 @@ export function kernelAnchorOf(topicId: string, message: Message): KernelAnchor 
     if (!/^[0-9]+$/.test(seqText)) return undefined
     return { sessionId: body.slice(0, dash), seq: Number(seqText) }
   }
-  const seq = liveUserSeq.get(topicId + '\u0000' + id)
-  return seq === undefined ? undefined : { sessionId: topicId, seq }
+  return undefined
 }
 
 /** 在内核把 source 会话按锚点 fork 成子分支（源会话原样保留）。返回子分支信息；锚点不可解析/失败返回 null。 */
@@ -411,7 +424,8 @@ export function assistantReasoningLevel(assistant: Assistant): string | undefine
  *
  * v0.3.0-2 目标 B（`report.md` §3.3.2-5）：`dshTopicCreate` 是 **upsert**，对"内核已遗忘的 id"调用
  * 会让该 id **复活**（违反内核兼容契约第 4 节的墓碑纪律）。因此只服务**真正新建**的话题：
- * 来自上次会话的行（`isRestoredTopicRow`）必须先由内核确认存在，否则拒绝建册。
+ * 来自上次会话的行（`isRestoredTopicRow`）必须由内核**确认存在**（`kernelKnowsTopic` 返回 `true`）
+ * 才允许建册；`false`（明确否定）与 `null`（重试窗口内没问到）都拒绝（r2-04）。
  * 本进程内新建的话题不需要这次确认——内核不认识它是因为它还没首发过（这正是本函数要做的建册）。
  */
 export async function ensureKernelTopic(topicId: string, assistant: Assistant): Promise<void> {
@@ -421,9 +435,21 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
   }
   if (isRestoredTopicRow(topicId)) {
     const known = await kernelKnowsTopic(topicId)
-    // known === null（查询失败）不拒绝：建册本身就要走同一个内核，此时拒绝只会把主操作也挡掉
+    // r2-04：`dshTopicCreate` 是 upsert，对"内核已遗忘的 id"调用会让它复活（墓碑纪律）。
+    // 三值契约里只有 `true` 是"已确认存在"；`false`（内核确定没有）与 `null`（全部尝试都没问到）
+    // 都属于**未确认存在**，而不变式 4 要求 `ensureAgent` 绝不在既有日志之上创建会话——
+    // 所以两种情形都拒绝，只在诊断文案上区分：
+    //   `false` = 内核明确回答"没有此行"（确定性否定）
+    //   `null`  = 内核未能在重试窗口内回答（未知；「不知道」不是「不存在」的许可证）
     if (known === false) {
-      throw new Error(`kernelChat: topic "${topicId}" is unknown to the kernel registry; refusing to recreate it`)
+      throw new Error(
+        `kernelChat: topic "${topicId}" is unknown to the kernel registry; refusing to recreate it (kernel answered: no such topic)`
+      )
+    }
+    if (known === null) {
+      throw new Error(
+        `kernelChat: topic "${topicId}" could not be verified against the kernel registry; refusing to recreate it (kernel did not answer within the retry window)`
+      )
     }
   }
   await window.api.dshTopicCreate({
@@ -548,11 +574,11 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
       // 广播口剔除（kernel/sessionEventView.ts），这里收到的一定是真实发送——回执 FIFO
       // 不再有被注入事件抢占名额、把本地消息的回执 seq 记到注入事件上的风险（v0.3.0-1
       // 结构化：可见性由单一判据保证，本层无需再判）。
-      // 回执登记：本地 uuid user 消息 → 内核 seq（供以后对该消息 fork 用）
-      const localUserId = recordUserMessageSeq(topicId, event.seq)
-      // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）
+      // 回执登记：弹出本地上送的 user 消息（FIFO），其 seq 由事件的 seq 给出
+      const localUserId = takePendingUser(topicId)
+      // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）；
+      // 改写后该消息的锚点直接由 id 解析，故不再需要单独的 seq 登记表（r2-21）。
       if (localUserId) {
-        liveUserSeq.delete(topicId + '\u0000' + localUserId)
         remapMessageToKernelId(topicId, localUserId, event.seq)
       }
       break
@@ -1150,7 +1176,15 @@ function turnHasVisibleOutput(state: TurnState, entities: Record<string, Message
 
 function finishTurn(topicId: string, reason: { kind: string; error?: { message: string; code: string } }): void {
   const state = streams.get(topicId)
-  if (state === undefined) return
+  if (state === undefined) {
+    // 本回合没有投影状态（turn/end 先于 turn/start 到达、或 startTurn 未认领 stub）：回合仍然结束了，
+    // 本回合的簿记必须收口——否则未回执的 FIFO 条目会污染下一回合的回执配对（r2-20），
+    // 中止登记也会留在 abortMap 里（r2-13/r2-47）。pendingStubs 不动：后续若真来了 turn/start，
+    // 它是唯一的 stub 认领凭据（删掉会让那一轮彻底投影不出来）。
+    pendingUserIds.delete(topicId)
+    clearAbortControllersForTopic(topicId)
+    return
+  }
   const failed = reason.kind === 'error'
   const aborted = reason.kind === 'aborted'
   if (failed) {
@@ -1251,7 +1285,18 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   store.dispatch(userQuestionsActions.clearByTopic({ topicId }))
   streams.delete(topicId)
   pendingStubs.delete(topicId)
+  // r2-20：本回合未回执的本地 user 消息 FIFO 到此作废——回执没来（内核侧失败/中断/删除轮次）时
+  // 留着它只会让下一回合的 user/message 回执把 seq 记到错误的本地 id 上（FIFO 错配 → 锚点错位）。
+  pendingUserIds.delete(topicId)
   // r2-13 彻底版：摘掉本回合的中止登记，空闲时 abortMap 归零（此前每话题残留一个闭包）。
+  // r2-47：登记键是**用户消息 id**，而 user/message 回执会把该 id 改写为 kernel-<topic>-<seq>；
+  // `abortKeysByTopic` 仍指向旧 uuid（rename 不迁移话题索引，见 utils/abortController.ts），
+  // 只按话题清会漏掉改写后的键——那个闭包会随回合数无界留在 abortMap 里。故再按本轮回答的
+  // askId（= 用户消息 id，改写后即内核 id）清一次。两种键都是"本条消息"的键，不会误伤别的回合。
+  const assistantMessage = store.getState().messages.entities[state.assistantMessageId]
+  if (assistantMessage?.askId !== undefined) {
+    removeAbortController(assistantMessage.askId)
+  }
   clearAbortControllersForTopic(topicId)
 }
 
@@ -1265,6 +1310,16 @@ async function projectEventsToMessages(
 ): Promise<{ messages: Message[]; blocks: MessageBlock[] }> {
   const messages: Message[] = []
   const blocks: MessageBlock[] = []
+  // r2-22：块索引（id → 块 / id → 下标）。旧实现在 tool/result 回路里用 `blocks.find` 线性查引用
+  // 载体块，复杂度是"事件数 × 本轮块数"（直播路径用 store 的实体索引，O(1)）。这里同口径建索引，
+  // 顺带让 r2-23 的不可变替换（换数组元素）也是 O(1)。数组只追加、只按 id 替换，下标稳定。
+  const blockById = new Map<string, MessageBlock>()
+  const blockIndexById = new Map<string, number>()
+  const pushBlock = (block: MessageBlock): void => {
+    blockIndexById.set(block.id, blocks.length)
+    blockById.set(block.id, block)
+    blocks.push(block)
+  }
   const assistantId = findAssistantIdForTopic(topicId)
 
   let lastUserMessageId: string | undefined
@@ -1272,6 +1327,8 @@ async function projectEventsToMessages(
   let reply: {
     messageId: string
     message: Message
+    /** 该回答消息在 `messages` 里的下标（不可变替换用，r2-23）。 */
+    messageIndex: number
     blockIds: string[]
     usage: { inputTokens: number; outputTokens: number }
     toolBlocks: Map<string, ToolMessageBlock>
@@ -1282,16 +1339,28 @@ async function projectEventsToMessages(
     citationBlockSource?: WebSearchSource
   } | null = null
 
+  /** r2-23：历史投影与直播路径同口径——收尾时用**新对象**替换数组元素，不就地改已入数组的对象。 */
+  const replaceReplyMessage = (next: Message): void => {
+    if (reply === null) return
+    reply.message = next
+    messages[reply.messageIndex] = next
+  }
+
   const closeReply = (): void => {
     if (reply === null) return
-    reply.message.blocks = reply.blockIds
-    if (reply.usage.inputTokens > 0 || reply.usage.outputTokens > 0) {
-      reply.message.usage = {
-        prompt_tokens: reply.usage.inputTokens,
-        completion_tokens: reply.usage.outputTokens,
-        total_tokens: reply.usage.inputTokens + reply.usage.outputTokens
-      }
-    }
+    replaceReplyMessage({
+      ...reply.message,
+      blocks: reply.blockIds,
+      ...(reply.usage.inputTokens > 0 || reply.usage.outputTokens > 0
+        ? {
+            usage: {
+              prompt_tokens: reply.usage.inputTokens,
+              completion_tokens: reply.usage.outputTokens,
+              total_tokens: reply.usage.inputTokens + reply.usage.outputTokens
+            }
+          }
+        : {})
+    })
     reply = null
   }
 
@@ -1307,7 +1376,7 @@ async function projectEventsToMessages(
         for (const content of event.data.content) {
           if (content.type === 'text' && content.text.length > 0) {
             const block = createMainTextBlock(messageId, content.text, { status: MessageBlockStatus.SUCCESS })
-            blocks.push(block)
+            pushBlock(block)
             blockIds.push(block.id)
           } else if (content.type === 'document') {
             // 附件修复（v0.3.2）：文档引用块 → FILE 块。引用随会话日志持久
@@ -1324,7 +1393,7 @@ async function projectEventsToMessages(
               count: 1
             }
             const block = createFileBlock(messageId, file, { status: MessageBlockStatus.SUCCESS })
-            blocks.push(block)
+            pushBlock(block)
             blockIds.push(block.id)
           } else if (content.type === 'image') {
             // v0.3.1：内核只存图片 ref——按 ref 同步字节回本地文件仓（幂等）再产出 IMAGE 块。
@@ -1332,13 +1401,21 @@ async function projectEventsToMessages(
             const file = await syncKernelImageAttachment(content.attachment)
             if (file !== null) {
               const block = createImageBlock(messageId, { file, status: MessageBlockStatus.SUCCESS })
-              blocks.push(block)
+              pushBlock(block)
               blockIds.push(block.id)
             } else {
+              // r2-24：失败占位与"真的有一段这样的文字"必须在结构上可分——旧实现用
+              // `status: SUCCESS` 承载它，导出/复制/用量这类按 status 统计的消费方会把它
+              // 当成正常内容。可见文本保持不变（消费方 MainTextBlock/Markdown 不看 status 渲染正文，
+              // 见 pages/home/Messages/Blocks/MainTextBlock.tsx；Markdown 只把 status==='streaming'
+              // 当流式，ERROR 走"已完成"渲染路径，故呈现不变）。
               const failed = createMainTextBlock(messageId, i18n.t('kernelChat.imageLoadFailed'), {
-                status: MessageBlockStatus.SUCCESS
+                status: MessageBlockStatus.ERROR,
+                metadata: {
+                  error: { kind: 'image-attachment-sync-failed', attachmentId: content.attachment.attachmentId }
+                }
               })
-              blocks.push(failed)
+              pushBlock(failed)
               blockIds.push(failed.id)
             }
           }
@@ -1372,6 +1449,7 @@ async function projectEventsToMessages(
           reply = {
             messageId,
             message,
+            messageIndex: messages.length - 1,
             blockIds: [],
             usage: { inputTokens: 0, outputTokens: 0 },
             toolBlocks: new Map(),
@@ -1391,12 +1469,12 @@ async function projectEventsToMessages(
                   }
                 : {})
             })
-            blocks.push(main)
+            pushBlock(main)
             reply.blockIds.push(main.id)
             reply.sawVisibleOutput = true
           } else if (block.type === 'reasoning' && block.text !== undefined && block.text.length > 0) {
             const thinking = createThinkingBlock(reply.messageId, block.text, { status: MessageBlockStatus.SUCCESS })
-            blocks.push(thinking)
+            pushBlock(thinking)
             reply.blockIds.push(thinking.id)
             reply.sawVisibleOutput = true
           }
@@ -1426,7 +1504,7 @@ async function projectEventsToMessages(
           ...(parsedArguments !== undefined ? { arguments: parsedArguments } : {}),
           metadata: { rawArguments: event.data.arguments }
         })
-        blocks.push(toolBlock)
+        pushBlock(toolBlock)
         reply.blockIds.push(toolBlock.id)
         reply.toolBlocks.set(event.data.callId, toolBlock)
         break
@@ -1446,14 +1524,25 @@ async function projectEventsToMessages(
           .flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []))
           .join('\n')
         const failed = resultBlock.isError === true || event.data.error !== undefined
-        toolBlock.content = text
-        toolBlock.status = failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+        // r2-23：回填结果用**新块对象**替换（不就地改已进 blocks 数组的块）——与直播路径的
+        // `updateOneBlock` 同口径；toolBlocks/数组/索引表同步指向新对象。
+        const filledToolBlock: ToolMessageBlock = {
+          ...toolBlock,
+          content: text,
+          status: failed ? MessageBlockStatus.ERROR : MessageBlockStatus.SUCCESS
+        }
+        reply.toolBlocks.set(resultBlock.toolCallId, filledToolBlock)
+        const toolBlockIndex = blockIndexById.get(toolBlock.id)
+        if (toolBlockIndex !== undefined) {
+          blocks[toolBlockIndex] = filledToolBlock
+          blockById.set(filledToolBlock.id, filledToolBlock)
+        }
         // 批次5 聊天生图回放投影：与直播路径同构（buildGenerateImageBlock 共用，
         // 载荷在事件 meta——presentationMeta 通道，回放复现）。
-        if (!failed && toolBlock.toolName === 'generate_image') {
+        if (!failed && filledToolBlock.toolName === 'generate_image') {
           const imageBlock = buildGenerateImageBlock(reply.messageId, event.data.meta)
           if (imageBlock !== undefined) {
-            blocks.push(imageBlock)
+            pushBlock(imageBlock)
             reply.blockIds.push(imageBlock.id)
           }
         }
@@ -1463,7 +1552,7 @@ async function projectEventsToMessages(
         const currentReply = reply
         const existingCarrier =
           currentReply.citationBlockSource === WEB_SEARCH_SOURCE.WEBSEARCH && currentReply.citationBlockId !== undefined
-            ? (blocks.find((b) => b.id === currentReply.citationBlockId) as CitationMessageBlock | undefined)
+            ? (blockById.get(currentReply.citationBlockId) as CitationMessageBlock | undefined)
             : undefined
         const citationResult = buildSearchCitationBlock(
           currentReply.messageId,
@@ -1475,12 +1564,15 @@ async function projectEventsToMessages(
           const citationBlock = citationResult.block
           if (citationResult.merged) {
             // 不可变合并的新块对象替换 blocks 里的旧元素（同 id；store 快照稍后统一 upsert）
-            const index = blocks.findIndex((b) => b.id === citationBlock.id)
-            if (index >= 0) blocks[index] = citationBlock
+            const index = blockIndexById.get(citationBlock.id)
+            if (index !== undefined) {
+              blocks[index] = citationBlock
+              blockById.set(citationBlock.id, citationBlock)
+            }
           } else {
             currentReply.citationBlockId = citationBlock.id
             currentReply.citationBlockSource = citationBlock.response?.source
-            blocks.push(citationBlock)
+            pushBlock(citationBlock)
             currentReply.blockIds.push(citationBlock.id)
           }
         }
@@ -1508,6 +1600,7 @@ async function projectEventsToMessages(
           reply = {
             messageId,
             message,
+            messageIndex: messages.length - 1,
             blockIds: [],
             usage: { inputTokens: 0, outputTokens: 0 },
             toolBlocks: new Map(),
@@ -1519,10 +1612,11 @@ async function projectEventsToMessages(
           : createErrorBlock(reply.messageId, serializedEmptyTurn())
         // 消息级 status 与直播路径（finishTurn）对齐：error 轮置 error；
         // 空轮保持 success（直播路径成功收尾语义，错误承载在块内）
+        // r2-23：用新消息对象替换数组元素（不就地改）。
         if (wantsErrorBlock) {
-          reply.message.status = 'error' as AssistantMessageStatus
+          replaceReplyMessage({ ...reply.message, status: 'error' as AssistantMessageStatus })
         }
-        blocks.push(turnBlock)
+        pushBlock(turnBlock)
         reply.blockIds.push(turnBlock.id)
         break
       }
@@ -1568,7 +1662,10 @@ function createKernelMessage(
     assistantId,
     topicId,
     createdAt: new Date().toISOString(),
-    status: role === 'user' ? ('success' as AssistantMessageStatus) : ('success' as AssistantMessageStatus),
+    // r2-52：旧写法 `role === 'user' ? 'success' : 'success'` 两支同值（读者会以为角色有默认差异）。
+    // 三个调用点都显式传 `status`（user→success、assistant→success/error），故缺省值不可达、
+    // 无法从调用方证明"按角色分默认"的意图；这里退回单一表达式，行为与旧实现逐字一致。
+    status: 'success' as AssistantMessageStatus,
     blocks,
     ...overrides
   }

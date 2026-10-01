@@ -60,36 +60,45 @@ export const useDebouncedRender = (
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  // c2-09①：渲染函数与守卫经 ref 读取，防抖函数的身份只随 `debounceDelay` 变化。
+  // 否则父组件在防抖窗口内任何一次重渲染都会重建 `debouncedRender` → `triggerRender`/`cancelRender`
+  // 身份变化 → 下面的 effect cleanup 把已排队的那次渲染 cancel 掉，长内容永远排不到渲染。
+  const renderFunctionRef = useRef(renderFunction)
+  renderFunctionRef.current = renderFunction
+  const shouldRenderRef = useRef(shouldRender)
+  shouldRenderRef.current = shouldRender
+
   // 包装渲染函数，添加容器检查和错误处理
-  const wrappedRenderFunction = useCallback(
-    async (content: string): Promise<void> => {
-      // 检查渲染前条件
-      if ((shouldRender && !shouldRender()) || !content) {
-        return
-      }
+  const wrappedRenderFunction = useCallback(async (content: string): Promise<void> => {
+    // 检查渲染前条件
+    if ((shouldRenderRef.current && !shouldRenderRef.current()) || !content) {
+      // c2-09②：早退也必须复位 spinner。`triggerRender` 已经把它打开了，
+      // 不复位会让折叠/`display:none` 里的图表一直转圈。
+      setIsLoading(false)
+      return
+    }
 
-      if (!containerRef.current) {
-        logger.warn('Container element not available')
-        throw new Error('Container element not available')
-      }
+    if (!containerRef.current) {
+      logger.warn('Container element not available')
+      setIsLoading(false)
+      throw new Error('Container element not available')
+    }
 
-      try {
-        setIsLoading(true)
+    try {
+      setIsLoading(true)
 
-        await renderFunction(content, containerRef.current)
+      await renderFunctionRef.current(content, containerRef.current)
 
-        // 渲染成功，确保清除错误状态
-        setError(null)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown rendering error'
-        logger.error(errorMessage)
-        setError(errorMessage)
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [renderFunction, shouldRender]
-  )
+      // 渲染成功，确保清除错误状态
+      setError(null)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown rendering error'
+      logger.error(errorMessage)
+      setError(errorMessage)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
 
   // 创建防抖版本的渲染函数
   const debouncedRender = useMemo(() => {
@@ -109,6 +118,10 @@ export const useDebouncedRender = (
   const triggerRender = useCallback(
     (content: string) => {
       if (content) {
+        if (shouldRenderRef.current && !shouldRenderRef.current()) {
+          setIsLoading(false)
+          return
+        }
         setIsLoading(true)
         debouncedRender(content)
       } else {
@@ -135,14 +148,12 @@ export const useDebouncedRender = (
   }, [])
 
   // 监听 children 变化，自动触发渲染
+  // c2-09①：cleanup 只在卸载时取消（见下面那个空依赖 effect），value 变化不再顺手 cancel，
+  // 否则重跑会把刚排队的那次渲染丢掉。
   useEffect(() => {
     if (value) {
       triggerRender(value)
     } else {
-      cancelRender()
-    }
-
-    return () => {
       cancelRender()
     }
   }, [value, triggerRender, cancelRender])

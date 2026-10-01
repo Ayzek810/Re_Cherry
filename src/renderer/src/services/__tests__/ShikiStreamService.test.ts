@@ -298,4 +298,80 @@ describe('ShikiStreamService', () => {
       }).not.toThrow()
     })
   })
+
+  /**
+   * r2-09：主线程高亮失败此前返回一条「看起来合法」的伪造结果
+   * （整段 chunk 塞进一行 token、`recall: 0`），调用方既不撤回 unstable 行又把它当正常高亮追加
+   * → 代码被挤进一行且可能重复，而失败只有一条 error 日志。现在必须原样上抛。
+   */
+  describe('main-thread highlight failure (r2-09)', () => {
+    it('主线程 tokenizer 失败时 reject，不返回伪造的单行 token', async () => {
+      const initSpy = vi.spyOn(shikiStreamService as any, 'initWorker').mockResolvedValue(undefined)
+      const workerSpy = vi.spyOn(shikiStreamService as any, 'hasWorkerHighlighter').mockReturnValue(false)
+      const tokenizerSpy = vi
+        .spyOn(shikiStreamService as any, 'getStreamTokenizer')
+        .mockRejectedValue(new Error('tokenizer exploded'))
+      try {
+        await expect(shikiStreamService.highlightCodeChunk('const a = 1', language, theme, callerId)).rejects.toThrow(
+          'tokenizer exploded'
+        )
+      } finally {
+        tokenizerSpy.mockRestore()
+        workerSpy.mockRestore()
+        initSpy.mockRestore()
+      }
+    })
+
+    it('主线程正常路径不受影响（返回 tokenizer 给的行）', async () => {
+      const initSpy = vi.spyOn(shikiStreamService as any, 'initWorker').mockResolvedValue(undefined)
+      const workerSpy = vi.spyOn(shikiStreamService as any, 'hasWorkerHighlighter').mockReturnValue(false)
+      const token = { content: 'const a = 1', color: '#000', offset: 0 }
+      const tokenizerSpy = vi
+        .spyOn(shikiStreamService as any, 'getStreamTokenizer')
+        .mockResolvedValue({ enqueue: async () => ({ stable: [[token]], unstable: [], recall: 0 }) })
+      try {
+        const result = await shikiStreamService.highlightCodeChunk('const a = 1', language, theme, callerId)
+        expect(result.lines).toEqual([[token]])
+        expect(result.recall).toBe(0)
+      } finally {
+        tokenizerSpy.mockRestore()
+        workerSpy.mockRestore()
+        initSpy.mockRestore()
+      }
+    })
+  })
+
+  /**
+   * r2-64：dispose 此前先 `postMessage({type:'dispose'})` 再 `terminate()`——同一 tick 终止线程，
+   * 回执永远到不了，反而由 terminateWorker 的显式 reject 打出虚假的 "Failed to dispose worker" warn。
+   * teardown 必须确定性：在途请求被显式结算（且清掉各自的超时定时器），线程终止，无假告警。
+   */
+  describe('dispose teardown determinism (r2-64)', () => {
+    it('在途请求被结算、线程被终止、无虚假 "Failed to dispose worker" 告警', async () => {
+      const { loggerService } = await import('@logger')
+      const warnSpy = vi.spyOn(loggerService, 'warn')
+      const terminate = vi.fn()
+      const postMessage = vi.fn()
+      ;(shikiStreamService as any).worker = { postMessage, terminate }
+
+      const pending = (shikiStreamService as any).sendWorkerMessage({
+        type: 'highlight',
+        callerId: 'teardown-caller'
+      }) as Promise<unknown>
+      pending.catch(() => {}) // 断言在下面显式做，先压掉未处理拒绝噪音
+
+      expect((shikiStreamService as any).pendingRequests.size).toBe(1)
+
+      shikiStreamService.dispose()
+
+      await expect(pending).rejects.toThrow('ShikiStream worker terminated')
+      expect(terminate).toHaveBeenCalledTimes(1)
+      expect((shikiStreamService as any).pendingRequests.size).toBe(0)
+      expect((shikiStreamService as any).workerIdleTimer).toBeNull()
+
+      const bogus = warnSpy.mock.calls.filter(([message]) => String(message).includes('Failed to dispose worker'))
+      expect(bogus).toHaveLength(0)
+      warnSpy.mockRestore()
+    })
+  })
 })

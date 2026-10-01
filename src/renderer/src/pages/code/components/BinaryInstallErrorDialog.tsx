@@ -110,7 +110,10 @@ export const BinaryInstallErrorDialog: FC<{
             )}
           </DialogDescription>
         </DialogHeader>
-        <pre className="max-h-72 select-text overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-muted-foreground text-xs leading-5">
+        {/* 二轮审查 f2-49（§9 Rendering）：容器同时声明 overflow 与 max-height 时必须两个轴都声明。
+            这里的安装日志可能含极长的无空格路径/URL，只写 `overflow-auto` 时横向滚动条一出现就会
+            改变内容宽度 → 改变换行高度 → 与 max-h-72 形成宽度重排↔高度的循环。 */}
+        <pre className="max-h-72 select-text overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-muted-foreground text-xs leading-5 [scrollbar-gutter:stable]">
           {lastError.current.message}
         </pre>
         <div className="mt-4 flex justify-end gap-2">

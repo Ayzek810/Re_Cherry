@@ -36,21 +36,97 @@ export function rootTopicIdOf(topicId: string, allTopics: Topic[]): string {
 }
 
 /**
+ * 血缘索引：`id → 行` 与 `parentTopicId → 直接子行[]`。
+ *
+ * 为什么要建它：根上溯（{@link rootTopicOf}）与家族闭包（{@link collectSubtreeIds}）
+ * 原先每一步都扫一次全表。`familyRowSignature` 在三个 `useAppSelector` 选择器里执行，
+ * 代价因此是"血缘深度 × 话题数"。索引只遍历输入一次，两个方向都降为 O(n)。
+ */
+interface TopicLineageIndex {
+  /** id → 行。同 id 多份持有（历史污染副本）时**首个获胜**，与 `branchKindsOf` 的口径一致。 */
+  byId: Map<string, Topic>
+  /** parentTopicId → 直接子行[]（按输入顺序）。 */
+  childrenOf: Map<string, Topic[]>
+}
+
+/**
+ * 建立血缘索引。**本模块是全仓唯一建造 `parentTopicId → 子行[]` 的地方**
+ * （`store/assistants.ts` 的删除闭包改用 {@link collectSubtreeIds}，不再自建一份）。
+ *
+ * 不缓存索引：输入数组可能被就地改写（`updateTopic*` 经 Immer 会换引用，Redux 之外的
+ * 就地写没有这个保证）。重建一次是 O(n)，与随后那次遍历同量级；换到的保证是
+ * "签名绝不陈旧"——陈旧的家族签名会让页码条漏刷新。
+ * @param rows - 话题行；跨助手联合清单同样适用。
+ */
+function buildLineageIndex(rows: Topic[]): TopicLineageIndex {
+  const byId = new Map<string, Topic>()
+  const childrenOf = new Map<string, Topic[]>()
+  for (const row of rows) {
+    if (!byId.has(row.id)) byId.set(row.id, row)
+    const parentId = row.parentTopicId
+    // 只跳过 `undefined`：空串父 id 照旧入索引，与旧的 `collectSubtreeIds` 逐字一致。
+    if (parentId === undefined) continue
+    const siblings = childrenOf.get(parentId)
+    if (siblings === undefined) childrenOf.set(parentId, [row])
+    else siblings.push(row)
+  }
+  return { byId, childrenOf }
+}
+
+/**
  * 沿 parentTopicId 向上找到该话题所属的根话题（找不到就返回自身）。
  * 与 rootTopicIdOf 的分工：这里**行对象在手**——即使该行尚未进入清单
  * （新 fork 分支刚 addTopic、调用方闭包还是旧帧清单），也能从对象自身的
  * parentTopicId 起步上溯到根。
  */
 export function rootTopicOf(topic: Topic, allTopics: Topic[]): Topic {
+  return rootTopicOfIndexed(topic, buildLineageIndex(allTopics))
+}
+
+/** {@link rootTopicOf} 的索引版：索引已在手时不再建造（见 {@link familyRowSignature}）。 */
+function rootTopicOfIndexed(topic: Topic, index: TopicLineageIndex): Topic {
   let current = topic
   const visited = new Set<string>()
   while (current.parentTopicId !== undefined && current.parentTopicId.length > 0 && !visited.has(current.id)) {
     visited.add(current.id)
-    const parent = allTopics.find((candidate) => candidate.id === current.parentTopicId)
+    const parent = index.byId.get(current.parentTopicId)
     if (parent === undefined) break
     current = parent
   }
   return current
+}
+
+/**
+ * 收集这些话题及其全部 fork 后代的 id（血缘在删除根时一并消失）。
+ * 删除类操作共用：`removeTopic`（用户删除）与 `pruneTopics`（内核对账剪除）。
+ * 根 id 不在 `topics` 里也照样出现在结果里（调用方可能传入尚未物化的 id）。
+ * @param topics - 血缘索引的输入行。
+ * @param roots - 起始根 id 列表。
+ */
+export function collectSubtreeIds(topics: Topic[], roots: string[]): Set<string> {
+  return collectSubtreeIdsWithIndex(buildLineageIndex(topics), roots)
+}
+
+/**
+ * {@link collectSubtreeIds} 的索引版：自根起一次 BFS，O(n)。
+ * 每行只入队一次，故互为父子的环、以及指向自身的行都会自然终止。
+ * @param index - 已建好的血缘索引。
+ * @param roots - 起始根 id 列表。
+ */
+function collectSubtreeIdsWithIndex(index: TopicLineageIndex, roots: string[]): Set<string> {
+  const ids = new Set<string>(roots)
+  // 下标遍历即可：队列在循环中增长，`shift()` 会把它变成 O(n²)。
+  const queue = [...ids]
+  for (let head = 0; head < queue.length; head += 1) {
+    const children = index.childrenOf.get(queue[head])
+    if (children === undefined) continue
+    for (const child of children) {
+      if (ids.has(child.id)) continue
+      ids.add(child.id)
+      queue.push(child.id)
+    }
+  }
+  return ids
 }
 
 /**
@@ -115,24 +191,17 @@ export function resolveTopicViewMemory(
  * 与"盖全助手清单"旧口径的区别：无关话题的任何变动（发送/删除/改名发生在别的
  * 话题上）都不再推翻本家族的缓存——否则每条无关 updatedAt 都触发一次全家族重取，
  * 页码条在"清空→重建"间闪烁（真机实证的"乱跳"形态之一）。
+ *
+ * 血缘闭包走预建的父→子索引（一次 BFS），根上溯走同一份索引：本函数在选择器里
+ * 执行，每次调用的代价必须是 O(n)，不能是 O(n × 血缘深度)。
  */
 export function familyRowSignature(allTopics: Topic[], topicId: string): string {
   const self = allTopics.find((row) => row.id === topicId)
   if (!self) return ''
-  const root = rootTopicOf(self, allTopics)
-  const ids = new Set<string>([root.id])
-  // 迭代收敛：行的父在本集合 → 行属于家族（血缘链可能隔多层）
-  let grew = true
-  while (grew) {
-    grew = false
-    for (const row of allTopics) {
-      if (ids.has(row.id) || !row.parentTopicId) continue
-      if (ids.has(row.parentTopicId) && !ids.has(row.id)) {
-        ids.add(row.id)
-        grew = true
-      }
-    }
-  }
+  // 索引只建一次，供根解析与后代闭包共用。
+  const index = buildLineageIndex(allTopics)
+  const root = rootTopicOfIndexed(self, index)
+  const ids = collectSubtreeIdsWithIndex(index, [root.id])
   return allTopics
     .filter((row) => ids.has(row.id))
     .map((row) => row.id + ':' + row.updatedAt + ':' + (row.branchKind ?? ''))

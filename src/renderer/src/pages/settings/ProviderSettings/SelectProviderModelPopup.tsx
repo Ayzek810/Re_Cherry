@@ -1,7 +1,6 @@
 import ModelSelector from '@renderer/components/ModelSelector'
 import { TopView } from '@renderer/components/TopView'
 import { isRerankModel } from '@renderer/config/models'
-import { useTimer } from '@renderer/hooks/useTimer'
 import i18n from '@renderer/i18n'
 import { getModelUniqId } from '@renderer/services/ModelService'
 import type { Model, Provider } from '@renderer/types'
@@ -14,13 +13,11 @@ interface ShowParams {
 }
 
 interface Props extends ShowParams {
-  reject: (reason?: any) => void
-  resolve: (data: any) => void
+  resolve: (data: Model | null) => void
 }
 
-const PopupContainer: React.FC<Props> = ({ provider, resolve, reject }) => {
+const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
   const [open, setOpen] = useState(true)
-  const { setTimeoutTimer } = useTimer()
 
   // Keep the natural order of models
   const models = useMemo(() => provider.models.filter((m) => !isRerankModel(m)), [provider])
@@ -42,16 +39,21 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve, reject }) => {
     resolve(model)
   }
 
+  /**
+   * 取消 = 交回 `null` 哨兵（v1 二轮审查 s2-08）。
+   *
+   * 旧实现在这里排了一个 300ms 的 `reject`：`useTimer` 卸载时会 `clearAllTimers()`，
+   * 弹窗关闭即卸载 → 定时器被清 → 外层 `await` 永不 settle（`onCheckApi` 后续一行都不执行）；
+   * 300ms 内没卸载时 `reject()` 又因调用点在 try 之外而无人接收。两条路径都不是取消的语义。
+   */
   const onCancel = () => {
     setOpen(false)
-    setTimeoutTimer('onCancel', reject, 300)
+    resolve(null)
   }
 
   const onClose = () => {
     TopView.hide(TopViewKey)
   }
-
-  SelectProviderModelPopup.hide = onCancel
 
   return (
     <Modal
@@ -85,15 +87,12 @@ export default class SelectProviderModelPopup {
   static hide() {
     TopView.hide(TopViewKey)
   }
-  static show(props: ShowParams) {
-    return new Promise<any>((resolve, reject) => {
+  /** 选中模型 → resolve(model)；取消 → resolve(null)（哨兵，不再 reject）。 */
+  static show(props: ShowParams): Promise<Model | null> {
+    return new Promise<Model | null>((resolve) => {
       TopView.show(
         <PopupContainer
           {...props}
-          reject={() => {
-            reject()
-            TopView.hide(TopViewKey)
-          }}
           resolve={(v) => {
             resolve(v)
             TopView.hide(TopViewKey)

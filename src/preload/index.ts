@@ -1,5 +1,4 @@
 import type { TokenUsageData } from '@cherrystudio/analytics-client'
-import { electronAPI } from '@electron-toolkit/preload'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import type { SpanContext } from '@opentelemetry/api'
 import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
@@ -7,6 +6,7 @@ import type { FileChangeEvent, WebviewKeyEvent } from '@shared/config/types'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 import type { ExternalAppInfo } from '@shared/externalApp/types'
 import { IpcChannel } from '@shared/IpcChannel'
+import type { FileReadByIdResult } from '@shared/types/fileRead'
 import type { InstallProgressPayload } from '@shared/types/installProgress'
 import type { Notification } from '@types'
 import type { FileMetadata, Shortcut, ThemeMode, WebDavConfig } from '@types'
@@ -413,6 +413,8 @@ const api = {
     renameDir: (dirPath: string, newName: string) => ipcRenderer.invoke(IpcChannel.File_RenameDir, dirPath, newName),
     read: (fileId: string, detectEncoding?: boolean) =>
       ipcRenderer.invoke(IpcChannel.File_Read, fileId, detectEncoding),
+    // r2-79/⑥：区分「不存在」与「读失败」的读通道（File_Read 对两者抛同一个通用错误）
+    readById: (fileId: string): Promise<FileReadByIdResult> => ipcRenderer.invoke(IpcChannel.File_ReadById, fileId),
     readExternal: (filePath: string, detectEncoding?: boolean) =>
       ipcRenderer.invoke(IpcChannel.File_ReadExternal, filePath, detectEncoding),
     clear: (spanContext?: SpanContext) => ipcRenderer.invoke(IpcChannel.File_Clear, spanContext),
@@ -467,8 +469,8 @@ const api = {
           callback(data)
         }
       }
-      ipcRenderer.on('file-change', listener)
-      return () => ipcRenderer.off('file-change', listener)
+      ipcRenderer.on(IpcChannel.File_Change, listener)
+      return () => ipcRenderer.off(IpcChannel.File_Change, listener)
     },
     showInFolder: (path: string): Promise<void> => ipcRenderer.invoke(IpcChannel.File_ShowInFolder, path)
   },
@@ -618,7 +620,169 @@ const api = {
   },
   analytics: {
     trackTokenUsage: (data: TokenUsageData) => ipcRenderer.invoke(IpcChannel.Analytics_TrackTokenUsage, data)
+  },
+  /**
+   * 主 → 渲染的**具名**事件面（k2-06/k2-07 收窄暴露面时补的显式桥）。
+   *
+   * 此前渲染层用 `window.electron.ipcRenderer.on(<channel>, …)` 直连：那既绕开三层契约
+   * （任意字符串 channel，无声明、无检查），也让 preload 的暴露面等于整个 Electron API。
+   * 这里每个方法就是一个声明出口：通道是 `IpcChannel` 常量，回调不接触 `IpcRendererEvent`
+   * （不把 `sender` 交给渲染层），返回值统一是解绑函数。
+   *
+   * `once` 只用于 trace 窗口：它的载荷由窗口生命周期投递（首次 did-finish-load + 语言订阅），
+   * 语义与内核的 `onXxx` 订阅缝（可重复触发）不同。
+   */
+  events: {
+    onThemeUpdated: (callback: (theme: ThemeMode) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, theme: ThemeMode) => callback(theme)
+      ipcRenderer.on(IpcChannel.ThemeUpdated, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.ThemeUpdated, listener)
+      }
+    },
+    onSaveData: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IpcChannel.App_SaveData, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.App_SaveData, listener)
+      }
+    },
+    onNavigateToAbout: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IpcChannel.Windows_NavigateToAbout, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.Windows_NavigateToAbout, listener)
+      }
+    },
+    onFullscreenStatusChanged: (callback: (isFullscreen: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, isFullscreen: boolean) => callback(isFullscreen)
+      ipcRenderer.on(IpcChannel.FullscreenStatusChanged, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.FullscreenStatusChanged, listener)
+      }
+    },
+    onShowMiniWindow: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on(IpcChannel.ShowMiniWindow, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.ShowMiniWindow, listener)
+      }
+    },
+    onStoreSyncBroadcast: (callback: (action: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: unknown) => callback(action)
+      ipcRenderer.on(IpcChannel.StoreSync_BroadcastSync, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.StoreSync_BroadcastSync, listener)
+      }
+    },
+    onBackupProgress: (callback: (data: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IpcChannel.BackupProgress, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.BackupProgress, listener)
+      }
+    },
+    onRestoreProgress: (callback: (data: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data)
+      ipcRenderer.on(IpcChannel.RestoreProgress, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.RestoreProgress, listener)
+      }
+    },
+    onQuoteToMain: (callback: (selectedText: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, selectedText: string) => callback(selectedText)
+      ipcRenderer.on(IpcChannel.App_QuoteToMain, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.App_QuoteToMain, listener)
+      }
+    },
+    onNotificationClick: (callback: (notification: Notification) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, notification: Notification) => callback(notification)
+      ipcRenderer.on(IpcChannel.Notification_Click, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.Notification_Click, listener)
+      }
+    },
+    onTraceSelected: (
+      callback: (payload: { traceId: string; topicId: string; modelName?: string }) => void
+    ): (() => void) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        payload: { traceId: string; topicId: string; modelName?: string }
+      ) => callback(payload)
+      ipcRenderer.once(IpcChannel.Trace_SetTrace, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.Trace_SetTrace, listener)
+      }
+    },
+    onTraceLanguageChanged: (callback: (payload: { lang: string }) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { lang: string }) => callback(payload)
+      ipcRenderer.once(IpcChannel.Trace_SetLanguage, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.Trace_SetLanguage, listener)
+      }
+    }
   }
+}
+
+/**
+ * 渲染层可见的 `window.electron`（k2-06：不再 expose `@electron-toolkit/preload` 的整个
+ * `electronAPI`）。
+ *
+ * 旧暴露面把三层 IPC 契约降级成"建议"：`window.electron.ipcRenderer.invoke/send` 接受**任意
+ * 字符串 channel**，主进程约 250 个 handler（含 `App_ResetData` / `File_Write` /
+ * `CodeCli_Binary_Remove` 这类破坏性操作）对渲染层全部可达，且 `webFrame`/`webUtils` 与
+ * 整个 `process.env` 一并外泄。现在只留渲染层真正用到的两件事：
+ *
+ * - `ipcRenderer.invoke/send`：**白名单**通道。白名单是显式的（不是"以 'dsh:' 开头的都放行"），
+ *   未登记即拒绝并带上面名——渲染层不需要 preload 声明就能调任何 handler 的路径就此关闭。
+ *   新增通道时三层一起改（CLAUDE.md §8），这里漏登记会在第一次调用时如实失败。
+ * - `process`：只有 `platform` 与三个日志相关键（`LoggerService` 的开发期开关）。
+ *   `env` 的其余键（含用户环境里的密钥与 `DSH_*`）不再进入渲染层。
+ * - `webFrame` / `webUtils` 整体移除：渲染层取文件路径走 `window.api.file.getPathForFile`
+ *  （同一 `webUtils.getPathForFile`，只在 preload 侧调用）。
+ */
+const RENDERER_INVOKE_CHANNELS: ReadonlySet<string> = new Set<string>([
+  IpcChannel.App_LogToMain,
+  IpcChannel.Backup_Backup,
+  IpcChannel.Backup_CheckConnection,
+  IpcChannel.Backup_ListLocalBackupFiles,
+  IpcChannel.Backup_Restore,
+  IpcChannel.Backup_RestoreFromLocalBackup,
+  IpcChannel.File_Read,
+  IpcChannel.File_ReadExternal,
+  IpcChannel.File_ReadById,
+  IpcChannel.File_Write
+])
+
+// 渲染层可能用 `send` 的通道；今天为空（全部走 invoke 或 `events` 面的具名监听）。
+const RENDERER_SEND_CHANNELS: ReadonlySet<string> = new Set<string>([])
+
+const ALLOWED_RENDERER_ENV_KEYS = ['NODE_ENV', 'CSLOGGER_RENDERER_LEVEL', 'CSLOGGER_RENDERER_SHOW_MODULES'] as const
+
+const rendererProcess = {
+  platform: process.platform,
+  env: Object.fromEntries(
+    ALLOWED_RENDERER_ENV_KEYS.filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]])
+  ) as Record<string, string | undefined>
+}
+
+const electronBridge = {
+  ipcRenderer: {
+    invoke: (channel: string, ...args: unknown[]): Promise<unknown> => {
+      if (!RENDERER_INVOKE_CHANNELS.has(channel)) {
+        return Promise.reject(new Error(`preload: channel "${channel}" is not exposed to the renderer`))
+      }
+      return ipcRenderer.invoke(channel, ...args)
+    },
+    send: (channel: string, ...args: unknown[]): void => {
+      if (!RENDERER_SEND_CHANNELS.has(channel)) {
+        throw new Error(`preload: channel "${channel}" is not exposed to the renderer`)
+      }
+      ipcRenderer.send(channel, ...args)
+    }
+  },
+  process: rendererProcess
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
@@ -626,13 +790,13 @@ const api = {
 // just add to the DOM global.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
+    contextBridge.exposeInMainWorld('electron', electronBridge)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error('[Preload]Failed to expose APIs:', error as Error)
   }
 } else {
-  window.electron = electronAPI
+  window.electron = electronBridge as unknown as Window['electron']
   window.api = api
 }
 

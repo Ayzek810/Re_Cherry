@@ -1,4 +1,5 @@
 import { InfoCircleOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import { AppLogo } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
@@ -13,6 +14,9 @@ import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
+import { useCommittedInput } from './useCommittedInput'
+
+const logger = loggerService.withContext('YuqueSettings')
 
 const YuqueSettings: FC = () => {
   const { t } = useTranslation()
@@ -23,13 +27,9 @@ const YuqueSettings: FC = () => {
   const yuqueToken = useSelector((state: RootState) => state.settings.yuqueToken)
   const yuqueUrl = useSelector((state: RootState) => state.settings.yuqueUrl)
 
-  const handleYuqueTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setYuqueToken(e.target.value))
-  }
-
-  const handleYuqueRepoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch(setYuqueUrl(e.target.value))
-  }
+  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片。
+  const tokenField = useCommittedInput(yuqueToken, (next) => dispatch(setYuqueToken(next)))
+  const repoUrlField = useCommittedInput(yuqueUrl, (next) => dispatch(setYuqueUrl(next)))
 
   const handleYuqueConnectionCheck = async () => {
     if (!yuqueToken) {
@@ -41,35 +41,51 @@ const YuqueSettings: FC = () => {
       return
     }
 
-    const response = await fetch('https://www.yuque.com/api/v2/hello', {
-      headers: {
-        'X-Auth-Token': yuqueToken
-      }
-    })
+    // v1 二轮审查 s2-32：这里此前完全没有错误路径——离线 / DNS 失败时 fetch 直接拒绝，
+    // 未处理的 rejection + 按钮毫无反馈；响应体缺 `data` 时读 `data.data.id` 抛 TypeError。
+    // 对照同目录 SiyuanSettings 的样板（try/catch + 三种 toast）。
+    try {
+      const response = await fetch('https://www.yuque.com/api/v2/hello', {
+        headers: {
+          'X-Auth-Token': yuqueToken
+        }
+      })
 
-    if (!response.ok) {
-      window.toast.error(t('settings.data.yuque.check.fail'))
-      return
-    }
-    const yuqueSlug = yuqueUrl.replace('https://www.yuque.com/', '')
-    const repoIDResponse = await fetch(`https://www.yuque.com/api/v2/repos/${yuqueSlug}`, {
-      headers: {
-        'X-Auth-Token': yuqueToken
+      if (!response.ok) {
+        window.toast.error(t('settings.data.yuque.check.fail'))
+        return
       }
-    })
-    if (!repoIDResponse.ok) {
-      window.toast.error(t('settings.data.yuque.check.fail'))
-      return
+      const yuqueSlug = yuqueUrl.replace('https://www.yuque.com/', '')
+      const repoIDResponse = await fetch(`https://www.yuque.com/api/v2/repos/${yuqueSlug}`, {
+        headers: {
+          'X-Auth-Token': yuqueToken
+        }
+      })
+      if (!repoIDResponse.ok) {
+        window.toast.error(t('settings.data.yuque.check.fail'))
+        return
+      }
+      const data = await repoIDResponse.json()
+      const repoId = data?.data?.id
+      if (repoId === undefined || repoId === null) {
+        logger.warn('Yuque repo id missing in response', { slug: yuqueSlug })
+        window.toast.error(t('settings.data.yuque.check.fail'))
+        return
+      }
+      dispatch(setYuqueRepoId(repoId))
+      window.toast.success(t('settings.data.yuque.check.success'))
+    } catch (error) {
+      logger.error('Check Yuque connection failed:', error as Error)
+      window.toast.error(t('settings.data.yuque.check.error', { defaultValue: 'Connection error' }))
     }
-    const data = await repoIDResponse.json()
-    dispatch(setYuqueRepoId(data.data.id))
-    window.toast.success(t('settings.data.yuque.check.success'))
   }
 
   const handleYuqueHelpClick = () => {
     openSmartMinapp({
       id: 'yuque-help',
-      name: 'Yuque Help',
+      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它），
+      // 此前硬编码英文，zh-CN 下与周围全部本地化的字符串不一致。
+      name: t('settings.data.yuque.title'),
       url: 'https://www.yuque.com/settings/tokens',
       logo: AppLogo
     })
@@ -84,8 +100,9 @@ const YuqueSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Input
             type="text"
-            value={yuqueUrl || ''}
-            onChange={handleYuqueRepoUrlChange}
+            value={repoUrlField.value}
+            onChange={repoUrlField.onChange}
+            onBlur={repoUrlField.onBlur}
             style={{ width: 315 }}
             placeholder={t('settings.data.yuque.repo_url_placeholder')}
           />
@@ -105,9 +122,9 @@ const YuqueSettings: FC = () => {
         <HStack alignItems="center" gap="5px" style={{ width: 315 }}>
           <Space.Compact style={{ width: '100%' }}>
             <Input.Password
-              value={yuqueToken || ''}
-              onChange={handleYuqueTokenChange}
-              onBlur={handleYuqueTokenChange}
+              value={tokenField.value}
+              onChange={tokenField.onChange}
+              onBlur={tokenField.onBlur}
               placeholder={t('settings.data.yuque.token_placeholder')}
               style={{ width: '100%' }}
             />

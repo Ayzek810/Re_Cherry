@@ -22,9 +22,12 @@ export interface TelemetryConfig {
   defaultTracerName?: string
 }
 
-export interface TraceConfig extends TelemetryConfig {
-  maxAttributesPerSpan?: number
-}
+/**
+ * Adapter configuration. There is no per-span attribute budget here: the one cap
+ * that exists lives in `core/traceMethod.ts` (k2-15). A field nothing reads only
+ * made the cap look configurable.
+ */
+export type TraceConfig = TelemetryConfig
 
 export interface TokenUsage {
   prompt_tokens: number
@@ -43,9 +46,11 @@ export interface SpanEntity {
   status: string
   kind: string
   attributes: Attributes | undefined
+  /** Span completion flag (`ReadableSpan.ended`). The trace page reads this instead of guessing from `endTime`. */
   isEnd: boolean
   events: TimedEvent[] | undefined
   startTime: number
+  /** Milliseconds since epoch, or `null` while the span has not ended (never `0`/1970). */
   endTime: number | null
   links: Link[] | undefined
   topicId?: string

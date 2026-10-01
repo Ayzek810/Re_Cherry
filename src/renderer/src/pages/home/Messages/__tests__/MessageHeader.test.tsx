@@ -37,12 +37,19 @@ vi.mock('@renderer/services/ModelService', () => ({
 vi.mock('@renderer/services/MessagesService', () => ({
   getMessageModelId: (message: Partial<Message>) => message?.modelId
 }))
-vi.mock('@renderer/hooks/useSettings', () => ({
-  useSettings: () => ({ userName: 'User', sidebarIcons: { visible: [], disabled: [] } }),
-  useMessageStyle: () => ({ isBubbleStyle: false })
-}))
-vi.mock('@renderer/hooks/useChatContext', () => ({
-  useChatContext: () => ({ isMultiSelectMode: false, selectedMessageIds: [], handleSelectMessage: vi.fn() })
+
+vi.mock('@renderer/hooks/useSettings', () => {
+  const settings = { userName: 'User', sidebarIcons: { visible: [], disabled: [] } }
+  return {
+    useSettings: () => settings,
+    // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+    useSetting: (key: string) => settings[key as keyof typeof settings],
+    useMessageStyle: () => ({ isBubbleStyle: false })
+  }
+})
+// 聊天上下文改由 ChatContextProvider 下发（f2-02）：这里桩掉上下文读取面即可
+vi.mock('../ChatContextProvider', () => ({
+  useChatContextValue: () => ({ isMultiSelectMode: false, selectedMessageIds: [], handleSelectMessage: vi.fn() })
 }))
 vi.mock('@renderer/hooks/useMinappPopup', () => ({
   useMinappPopup: () => ({ openMinappById: vi.fn() })

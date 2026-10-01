@@ -2,7 +2,7 @@ import { loggerService } from '@logger'
 import { type NodeViewProps, NodeViewWrapper } from '@tiptap/react'
 import { Checkbox, Dropdown, Input, type MenuProps } from 'antd'
 import { Calendar, Check, FileText, Hash, MoreHorizontal, Plus, Tag as TagIcon, Trash2, Type, X } from 'lucide-react'
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import { parse, stringify } from 'yaml'
@@ -409,8 +409,17 @@ const YamlFrontMatterNodeView: React.FC<NodeViewProps> = ({ node, updateAttribut
   }
 
   // Check if there's content in the entire editor (excluding YAML front matter)
-  const hasContent = useMemo(() => {
-    return editor.getText().trim().length > 0
+  // c2-45①：`editor` 身份稳定，`useMemo(..., [editor])` 只在节点视图挂载时算一次、之后永不跟踪文档，
+  // 于是「添加属性」那一行的 opacity 与笔记是否有内容脱钩。改为订阅编辑器事务。
+  const [hasContent, setHasContent] = useState(() => editor.getText().trim().length > 0)
+
+  useEffect(() => {
+    const updateHasContent = () => setHasContent(editor.getText().trim().length > 0)
+    updateHasContent()
+    editor.on('update', updateHasContent)
+    return () => {
+      editor.off('update', updateHasContent)
+    }
   }, [editor])
 
   return (

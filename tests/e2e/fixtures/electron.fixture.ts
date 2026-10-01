@@ -30,15 +30,32 @@ export const test = base.extend<ElectronFixtures>({
   },
 
   mainWindow: async ({ electronApp }, use) => {
-    // Wait for the main window (title: "Re_Cherry", not "Quick Assistant")
-    // On Mac, the app may create miniWindow for QuickAssistant with different title
-    const mainWindow = await electronApp.waitForEvent('window', {
-      predicate: async (window) => {
-        const title = await window.title()
-        return title === 'Re_Cherry'
-      },
-      timeout: 60000
-    })
+    // Wait for the main window (title: "Re_Cherry", not "Quick Assistant").
+    //
+    // 2026-10-01：不能在 attach 之后才 `waitForEvent('window')`。主进程在 Playwright 连上 CDP
+    // 之前就已经把主窗口建好了，事件错过 ⇒ 整族用例 60s 超时（当时 7/7 全红，而应用实际渲染正常）。
+    // 正确顺序：先看**已存在**的窗口，找不到再等新窗口事件。
+    const titleOf = async (win: Page): Promise<string> => {
+      try {
+        return await win.title()
+      } catch {
+        return '' // 窗口还在初始化，按不匹配处理
+      }
+    }
+
+    let mainWindow: Page | undefined
+    for (const win of electronApp.windows()) {
+      if ((await titleOf(win)) === 'Re_Cherry') {
+        mainWindow = win
+        break
+      }
+    }
+    if (!mainWindow) {
+      mainWindow = await electronApp.waitForEvent('window', {
+        predicate: async (win) => (await titleOf(win)) === 'Re_Cherry',
+        timeout: 60000
+      })
+    }
 
     // Wait for React app to mount
     await mainWindow.waitForSelector('#root', { state: 'attached', timeout: 60000 })

@@ -107,6 +107,67 @@ describe('input', () => {
       expect(result).toEqual([])
     })
 
+    // 坏 JSON：原实现里 JSON.parse 在异步回调中无守卫，resolve 永不执行 → await 永久挂起
+    it('should resolve an empty list when the codefiles payload is malformed JSON (audit2 r2-94)', async () => {
+      const mockGetAsString = vi.fn((callback) => {
+        callback('{not valid json')
+      })
+
+      const event = {
+        dataTransfer: {
+          files: [],
+          items: [{ type: 'codefiles', getAsString: mockGetAsString }]
+        }
+      } as any
+
+      // 关键：这里必须有终态。使用 race 把一个永不 settle 的 Promise 变成可见失败，
+      // 而不是让测试挂住。
+      const result = await Promise.race([
+        getFilesFromDropEvent(event),
+        new Promise((resolve) => setTimeout(() => resolve('NEVER_SETTLED'), 300))
+      ])
+
+      expect(result).not.toBe('NEVER_SETTLED')
+      expect(result).toEqual([])
+    })
+
+    it('should resolve an empty list when the codefiles payload is not an array', async () => {
+      const mockGetAsString = vi.fn((callback) => {
+        callback(JSON.stringify({ path: '/path/file.txt' }))
+      })
+
+      const event = {
+        dataTransfer: {
+          files: [],
+          items: [{ type: 'codefiles', getAsString: mockGetAsString }]
+        }
+      } as any
+
+      const result = await getFilesFromDropEvent(event)
+      expect(result).toEqual([])
+      expect(mockFileGet).not.toHaveBeenCalled()
+    })
+
+    it('should ignore non-string entries in the codefiles payload', async () => {
+      const mockMetadata = { id: '1', name: 'file.txt', path: '/path/file.txt' }
+      mockFileGet.mockResolvedValue(mockMetadata)
+      const mockGetAsString = vi.fn((callback) => {
+        callback(JSON.stringify([42, '/path/file.txt', null]))
+      })
+
+      const event = {
+        dataTransfer: {
+          files: [],
+          items: [{ type: 'codefiles', getAsString: mockGetAsString }]
+        }
+      } as any
+
+      const result = await getFilesFromDropEvent(event)
+      expect(result).toEqual([mockMetadata])
+      expect(mockFileGet).toHaveBeenCalledTimes(1)
+      expect(mockFileGet).toHaveBeenCalledWith('/path/file.txt')
+    })
+
     // 错误处理
     it('should handle errors gracefully when file path cannot be obtained', async () => {
       const mockFile = new File(['content'], 'file.txt')

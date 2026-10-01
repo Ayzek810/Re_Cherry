@@ -4,11 +4,22 @@ import { useSettings } from '@renderer/hooks/useSettings'
 import type { HighlightChunkResult, ShikiPreProperties } from '@renderer/services/ShikiStreamService'
 import { shikiStreamService } from '@renderer/services/ShikiStreamService'
 import { ThemeMode } from '@renderer/types'
-import { getHighlighter, getMarkdownIt, getShiki, loadLanguageIfNeeded, loadThemeIfNeeded } from '@renderer/utils/shiki'
+import { getHighlighter, getMarkdownIt, loadLanguageIfNeeded, loadThemeIfNeeded } from '@renderer/utils/shiki'
 import * as cmThemes from '@uiw/codemirror-themes-all'
 import type React from 'react'
-import { createContext, type PropsWithChildren, use, useCallback, useEffect, useMemo, useState } from 'react'
+import { createContext, type PropsWithChildren, use, useCallback, useEffect, useMemo } from 'react'
+import { bundledThemesInfo } from 'shiki/bundle/web'
 import type { BundledThemeInfo } from 'shiki/types'
+
+/**
+ * Shiki 主题元数据（v1 二轮性能审计 p2-05）。
+ *
+ * 此前这里在 effect 里 `getShiki().then(({ bundledThemesInfo }) => ...)`：为了拿一份**静态可知**
+ * 的主题 id / 明暗类型表，把整个 `shiki` 包（`utils/shiki.ts:17 await import('shiki')` → 含核心
+ * 引擎与完整语言表）拉进首屏执行面。`bundledThemesInfo` 是 `shiki/dist/themes.mjs` 里的纯 JSON
+ * 常量（约 9.5KB），从 `shiki/bundle/web` 直接**值导入**它不会带上核心或语言表，且类型自带。
+ */
+const shikiThemesInfo: BundledThemeInfo[] = bundledThemesInfo
 
 interface CodeStyleContextType {
   highlightCodeChunk: (trunk: string, language: string, callerId: string) => Promise<HighlightChunkResult>
@@ -41,16 +52,7 @@ const CodeStyleContext = createContext<CodeStyleContextType>(defaultCodeStyleCon
 export const CodeStyleProvider: React.FC<PropsWithChildren> = ({ children }) => {
   const { codeEditor, codeViewer } = useSettings()
   const { theme } = useTheme()
-  const [shikiThemesInfo, setShikiThemesInfo] = useState<BundledThemeInfo[]>([])
   useMermaid()
-
-  useEffect(() => {
-    if (!codeEditor.enabled) {
-      void getShiki().then(({ bundledThemesInfo }) => {
-        setShikiThemesInfo(bundledThemesInfo)
-      })
-    }
-  }, [codeEditor.enabled])
 
   // 获取支持的主题名称列表
   const themeNames = useMemo(() => {
@@ -63,9 +65,11 @@ export const CodeStyleProvider: React.FC<PropsWithChildren> = ({ children }) => 
         .filter((item) => !/^(defaultSettings)/.test(item) && !/(Style)$/.test(item))
     }
 
-    // Shiki 主题，取出所有 BundledThemeInfo 的 id 作为主题名
+    // Shiki 主题，取出所有 BundledThemeInfo 的 id 作为主题名。
+    // 依赖数组只有 `codeEditor.enabled`：`shikiThemesInfo` 是模块级常量（不是 props/state），
+    // 放进依赖数组会被 react-hooks 规则判为"不必要的依赖"（它不参与重渲染）。
     return ['auto', ...shikiThemesInfo.map((info) => info.id)]
-  }, [codeEditor.enabled, shikiThemesInfo])
+  }, [codeEditor.enabled])
 
   // 获取当前使用的 Shiki 主题名称（只用于代码预览）
   const activeShikiTheme = useMemo(() => {
@@ -80,7 +84,8 @@ export const CodeStyleProvider: React.FC<PropsWithChildren> = ({ children }) => 
   const isShikiThemeDark = useMemo(() => {
     const themeInfo = shikiThemesInfo.find((info) => info.id === activeShikiTheme)
     return themeInfo?.type === 'dark'
-  }, [activeShikiTheme, shikiThemesInfo])
+    // `shikiThemesInfo` 是模块级常量，不参与重渲染 ⇒ 不进依赖数组（同 `themeNames` 的说明）
+  }, [activeShikiTheme])
 
   // 获取当前使用的 CodeMirror 主题对象（只用于编辑器）
   const activeCmTheme = useMemo(() => {

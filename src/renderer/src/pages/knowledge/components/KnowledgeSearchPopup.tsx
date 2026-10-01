@@ -30,30 +30,42 @@ const PopupContainer: React.FC<Props> = ({ base, resolve }) => {
   const [searchError, setSearchError] = useState<string | null>(null)
   const { t } = useTranslation()
   const searchInputRef = useRef<InputRef>(null)
+  // 乱序守卫：只接受最后一次检索的结果（二轮审查 f2-18）。没有它时按回车检索 "A" 再 "B"，
+  // 若 A 的响应后到，`results` 会变成 A 的命中而 `searchKeyword` 已是 "B"——高亮关键词与
+  // 结果内容错位，用户把不相关片段当成 B 的结果。
+  const requestIdRef = useRef(0)
 
   const handleSearch = async (value: string) => {
     if (!value.trim()) {
+      requestIdRef.current += 1
       setResults([])
       setSearchKeyword('')
       setSearchError(null)
       return
     }
 
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
+
     setSearchKeyword(value.trim())
     setLoading(true)
     setSearchError(null)
     try {
       const searchResults = await searchKnowledgeBase(value, base)
+      if (requestId !== requestIdRef.current) return
       logger.debug(`KnowledgeSearchPopup Search Results: ${searchResults}`)
       setResults(searchResults)
     } catch (error) {
+      if (requestId !== requestIdRef.current) return
       // 检索失败**不得**渲染成"没有结果"（CLAUDE.md §9）：置错误态并给出可重试的三态之一。
       logger.error(`Failed to search knowledge base ${base.name}:`, error as Error)
       setResults([])
       setSearchError(error instanceof Error ? error.message : String(error))
       window.toast.error(t('knowledge.search_failed'))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }
 
@@ -69,8 +81,9 @@ const PopupContainer: React.FC<Props> = ({ base, resolve }) => {
     resolve({})
   }
 
-  KnowledgeSearchPopup.hide = onCancel
-
+  // 二轮审查 f2-25：这里曾有一行 `KnowledgeSearchPopup.hide = onCancel`（render 期改写模块级静态
+  // 方法，且覆盖后无任何调用者）。渲染期副作用 + 覆盖掉 `static hide()` 的 TopView 关闭语义，
+  // 已删除；外部关闭走 `KnowledgeSearchPopup.hide()` 原实现。
   useEffect(() => {
     if (searchInputRef.current) {
       searchInputRef.current.focus()
@@ -210,7 +223,6 @@ const SearchIcon = styled.div`
 const TopViewKey = 'KnowledgeSearchPopup'
 
 export default class KnowledgeSearchPopup {
-  static topviewId = 0
   static hide() {
     TopView.hide(TopViewKey)
   }

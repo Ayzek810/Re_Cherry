@@ -128,19 +128,28 @@ class FileManager {
     return filesPath + '/' + file.id + file.ext
   }
 
-  static async deleteFile(id: string, force: boolean = false): Promise<void> {
+  /**
+   * 删除一个文件行与它的盘上字节。
+   *
+   * r2-45（§9 删除纪律）：返回 `Promise<boolean>`，调用方能区分成败并回滚乐观行。
+   * `false` 的两种来源——行不存在（无可删）与盘上删不掉（`window.api.file.delete` 抛错）。
+   * 盘上删不掉时**不抛**：Dexie 行已删、文件列表已一致，抛出去会让 `Promise.allSettled`
+   * 记成"整条删除失败"，反而不如实报告；这里记 warn 并返回 `false` 交给批量接口计数。
+   */
+  static async deleteFile(id: string, force: boolean = false): Promise<boolean> {
     const file = await this.getFile(id)
 
     logger.info('Deleting file:', file)
 
     if (!file) {
-      return
+      logger.warn(`FileManager.deleteFile: no row for id ${id}, nothing deleted`)
+      return false
     }
 
     if (!force) {
       if (file.count > 1) {
         await db.files.update(id, { ...file, count: file.count - 1 })
-        return
+        return true
       }
     }
 
@@ -148,20 +157,40 @@ class FileManager {
 
     try {
       await window.api.file.delete(id + file.ext)
+      return true
     } catch (error) {
-      logger.error('Failed to delete file:', error as Error)
+      // warn 级：renderer 的 info 不落盘，这条是"盘上字节还在"的取证钩子。
+      logger.warn('Failed to delete file bytes from disk:', error as Error)
+      return false
     }
   }
 
-  static async deleteFiles(files: FileMetadata[]): Promise<void> {
-    if (!files || files.length === 0) return
+  /**
+   * 批量删除。§9 要求把 "N succeeded / M failed" 作为真实信号报出来，所以这里返回计数，
+   * 而不是只写一条日志（旧签名 `Promise<void>` 让调用方结构上无法上报）。
+   */
+  static async deleteFiles(files: FileMetadata[]): Promise<{ succeeded: number; failed: number }> {
+    if (!files || files.length === 0) return { succeeded: 0, failed: 0 }
 
     const results = await Promise.allSettled(files.map((file) => this.deleteFile(file.id)))
 
-    const failed = results.filter((r) => r.status === 'rejected')
+    const failed = results.filter(
+      (result) => result.status === 'rejected' || (result.status === 'fulfilled' && result.value === false)
+    )
+    const succeeded = results.length - failed.length
+
     if (failed.length > 0) {
-      logger.warn(`File deletions completed with ${failed.length} files failed to delete:`, failed)
+      logger.warn(`File deletions completed with ${succeeded} succeeded / ${failed.length} failed`, failed)
+      window.toast.error(
+        i18n.t('files.delete.partial_failed', {
+          defaultValue: '{{succeeded}} deleted, {{failed}} failed',
+          succeeded,
+          failed: failed.length
+        })
+      )
     }
+
+    return { succeeded, failed: failed.length }
   }
 
   static async allFiles(): Promise<FileMetadata[]> {

@@ -1,7 +1,25 @@
+import { createSelector } from '@reduxjs/toolkit'
+import type { RootState } from '@renderer/store'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
-import { toolPermissionsActions } from '@renderer/store/toolPermissions'
+import { type ToolPermissionEntry, toolPermissionsActions } from '@renderer/store/toolPermissions'
 import type { ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus } from '@renderer/types/newMessage'
+
+/**
+ * 未决审批按 toolCallId 建索引，reselect 以 `requests` 切片引用为缓存键：同一批 store 变更内只建一次。
+ * 旧实现是"每个工具块 × 每次 store 通知"各做一次 `Object.values(...).find(...)` 全表扫描，
+ * 全部落在同一帧（§12 渲染饥饿的组成部分）。
+ */
+export const selectApprovalRequestByToolCallId = createSelector(
+  [(state: RootState) => state.toolPermissions.requests],
+  (requests) => {
+    const byToolCallId = new Map<string, ToolPermissionEntry>()
+    for (const request of Object.values(requests)) {
+      byToolCallId.set(request.toolCallId, request)
+    }
+    return byToolCallId
+  }
+)
 
 /**
  * Unified tool approval state
@@ -36,10 +54,8 @@ export function useToolApproval(
 ): ToolApprovalState & ToolApprovalActions {
   void options
   const dispatch = useAppDispatch()
-  // 投影时 toolId = callId；审批请求按 toolCallId 配对到块
-  const entry = useAppSelector((state) =>
-    Object.values(state.toolPermissions.requests).find((request) => request.toolCallId === block.toolId)
-  )
+  // 投影时 toolId = callId；审批请求按 toolCallId 配对到块（O(1) 取索引，不再逐块扫全表）
+  const entry = useAppSelector((state) => selectApprovalRequestByToolCallId(state).get(block.toolId))
 
   const isWaiting = entry?.status === 'pending'
   const isSubmitting = entry?.status === 'submitting-allow' || entry?.status === 'submitting-deny'

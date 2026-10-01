@@ -63,6 +63,8 @@ const mockSetCopiedImageTemporarily = vi.fn()
 describe('useCopyTool', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // c2-13：复制失败现在要给出用户可见信号（window.toast.error），jsdom 里没有 toast 单例。
+    ;(window as any).toast = { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() }
     // Reset mocks for each test to ensure isolation
     mocks.useTemporaryValue
       .mockImplementationOnce(() => [false, mockSetCopiedTemporarily])
@@ -81,7 +83,7 @@ describe('useCopyTool', () => {
   const createMockPreviewHandles = (): BasicPreviewHandles => ({
     pan: vi.fn(),
     zoom: vi.fn(),
-    copy: vi.fn(),
+    copy: vi.fn().mockResolvedValue(undefined),
     download: vi.fn()
   })
 
@@ -157,7 +159,7 @@ describe('useCopyTool', () => {
       expect(mockSetCopiedTemporarily).toHaveBeenCalledWith(true)
     })
 
-    it('should execute copy image behavior when copy-image tool is clicked', () => {
+    it('should execute copy image behavior when copy-image tool is clicked', async () => {
       const mockPreviewHandles = createMockPreviewHandles()
       const props = createMockProps({
         showPreviewTools: true,
@@ -168,7 +170,7 @@ describe('useCopyTool', () => {
 
       // The copy-image tool is the second one registered
       const copyImageTool = mockRegisterTool.mock.calls[1][0]
-      act(() => {
+      await act(async () => {
         copyImageTool.onClick()
       })
 
@@ -225,11 +227,10 @@ describe('useCopyTool', () => {
       expect(mockSetCopiedTemporarily).toHaveBeenCalledWith(false)
     })
 
-    it('should handle copy image failure gracefully', () => {
+    it('should handle copy image failure gracefully', async () => {
       const mockPreviewHandles = createMockPreviewHandles()
-      mockPreviewHandles.copy = vi.fn().mockImplementation(() => {
-        throw new Error('Image copy failed')
-      })
+      // c2-13：copy() 是异步的，失败以 rejection 表达；成功勾不得在 resolve 之前亮起。
+      mockPreviewHandles.copy = vi.fn().mockRejectedValue(new Error('Image copy failed'))
       const props = createMockProps({
         showPreviewTools: true,
         previewRef: { current: mockPreviewHandles }
@@ -238,14 +239,42 @@ describe('useCopyTool', () => {
 
       const copyImageTool = mockRegisterTool.mock.calls[1][0]
 
-      expect(() => {
-        act(() => {
-          copyImageTool.onClick()
-        })
-      }).toThrow('Image copy failed')
+      await act(async () => {
+        copyImageTool.onClick()
+      })
 
       expect(mockPreviewHandles.copy).toHaveBeenCalledTimes(1)
+      expect(mockSetCopiedImageTemporarily).not.toHaveBeenCalledWith(true)
       expect(mockSetCopiedImageTemporarily).toHaveBeenCalledWith(false)
+    })
+
+    it('should not mark the copy-image tool as copied before the copy promise resolves', async () => {
+      const mockPreviewHandles = createMockPreviewHandles()
+      let resolveCopy: (() => void) | undefined
+      mockPreviewHandles.copy = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveCopy = resolve
+          })
+      )
+      const props = createMockProps({
+        showPreviewTools: true,
+        previewRef: { current: mockPreviewHandles }
+      })
+      renderHook(() => useCopyTool(props))
+
+      const copyImageTool = mockRegisterTool.mock.calls[1][0]
+      act(() => {
+        copyImageTool.onClick()
+      })
+
+      expect(mockSetCopiedImageTemporarily).not.toHaveBeenCalledWith(true)
+
+      await act(async () => {
+        resolveCopy?.()
+      })
+
+      expect(mockSetCopiedImageTemporarily).toHaveBeenCalledWith(true)
     })
   })
 })

@@ -8,9 +8,11 @@ import {
 import { getStoreProviders } from '@renderer/hooks/useStore'
 import i18n from '@renderer/i18n'
 import store from '@renderer/store'
-import type { Assistant, AssistantSettings, AssistantWorkModeConfig, Model, Provider, Topic } from '@renderer/types'
+import type { Assistant, AssistantSettings, AssistantWorkModeConfig, Provider, Topic } from '@renderer/types'
 import { WORK_MODE_APPROVAL_TIERS } from '@shared/config/workMode'
 import { v4 as uuid } from 'uuid'
+
+import { getProviderByModel } from './ProviderService'
 
 /**
  * Default assistant settings configuration template.
@@ -96,7 +98,15 @@ export function getDefaultTopic(assistantId: string): Topic {
   }
 }
 
-export function getDefaultProvider() {
+/**
+ * 默认 provider = 默认模型所属的 provider。
+ *
+ * r2-42：`getProviderByModel` 现在如实返回 `undefined`，本函数也不再回落到清单中的
+ * **任意** provider（旧行为是 `defaultProvider || providers[0]`）。那会把「默认模型的
+ * provider 已被删除」伪装成「找到了」，并把请求发到「外来 model.id + 别的 provider」上。
+ * 需要回落的地方在**调用点**显式写（见 `hooks/useProvider.ts`、`MessagesService.checkRateLimit`）。
+ */
+export function getDefaultProvider(): Provider | undefined {
   return getProviderByModel(getDefaultModel())
 }
 
@@ -108,25 +118,30 @@ export function getQuickModel() {
   return store.getState().llm.quickModel
 }
 
-export function getAssistantProvider(assistant: Assistant): Provider {
+/**
+ * 助手当前使用的 provider。
+ *
+ * 显式回落顺序（r2-42）：助手模型所属 provider → 默认模型所属 provider。
+ * 两级都查不到（助手未选模型、且默认 provider 不可用）时返回 `undefined`。
+ * 调用方必须显式处理，不得假定一定拿到 provider。
+ */
+export function getAssistantProvider(assistant: Assistant): Provider | undefined {
   const providers = getStoreProviders()
-  const provider = providers.find((p) => p.id === assistant.model?.provider)
-  return provider || getDefaultProvider()
+  return providers.find((p) => p.id === assistant.model?.provider) ?? getDefaultProvider()
 }
 
-// FIXME: This function fails in silence.
-// TODO: Refactor it to make it return exactly valid value or null, and update all usage.
-export function getProviderByModel(model?: Model): Provider {
-  const providers = getStoreProviders()
-  const provider = providers.find((p) => p.id === model?.provider)
-
-  if (!provider) {
-    const defaultProvider = providers.find((p) => p.id === getDefaultModel()?.provider)
-    return defaultProvider || providers[0]
-  }
-
-  return provider
-}
+/**
+ * 按模型解析 provider（三值契约，r2-42）。
+ *
+ * 本函数不再有第二份实现：唯一实现在 `ProviderService.getProviderByModel`（纯查表），
+ * 此处只做转发，返回值与它逐字一致：
+ * - 命中 `model.provider` ⇒ 该 `Provider`；
+ * - 未命中（provider 未配置、已被删除，或 `model` 为空）⇒ `undefined`，调用方**必须**显式处理。
+ *
+ * 旧实现找不到时静默回落到 `defaultProvider || providers[0]`，调用方无法区分
+ * 「没有」与「有」。需要回落默认 provider 的地方，现在在调用点显式写。
+ */
+export { getProviderByModel }
 
 /**
  * Retrieves and normalizes assistant settings with special transformation handling.

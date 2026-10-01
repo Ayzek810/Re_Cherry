@@ -1,4 +1,5 @@
 import { DynamicVirtualList } from '@renderer/components/VirtualList'
+import type { UseInPlaceEditReturn } from '@renderer/hooks/useInPlaceEdit'
 import { useActiveNode } from '@renderer/hooks/useNotesQuery'
 import NotesSidebarHeader from '@renderer/pages/notes/NotesSidebarHeader'
 import { useAppSelector } from '@renderer/store'
@@ -6,7 +7,7 @@ import { selectSortType } from '@renderer/store/note'
 import type { NotesSortType, NotesTreeNode } from '@renderer/types/note'
 import type { MenuProps } from 'antd'
 import { Dropdown } from 'antd'
-import { FilePlus, Folder, FolderUp, Loader2, Upload, X } from 'lucide-react'
+import { FilePlus, Folder, FolderUp, Loader2, RotateCw, Upload, X } from 'lucide-react'
 import type { FC } from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -74,6 +75,43 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
   const { editingNodeId, renamingNodeIds, newlyRenamedNodeIds, inPlaceEdit, handleStartEdit, handleAutoRename } =
     useNotesEditing({ onRenameNode })
 
+  /**
+   * f2-36：`useInPlaceEdit`（`@renderer/hooks/useInPlaceEdit.ts:124-138`，禁改区）每次渲染都返回
+   * 新对象字面量（`inputProps` 里的 `handleKeyDown`/`handleBlur` 又依赖每次渲染新建的 `saveEdit`）。
+   * 直接把它放进 `NotesEditingContext`，上下文引用就每渲染一换 ⇒ `memo` 的 `TreeNode` 全部重渲染，
+   * 注释里"only subscribe to what this node needs"的分片上下文设计失效。
+   *
+   * 这里把两层拆开：方法经 ref 转发（引用一辈子不变），对象只在 `isEditing`/`isSaving`/
+   * 输入值/禁用态真的变化时才换引用。TreeNode 读的就是这四个字段（`isEditing` + `inputProps`）。
+   */
+  const inPlaceEditRef = useRef(inPlaceEdit)
+  inPlaceEditRef.current = inPlaceEdit
+
+  const stableInPlaceEdit = useMemo<UseInPlaceEditReturn>(
+    () => ({
+      isEditing: inPlaceEdit.isEditing,
+      isSaving: inPlaceEdit.isSaving,
+      startEdit: (value: string) => inPlaceEditRef.current.startEdit(value),
+      saveEdit: () => inPlaceEditRef.current.saveEdit(),
+      cancelEdit: () => inPlaceEditRef.current.cancelEdit(),
+      inputProps: {
+        ref: inPlaceEdit.inputProps.ref,
+        value: inPlaceEdit.inputProps.value,
+        disabled: inPlaceEdit.inputProps.disabled,
+        onChange: (event) => inPlaceEditRef.current.inputProps.onChange?.(event),
+        onKeyDown: (event) => inPlaceEditRef.current.inputProps.onKeyDown?.(event),
+        onBlur: (event) => inPlaceEditRef.current.inputProps.onBlur?.(event)
+      }
+    }),
+    [
+      inPlaceEdit.isEditing,
+      inPlaceEdit.isSaving,
+      inPlaceEdit.inputProps.ref,
+      inPlaceEdit.inputProps.value,
+      inPlaceEdit.inputProps.disabled
+    ]
+  )
+
   const {
     draggedNodeId,
     dragOverNodeId,
@@ -121,7 +159,11 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
     reset,
     isSearching,
     results: searchResults,
-    stats: searchStats
+    stats: searchStats,
+    error: searchError,
+    failedFiles: searchFailedFiles,
+    failureMessage: searchFailureMessage,
+    searchedKeyword
   } = useFullTextSearch(searchOptions)
 
   useEffect(() => {
@@ -305,9 +347,9 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
       editingNodeId,
       renamingNodeIds,
       newlyRenamedNodeIds,
-      inPlaceEdit
+      inPlaceEdit: stableInPlaceEdit
     }),
-    [editingNodeId, renamingNodeIds, newlyRenamedNodeIds, inPlaceEdit]
+    [editingNodeId, renamingNodeIds, newlyRenamedNodeIds, stableInPlaceEdit]
   )
 
   const dragValue = useMemo(
@@ -341,13 +383,16 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
     [isShowSearch, trimmedSearchKeyword]
   )
 
+  // f2-36：内联字面量每渲染都是新对象，NotesUIContext 的消费者（每个 TreeNode）会跟着全量重渲染。
+  const uiValue = useMemo(() => ({ openDropdownKey }), [openDropdownKey])
+
   return (
     <NotesActionsContext value={actionsValue}>
       <NotesSelectionContext value={selectionValue}>
         <NotesEditingContext value={editingValue}>
           <NotesDragContext value={dragValue}>
             <NotesSearchContext value={searchValue}>
-              <NotesUIContext value={{ openDropdownKey }}>
+              <NotesUIContext value={uiValue}>
                 <SidebarContainer
                   onDragOver={(e) => {
                     e.preventDefault()
@@ -384,14 +429,49 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
                         </CancelButton>
                       </SearchStatusBar>
                     )}
-                    {isShowSearch && !isSearching && hasSearchKeyword && searchStats.total > 0 && (
-                      <SearchStatusBar>
-                        <span>
-                          {t('notes.search.found_results', {
-                            count: searchStats.total,
-                            nameCount: searchStats.fileNameMatches,
-                            contentCount: searchStats.contentMatches + searchStats.bothMatches
-                          })}
+                    {isShowSearch && !isSearching && hasSearchKeyword && searchError && (
+                      <SearchStatusBar data-testid="notes-search-error">
+                        <span title={searchError.message}>{t('notes.search.failed')}</span>
+                        <CancelButton
+                          type="button"
+                          onClick={() => search(notesTreeRef.current, trimmedSearchKeyword)}
+                          title={t('common.retry')}>
+                          <RotateCw size={14} />
+                        </CancelButton>
+                      </SearchStatusBar>
+                    )}
+                    {isShowSearch &&
+                      !isSearching &&
+                      hasSearchKeyword &&
+                      !searchError &&
+                      searchedKeyword === trimmedSearchKeyword &&
+                      searchStats.total > 0 && (
+                        <SearchStatusBar>
+                          <span>
+                            {t('notes.search.found_results', {
+                              count: searchStats.total,
+                              nameCount: searchStats.fileNameMatches,
+                              contentCount: searchStats.contentMatches + searchStats.bothMatches
+                            })}
+                          </span>
+                        </SearchStatusBar>
+                      )}
+                    {/* f2-35：0 命中原本是一片空列表，与"读失败"不可区分——补一行显式占位。 */}
+                    {isShowSearch &&
+                      !isSearching &&
+                      hasSearchKeyword &&
+                      !searchError &&
+                      searchedKeyword === trimmedSearchKeyword &&
+                      searchStats.total === 0 && (
+                        <SearchStatusBar data-testid="notes-search-empty">
+                          <span>{t('notes.search.no_results')}</span>
+                        </SearchStatusBar>
+                      )}
+                    {/* f2-35 的另一半：部分文件读失败时结果集必然不完整，不得只显示"N 条结果"。 */}
+                    {isShowSearch && !isSearching && hasSearchKeyword && !searchError && searchFailedFiles > 0 && (
+                      <SearchStatusBar data-testid="notes-search-partial-failure">
+                        <span title={searchFailureMessage ?? undefined}>
+                          {t('notes.search.failed_partial', { count: searchFailedFiles })}
                         </span>
                       </SearchStatusBar>
                     )}

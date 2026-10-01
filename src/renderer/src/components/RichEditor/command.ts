@@ -68,12 +68,33 @@ export interface CommandSuggestion {
 // Internal dynamic command registry
 const commandRegistry = new Map<string, Command>()
 
+/**
+ * c2-21：工具栏条目按注册表版本号记忆化，所以注册表每次真的变化都要通知订阅方，
+ * 否则动态注册/隐藏的命令不会出现在工具栏里。
+ */
+const registryListeners = new Set<() => void>()
+
+export function subscribeCommandRegistry(listener: () => void): () => void {
+  registryListeners.add(listener)
+  return () => {
+    registryListeners.delete(listener)
+  }
+}
+
+function notifyRegistryChange(): void {
+  for (const listener of registryListeners) {
+    listener()
+  }
+}
+
 export function registerCommand(cmd: Command): void {
   commandRegistry.set(cmd.id, cmd)
+  notifyRegistryChange()
 }
 
 export function unregisterCommand(id: string): void {
   commandRegistry.delete(id)
+  notifyRegistryChange()
 }
 
 export function getCommand(id: string): Command | undefined {
@@ -104,6 +125,7 @@ export function unregisterToolbarCommand(id: string): void {
   const cmd = getCommand(id)
   if (cmd) {
     cmd.showInToolbar = false
+    notifyRegistryChange()
     // Keep command for slash menu, just hide from toolbar
   }
 }
@@ -112,6 +134,7 @@ export function setCommandAvailability(id: string, isAvailable: (editor: Editor)
   const cmd = getCommand(id)
   if (cmd) {
     cmd.isAvailable = isAvailable
+    notifyRegistryChange()
   }
 }
 
@@ -132,6 +155,7 @@ export function hideToolbarCommandsWhen(commandIds: string[], condition: () => b
         cmd.showInToolbar = true
       }
     })
+    notifyRegistryChange()
   }
 }
 
@@ -583,6 +607,20 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
     let component: ReactRenderer<any, any>
     let cleanup: (() => void) | undefined
 
+    /**
+     * c2-36：所有拆解路径必须走同一个 helper。原实现里 Shift+Enter 与 Escape 只调
+     * `cleanup()` + `component.destroy()`，漏了 `element.remove()` —— `ReactRenderer.destroy()`
+     * 只注销 React 渲染器，`div.react-renderer` 仍留在 `document.body` 上；且 suggestion 未退出，
+     * 下一次 `onUpdate` 又会注册渲染器，而 `autoUpdate` 已被释放，菜单以未定位状态重现。
+     */
+    const teardown = () => {
+      if (cleanup) cleanup()
+      cleanup = undefined
+      const element = component?.element as HTMLElement | undefined
+      element?.remove()
+      component?.destroy()
+    }
+
     return {
       onStart: (props) => {
         if (!props?.items || !props?.clientRect) {
@@ -638,8 +676,7 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
         if (props.event.key === 'Enter' && props.event.shiftKey) {
           props.event.preventDefault()
           // Close the suggestion menu
-          if (cleanup) cleanup()
-          component.destroy()
+          teardown()
           // Use the view from SuggestionKeyDownProps to insert newline
           const { view } = props
           const { state, dispatch } = view
@@ -650,8 +687,7 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
         }
 
         if (props.event.key === 'Escape') {
-          if (cleanup) cleanup()
-          component.destroy()
+          teardown()
           return true
         }
 
@@ -659,10 +695,7 @@ export const commandSuggestion: Omit<SuggestionOptions<Command, MentionNodeAttrs
       },
 
       onExit: () => {
-        if (cleanup) cleanup()
-        const element = component.element as HTMLElement
-        element.remove()
-        component.destroy()
+        teardown()
       }
     }
   }

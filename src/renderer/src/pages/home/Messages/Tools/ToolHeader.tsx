@@ -120,7 +120,7 @@ const ToolHeader: FC<ToolHeaderProps> = ({
 }) => {
   const { t } = useTranslation()
 
-  const resolvedName = propToolName || block?.toolName || 'Tool'
+  const resolvedName = propToolName || block?.toolName || t('message.unknown_tool')
   const display = getToolDisplay(resolvedName)
   const toolName = display.labelKey !== undefined ? t(display.labelKey) : resolvedName
 

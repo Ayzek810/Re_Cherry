@@ -25,6 +25,7 @@ import { getDefaultGroupName, getDifference, getUnion, uniqueObjectArray } from 
 import { isNewApiProvider } from '@renderer/utils/provider'
 import type { ModalProps } from 'antd'
 import { Button, Divider, Flex, Form, Input, InputNumber, message, Modal, Select, Switch, Tooltip } from 'antd'
+import type { TFunction } from 'i18next'
 import { cloneDeep } from 'lodash'
 import { ChevronDown, ChevronUp, RotateCcw, SaveIcon } from 'lucide-react'
 import type { FC } from 'react'
@@ -52,6 +53,16 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
 
   const labelWidth = useDynamicLabelWidth([t('settings.models.add.endpoint_type.label')])
 
+  /**
+   * 价格字段的空值语义（v1 二轮审查 s2-16）：`Number(x) || 0` 把「清空输入框」当成 0 写库。
+   * 清空是用户重填前的中间态，此时保留原值；只有真的填了数字才写。
+   */
+  const toTokenPrice = (raw: unknown, fallback: number | undefined): number => {
+    if (raw === null || raw === undefined || raw === '') return fallback ?? 0
+    const parsed = Number(raw)
+    return Number.isFinite(parsed) ? parsed : (fallback ?? 0)
+  }
+
   // 自动保存函数
   const autoSave = (overrides?: {
     capabilities?: ModelCapability[]
@@ -74,8 +85,14 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       capabilities: overrides?.capabilities ?? modelCapabilities,
       supported_text_delta: overrides?.supported_text_delta ?? supportedTextDelta,
       pricing: {
-        input_per_million_tokens: Number(formValues.input_per_million_tokens) || 0,
-        output_per_million_tokens: Number(formValues.output_per_million_tokens) || 0,
+        input_per_million_tokens: toTokenPrice(
+          formValues.input_per_million_tokens,
+          model.pricing?.input_per_million_tokens
+        ),
+        output_per_million_tokens: toTokenPrice(
+          formValues.output_per_million_tokens,
+          model.pricing?.output_per_million_tokens
+        ),
         currencySymbol: finalCurrencySymbol
       }
     }
@@ -93,8 +110,14 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       capabilities: modelCapabilities,
       supported_text_delta: supportedTextDelta,
       pricing: {
-        input_per_million_tokens: Number(values.input_per_million_tokens) || 0,
-        output_per_million_tokens: Number(values.output_per_million_tokens) || 0,
+        input_per_million_tokens: toTokenPrice(
+          values.input_per_million_tokens,
+          model.pricing?.input_per_million_tokens
+        ),
+        output_per_million_tokens: toTokenPrice(
+          values.output_per_million_tokens,
+          model.pricing?.output_per_million_tokens
+        ),
         currencySymbol: finalCurrencySymbol || '$'
       }
     }
@@ -164,20 +187,12 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelCapabilities])
 
-  const ModelCapability = () => {
-    // 排他标签组（v0.3.3-18）：嵌入 / 重排 / 生图 三者互斥，且任一被选中即禁用其余"能力"标签
-    // —— 一个模型不可能既是嵌入模型、又是重排模型、又是生图模型。
-    const exclusiveTypes: ModelType[] = ['embedding', 'rerank', 'image_generation']
-    const selectedExclusive = exclusiveTypes.filter((type) => selectedTypes.includes(type))
-    const isExclusiveDisabled = (type: ModelType) => selectedExclusive.some((selected) => selected !== type)
-    const isOtherDisabled = selectedExclusive.length > 0
-
-    const handleResetTypes = () => {
-      setModelCapabilities(originalModelCapabilities)
-      setHasUserModified(false) // 重置后清除修改标志
-    }
-
-    const updateType = useCallback((type: ModelType) => {
+  // v1 二轮审查 s2-42：能力标签组原先定义在渲染体内并按 `<ModelCapability />` 使用。
+  // 那样每次父渲染都会产生新的组件类型 → React 卸载重挂整组（DOM 重建、焦点丢失）；
+  // 而 `updateType` 的 `useCallback(..., [])` 之所以"看起来没问题"，正是靠这次重挂刷新闭包。
+  // 现在标签组提为模块级组件（见文件末尾 `ModelCapabilityTags`），闭包正确性由依赖数组保证。
+  const updateType = useCallback(
+    (type: ModelType) => {
       setHasUserModified(true)
       setModelCapabilities((prev) =>
         uniqueObjectArray([
@@ -185,67 +200,13 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
           { type, isUserSelected: !selectedTypes.includes(type) }
         ])
       )
-    }, [])
+    },
+    [selectedTypes]
+  )
 
-    return (
-      <>
-        <TypeTitle>
-          <Flex align="center" gap={4} style={{ height: 24 }}>
-            {t('models.type.select')}
-            <WarnTooltip title={t('settings.moresetting.check.warn')} />
-          </Flex>
-
-          {hasUserModified && (
-            <Tooltip title={t('common.reset')}>
-              <Button size="small" icon={<RotateCcw size={14} />} onClick={handleResetTypes} type="text" />
-            </Tooltip>
-          )}
-        </TypeTitle>
-        <Flex justify="flex-start" align="center" gap={4} wrap={'wrap'} style={{ marginBottom: 8 }}>
-          <VisionTag
-            showLabel
-            inactive={isOtherDisabled || !selectedTypes.includes('vision')}
-            disabled={isOtherDisabled}
-            onClick={() => updateType('vision')}
-          />
-          <WebSearchTag
-            showLabel
-            inactive={isOtherDisabled || !selectedTypes.includes('web_search')}
-            disabled={isOtherDisabled}
-            onClick={() => updateType('web_search')}
-          />
-          <ReasoningTag
-            showLabel
-            inactive={isOtherDisabled || !selectedTypes.includes('reasoning')}
-            disabled={isOtherDisabled}
-            onClick={() => updateType('reasoning')}
-          />
-          <ToolsCallingTag
-            showLabel
-            inactive={isOtherDisabled || !selectedTypes.includes('function_calling')}
-            disabled={isOtherDisabled}
-            onClick={() => updateType('function_calling')}
-          />
-          {/* 排他组：生图 / 重排 / 嵌入（三枚同组互斥，且任一被选中即禁用上面那四个能力标签）。
-              与嵌入/重排一样**不传 showLabel** —— 那三枚用文字当图标，再渲染 children 会变成「生图 生图」。 */}
-          <ImageGenerationTag
-            inactive={isExclusiveDisabled('image_generation') || !selectedTypes.includes('image_generation')}
-            disabled={isExclusiveDisabled('image_generation')}
-            onClick={() => updateType('image_generation')}
-          />
-          <RerankerTag
-            disabled={isExclusiveDisabled('rerank')}
-            inactive={isExclusiveDisabled('rerank') || !selectedTypes.includes('rerank')}
-            onClick={() => updateType('rerank')}
-          />
-          <EmbeddingTag
-            inactive={isExclusiveDisabled('embedding') || !selectedTypes.includes('embedding')}
-            disabled={isExclusiveDisabled('embedding')}
-            onClick={() => updateType('embedding')}
-          />
-        </Flex>
-      </>
-    )
+  const handleResetTypes = () => {
+    setModelCapabilities(originalModelCapabilities)
+    setHasUserModified(false) // 重置后清除修改标志
   }
 
   return (
@@ -348,7 +309,13 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
         {showMoreSettings && (
           <div style={{ marginBottom: 8 }}>
             <Divider style={{ margin: '16px 0 16px 0' }} />
-            <ModelCapability />
+            <ModelCapabilityTags
+              t={t}
+              selectedTypes={selectedTypes}
+              hasUserModified={hasUserModified}
+              onToggle={updateType}
+              onReset={handleResetTypes}
+            />
             <Divider style={{ margin: '16px 0 12px 0' }} />
             <Form.Item
               name="supported_text_delta"
@@ -407,12 +374,11 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                   placeholder={t('models.price.custom_currency_placeholder')}
                   defaultValue={model.pricing?.currencySymbol}
                   maxLength={5}
-                  onChange={(e) => {
-                    const newValue = e.target.value
-                    setCurrencySymbol(newValue)
-                    // 自动保存
+                  // 只刷新展示用的符号；落库交给失焦（同 s2-16：输入框不做按键级持久化）。
+                  onChange={(e) => setCurrencySymbol(e.target.value)}
+                  onBlur={(e) => {
                     autoSave({
-                      currencySymbol: newValue,
+                      currencySymbol: e.target.value,
                       isCustomCurrency: true
                     })
                   }}
@@ -429,10 +395,9 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                 precision={2}
                 style={{ width: '240px' }}
                 addonAfter={`${currencySymbol} / ${t('models.price.million_tokens')}`}
-                onChange={() => {
-                  // 自动保存
-                  autoSave()
-                }}
+                // v1 二轮审查 s2-16：输入框每敲一位都 autoSave 会把 llm + assistants 两个
+                // 持久化切片各写一次并广播两次；改为失焦提交（同名值不再触发）。
+                onBlur={() => autoSave()}
               />
             </Form.Item>
             <Form.Item label={t('models.price.output')} style={{ marginBottom: 10 }} name="output_per_million_tokens">
@@ -444,10 +409,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                 precision={2}
                 style={{ width: '240px' }}
                 addonAfter={`${currencySymbol} / ${t('models.price.million_tokens')}`}
-                onChange={() => {
-                  // 自动保存
-                  autoSave()
-                }}
+                onBlur={() => autoSave()}
               />
             </Form.Item>
           </div>
@@ -465,5 +427,91 @@ const TypeTitle = styled.div`
   font-size: 14px;
   font-weight: 600;
 `
+
+interface ModelCapabilityTagsProps {
+  t: TFunction
+  selectedTypes: ModelType[]
+  hasUserModified: boolean
+  /** 翻转某项能力（父级持有状态与持久化） */
+  onToggle: (type: ModelType) => void
+  /** 恢复为打开弹窗时的能力集合 */
+  onReset: () => void
+}
+
+/**
+ * 模型能力标签组。
+ *
+ * 必须是**模块级**组件，不能定义在 `ModelEditContent` 的渲染体内：定义在渲染体内时每次父渲染
+ * 都会产生新的组件类型，React 会卸载重挂整组（DOM 重建、焦点丢失）。
+ * v1 二轮审查 s2-42。
+ */
+function ModelCapabilityTags({ t, selectedTypes, hasUserModified, onToggle, onReset }: ModelCapabilityTagsProps) {
+  // 排他标签组（v0.3.3-18）：嵌入 / 重排 / 生图 三者互斥，且任一被选中即禁用其余"能力"标签
+  // —— 一个模型不可能既是嵌入模型、又是重排模型、又是生图模型。
+  const exclusiveTypes: ModelType[] = ['embedding', 'rerank', 'image_generation']
+  const selectedExclusive = exclusiveTypes.filter((type) => selectedTypes.includes(type))
+  const isExclusiveDisabled = (type: ModelType) => selectedExclusive.some((selected) => selected !== type)
+  const isOtherDisabled = selectedExclusive.length > 0
+
+  return (
+    <>
+      <TypeTitle>
+        <Flex align="center" gap={4} style={{ height: 24 }}>
+          {t('models.type.select')}
+          <WarnTooltip title={t('settings.moresetting.check.warn')} />
+        </Flex>
+
+        {hasUserModified && (
+          <Tooltip title={t('common.reset')}>
+            <Button size="small" icon={<RotateCcw size={14} />} onClick={onReset} type="text" />
+          </Tooltip>
+        )}
+      </TypeTitle>
+      <Flex justify="flex-start" align="center" gap={4} wrap={'wrap'} style={{ marginBottom: 8 }}>
+        <VisionTag
+          showLabel
+          inactive={isOtherDisabled || !selectedTypes.includes('vision')}
+          disabled={isOtherDisabled}
+          onClick={() => onToggle('vision')}
+        />
+        <WebSearchTag
+          showLabel
+          inactive={isOtherDisabled || !selectedTypes.includes('web_search')}
+          disabled={isOtherDisabled}
+          onClick={() => onToggle('web_search')}
+        />
+        <ReasoningTag
+          showLabel
+          inactive={isOtherDisabled || !selectedTypes.includes('reasoning')}
+          disabled={isOtherDisabled}
+          onClick={() => onToggle('reasoning')}
+        />
+        <ToolsCallingTag
+          showLabel
+          inactive={isOtherDisabled || !selectedTypes.includes('function_calling')}
+          disabled={isOtherDisabled}
+          onClick={() => onToggle('function_calling')}
+        />
+        {/* 排他组：生图 / 重排 / 嵌入（三枚同组互斥，且任一被选中即禁用上面那四个能力标签）。
+            与嵌入/重排一样**不传 showLabel** —— 那三枚用文字当图标，再渲染 children 会变成「生图 生图」。 */}
+        <ImageGenerationTag
+          inactive={isExclusiveDisabled('image_generation') || !selectedTypes.includes('image_generation')}
+          disabled={isExclusiveDisabled('image_generation')}
+          onClick={() => onToggle('image_generation')}
+        />
+        <RerankerTag
+          disabled={isExclusiveDisabled('rerank')}
+          inactive={isExclusiveDisabled('rerank') || !selectedTypes.includes('rerank')}
+          onClick={() => onToggle('rerank')}
+        />
+        <EmbeddingTag
+          inactive={isExclusiveDisabled('embedding') || !selectedTypes.includes('embedding')}
+          disabled={isExclusiveDisabled('embedding')}
+          onClick={() => onToggle('embedding')}
+        />
+      </Flex>
+    </>
+  )
+}
 
 export default ModelEditContent

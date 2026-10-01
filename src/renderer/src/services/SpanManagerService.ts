@@ -258,9 +258,10 @@ class SpanManagerService {
     }
 
     // remove span
-    if (entity.removeSpan(span)) {
-      this.getModelSpanEntity(params.topicId).removeSpan(span)
-    }
+    // r2-60：此前是 `if (entity.removeSpan(span)) { this.getModelSpanEntity(topicId).removeSpan(span) }`
+    // ——对同一 span 做两次 remove。第二次拿的是 root entity（无 modelName 的实体），span 不在
+    // 它里面，必然返回 false；当 modelName 缺省时 `entity` 本身就是 root entity，一次就够。
+    entity.removeSpan(span)
 
     const code = params.error ? SpanStatusCode.ERROR : SpanStatusCode.OK
     const message = params.error ? params.error.message : 'success'
@@ -305,11 +306,9 @@ class SpanManagerService {
 
 export const spanManagerService = new SpanManagerService()
 export const webTracer = trace.getTracer('CherryStudio', '1.0.0')
-export const addSpan = spanManagerService.addSpan.bind(spanManagerService)
 export const startTrace = spanManagerService.startTrace.bind(spanManagerService)
 export const endTrace = spanManagerService.endTrace.bind(spanManagerService)
 export const endSpan = spanManagerService.endSpan.bind(spanManagerService)
-export const addTokenUsage = spanManagerService.addTokenUsage.bind(spanManagerService)
 export const pauseTrace = spanManagerService.finishModelTrace.bind(spanManagerService)
 export const appendTrace = spanManagerService.appendTrace.bind(spanManagerService)
 export const appendMessageTrace = spanManagerService.appendMessageTrace.bind(spanManagerService)

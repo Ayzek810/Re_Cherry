@@ -33,7 +33,7 @@ import {
 import { adaptProviderApiHost } from '@renderer/utils/providerHost'
 import { Button, Divider, Flex, Input, Select, Space, Switch, Tooltip } from 'antd'
 import Link from 'antd/es/typography/Link'
-import { debounce, isEmpty } from 'lodash'
+import { isEmpty } from 'lodash'
 import { Bolt, Check, Settings2, SquareArrowOutUpRight, TriangleAlert } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -120,55 +120,37 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
     checking: false
   })
 
-  // Store callbacks in ref to avoid recreating debounce function when dependencies change
-  const callbacks = { updateProvider, isOnboarding, providerEnabled: provider.enabled }
-  const callbacksRef = useRef(callbacks)
-  callbacksRef.current = callbacks
+  // v1 二轮审查 s2-38：API key 改为**失焦提交**。
+  // 旧实现走 150ms 防抖：连续输入时相邻字符间隔常常超过 150ms，于是每敲一位就是一次
+  // `updateProvider`——main 进程加密落盘 + settings 切片整片持久化 + `syncList` 广播。
+  // 同页的 apiHost / anthropicApiHost 本就是 blur 语义，这里与之对齐。
+  const commitApiKey = () => {
+    const formattedKey = formatApiKeys(localApiKey)
+    if (formattedKey === provider.apiKey) return
+    updateProvider({ apiKey: formattedKey })
+    // Auto-enable provider when apiKey is updated in onboarding mode
+    if (isOnboarding && formattedKey && !provider.enabled) {
+      updateProvider({ enabled: true })
+    }
+  }
 
-  const debouncedUpdateApiKey = useMemo(
-    () =>
-      debounce((value: string) => {
-        const { updateProvider, isOnboarding, providerEnabled } = callbacksRef.current
-        const formattedKey = formatApiKeys(value)
-        updateProvider({ apiKey: formattedKey })
-        // Auto-enable provider when apiKey is updated in onboarding mode
-        if (isOnboarding && formattedKey && !providerEnabled) {
-          updateProvider({ enabled: true })
-        }
-      }, 150),
-    []
-  )
-
-  // Track whether update comes from external source to avoid loops
-  const isExternalUpdateRef = useRef(false)
+  // 卸载兜底：还没失焦就关掉设置页时也要落库（旧实现靠 debounce.flush()）。
+  const commitApiKeyRef = useRef(commitApiKey)
+  commitApiKeyRef.current = commitApiKey
 
   // Sync provider.apiKey to localApiKey and reset connectivity status
+  //（外部来源改了 key——例如多 Key 列表弹窗——时把输入框拉回真值）
   useEffect(() => {
-    // Cancel any pending debounce calls to prevent old values from overwriting new ones
-    debouncedUpdateApiKey.cancel()
-    isExternalUpdateRef.current = true
     setLocalApiKey(provider.apiKey)
     setApiKeyConnectivity({ status: HealthStatus.NOT_CHECKED })
-  }, [provider.apiKey, debouncedUpdateApiKey])
-
-  // Sync localApiKey to provider.apiKey (debounced)
-  // Only trigger on user input, not on external updates
-  useEffect(() => {
-    if (isExternalUpdateRef.current) {
-      isExternalUpdateRef.current = false
-      return
-    }
-    if (localApiKey !== provider.apiKey) {
-      debouncedUpdateApiKey(localApiKey)
-    }
-  }, [localApiKey, provider.apiKey, debouncedUpdateApiKey])
+  }, [provider.apiKey])
 
   // Flush pending updates on unmount to prevent data loss
   useEffect(() => {
     return () => {
-      debouncedUpdateApiKey.flush()
+      commitApiKeyRef.current()
     }
-  }, [debouncedUpdateApiKey])
+  }, [])
 
   const isApiKeyConnectable = useMemo(() => {
     return apiKeyConnectivity.status === 'success'
@@ -253,10 +235,12 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
       return
     }
 
+    // v1 二轮审查 s2-08：取消现在交回 `null` 哨兵（旧实现排 300ms reject，弹窗卸载即被
+    // clearAllTimers 清掉 → 永不 settle；未卸载时 rejection 又无人接收）。取消不是错误，
+    // 这里静默返回，不再弹「请选择模型」。
     const model = await SelectProviderModelPopup.show({ provider })
 
     if (!model) {
-      window.toast.error(i18n.t('message.error.enter.model'))
       return
     }
 
@@ -490,6 +474,7 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
                   value={localApiKey}
                   placeholder={t('settings.provider.api_key.label')}
                   onChange={(e) => setLocalApiKey(e.target.value)}
+                  onBlur={commitApiKey}
                   spellCheck={false}
                   autoFocus={provider.enabled && provider.apiKey === '' && !isProviderSupportAuth(provider)}
                   disabled={provider.id === 'copilot'}

@@ -54,7 +54,6 @@ interface CodeCliContentPanelProps {
   supportedProviders: Provider[]
   providerConfigs: Record<string, CliProviderConfig>
   currentProviderId: string | null
-  currentProviderModelName?: string
   providerActionsDisabled?: boolean
   resolveProviderMeta: (provider: Provider, cfg?: CliProviderConfig) => { providerName: string; modelName?: string }
   onInstall: () => void
@@ -92,7 +91,6 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   supportedProviders,
   providerConfigs,
   currentProviderId,
-  currentProviderModelName,
   providerActionsDisabled,
   resolveProviderMeta,
   onInstall,
@@ -200,7 +198,6 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
                 providers={supportedProviders}
                 providerConfigs={providerConfigs}
                 currentProviderId={currentProviderId}
-                currentProviderModelName={currentProviderModelName}
                 providerActionsDisabled={providerActionsDisabled}
                 resolveMeta={resolveProviderMeta}
                 onConfigure={onConfigure}

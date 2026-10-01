@@ -43,6 +43,9 @@ const EditableNumber: FC<EditableNumberProps> = ({
   const [isEditing, setIsEditing] = useState(false)
   const [inputValue, setInputValue] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
+  // c2-42②：Enter 会手动 blur，紧随其后的真实 blur 事件仍会到达 handleBlur，
+  // 于是调用方的 onBlur 被通知两次（典型后果：重复提交）。用 ref 去重。
+  const isEditingRef = useRef(false)
 
   useEffect(() => {
     setInputValue(value)
@@ -50,6 +53,7 @@ const EditableNumber: FC<EditableNumberProps> = ({
 
   const handleFocus = () => {
     if (disabled) return
+    isEditingRef.current = true
     setIsEditing(true)
   }
 
@@ -58,16 +62,21 @@ const EditableNumber: FC<EditableNumberProps> = ({
   }
 
   const handleBlur = () => {
+    if (!isEditingRef.current) return
+    isEditingRef.current = false
     setIsEditing(false)
     onBlur?.()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleBlur()
+      // Enter 不会让 <InputNumber> 失焦；显式 blur 才能把「提交」这一步走完。
+      e.preventDefault()
+      inputRef.current?.blur()
     } else if (e.key === 'Escape') {
       e.stopPropagation()
       setInputValue(value)
+      isEditingRef.current = false
       setIsEditing(false)
     }
   }
@@ -75,7 +84,10 @@ const EditableNumber: FC<EditableNumberProps> = ({
   return (
     <Container>
       <InputNumber
-        style={{ ...style, opacity: isEditing ? 1 : 0 }}
+        // c2-42①：非编辑态原来只是 `opacity: 0` —— 仍占布局、仍可被 Tab 聚焦、仍接收键盘输入
+        // （上层 DisplayText 只挡指针事件）。改用 `visibility: hidden` + tabIndex={-1}：
+        // 视觉与交互都真正关闭。
+        style={{ ...style, opacity: isEditing ? 1 : 0, visibility: isEditing ? 'visible' : 'hidden' }}
         ref={inputRef}
         value={inputValue}
         min={min}
@@ -83,6 +95,7 @@ const EditableNumber: FC<EditableNumberProps> = ({
         step={step}
         precision={precision}
         size={size}
+        tabIndex={isEditing ? 0 : -1}
         onChange={handleInputChange}
         onBlur={handleBlur}
         onFocus={handleFocus}

@@ -10,8 +10,11 @@ const mockUseSettings = vi.fn()
 const mockUseTranslation = vi.fn()
 
 // Mock hooks
+
 vi.mock('@renderer/hooks/useSettings', () => ({
-  useSettings: () => mockUseSettings()
+  useSettings: () => mockUseSettings(),
+  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  useSetting: (key: string) => (mockUseSettings() as Record<string, unknown>)[key]
 }))
 
 vi.mock('react-i18next', () => ({

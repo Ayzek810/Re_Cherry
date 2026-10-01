@@ -155,6 +155,19 @@ function buildKnowledgeFileIndex(bases: KnowledgeBase[]): Map<string, { title: s
   return index
 }
 
+/**
+ * r2-51：把 `new URL(url).hostname` 与其失败回落收敛成一个 helper。
+ * 相对路径 / 畸形串（如 `'not a url'`、`'/relative/path'`）会抛 `TypeError`；裸 `new URL`
+ * 会让整个引用 selector 抛错，引用药丸（citations）整块不渲染。失败回落成原始 url 字符串。
+ */
+export function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
+
 export const formatCitationsFromBlock = (
   block: CitationMessageBlock | undefined,
   knowledgeFileIndex?: Map<string, { title: string; path: string }>
@@ -181,12 +194,7 @@ export const formatCitationsFromBlock = (
       case WEB_SEARCH_SOURCE.OPENAI_RESPONSE:
         formattedCitations =
           (block.response.results as OpenAI.Responses.ResponseOutputText.URLCitation[])?.map((result, index) => {
-            let hostname: string | undefined
-            try {
-              hostname = result.title ? undefined : new URL(result.url).hostname
-            } catch {
-              hostname = result.url
-            }
+            const hostname: string | undefined = result.title ? undefined : hostnameOf(result.url)
             return {
               number: index + 1,
               url: result.url,
@@ -201,12 +209,7 @@ export const formatCitationsFromBlock = (
         formattedCitations =
           (block.response.results as OpenAI.Chat.Completions.ChatCompletionMessage.Annotation[])?.map((url, index) => {
             const urlCitation = url.url_citation
-            let hostname: string | undefined
-            try {
-              hostname = urlCitation.title ? undefined : new URL(urlCitation.url).hostname
-            } catch {
-              hostname = urlCitation.url
-            }
+            const hostname: string | undefined = urlCitation.title ? undefined : hostnameOf(urlCitation.url)
             return {
               number: index + 1,
               url: urlCitation.url,
@@ -221,17 +224,11 @@ export const formatCitationsFromBlock = (
         formattedCitations =
           (block.response.results as Array<WebSearchResultBlock>)?.map((result, index) => {
             const { url } = result
-            let hostname: string | undefined
-            try {
-              hostname = new URL(url).hostname
-            } catch {
-              hostname = url
-            }
             return {
               number: index + 1,
               url: url,
               title: result.title,
-              hostname: hostname,
+              hostname: hostnameOf(url),
               showFavicon: true,
               type: 'websearch'
             }
@@ -252,25 +249,15 @@ export const formatCitationsFromBlock = (
         formattedCitations =
           (block.response.results as AISDKWebSearchResult[])?.map((result, index) => {
             const url = result.url
-            try {
-              const hostname = new URL(result.url).hostname
-              // xAI source events use citation number as title, fall back to hostname
-              const title = result.title && /^\d+$/.test(result.title) ? hostname : result.title || hostname
-              return {
-                number: index + 1,
-                url,
-                title,
-                showFavicon: true,
-                type: 'websearch'
-              }
-            } catch {
-              return {
-                number: index + 1,
-                url,
-                hostname: url,
-                showFavicon: true,
-                type: 'websearch'
-              }
+            const hostname = hostnameOf(url)
+            // xAI source events use citation number as title, fall back to hostname
+            const title = result.title && /^\d+$/.test(result.title) ? hostname : result.title || hostname
+            return {
+              number: index + 1,
+              url,
+              title,
+              showFavicon: true,
+              type: 'websearch'
             }
           }) || []
         break
@@ -278,25 +265,15 @@ export const formatCitationsFromBlock = (
         formattedCitations =
           (block.response.results as AISDKWebSearchResult[])?.map((result, index) => {
             const url = result.url
-            try {
-              const hostname = new URL(result.url).hostname
-              const content = result.providerMetadata && result.providerMetadata['openrouter']?.content
-              return {
-                number: index + 1,
-                url,
-                title: result.title || hostname,
-                content: content as string,
-                showFavicon: true,
-                type: 'websearch'
-              }
-            } catch {
-              return {
-                number: index + 1,
-                url,
-                hostname: url,
-                showFavicon: true,
-                type: 'websearch'
-              }
+            const hostname = hostnameOf(url)
+            const content = result.providerMetadata && result.providerMetadata['openrouter']?.content
+            return {
+              number: index + 1,
+              url,
+              title: result.title || hostname,
+              content: content as string,
+              showFavicon: true,
+              type: 'websearch'
             }
           }) || []
         break
@@ -327,7 +304,9 @@ export const formatCitationsFromBlock = (
           (block.response?.results as AISDKWebSearchResult[])?.map((result, index) => ({
             number: index + 1,
             url: result.url,
-            title: result.title || new URL(result.url).hostname,
+            // r2-51：此前这里是裸 `new URL(result.url).hostname`（同函数四条兄弟分支都包了 try/catch），
+            // 相对路径/畸形 url 会抛错并带走整个引用 selector。
+            title: result.title || hostnameOf(result.url),
             showFavicon: true,
             type: 'websearch',
             providerMetadata: result?.providerMetadata

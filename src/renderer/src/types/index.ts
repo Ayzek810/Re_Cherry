@@ -1,7 +1,7 @@
 import type { LanguageModelV3Source } from '@ai-sdk/provider'
 import type { WebSearchResultBlock } from '@anthropic-ai/sdk/resources'
 import type OpenAI from '@cherrystudio/openai'
-import type { GroundingMetadata, PersonGeneration } from '@google/genai'
+import type { GroundingMetadata } from '@google/genai'
 import type { WorkModeApprovalTier } from '@shared/config/workMode'
 import type { CSSProperties } from 'react'
 
@@ -10,7 +10,6 @@ export * from './note'
 
 import * as z from 'zod'
 
-import type { FileMetadata } from './file'
 import type { KnowledgeBase, KnowledgeReference } from './knowledge'
 import type { MCPConfigSample, MCPServerInstallSource, McpServerType } from './mcp'
 import type { Message } from './newMessage'
@@ -20,7 +19,6 @@ export * from './agent'
 export * from './knowledge'
 export * from './mcp'
 export * from './notification'
-export * from './plugin'
 export * from './provider'
 export * from './serialize'
 export * from './skill'
@@ -218,52 +216,6 @@ export type AssistantSettings = {
   messageIdentity?: 'model' | 'assistant'
 }
 
-export type LegacyMessage = {
-  id: string
-  assistantId: string
-  role: 'user' | 'assistant'
-  content: string
-  reasoning_content?: string
-  topicId: string
-  createdAt: string
-  status: 'sending' | 'pending' | 'searching' | 'success' | 'paused' | 'error'
-  modelId?: string
-  model?: Model
-  files?: FileMetadata[]
-  images?: string[]
-  usage?: Usage
-  metrics?: Metrics
-  knowledgeBaseIds?: string[]
-  type: 'text' | '@' | 'clear'
-  mentions?: Model[]
-  askId?: string
-  useful?: boolean
-  error?: Record<string, any>
-  enabledMCPs?: MCPServer[]
-  metadata?: {
-    // Gemini
-    groundingMetadata?: GroundingMetadata
-    // Perplexity Or Openrouter
-    citations?: string[]
-    // OpenAI
-    annotations?: OpenAI.Chat.Completions.ChatCompletionMessage.Annotation[]
-    // Zhipu or Hunyuan
-    webSearchInfo?: any[]
-    // Web search
-    webSearch?: WebSearchProviderResponse
-    // MCP Tools
-    mcpTools?: MCPToolResponse[]
-    // Generate Image
-    generateImage?: GenerateImageResponse
-    // knowledge
-    knowledge?: KnowledgeReference[]
-  }
-  // 多模型消息样式
-  multiModelMessageStyle?: 'horizontal' | 'vertical' | 'fold' | 'grid'
-  // fold时是否选中
-  foldSelected?: boolean
-}
-
 export type Usage = OpenAI.Completions.CompletionUsage & {
   thoughts_tokens?: number
   // OpenRouter specific fields
@@ -371,10 +323,6 @@ export type Model = {
   supported_text_delta?: boolean
 }
 
-export type Suggestion = {
-  content: string
-}
-
 export type MinAppType = {
   id: string
   name: string
@@ -440,49 +388,10 @@ export interface Shortcut {
   system: boolean
 }
 
-export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed'
-
-export type ApiClient = {
-  model: string
-  provider: string
-  apiKey: string
-  apiVersion?: string
-  baseURL: string
-}
-
-export type GenerateImageParams = {
-  model: string
-  prompt: string
-  negativePrompt?: string
-  imageSize: string
-  batchSize: number
-  seed?: string
-  numInferenceSteps?: number
-  guidanceScale?: number
-  signal?: AbortSignal
-  promptEnhancement?: boolean
-  personGeneration?: PersonGeneration
-  quality?: string
-}
-
-/**
- * 图像编辑参数
- * 用于基于输入图像和文本提示生成编辑后的图像
- */
-export type EditImageParams = {
-  /** 模型 ID */
-  model: string
-  /** 编辑提示词 */
-  prompt: string
-  /** 需要编辑的输入图像（可以是 Buffer、Uint8Array 或 base64/URL 字符串） */
-  inputImages: (Buffer | Uint8Array | string)[]
-  /** 可选的 mask 图像用于 inpainting（指定需要编辑的区域） */
-  mask?: Buffer | Uint8Array | string
-  /** 输出图像尺寸 */
-  imageSize?: string
-  /** 中止信号 */
-  signal?: AbortSignal
-}
+// r2-105：`ProcessingStatus` 的定义唯一化在 `./knowledge`（`KnowledgeItem.processingStatus` 的归属类型），
+// 这里原先另有一份逐字重复的本地声明——本地声明会遮蔽 barrel 导出，任一边增删状态都会让
+// `@renderer/types` 消费方与 `KnowledgeItem` 静默分叉。现改为再导出同一份。
+export type { ProcessingStatus } from './knowledge'
 
 export type GenerateImageResponse = {
   type: 'url' | 'base64'
@@ -548,7 +457,7 @@ export type WebSearchProviderResponse = {
   results: WebSearchProviderResult[]
   /** 压缩摘要（WebSearchService.applyCompression 实际生效时附加；none/未压缩无此字段）。
    * web_search 工具据此在结果文本里向用户报告压缩启用状态与前后条数。 */
-  compression?: { method: string; before: number; after: number }
+  compression?: { method: string; before: number; after: number; error?: string }
 }
 
 export type AISDKWebSearchResult = Omit<Extract<LanguageModelV3Source, { sourceType: 'url' }>, 'sourceType'>
@@ -595,17 +504,6 @@ export type WebSearchStatus = {
 }
 
 // TODO: 把 mcp 相关类型定义迁移到独立文件中
-export type MCPArgType = 'string' | 'list' | 'number'
-export type MCPEnvType = 'string' | 'number'
-export type MCPArgParameter = { [key: string]: MCPArgType }
-export type MCPEnvParameter = { [key: string]: MCPEnvType }
-
-export interface MCPServerParameter {
-  name: string
-  type: MCPArgType | MCPEnvType
-  description: string
-}
-
 export interface MCPServer {
   id: string // internal id
   name: string // mcp name, generally as unique key
@@ -695,19 +593,6 @@ export interface MCPPrompt {
   serverName: string
 }
 
-export interface GetMCPPromptResponse {
-  description?: string
-  messages: {
-    role: string
-    content: {
-      type: 'text' | 'image' | 'audio' | 'resource'
-      text?: string
-      data?: string
-      mimeType?: string
-    }
-  }[]
-}
-
 export interface MCPConfig {
   servers: MCPServer[]
   isUvInstalled: boolean
@@ -778,10 +663,6 @@ export interface MCPResource {
   size?: number
   text?: string
   blob?: string
-}
-
-export interface GetResourceResponse {
-  contents: MCPResource[]
 }
 
 export interface QuickPhrase {
@@ -954,12 +835,7 @@ export const isHexColor = (value: string): value is HexColor => {
   return /^#([0-9A-F]{3}){1,2}$/i.test(value)
 }
 
-export type FetchChatCompletionRequestOptions = {
-  signal?: AbortSignal
-  timeout?: number
-  headers?: Record<string, string>
-}
-
 // More specific than NonNullable
+// `NotUndefined` 仍被 `types/aiCoreTypes.ts` 使用，保留；同族的 `NotNull` 在 r2-109
+// 复核中确认全仓零消费，已删除。
 export type NotUndefined<T> = Exclude<T, undefined>
-export type NotNull<T> = Exclude<T, null>

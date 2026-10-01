@@ -675,7 +675,20 @@ export const INITIAL_STATE_EXCLUDED_PROVIDER_IDS = ['cephalon', 'tokenflux'] as 
 export const NOT_SUPPORTED_RERANK_PROVIDERS = ['ollama', 'lmstudio'] as const satisfies SystemProviderId[]
 export const ONLY_SUPPORTED_DIMENSION_PROVIDERS = ['ollama', 'infini'] as const satisfies SystemProviderId[]
 
-export const SYSTEM_PROVIDERS: SystemProvider[] = Object.values(SYSTEM_PROVIDERS_CONFIG)
+/**
+ * r2-81：`SYSTEM_PROVIDERS` 与 `SYSTEM_PROVIDERS_CONFIG` 必须是**两批对象**。
+ * 导出名与形状不变（`SystemProvider[]`），但每个 provider 都是新对象（`models` 数组另建），
+ * 于是 Redux 初始态 / `store/migrate.ts` 的就地改写（`provider.anthropicApiHost = …`、
+ * `provider.type = 'openai-response'`）只能写进 state，写不回模块级默认表。
+ * 代价：模块求值期多出约 N 个 provider 对象 + N 个 models 数组（浅拷贝，model 条目仍共享），
+ * 换来默认表在本会话内保持不可污染；`SYSTEM_PROVIDERS_CONFIG` 仍按引用供只读消费方使用。
+ */
+const cloneSystemProvider = (provider: SystemProvider): SystemProvider => ({
+  ...provider,
+  models: [...provider.models]
+})
+
+export const SYSTEM_PROVIDERS: SystemProvider[] = Object.values(SYSTEM_PROVIDERS_CONFIG).map(cloneSystemProvider)
 
 export const PROVIDER_LOGO_MAP: AtLeast<SystemProviderId, string> = {
   ph8: Ph8ProviderLogo,

@@ -362,6 +362,14 @@ if (!app.requestSingleInstanceLock()) {
       logger.warn('Error stopping dsh kernel:', error as Error)
     }
 
+    // v1 二轮 k2-20：冲刷并关闭 tracer——批处理器里的在途 span 不冲刷就会随进程退出丢掉。
+    // 失败只记日志（退出路径不因可观测性组件卡住）；放在 logger.finish() 之前，让告警能落盘。
+    try {
+      await nodeTraceService.shutdown()
+    } catch (error) {
+      logger.warn('Error shutting down the node tracer:', error as Error)
+    }
+
     // finish the logger
     logger.finish()
   })

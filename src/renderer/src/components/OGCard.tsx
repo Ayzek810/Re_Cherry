@@ -1,7 +1,7 @@
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
 import { useMetaDataParser } from '@renderer/hooks/useMetaDataParser'
 import { Skeleton } from 'antd'
-import { type PropsWithChildren, useCallback, useEffect, useMemo } from 'react'
+import { type PropsWithChildren, useEffect, useMemo } from 'react'
 
 import MarqueeText from './MarqueeText'
 
@@ -9,6 +9,17 @@ type Props = {
   link: string
   show: boolean
 }
+
+/**
+ * c2-45②：原来用 `useCallback` 造出一个「组件」，再在 JSX 里当组件类型用：
+ * `metadata` 引用每次变化都产生**新的组件类型**，React 因此卸载旧子树再挂载新的（而非更新）。
+ * 抽成真正的组件，只传它真正读的字段。
+ */
+const GeneratedGraph = ({ title, hostname }: { title?: string; hostname: string | null }) => (
+  <div className="flex h-48 items-center justify-center bg-accent p-4">
+    <h2 className="font-bold text-2xl">{title || hostname}</h2>
+  </div>
+)
 
 export const OGCard = ({ link, show }: Props) => {
   const openGraph = ['og:title', 'og:description', 'og:image', 'og:imageAlt'] as const
@@ -31,14 +42,6 @@ export const OGCard = ({ link, show }: Props) => {
     }
   }, [parseMetadata, isLoading, show])
 
-  const GeneratedGraph = useCallback(() => {
-    return (
-      <div className="flex h-48 items-center justify-center bg-accent p-4">
-        <h2 className="font-bold text-2xl">{metadata['og:title'] || hostname}</h2>
-      </div>
-    )
-  }, [hostname, metadata])
-
   if (isLoading) {
     return <CardSkeleton />
   }
@@ -50,7 +53,7 @@ export const OGCard = ({ link, show }: Props) => {
           <img src={metadata['og:image']} alt={metadata['og:imageAlt'] || link} className="max-h-full object-contain" />
         </div>
       )}
-      {!hasImage && <GeneratedGraph />}
+      {!hasImage && <GeneratedGraph title={metadata['og:title']} hostname={hostname} />}
 
       <div className="flex min-h-0 flex-col overflow-hidden p-2">
         <div className="mb-2 flex items-center gap-2">

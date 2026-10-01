@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import type { BundledLanguage, BundledTheme } from 'shiki/bundle/web'
-import type { SpecialLanguage, ThemedToken } from 'shiki/core'
-import { getTokenStyleObject, type HighlighterGeneric } from 'shiki/core'
+import type { HighlighterGeneric, SpecialLanguage, ThemedToken } from 'shiki/core'
 
 import { AsyncInitializer } from './asyncInitializer'
 
@@ -9,6 +8,41 @@ export const DEFAULT_LANGUAGES = ['text', 'javascript', 'typescript', 'python', 
 export const DEFAULT_THEMES = ['one-light', 'material-theme-darker']
 
 const logger = loggerService.withContext('Shiki')
+
+/**
+ * Shiki 的 `FontStyle` 位域取值（`@shikijs/core` 的 `FontStyle` 枚举）。
+ *
+ * 为什么是本地字面量而不是 `import { FontStyle } from 'shiki/core'`（v1 二轮性能审计 p2-02）：
+ * `shiki/core` 是一个**值**导入 ⇒ rollup 把整个 `@shikijs/core` 实体（含 Oniguruma 主题解析、
+ * EncodedTokenMetadata、hast 工具链，产物里 174KB 的 `dist-*.js`）折进**首屏静态导入闭包**，
+ * 而这里只需要 4 个位。改成动态导入会把同步的 `getReactStyleFromToken` 变成 async，代价面
+ * 远大于收益。位域是 TextMate 标准映射，不会随 shiki 小版本漂移。
+ */
+const FONT_STYLE_ITALIC = 1
+const FONT_STYLE_BOLD = 2
+const FONT_STYLE_UNDERLINE = 4
+const FONT_STYLE_STRIKETHROUGH = 8
+
+/**
+ * 由 token 的 `color` / `bgColor` / `fontStyle` 位域推出 CSS 样式表。
+ *
+ * 与 `@shikijs/core` 的 `getTokenStyleObject` 逐字同形（只用于 `htmlStyle` 缺失的 token，
+ * 例如 `codeToTokens` 的原始输出）。本地实现是为了不把 shiki core 值导入钉进首屏。
+ */
+function getTokenStyleObject(token: ThemedToken): Record<string, string> {
+  const styles: Record<string, string> = {}
+  if (token.color) styles.color = token.color
+  if (token.bgColor) styles['background-color'] = token.bgColor
+  if (token.fontStyle) {
+    if (token.fontStyle & FONT_STYLE_ITALIC) styles['font-style'] = 'italic'
+    if (token.fontStyle & FONT_STYLE_BOLD) styles['font-weight'] = 'bold'
+    const decorations: string[] = []
+    if (token.fontStyle & FONT_STYLE_UNDERLINE) decorations.push('underline')
+    if (token.fontStyle & FONT_STYLE_STRIKETHROUGH) decorations.push('line-through')
+    if (decorations.length) styles['text-decoration'] = decorations.join(' ')
+  }
+  return styles
+}
 
 /**
  * shiki 初始化器，避免并发问题
@@ -23,6 +57,66 @@ const shikiInitializer = new AsyncInitializer(async () => {
  */
 export async function getShiki() {
   return shikiInitializer.get()
+}
+
+/**
+ * 把 `shiki` 的 `bundledLanguages` / `bundledThemes` 动态导入结果规范成注册数据数组。
+ *
+ * 为什么必须做这层归一：`shiki` 的 `langs.mjs` / `themes.mjs` 是 **CJS 产物经 Vite 转成 ESM**
+ * 的形态，`bundledLanguages[lang]()` 在开发/测试环境返回的是**模块命名空间**
+ * （实测 `{ default: [ {...} ] }`），而不是裸数组。直接把它交给
+ * `highlighter.loadLanguage()` 会因为"不是 LanguageRegistration[]"而失败 ⇒ 语法加载静默退化成
+ * `text`（高亮全丢颜色）。这里同时接受两种形态。
+ */
+function normalizeRegistrationResult(value: unknown): unknown[] | null {
+  if (value === null || value === undefined) return null
+  if (Array.isArray(value)) return value
+  if (typeof value === 'object' && 'default' in (value as Record<string, unknown>)) {
+    const inner = (value as Record<string, unknown>).default
+    if (Array.isArray(inner)) return inner
+    if (inner !== null && inner !== undefined) return [inner]
+  }
+  return [value]
+}
+
+/**
+ * 解析语言语法注册数据（v1 二轮性能审计 p2-04）。
+ *
+ * 用途：`shiki-stream.worker` 不再 `import('shiki')`——worker 是一份**独立的 rollup 模块图**，
+ * 它自己 import shiki 会让 `bundledLanguages` 语言表在产物里再编译一份（实测重复 4.15 MB）。
+ * 现在 worker 改为向主线程索取语法数据，主线程用本表解析后经 `postMessage` 下发
+ * （语言注册数据是 JSON，可结构化克隆）。
+ *
+ * @param language 语言 id（`bundledLanguages` 的键；`text`/`ansi` 等特殊语言返回 `null`）
+ * @returns 语言注册数据数组；未知语言返回 `null`（调用方按"加载失败"处理并回退 `text`）
+ */
+export async function resolveLanguageRegistrations(language: string): Promise<unknown[] | null> {
+  const shiki = await getShiki()
+  const importFn = (shiki.bundledLanguages as unknown as Record<string, (() => Promise<unknown>) | undefined>)[language]
+  if (typeof importFn !== 'function') return null
+  return normalizeRegistrationResult(await importFn())
+}
+
+/**
+ * 解析主题注册数据（与 `resolveLanguageRegistrations` 同因同法）。
+ *
+ * `createHighlighterCore` / `loadTheme` 的 `ThemeInput` 需要 `name` 字段；`shiki` 的主题数据
+ * 本身已带 `name`，这里在缺失时用键名补齐，兼容 CJS 互操作包装形态。
+ *
+ * @param theme 主题 id（`bundledThemes` 的键）
+ * @returns 主题注册数据数组；未知主题返回 `null`
+ */
+export async function resolveThemeRegistrations(theme: string): Promise<unknown[] | null> {
+  const shiki = await getShiki()
+  const importFn = (shiki.bundledThemes as unknown as Record<string, (() => Promise<unknown>) | undefined>)[theme]
+  if (typeof importFn !== 'function') return null
+  const normalized = normalizeRegistrationResult(await importFn())
+  if (normalized === null) return null
+  return normalized.map((registration) =>
+    registration !== null && typeof registration === 'object' && !('name' in registration)
+      ? { name: theme, ...(registration as Record<string, unknown>) }
+      : registration
+  )
 }
 
 /**

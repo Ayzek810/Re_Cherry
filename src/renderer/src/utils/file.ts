@@ -1,7 +1,10 @@
+import { loggerService } from '@logger'
 import type { FileMetadata, FileType } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import { audioExts, documentExts, GB, imageExts, KB, MB, textExts, videoExts } from '@shared/config/constant'
 import mime from 'mime-types'
+
+const logger = loggerService.withContext('Utils:File')
 
 /**
  * 从文件路径中提取目录路径。
@@ -16,15 +19,24 @@ export function getFileDirectory(filePath: string): string {
 /**
  * 从文件路径中提取文件扩展名。
  * @param {string} filePath 文件路径
- * @returns {string} 文件扩展名（小写），如果没有则返回 '.'
+ * @returns {string} 文件扩展名（含前导点、小写）；没有扩展名时返回空串。
+ *
+ * 空串是唯一可区分的「没有扩展名」表示（audit2 r2-92）：原先返回 `'.'`，
+ * 与「扩展名恰好是一个点」（`C:\a\b.`）不可区分，还会传进
+ * `supportExts.has(...)` 与 `mime2type` 被当成真扩展名。
+ * `C:\a\b`、`C:\a\b.`、`.hidden`（无基名）一律返回 `''`；调用方用 `if (!ext)` 判断。
  */
 export function getFileExtension(filePath: string): string {
   const parts = filePath.split('.')
   if (parts.length > 1) {
     const extension = parts.slice(-1)[0].toLowerCase()
-    return '.' + extension
+    const baseName = parts.slice(0, -1).join('.')
+    // `.hidden` 这类无基名的路径不算扩展名；`name.` 的扩展名是空、不是点。
+    if (baseName && extension) {
+      return '.' + extension
+    }
   }
-  return '.'
+  return ''
 }
 
 /**
@@ -67,6 +79,13 @@ export function removeSpecialCharactersForFileName(str: string): string {
  * 支持的文件类型包括:
  * 1. 文件扩展名在supportExts集合中的文件
  * 2. 文本文件
+ *
+ * 失败语义（audit2 r2-93）：`window.api.file.isTextFile` 是 IPC 读盘探测，
+ * 抛错表示「问不到答案」（文件被占用/权限/handler 未就绪），与「确实不是文本
+ * 文件」同形。这里不得静默吞掉：catch 里记 `warn` 供取证，返回 false 保持
+ * 现有签名（`filterSupportedFiles` 的调用方在本工作区之外，三值化改动见报告
+ * 「跨区请求」）。
+ *
  * @param {string} filePath 文件路径
  * @param {Set<string>} supportExts 支持的文件扩展名集合
  * @returns {Promise<boolean>} 如果文件类型受支持返回true，否则返回false
@@ -83,6 +102,7 @@ export async function isSupportedFile(filePath: string, supportExts: Set<string>
 
     return false
   } catch (error) {
+    logger.warn(`isSupportedFile: text-file probe failed for "${filePath}" — treating as unsupported`, error as Error)
     return false
   }
 }

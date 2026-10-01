@@ -45,7 +45,7 @@ interface Props extends ShowParams {
 
 const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
   const [open, setOpen] = useState(true)
-  const { provider, models, addModel, removeModel } = useProvider(providerId)
+  const { provider, models, addModel, removeModel, updateProvider } = useProvider(providerId)
   const [listModels, setListModels] = useState<Model[]>([])
   const [loadingModels, setLoadingModels] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -154,9 +154,29 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
 
   const onRemoveModel = useCallback((model: Model) => removeModel(model), [removeModel])
 
+  /**
+   * 「移除列表中的模型」是破坏性批量操作（v1 二轮审查 s2-15）：修改前没有任何确认框，
+   * 且逐条 `dispatch(removeModel)` —— 每一条都是一次整片持久化 + 一次 IPC 广播
+   *（`store/index.ts` 的 `syncList ['assistants/','llm/']`）。现在沿用 `onAddAll` 的确认框形态，
+   * 并把「移除全部」收敛成**一次** `updateProvider`（`removeModel` 的语义就是按 id 过滤 models，
+   * 批量等价、写入一次）。
+   */
   const onRemoveAll = useCallback(() => {
-    list.filter((model) => isModelInProvider(provider, model.id)).forEach(onRemoveModel)
-  }, [list, onRemoveModel, provider])
+    const listedInProvider = list.filter((model) => isModelInProvider(provider, model.id))
+    if (listedInProvider.length === 0) return
+
+    window.modal.confirm({
+      title: t('settings.models.manage.remove_listed.label'),
+      content: t('settings.models.manage.remove_listed.confirm', {
+        defaultValue: 'Remove all listed models from this provider?'
+      }),
+      centered: true,
+      onOk: () => {
+        const removeIds = new Set(listedInProvider.map((model) => model.id))
+        updateProvider({ models: provider.models.filter((model) => !removeIds.has(model.id)) })
+      }
+    })
+  }, [list, provider, updateProvider, t])
 
   const onAddAll = useCallback(() => {
     const wouldAddModel = list.filter((model) => !isModelInProvider(provider, model.id))
@@ -249,7 +269,7 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
         <Tooltip
           title={
             isAllFilteredInProvider
-              ? t('settings.models.manage.remove_listed')
+              ? t('settings.models.manage.remove_listed.label')
               : t('settings.models.manage.add_listed.label')
           }
           mouseLeaveDelay={0}>

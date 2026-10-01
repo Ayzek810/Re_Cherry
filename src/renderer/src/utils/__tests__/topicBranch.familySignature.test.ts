@@ -6,6 +6,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * `familyRowSignature`（页码条/旁答条的家族缓存失效口径）：
  * 只盖本话题家族的行——与"盖全助手清单"旧口径的区别直接决定页码条会不会被
  * 无关话题的变动拖着反复重取（真机实证的"乱跳"形态之一）。
+ *
+ * r2-71：家族闭包与 `collectSubtreeIds` 共用一份 `parentTopicId → 子行[]` 索引 + 一次 BFS。
+ * 本文件的"共父分支 / 父行缺失 / 父行已删"三例是那份索引的正确性契约：索引只要记错一处
+ * （覆盖同父的第二个兄弟、把不可达的行拉进家族、把断链的行接到祖辈上），签名立刻变。
  */
 
 function row(id: string, parentTopicId?: string, updatedAt = '2026-09-01T00:00:00.000Z'): Topic {
@@ -84,6 +88,50 @@ describe('familyRowSignature（家族域签名）', () => {
   })
 
   //
+  // r2-71：父→子索引的正确性（索引 + 一次 BFS 替换了逐轮全表扫描）。
+  // 下面三例分别钉住"共父的第二个兄弟"、"父行缺失的孤儿"、"父行已删的断链"。
+  //
+  it('共父的两个分支都在家族里（索引覆盖兄弟会让整条分支消失）', () => {
+    const rows = [
+      row('root-a'),
+      row('b1', 'root-a'),
+      row('b2', 'root-a'), // 与 b1 同父：单值索引会覆盖掉它
+      row('b1c', 'b1'),
+      row('b2c', 'b2'),
+      row('root-b'), // 别的家族
+      row('other', 'root-b')
+    ]
+    const sig = familyRowSignature(rows, 'b1c')
+    for (const id of ['root-a', 'b1', 'b2', 'b1c', 'b2c']) {
+      expect(sig).toContain(id + ':')
+    }
+    expect(sig).not.toContain('root-b')
+    // 五个家族行 → 五段；丢掉共父兄弟时只剩四段
+    expect(sig.split('|')).toHaveLength(5)
+    // 入口不影响家族：根解析与下溯都走同一份索引
+    expect(familyRowSignature(rows, 'root-a')).toBe(sig)
+    expect(familyRowSignature(rows, 'b2c')).toBe(sig)
+  })
+
+  it('父行缺失的孤儿行不进任何家族；以它为根时家族只有它自己', () => {
+    const rows = [row('root-a'), row('b1', 'root-a'), row('orphan', 'missing-parent')]
+    const sig = familyRowSignature(rows, 'root-a')
+    expect(sig).toContain('root-a')
+    expect(sig).toContain('b1:')
+    expect(sig).not.toContain('orphan')
+    // 断链处即根：签名与"清单里只有这一行"逐字相同
+    expect(familyRowSignature(rows, 'orphan')).toBe(familyRowSignature([row('orphan', 'missing-parent')], 'orphan'))
+  })
+
+  it('父行已被删除：子树既不在祖辈家族里，也不再认得祖辈', () => {
+    const withoutB1 = [row('root-a'), row('b2', 'b1')] // b1 已删，b2 的父悬空
+    const rootSig = familyRowSignature(withoutB1, 'root-a')
+    expect(rootSig).toContain('root-a')
+    expect(rootSig).not.toContain('b2')
+    expect(familyRowSignature(withoutB1, 'b2')).toBe(familyRowSignature([row('b2', 'b1')], 'b2'))
+  })
+
+  //
   // branchKindsOf（跨助手联合 kind 表，首个有值获胜）：
   // 页码条/旁答条/分支图三家共用同一份——kindless 重复行（历史跨助手物化误建）
   // 无论排在联合序列的哪一侧，都不能遮蔽带 kind 的正主。
@@ -105,5 +153,47 @@ describe('familyRowSignature（家族域签名）', () => {
     const kinds = branchKindsOf([first, second])
     expect(kinds.b1).toBe('resend')
     expect(kinds['b2']).toBeUndefined()
+  })
+})
+
+/**
+ * r2-71：`collectSubtreeIds`（`removeTopic` / `pruneTopics` 的删除闭包）改用与
+ * `familyRowSignature` 同一份父→子索引 + 同一次 BFS。这里的断言钉住那条共享路径：
+ * 共父分支必须全收、兄弟子树不得互相牵连、断链与成环都必须终止。
+ */
+describe('collectSubtreeIds（血缘闭包：与家族签名共用同一份父→子索引）', () => {
+  const rows = [
+    row('root-a'),
+    row('b1', 'root-a'),
+    row('b2', 'root-a'), // 与 b1 同父
+    row('b1c', 'b1'),
+    row('b2c', 'b2'),
+    row('other-root'),
+    row('orphan', 'missing-parent')
+  ]
+
+  it('共父的两个分支一次收全（单值索引会漏掉第二个兄弟）', async () => {
+    const { collectSubtreeIds } = await freshModule()
+    expect([...collectSubtreeIds(rows, ['root-a'])].sort()).toEqual(['b1', 'b1c', 'b2', 'b2c', 'root-a'])
+  })
+
+  it('只删一个分支时兄弟子树原样留下', async () => {
+    const { collectSubtreeIds } = await freshModule()
+    expect([...collectSubtreeIds(rows, ['b1'])].sort()).toEqual(['b1', 'b1c'])
+    expect([...collectSubtreeIds(rows, ['b2'])].sort()).toEqual(['b2', 'b2c'])
+  })
+
+  it('根不在清单也在结果里；父行缺失的孤儿行不被收进', async () => {
+    const { collectSubtreeIds } = await freshModule()
+    // 尚未物化的根 id：闭包含它自身，闭包为空也是确定性答案
+    expect([...collectSubtreeIds(rows, ['not-materialized'])]).toEqual(['not-materialized'])
+    expect(collectSubtreeIds(rows, ['root-a']).has('orphan')).toBe(false)
+  })
+
+  it('互为父子的环与自指行都终止（每行只入队一次）', async () => {
+    const { collectSubtreeIds } = await freshModule()
+    const cyclic = [row('x', 'y'), row('y', 'x'), row('self', 'self')]
+    expect([...collectSubtreeIds(cyclic, ['x'])].sort()).toEqual(['x', 'y'])
+    expect([...collectSubtreeIds(cyclic, ['self'])]).toEqual(['self'])
   })
 })

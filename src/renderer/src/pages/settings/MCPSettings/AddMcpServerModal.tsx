@@ -2,9 +2,10 @@ import { UploadOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
 import CodeEditor from '@renderer/components/CodeEditor'
-import { useMCPServers } from '@renderer/hooks/useMCPServers'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { mcpApi } from '@renderer/services/mcpApi'
+import { useAppDispatch } from '@renderer/store'
+import { setMCPServerActive as setMCPServerActiveById } from '@renderer/store/mcp'
 import type { MCPServer } from '@renderer/types'
 import { objectKeys, safeValidateMcpConfig } from '@renderer/types'
 import { parseJSON } from '@renderer/utils'
@@ -83,7 +84,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
 }) => {
   const { t } = useTranslation()
   const [form] = Form.useForm()
-  const { setMCPServerActive } = useMCPServers()
+  const dispatch = useAppDispatch()
   const { setTimeoutTimer } = useTimer()
   const [loading, setLoading] = useState(false)
   const [importMethod, setImportMethod] = useState<'json' | 'dxt'>(initialImportMethod)
@@ -225,7 +226,11 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 .checkConnectivity(newServer)
                 .then((isConnected) => {
                   logger.debug(`Connectivity check for ${newServer.name}: ${isConnected}`)
-                  setMCPServerActive(newServer, isConnected)
+                  // v1 二轮审查 s2-19：按 id 窄更新，不再用导入瞬间的 `newServer` 快照整行覆盖。
+                  // `checkConnectivity` 走 initClient + listTools，超时下限 180s——用户在这段时间里
+                  // 填好的 env / args / apiKey 会被旧快照静默回退（注释自己承认「失败是预期情况」，
+                  // 即这条路径经常走到）。切片已有按 id 的 `setMCPServerActive`。
+                  dispatch(setMCPServerActiveById({ id: newServer.id, isActive: isConnected }))
                 })
                 .catch((connError: unknown) => {
                   logger.warn(

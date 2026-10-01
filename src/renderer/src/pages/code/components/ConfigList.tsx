@@ -11,8 +11,11 @@ import { EmptyState, ReorderableList } from './shadcn'
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/ConfigList.tsx
 //（2026-09-24，v0.3.4-1 批次4b）。缝点两处，搜索过滤/置顶/双卡片分派逻辑逐字：
 // ① 类型缝：Provider ← providerView 投影、CliProviderConfig ← @shared/types/codeCliState。
-// ② UI 面缝：EmptyState/ReorderableList → 本页 shim（拖拽排序未实现，onReorder/move-to-top
-//   通道保留，见 shim 缝注）；import 面对号（isOwnLoginConfigurable ← 本页 cliConfig barrel）。
+// ② UI 面缝：EmptyState/ReorderableList → 本页 shim（拖拽排序未实现，见 shim 缝注与 f2-46）；
+//    import 面对号（isOwnLoginConfigurable ← 本页 cliConfig barrel）。
+//
+// 二轮审查 f2-45：不再接收 `currentProviderModelName`——调用方只能拿"磁盘配置不属于当前服务商"
+// 这一事实去填它，卡片于是把选中服务商的模型名显示成「未知供应商」。模型名一律取 `resolveMeta`。
 
 export interface ConfigListProps {
   selectedCliTool: CodeCli
@@ -20,7 +23,6 @@ export interface ConfigListProps {
   providers: Provider[]
   providerConfigs: Record<string, CliProviderConfig>
   currentProviderId: string | null
-  currentProviderModelName?: string
   providerActionsDisabled?: boolean
   resolveMeta: (provider: Provider, cfg?: CliProviderConfig) => { providerName: string; modelName?: string }
   onConfigure: (provider: Provider) => void
@@ -32,15 +34,14 @@ export interface ConfigListProps {
 
 import type { Provider } from '../cliConfig/providerView'
 
-/** Enabled-provider list for a tool. Drag a row to reorder (persisted via
- * `onReorder`); empty-state fallback when no provider matches the tool. */
+/** Enabled-provider list for a tool. Ordering is done with the always-visible
+ * "move to top" control; empty-state fallback when no provider matches the tool. */
 export const ConfigList: FC<ConfigListProps> = ({
   selectedCliTool,
   toolName,
   providers,
   providerConfigs,
   currentProviderId,
-  currentProviderModelName,
   providerActionsDisabled,
   resolveMeta,
   onConfigure,
@@ -87,11 +88,8 @@ export const ConfigList: FC<ConfigListProps> = ({
       items={providers}
       visibleItems={displayedProviders}
       getId={(p) => p.id}
-      onReorder={onReorder}
-      disabled={providerActionsDisabled}
-      gap="0.5rem"
       itemStyle={{ cursor: 'default' }}
-      renderItem={(provider, _index, { dragging }) => {
+      renderItem={(provider) => {
         const onMoveToTop = providerActionsDisabled || providers[0]?.id === provider.id ? undefined : handleMoveToTop
         if (provider.id === CLI_OWN_LOGIN_PROVIDER_ID) {
           return (
@@ -100,7 +98,6 @@ export const ConfigList: FC<ConfigListProps> = ({
               toolName={toolName}
               selected={currentProviderId === provider.id}
               configurable={isOwnLoginConfigurable(selectedCliTool)}
-              dragging={dragging}
               onMoveToTop={onMoveToTop ? () => onMoveToTop(provider) : undefined}
               onToggle={() => onToggleCurrent(provider)}
               onConfigure={() => onConfigure(provider)}
@@ -109,17 +106,14 @@ export const ConfigList: FC<ConfigListProps> = ({
         }
         const cfg = providerConfigs[provider.id]
         const meta = resolveMeta(provider, cfg)
-        const modelName =
-          currentProviderId === provider.id && currentProviderModelName ? currentProviderModelName : meta.modelName
         return (
           <ProviderCard
             provider={provider}
             providerName={meta.providerName}
-            modelName={modelName}
+            modelName={meta.modelName}
             description={isApiGatewayProviderId(provider.id) ? t('code.api_gateway.description') : undefined}
             isCurrent={currentProviderId === provider.id}
             actionsDisabled={providerActionsDisabled}
-            dragging={dragging}
             onMoveToTop={onMoveToTop}
             onConfigure={onConfigure}
             onToggleCurrent={onToggleCurrent}

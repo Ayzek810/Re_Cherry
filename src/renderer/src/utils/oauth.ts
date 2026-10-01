@@ -4,6 +4,63 @@ import i18n, { getLanguageCode } from '@renderer/i18n'
 
 const logger = loggerService.withContext('Utils:oauth')
 
+/**
+ * 允许向本窗口 postMessage OAuth 结果的来源白名单（audit2 r2-95）。
+ *
+ * 只登记本文件里 `window.open` 出去、且约定用 postMessage 回传密钥的授权页来源，
+ * 全部由同一批授权 URL 推导而来：
+ * - `oauthWithSiliconFlow` → `https://account.siliconflow.cn/oauth?...`
+ * - `oauthWithAihubmix`    → `https://console.aihubmix.com/token?...`
+ * - `oauthWith302AI`       → `https://dash.302.ai/sso/login?...`
+ *
+ * 不校验 origin 时，任何窗口/iframe 只要 postMessage 出 `{secretKey}` 形状就能写入
+ * 用户的 API Key。不在白名单内的消息一律丢弃并记 warn。
+ * （PPIO / TokenFlux 不走 message 通道：前者用 `window.api.protocol`，后者只打开页面。）
+ */
+const OAUTH_MESSAGE_ORIGINS = ['https://account.siliconflow.cn', 'https://console.aihubmix.com', 'https://dash.302.ai']
+
+/**
+ * 注册一次性 OAuth message 监听。
+ * - 监听器句柄被保存，回调里 removeEventListener 用同一实例（原实现在 add 之前
+ *   对刚创建的函数 remove，永远匹配不上，重复点击会叠加监听）。
+ * - 不在 `OAUTH_MESSAGE_ORIGINS` 的消息直接丢弃。
+ * - `event.data` 可能为 undefined，取用前先判空。
+ * @param handler 收到合法来源消息后的处理逻辑；返回 true 表示已处理完，监听器随即注销。
+ * @returns 注销函数（调用方可提前清理）
+ */
+const listenForOauthMessage = (handler: (data: any) => boolean | Promise<boolean>): (() => void) => {
+  let settled = false
+  const messageHandler = (event: MessageEvent) => {
+    if (settled) return
+    if (!OAUTH_MESSAGE_ORIGINS.includes(event.origin)) {
+      logger.warn(`[oauth] ignored message from untrusted origin: ${event.origin}`)
+      return
+    }
+    const data = event.data
+    if (data === undefined || data === null) {
+      return
+    }
+    void Promise.resolve()
+      .then(() => handler(data))
+      .then((handled) => {
+        if (handled && !settled) {
+          settled = true
+          window.removeEventListener('message', messageHandler)
+        }
+      })
+      .catch((error) => {
+        // handler 内的失败必须可见（家规 §9：绝不静默失败）。
+        logger.warn('[oauth] message handler failed', error as Error)
+      })
+  }
+
+  window.addEventListener('message', messageHandler)
+  return () => {
+    settled = true
+    window.removeEventListener('message', messageHandler)
+  }
+}
+
 export const oauthWithSiliconFlow = async (setKey) => {
   const authUrl = `https://account.siliconflow.cn/oauth?client_id=${SILICON_CLIENT_ID}`
 
@@ -13,16 +70,14 @@ export const oauthWithSiliconFlow = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
-  const messageHandler = (event) => {
-    if (event.data.length > 0 && event.data[0]['secretKey'] !== undefined) {
-      setKey(event.data[0]['secretKey'])
+  listenForOauthMessage((data) => {
+    if (Array.isArray(data) && data.length > 0 && data[0]?.['secretKey'] !== undefined) {
+      setKey(data[0]['secretKey'])
       popup?.close()
-      window.removeEventListener('message', messageHandler)
+      return true
     }
-  }
-
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+    return false
+  })
 }
 
 export const oauthWithAihubmix = async (setKey) => {
@@ -34,31 +89,29 @@ export const oauthWithAihubmix = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
-  const messageHandler = async (event) => {
-    const data = event.data
-
-    if (data && data.key === 'cherry_studio_oauth_callback') {
-      const { iv, encryptedData } = data.data
-
-      try {
-        const secret = import.meta.env.RENDERER_VITE_AIHUBMIX_SECRET || ''
-        const decryptedData: any = await window.api.aes.decrypt(encryptedData, iv, secret)
-        const { api_keys } = JSON.parse(decryptedData)
-        if (api_keys && api_keys.length > 0) {
-          setKey(api_keys[0].value)
-          popup?.close()
-          window.removeEventListener('message', messageHandler)
-        }
-      } catch (error) {
-        logger.error('[oauthWithAihubmix] error', error as Error)
-        popup?.close()
-        window.toast.error(i18n.t('settings.provider.oauth.error'))
-      }
+  listenForOauthMessage(async (data) => {
+    if (!data || data.key !== 'cherry_studio_oauth_callback') {
+      return false
     }
-  }
+    const { iv, encryptedData } = data.data ?? {}
 
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+    try {
+      const secret = import.meta.env.RENDERER_VITE_AIHUBMIX_SECRET || ''
+      const decryptedData: any = await window.api.aes.decrypt(encryptedData, iv, secret)
+      const { api_keys } = JSON.parse(decryptedData)
+      if (api_keys && api_keys.length > 0) {
+        setKey(api_keys[0].value)
+        popup?.close()
+        return true
+      }
+      return false
+    } catch (error) {
+      logger.error('[oauthWithAihubmix] error', error as Error)
+      popup?.close()
+      window.toast.error(i18n.t('settings.provider.oauth.error'))
+      return true
+    }
+  })
 }
 
 export const oauthWithPPIO = async (setKey) => {
@@ -160,16 +213,14 @@ export const oauthWith302AI = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
-  const messageHandler = (event) => {
-    if (event.data && event.data.data.apikey !== undefined) {
-      setKey(event.data.data.apikey)
+  listenForOauthMessage((data) => {
+    if (data && data.data && data.data.apikey !== undefined) {
+      setKey(data.data.apikey)
       popup?.close()
-      window.removeEventListener('message', messageHandler)
+      return true
     }
-  }
-
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+    return false
+  })
 }
 
 export const oauthWithAiOnly = async (setKey) => {
@@ -181,16 +232,14 @@ export const oauthWithAiOnly = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
-  const messageHandler = (event) => {
-    if (event.data.length > 0 && event.data[0]['secretKey'] !== undefined) {
-      setKey(event.data[0]['secretKey'])
+  listenForOauthMessage((data) => {
+    if (Array.isArray(data) && data.length > 0 && data[0]?.['secretKey'] !== undefined) {
+      setKey(data[0]['secretKey'])
       popup?.close()
-      window.removeEventListener('message', messageHandler)
+      return true
     }
-  }
-
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+    return false
+  })
 }
 
 export const providerCharge = async (provider: string) => {
@@ -227,7 +276,14 @@ export const providerCharge = async (provider: string) => {
     }
   }
 
-  const { url, width, height } = chargeUrlMap[provider]
+  const { url, width, height } = chargeUrlMap[provider] ?? {}
+
+  if (!url) {
+    // 未登记 provider 不是「URL 为空」而是「没有这个入口」：给可见失败而不是 TypeError。
+    logger.warn(`[providerCharge] no charge url registered for provider "${provider}"`)
+    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    return
+  }
 
   window.open(
     url,
@@ -270,7 +326,14 @@ export const providerBills = async (provider: string) => {
     }
   }
 
-  const { url, width, height } = billsUrlMap[provider]
+  const { url, width, height } = billsUrlMap[provider] ?? {}
+
+  if (!url) {
+    // 同上：bills 表缺项曾经直接抛 TypeError（解构 undefined）。
+    logger.warn(`[providerBills] no bills url registered for provider "${provider}"`)
+    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    return
+  }
 
   window.open(
     url,

@@ -70,8 +70,17 @@ function emptyModelBucket(modelId: string): UsageModelBucket {
   return { modelId, requests: 0, inputTokens: 0, outputTokens: 0 }
 }
 
-export function summarizeUsage(records: UsageRecord[], range: UsageRange): UsageSummary {
-  const filtered = filterUsageRecords(records, range)
+/**
+ * 聚合一批用量记录。
+ *
+ * @param records 记录集合。
+ * @param range 时间范围（用于按天分桶的边界语义）。
+ * @param alreadyFiltered r2-56：调用方已用 `between(start, end, true, true)` 按**同一闭区间**
+ *   取过数时传 `true`，跳过 `filterUsageRecords` 的整表 O(n) 二次判定（否则随表增长白白翻倍）。
+ *   默认 `false`，语义与既有调用方逐字一致。
+ */
+export function summarizeUsage(records: UsageRecord[], range: UsageRange, alreadyFiltered = false): UsageSummary {
+  const filtered = alreadyFiltered ? records : filterUsageRecords(records, range)
   const dayMap = new Map<string, UsageDayBucket>()
   const modelMap = new Map<string, UsageModelBucket>()
   let requests = 0

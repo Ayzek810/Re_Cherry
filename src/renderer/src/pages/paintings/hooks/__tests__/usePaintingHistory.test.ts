@@ -38,6 +38,14 @@ function row(index: number) {
   return { id: `p-${index}`, createdAt: 1_000 - index }
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
 describe('usePaintingHistory（f2-15：失败不得停成永久转圈）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -116,5 +124,41 @@ describe('usePaintingHistory（f2-15：失败不得停成永久转圈）', () =>
     expect(result.current.hasMore).toBe(false)
     // 已载入的第一页不被失败清空（stale-while-error）。
     expect(result.current.items).toHaveLength(30)
+  })
+
+  it('分页在途时的 reload() 不被丢弃：落地后补跑首页，新画作出现在条里（f2-22）', async () => {
+    toArray.mockResolvedValueOnce(Array.from({ length: 30 }, (_, index) => row(index)))
+
+    const { result } = renderHook(() => usePaintingHistory())
+    await waitFor(() => {
+      expect(result.current.hasMore).toBe(true)
+    })
+
+    // 续页卡在途（用户滚到底触发补页）。
+    const inFlightPage = deferred<Array<{ id: string; createdAt: number }>>()
+    toArray.mockImplementationOnce(() => inFlightPage.promise)
+    act(() => {
+      result.current.loadMore()
+    })
+
+    // 在途期间"生成成功落盘"→ 页面调 reload()。
+    act(() => {
+      result.current.reload()
+    })
+
+    // 补跑首页返回的"新落盘画作"。
+    toArray.mockResolvedValueOnce([{ id: 'fresh', createdAt: 9_999 }])
+
+    await act(async () => {
+      inFlightPage.resolve(Array.from({ length: 30 }, (_, index) => row(index)))
+      await inFlightPage.promise
+    })
+
+    await waitFor(() => {
+      expect(result.current.items.map((item) => item.id)).toEqual(['fresh'])
+    })
+    // 旧实现在这里只调用 2 次（reload 被 `if (loadingRef.current) return` 丢掉），新画作永不出现。
+    expect(toArray).toHaveBeenCalledTimes(3)
+    expect(result.current.error).toBeNull()
   })
 })

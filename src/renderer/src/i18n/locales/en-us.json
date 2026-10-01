@@ -216,7 +216,11 @@
     },
     "branches": {
       "jumpFailed": "Branch session not found or no longer valid — reopen the branch graph",
-      "loadFailed": "Failed to load the branch structure — reopen the branch graph to retry"
+      "loadFailed": "Failed to load the branch structure — reopen the branch graph to retry",
+      "new_branch": "New Branch"
+    },
+    "code": {
+      "highlight_failed": "Code highlighting failed. The block is shown as plain text."
     },
     "deeply_thought": "Deeply thought ({{seconds}} seconds)",
     "default": {
@@ -318,6 +322,9 @@
       "next": "Next Message",
       "prev": "Previous Message",
       "top": "Back to top"
+    },
+    "pause": {
+      "failed": "Failed to stop generation; the turn may still be running"
     },
     "resend": "Resend",
     "save": {
@@ -705,6 +712,7 @@
     "up_to_date": "Up to date",
     "update_found": "Version {{version}} is available",
     "upgrade": "Upgrade",
+    "upgrade_failed": "Upgrade failed",
     "upgrade_success": "Upgrade successful",
     "working_directory": "Working Directory"
   },
@@ -870,6 +878,7 @@
     "unnamed": "Unnamed",
     "unsubscribe": "Unsubscribe",
     "update_success": "Update successfully",
+    "upload_failed": "Upload failed",
     "upload_files": "Upload file",
     "upload_image": "Upload image file",
     "uploaded_image": "Uploaded image",
@@ -989,6 +998,7 @@
     "provider": "Provider",
     "providerId": "Provider ID",
     "provider_disabled": "Model provider is not enabled",
+    "provider_not_found": "No provider matches this model. Check the model service settings.",
     "reason": "Reason",
     "render": {
       "block": "This content block failed to render",
@@ -1021,6 +1031,9 @@
     "values": "Values"
   },
   "export": {
+    "citation": {
+      "untitled": "Untitled"
+    },
     "created": "Created",
     "last_updated": "Last Updated",
     "notion": {
@@ -1030,12 +1043,14 @@
   "files": {
     "all": "All Files",
     "batch_delete": "Batch delete",
+    "batch_delete_result": "Deleted {{success}}, {{failed}} failed",
     "batch_operation": "Select All",
     "count": "files",
     "created_at": "Created At",
     "delete": {
       "content": "Deleting a file will delete its reference from all messages. Are you sure you want to delete this file?",
       "db_error": "Deletion failed",
+      "partial_failed": "{{succeeded}} deleted, {{failed}} failed.",
       "title": "Delete File"
     },
     "document": "Document",
@@ -1044,6 +1059,9 @@
     "name": "Name",
     "preview": {
       "error": "Failed to open file"
+    },
+    "rename": {
+      "error": "Failed to rename. The new name was not saved."
     },
     "size": "Size",
     "text": "Text",
@@ -1054,6 +1072,7 @@
     "hint": "Sent automatically in order when the turn ends; work-mode topics only",
     "pause": "Pause auto-send",
     "pausedCount": "Paused, {{count}} follow-up(s) queued",
+    "pump_failed": "The queued follow-up was not sent. It stays in the queue.",
     "queuedCount": "{{count}} follow-up(s) queued",
     "remove": "Remove",
     "resume": "Resume auto-send",
@@ -1071,6 +1090,7 @@
     "error": {
       "topic_not_found": "Topic not found"
     },
+    "load_failed": "Failed to load the topic. Retry.",
     "locate": {
       "message": "Locate the message"
     },
@@ -1094,6 +1114,7 @@
   },
   "html_artifacts": {
     "code": "Code",
+    "default_title": "HTML Artifacts",
     "empty_preview": "No content to display",
     "generating": "Generating",
     "interactive_preview": {
@@ -1151,6 +1172,7 @@
   },
   "kernelChat": {
     "emptyResponse": "The model finished this turn but returned no content. Retry or switch models.",
+    "historyLoadFailed": "Failed to load the topic history: the kernel did not answer within the retry window. Reopen the topic later.",
     "imageLoadFailed": "[Image attachment failed to load; reopen the topic to retry]",
     "unknownModelError": "The model {{model}} used by this topic is no longer available from the current provider (it may have been delisted, or the provider configuration changed). Please reselect a model in the topic settings and retry."
   },
@@ -1172,6 +1194,7 @@
     "chunk_size_change_warning": "Chunk size and overlap size changes only apply to new content",
     "chunk_size_placeholder": "Default (not recommended to change)",
     "chunk_size_tooltip": "Split documents into chunks, each chunk size, not exceeding model context limit",
+    "delete_base_failed": "Failed to delete the knowledge base.",
     "delete_confirm": "Are you sure you want to delete this knowledge base?",
     "dimensions": "Embedding dimension",
     "dimensions_auto_set": "Auto-set embedding dimensions",
@@ -1196,6 +1219,7 @@
       }
     },
     "file_hint": "Support {{file_types}}",
+    "knowledge_base": "Knowledge Base",
     "migrate": {
       "button": {
         "text": "Migrate"
@@ -1219,6 +1243,7 @@
     "remove_failed": "Delete failed. The entry was restored.",
     "remove_file_cleanup_failed": "The index entry was deleted, but local files were not cleaned up.",
     "rename": "Rename",
+    "score": "Score",
     "search": "Search knowledge base",
     "search_failed": "Knowledge base search failed. Retry.",
     "search_no_results": "No matching content found",
@@ -1227,6 +1252,7 @@
       "title": "Knowledge Base Settings"
     },
     "sitemap_added": "Added successfully",
+    "sitemap_exists": "This sitemap URL is already in the list",
     "sitemap_placeholder": "Enter Website Map URL",
     "sitemaps": "Websites",
     "source": "Source",
@@ -1243,6 +1269,7 @@
     "threshold_tooltip": "Used to evaluate the relevance between the user's question and the content in the knowledge base (0-1)",
     "title": "Knowledge Base",
     "url_added": "URL added",
+    "url_batch_skipped": "Skipped {{invalid}} invalid and {{duplicate}} duplicate URL(s)",
     "url_placeholder": "Enter URL, multiple URLs separated by Enter",
     "urls": "URLs",
     "videos": "video",
@@ -1329,8 +1356,14 @@
       "failed": "Download failed",
       "success": "Download successfully"
     },
+    "edit": {
+      "resend_failed": "Failed to resend the message. Retry.",
+      "save_failed": "Failed to save the message. Retry."
+    },
     "error": {
       "chunk_overlap_too_large": "Chunk overlap cannot be greater than chunk size",
+      "chunk_size_too_large": "Chunk size cannot exceed the embedding model context limit ({{limit}})",
+      "chunk_size_unknown_limit": "The embedding model context limit is unknown, so the chunk size was not validated",
       "citation_fetch_failed": "Failed to load the page summary. Open the citation to view the source.",
       "copy": "Copy failed",
       "dimension_too_large": "Content size is too large",
@@ -1346,6 +1379,7 @@
       },
       "fetchTopicName": "Failed to name the topic",
       "get_embedding_dimensions": "Failed to get embedding dimensions",
+      "image_store_failed": "Failed to save the image.",
       "invalid": {
         "nutstore": "Invalid Nutstore settings",
         "nutstore_token": "Invalid Nutstore Token",
@@ -1388,11 +1422,13 @@
         "content": "Deleting a group message will delete the user's question and all assistant's answers",
         "title": "Delete Group Message"
       },
+      "retry_all_result": "Retried {{success}}, {{failed}} failed",
       "retry_failed": "Retry failed messages"
     },
     "image": {
       "unavailable": "Image unavailable"
     },
+    "inspect_data": "Inspect Data (Dev)",
     "loading": {
       "notion": {
         "exporting_progress": "Exporting to Notion ...",
@@ -1447,6 +1483,7 @@
       "success": "Restored successfully"
     },
     "save": {
+      "failed": "Save failed; no file was written",
       "success": {
         "title": "Saved successfully"
       }
@@ -1507,6 +1544,7 @@
       "reject": "Reject",
       "streaming": "Streaming"
     },
+    "unknown_tool": "Tool",
     "video": {
       "error": {
         "local_file_missing": "Local video file not found",
@@ -1717,6 +1755,8 @@
     "search": {
       "both": "Name+Content",
       "content": "Content",
+      "failed": "Search failed",
+      "failed_partial": "Search incomplete: {{count}} file(s) could not be read",
       "found_results": "Found {{count}} results (Name: {{nameCount}}, Content: {{contentCount}})",
       "more_matches": "more matches",
       "no_results": "No matching content",
@@ -1785,8 +1825,10 @@
     "untitled_folder": "New Folder",
     "untitled_note": "Untitled Note",
     "upload_failed": "Note upload failed",
+    "upload_fallback": "Batch upload failed. Retrying with the compatibility path.",
     "upload_files": "Upload Files",
     "upload_folder": "Upload Folder",
+    "upload_partial": "{{succeeded}} uploaded, {{failed}} failed.",
     "upload_success": "Note uploaded success"
   },
   "notification": {
@@ -1885,6 +1927,7 @@
     },
     "generate_failed": "Generation failed",
     "generating": "Drawing in progress. Please do not leave this page.",
+    "generation_canceled": "Generation canceled",
     "generic_params_hint": "This model declares no parameter set; the options below are generic",
     "guidance_scale": "Guidance Scale",
     "guidance_scale_tip": "Classifier Free Guidance ({{min}}-{{max}}). How close you want the model to stick to your prompt when looking for a related image to show you",
@@ -2487,6 +2530,10 @@
         "select_title": "Change App Data Directory",
         "stop_quit_app_reason": "The app is currently migrating data and cannot be exited"
       },
+      "app_info": {
+        "load_failed": "Failed to read application paths",
+        "unavailable": "Unavailable"
+      },
       "app_logs": {
         "button": "Open Logs",
         "label": "App Logs"
@@ -2499,6 +2546,7 @@
         "button": "Clear Cache",
         "confirm": "Clearing the cache will delete application cache data, including minapp data. This action is irreversible, continue?",
         "error": "Error clearing cache",
+        "size_unavailable": "cache size unavailable",
         "success": "Cache cleared",
         "title": "Clear Cache"
       },
@@ -2574,6 +2622,7 @@
                 "title": "Confirm Delete"
               },
               "error": "Delete failed",
+              "partial": "Deleted {{succeeded}} of {{total}} backup files. {{failed}} failed.",
               "selected": "Delete Selected",
               "success": {
                 "multiple": "Successfully deleted {{count}} backup files",
@@ -2605,6 +2654,9 @@
           }
         },
         "directory": {
+          "app_info_unavailable": "Cannot check the directory: application paths are unavailable. Retry later.",
+          "clear_confirm_content": "The saved directory is cleared and auto backup is turned off. Unsaved edits are discarded.",
+          "clear_confirm_title": "Clear backup directory?",
           "label": "Local Backup Directory",
           "placeholder": "Select a directory for local backups",
           "select_error_app_data_path": "New path cannot be the same as the application data path",
@@ -2736,6 +2788,9 @@
             "title": "Restore from Nutstore"
           }
         },
+        "sso": {
+          "failed": "Nutstore authorization failed. Try again."
+        },
         "title": "Nutstore Configuration",
         "username": "Nutstore Username"
       },
@@ -2748,6 +2803,7 @@
         "title": "Obsidian Configuration"
       },
       "s3": {
+        "not_available": "This build has no settings UI for S3-compatible storage. The app still reads the saved S3 auto-sync configuration at startup.",
         "title": {
           "label": "S3 Compatible Storage"
         }
@@ -2862,6 +2918,7 @@
           "button": "Check",
           "empty_repo_url": "Please enter the knowledge base URL first",
           "empty_token": "Please enter the Yuque Token first",
+          "error": "Connection error. Check the network connection.",
           "fail": "Yuque connection verification failed",
           "success": "Yuque connection verified successfully"
         },
@@ -3047,6 +3104,7 @@
       "deleteServerConfirm": "Are you sure you want to delete this server?",
       "deleteSuccess": "Server deleted successfully",
       "description": "Description",
+      "descriptionUnavailable": "Failed to fetch the package description.",
       "discover": "Discover",
       "editJson": "Edit JSON",
       "env": "Environment Variables",
@@ -3055,6 +3113,7 @@
         "button": "Fetch Servers",
         "success": "Successfully fetched MCP servers"
       },
+      "fetchFailed": "Failed to load MCP server data",
       "findMore": "Find More MCP",
       "headers": "Headers",
       "headersTooltip": "Custom headers for HTTP requests",
@@ -3062,6 +3121,11 @@
       "jsonFormatError": "JSON formatting error",
       "jsonModeHint": "Edit the JSON representation of the MCP server configuration. Please ensure the format is correct before saving.",
       "jsonSaveError": "Failed to save JSON configuration.",
+      "jsonSavePartial": "{{count}} server(s) saved, {{failed}} failed to remove",
+      "jsonSaveRemoveConfirm": {
+        "content": "Saving removes {{count}} server(s) from this list. Continue?",
+        "title": "Remove MCP servers?"
+      },
       "jsonSaveSuccess": "JSON configuration has been saved.",
       "logoUrl": "Logo URL",
       "logs": "Logs",
@@ -3108,7 +3172,16 @@
       "providerPlaceholder": "Provider name",
       "providerUrl": "Provider URL",
       "providers": "Providers",
-      "registry": "Package Registry",
+      "registry": {
+        "custom": "Custom",
+        "label": "Package Registry",
+        "npm_taobao": "Taobao npm mirror",
+        "pip_aliyun": "Aliyun PyPI mirror",
+        "pip_huaweicloud": "Huawei Cloud PyPI mirror",
+        "pip_tencent": "Tencent Cloud PyPI mirror",
+        "pip_tsinghua": "Tsinghua PyPI mirror",
+        "pip_ustc": "USTC PyPI mirror"
+      },
       "registryDefault": "Default",
       "registryTooltip": "Choose the registry for package installation to resolve network issues with the default registry.",
       "requiresConfig": "Requires Configuration",
@@ -3124,6 +3197,7 @@
       "runtimeChecking": "Checking {{command}}…",
       "runtimeCommandMissing": "{{command}} was not found in the system PATH",
       "runtimeCommandReady": "{{command}} is ready",
+      "runtimeCommandUnknown": "Cannot probe {{command}} right now",
       "runtimeNote": "This build does not bundle uv/bun binaries: MCP servers resolve npx/uvx from the system PATH. If a command is missing, install Node.js (for npx) or uv (for uvx) first.",
       "search": {
         "placeholder": "Search MCP servers...",
@@ -3242,6 +3316,7 @@
         "logo_url": "Logo URL",
         "logo_url_label": "Logo URL",
         "logo_url_placeholder": "Enter logo URL",
+        "load_error": "Failed to read custom mini apps. The file was kept unchanged.",
         "name": "Name",
         "name_error": "Name is required.",
         "name_placeholder": "Enter name",
@@ -3344,7 +3419,10 @@
         "add_whole_group": "Add the whole group",
         "fetch_list": "Fetch model list",
         "refetch_list": "Refetch model list",
-        "remove_listed": "Remove models from the list",
+        "remove_listed": {
+          "confirm": "Remove all listed models from this provider?",
+          "label": "Remove models from the list"
+        },
         "remove_model": "Remove model",
         "remove_whole_group": "Remove the whole group"
       },
@@ -3547,6 +3625,7 @@
       "no_models_for_check": "No models available for checking (e.g. chat models)",
       "notes": {
         "markdown_editor_default_value": "Preview area",
+        "markdown_editor_placeholder": "Enter Markdown text...",
         "placeholder": "Enter Markdown content...",
         "title": "Model Notes"
       },
@@ -3645,6 +3724,7 @@
     },
     "skills": {
       "author": "Author",
+      "batchUninstallPartial": "{{count}} uninstalled, {{failed}} failed",
       "batchUninstallSuccess": "{{count}} skills uninstalled",
       "builtin": "Built-in",
       "confirmBatchUninstall": "Are you sure you want to uninstall {{count}} selected skills?",
@@ -3653,6 +3733,7 @@
       "emptyDesc": "Install skills from ZIP, directory, or search online registries to extend agent capabilities.",
       "emptyTip": "Tip: You can also ask an agent to install skills for you.",
       "emptyTitle": "No skill selected",
+      "fileBrowserUnavailable": "File browsing is not wired up in this build",
       "filterPlaceholder": "Filter skills...",
       "install": "Install",
       "installFailed": "Failed to install skill: {{name}}",
@@ -3667,8 +3748,9 @@
       "noInstalled": "No skills installed",
       "noResults": "No skills found",
       "noSkillFile": "No SKILL.md found",
+      "refreshFailed": "Failed to scan installed skills",
+      "searchFailed": "Search failed. Check the network or registry availability.",
       "searchPlaceholder": "Discover more skills...",
-      "selectFile": "Select a file to view",
       "title": "Skills",
       "toggleNeedsAgent": "Skill enablement is managed per assistant in the assistant settings",
       "uninstall": "Uninstall",
@@ -3711,6 +3793,7 @@
           "api_url_label": "Obtain Access Token and API URL"
         },
         "provider": "Document Processing Provider",
+        "provider_not_found": "Document processing provider not found",
         "provider_placeholder": "Choose a document processing provider",
         "title": "Document Processing",
         "tooltip": "In Settings -> Tools, set a document processing service provider. Document processing can effectively improve the retrieval performance of complex format documents and scanned documents.",
@@ -3770,6 +3853,7 @@
           "settings": "Local Search Settings"
         },
         "local_providers": "Local Providers",
+        "provider_missing": "This page needs a search provider id in the URL.",
         "search_max_result": {
           "label": "Number of search results",
           "tooltip": "When search result compression is disabled, the number of results may be too large, which may lead to insufficient tokens"
@@ -3918,6 +4002,7 @@
     "exchange": "Swap languages and text",
     "history": "Translation History",
     "history_empty": "No translation records",
+    "history_load_failed": "Failed to load translation history",
     "input_placeholder": "Enter text to translate",
     "model": "Translation Model",
     "model_hint_prefix": "Current model: ",

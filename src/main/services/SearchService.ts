@@ -34,6 +34,42 @@ function scrapeSession(): Session {
   return target
 }
 
+/** 判定「页面主体已可刮」的最小信号：有 body，且 body 内有元素或非空文本。 */
+const SCRAPE_READY_PROBE = `(() => {
+  const body = document.body
+  if (!body) return false
+  if (body.querySelector('*')) return true
+  return (body.textContent || '').trim().length > 0
+})()`
+
+/** 结果渲染等待的上限。超时不报错：照常取一次 outerHTML（诚实降级，不无限等）。 */
+const SCRAPE_DOM_READY_TIMEOUT_MS = 2500
+/** 轮询间隔：先给一个短 tick，然后 100ms 一次。 */
+const SCRAPE_DOM_READY_POLL_MS = 100
+
+/**
+ * 等页面把内容渲染进 DOM。就绪即返回；到上限仍未就绪也返回（调用方照常刮一次）。
+ * v1 二轮审查 m2-24：替换原来的无条件 `setTimeout(500)` 定值等待。
+ */
+async function waitForScrapeContent(contents: Electron.WebContents): Promise<void> {
+  const deadline = Date.now() + SCRAPE_DOM_READY_TIMEOUT_MS
+  for (;;) {
+    if (contents.isDestroyed()) return
+    try {
+      if (await contents.executeJavaScript(SCRAPE_READY_PROBE)) return
+    } catch (error) {
+      // 页面正在导航/已销毁：不再轮询，交给调用方的 executeJavaScript 如实上抛。
+      logger.debug(`scrape DOM probe stopped: ${error instanceof Error ? error.message : String(error)}`)
+      return
+    }
+    if (Date.now() >= deadline) {
+      logger.warn('scrape DOM probe timed out; taking the page as rendered')
+      return
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, SCRAPE_DOM_READY_POLL_MS))
+  }
+}
+
 export class SearchService {
   private static instance: SearchService | null = null
   private searchWindows: Record<string, BrowserWindow> = {}
@@ -110,10 +146,10 @@ export class SearchService {
       logger.error(`search window load failed for ${url}`, error instanceof Error ? error : new Error(String(error)))
       throw new Error(`search window page load failed: ${error instanceof Error ? error.message : String(error)}`)
     }
-    // 500ms 定值：等页面 JS 把结果渲染进 DOM（上游同值；上游的
-    // "loadURL 之后再注册 did-finish-load + 10s 兜底"是死等——事件在 loadURL
-    // await 期间已触发，监听器永远不响，每次搜索白等满 10s，本版一并修掉）。
-    await new Promise<void>((resolve) => setTimeout(resolve, 500))
+    // 结果渲染等待（v1 二轮审查 m2-24）：原来是无条件 `setTimeout(500)`，作为纯延迟成本加在
+    // 每个搜索请求上。改成轮询「结果节点是否已进 DOM」——就绪即返回，上限
+    // SCRAPE_DOM_READY_TIMEOUT_MS（超时也照常取一次 outerHTML：宁可读到半渲染，也不无限等）。
+    await waitForScrapeContent(window.webContents)
 
     // Get the page content after ensuring it's fully loaded
     return await window.webContents.executeJavaScript('document.documentElement.outerHTML')

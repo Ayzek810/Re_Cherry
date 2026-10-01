@@ -2,12 +2,13 @@ import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
 import { TopView } from '@renderer/components/TopView'
 import { useKnowledge } from '@renderer/hooks/useKnowledge'
+import type { KnowledgeBaseForm } from '@renderer/hooks/useKnowledgeBaseForm'
 import { useKnowledgeBaseForm } from '@renderer/hooks/useKnowledgeBaseForm'
 import { getModelUniqId } from '@renderer/services/ModelService'
 import type { KnowledgeBase } from '@renderer/types'
 import { formatErrorMessage } from '@renderer/utils/error'
 import { Flex } from 'antd'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -18,6 +19,16 @@ import {
 } from './KnowledgeSettings'
 
 const logger = loggerService.withContext('EditKnowledgeBasePopup')
+
+/**
+ * r2-69：把表单态窄化为提交态。表单允许 `model` 为空位（`undefined` = 还没选），
+ * 提交路径必须先校验再构造 `KnowledgeBase` —— 旧实现用 `model: null as any` 绕过类型系统。
+ * 返回 `undefined` 表示还没选模型，调用方负责提示（不抛异常，便于在两种入口共用）。
+ */
+function toSubmittedBase(form: KnowledgeBaseForm): KnowledgeBase | undefined {
+  if (!form.model) return undefined
+  return { ...form, model: form.model }
+}
 
 interface ShowParams {
   base: KnowledgeBase
@@ -46,7 +57,12 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ base: _base, resolve })
 
   // 处理嵌入模型更改迁移
   const handleEmbeddingModelChangeMigration = useCallback(async () => {
-    const migratedBase = { ...newBase, id: nanoid() }
+    const migrated = toSubmittedBase(newBase)
+    if (!migrated) {
+      window.toast.error(t('knowledge.embedding_model_required'))
+      return
+    }
+    const migratedBase = { ...migrated, id: nanoid() }
     try {
       await migrateBase(migratedBase)
       setOpen(false)
@@ -57,8 +73,29 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ base: _base, resolve })
     }
   }, [newBase, migrateBase, resolve, t])
 
+  // 二轮审查 f2-19：这里曾是 render 体内的 `if (!base) { resolve(null); return null }`。
+  // `resolve` → `this.hide()` → TopView 容器 setState，等于在一个组件渲染期间更新另一个组件
+  // （React 报 "Cannot update a component while rendering a different component"；并发/StrictMode 下
+  // 还可能重复 hide/resolve）。渲染分支只 `return null`，副作用挪进 effect 且只结算一次。
+  const resolvedMissingBaseRef = useRef(false)
+  useEffect(() => {
+    if (!base && !resolvedMissingBaseRef.current) {
+      resolvedMissingBaseRef.current = true
+      resolve(null)
+    }
+  }, [base, resolve])
+
+  const submittedBase = toSubmittedBase(newBase)
+
+  const confirmModelChange = useCallback(() => {
+    if (!submittedBase) {
+      window.toast.error(t('knowledge.embedding_model_required'))
+      return
+    }
+    void handleEmbeddingModelChangeMigration()
+  }, [submittedBase, handleEmbeddingModelChangeMigration, t])
+
   if (!base) {
-    resolve(null)
     return null
   }
 
@@ -72,7 +109,9 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ base: _base, resolve })
             <span>{t('knowledge.embedding_model')}:</span>
             <span style={{ paddingLeft: '1em' }}>{`${t('knowledge.migrate.source_model')}: ${base.model.name}`}</span>
             <span
-              style={{ paddingLeft: '1em' }}>{`${t('knowledge.migrate.target_model')}: ${newBase.model.name}`}</span>
+              style={{
+                paddingLeft: '1em'
+              }}>{`${t('knowledge.migrate.target_model')}: ${newBase.model?.name ?? ''}`}</span>
             <span>{t('knowledge.dimensions')}:</span>
             <span
               style={{ paddingLeft: '1em' }}>{`${t('knowledge.migrate.source_dimensions')}: ${base.dimensions}`}</span>
@@ -84,14 +123,18 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ base: _base, resolve })
         ),
         okText: t('knowledge.migrate.confirm.ok'),
         centered: true,
-        onOk: handleEmbeddingModelChangeMigration
+        onOk: confirmModelChange
       })
     } else {
+      if (!submittedBase) {
+        window.toast.error(t('knowledge.embedding_model_required'))
+        return
+      }
       try {
-        logger.debug('newbase', newBase)
-        updateKnowledgeBase(newBase)
+        logger.debug('newbase', submittedBase)
+        updateKnowledgeBase(submittedBase)
         setOpen(false)
-        resolve(newBase)
+        resolve(submittedBase)
       } catch (error) {
         logger.error('KnowledgeBase edit failed:', error as Error)
         window.toast.error(t('knowledge.error.failed_to_edit') + formatErrorMessage(error))

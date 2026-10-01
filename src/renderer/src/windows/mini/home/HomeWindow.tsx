@@ -10,7 +10,7 @@ import { getAssistantMessage, getUserMessage } from '@renderer/services/Messages
 import store, { useAppSelector } from '@renderer/store'
 import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
-import type { Assistant, Topic } from '@renderer/types'
+import type { Assistant, Message, Topic } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { AssistantMessageStatus, MessageBlockStatus } from '@renderer/types/newMessage'
 import { createImageBlock, createMainTextBlock, createThinkingBlock } from '@renderer/utils/messageUtils/create'
@@ -18,7 +18,6 @@ import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { replacePromptVariables } from '@renderer/utils/prompt'
 import { kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
 import { defaultLanguage } from '@shared/config/constant'
-import { IpcChannel } from '@shared/IpcChannel'
 import { Divider } from 'antd'
 import { isEmpty, last } from 'lodash'
 import type { FC } from 'react'
@@ -38,6 +37,58 @@ const logger = loggerService.withContext('HomeWindow')
 
 /** 快捷助手固定标识：不依赖任何 Assistant 配置，消息也不计入聊天消息库 */
 const MINI_ASSISTANT_ID = 'quick-assistant'
+
+/**
+ * 找该话题的在途助手消息（r2-66：原先 `clearConversation` 用 `status === PROCESSING`、
+ * `handlePause` 用 `askId/id` 匹配，两套判据各自演化——只改一处另一条路径就会漏 abort，
+ * 旧流继续计费）。统一判据 = 「带 PROCESSING 状态」**或**「本轮 askId/消息 id 命中」。
+ */
+function findInFlightAssistantMessage(topicId: string, askId?: string): Message | undefined {
+  const state = store.getState()
+  const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
+  return messageIds
+    .map((id) => state.messages.entities[id])
+    .find(
+      (m) =>
+        m !== undefined &&
+        m.role === 'assistant' &&
+        (m.status === AssistantMessageStatus.PROCESSING ||
+          (askId !== undefined && askId !== '' && (m.askId === askId || m.id === askId)))
+    )
+}
+
+/**
+ * 取消该话题在途流；`markPaused` 决定是否把流式中的块与消息落 PAUSED 终态
+ *（「暂停」要保留内容并停动画；「清空会话」随后会整条清掉消息，无需落终态）。
+ */
+function abortInFlight(topicId: string, opts: { markPaused: boolean; askId?: string }): void {
+  const pending = findInFlightAssistantMessage(topicId, opts.askId)
+  if (!pending) return
+  // fork 缝：「暂停」额外发起真取消——在途流的 requestId 就是该助手消息 id
+  //（见下方 lightStream(assistantMessage.id, …)），主进程随即 abort 底层请求。
+  void lightStreamAbort(pending.id)
+  if (!opts.markPaused) return
+
+  const state = store.getState()
+  for (const blockId of pending.blocks ?? []) {
+    const block = state.messageBlocks.entities[blockId]
+    if (
+      block !== undefined &&
+      (block.status === MessageBlockStatus.STREAMING ||
+        block.status === MessageBlockStatus.PENDING ||
+        block.status === MessageBlockStatus.PROCESSING)
+    ) {
+      store.dispatch(updateOneBlock({ id: blockId, changes: { status: MessageBlockStatus.PAUSED } }))
+    }
+  }
+  store.dispatch(
+    newMessagesActions.updateMessage({
+      topicId,
+      messageId: pending.id,
+      updates: { status: AssistantMessageStatus.PAUSED }
+    })
+  )
+}
 
 const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   const { language, readClipboardAtStartup, quickAssistantPrompt, quickAssistantReasoningEffort, windowStyle } =
@@ -117,14 +168,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     //   （复刻 handlePause 的 requestId 约定：在途流的 requestId 就是该助手消息 id）。
     cancelledRef.current = true
     const topicId = currentTopic.current?.id
-    if (topicId) {
-      const state = store.getState()
-      const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
-      const streaming = messageIds
-        .map((id) => state.messages.entities[id])
-        .find((m) => m !== undefined && m.role === 'assistant' && m.status === AssistantMessageStatus.PROCESSING)
-      if (streaming) void lightStreamAbort(streaming.id)
-    }
+    // r2-66：找在途助手 + 取消收敛为单一实现（`abortInFlight`），判据不再与 handlePause 漂移。
+    // 清空会话不落 PAUSED（随后第 ② 步会整条清掉消息，落终态是多余写）；暂停要落 PAUSED。
+    if (topicId) abortInFlight(topicId, { markPaused: false, askId: currentAskId.current })
     // ② 清该话题消息（V2 `setMessages([])`）。
     if (topicId) store.dispatch(newMessagesActions.clearTopicMessages(topicId))
     // ③ 复位执行态：话题回默认、加载/输出标志与执行 id 归零（V2 `clearExecutionMessages()` + `setIsPreparing(false)`）。
@@ -199,12 +245,10 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   }, [isPinned])
 
   useEffect(() => {
-    window.electron.ipcRenderer.on(IpcChannel.ShowMiniWindow, onWindowShow)
-
-    return () => {
-      // 具名解绑：removeAllListeners 会误杀同通道的其他订阅者
-      window.electron.ipcRenderer.removeListener(IpcChannel.ShowMiniWindow, onWindowShow)
-    }
+    // 具名解绑由 preload 桥的返回函数负责：removeAllListeners 会误杀同通道的其他订阅者
+    return window.api.events.onShowMiniWindow(() => {
+      void onWindowShow()
+    })
   }, [onWindowShow])
 
   useEffect(() => {
@@ -597,38 +641,8 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     cancelledRef.current = true
     const requestUser = currentAskId.current
     const topicId = currentTopic.current?.id
-    if (topicId && requestUser) {
-      const state = store.getState()
-      const messageIds = state.messages.messageIdsByTopic[topicId] ?? []
-      const pending = messageIds
-        .map((id) => state.messages.entities[id])
-        .find((m) => m !== undefined && m.role === 'assistant' && (m.askId === requestUser || m.id === requestUser))
-      if (pending) {
-        // fork 缝：「暂停」额外发起真取消——在途流的 requestId 就是该助手消息 id
-        //（见下方 lightStream(assistantMessage.id, …)），主进程随即 abort 底层请求；
-        // UI 行为不变：块/消息照旧置 PAUSED，已生成内容保留。
-        void lightStreamAbort(pending.id)
-        // 保留内容，仅把流式中的块与消息置为 PAUSED，停掉“该条消息下”的生成中动画
-        for (const blockId of pending.blocks ?? []) {
-          const block = state.messageBlocks.entities[blockId]
-          if (
-            block !== undefined &&
-            (block.status === MessageBlockStatus.STREAMING ||
-              block.status === MessageBlockStatus.PENDING ||
-              block.status === MessageBlockStatus.PROCESSING)
-          ) {
-            store.dispatch(updateOneBlock({ id: blockId, changes: { status: MessageBlockStatus.PAUSED } }))
-          }
-        }
-        store.dispatch(
-          newMessagesActions.updateMessage({
-            topicId,
-            messageId: pending.id,
-            updates: { status: AssistantMessageStatus.PAUSED }
-          })
-        )
-      }
-    }
+    // r2-66：与 clearConversation 共用同一实现在途查找 + 取消（判据统一：PROCESSING ∪ askId/id）。
+    if (topicId) abortInFlight(topicId, { markPaused: true, askId: requestUser })
     // 无条件收敛 Footer/聊天区加载动画
     setIsLoading(false)
     setIsOutputted(true)

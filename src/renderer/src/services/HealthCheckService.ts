@@ -11,14 +11,19 @@ const logger = loggerService.withContext('HealthCheckService')
 
 /**
  * 用多个 API 密钥检查单个模型的连通性
+ *
+ * r2-39：`isConcurrent=false` 时密钥也**逐个串行**发（此前 `apiKeys.map` 无条件全并发，
+ * 关掉开关仍会一次打出「模型数 × key 数」个请求——正是该开关要避免的限流场景）。
+ * 无论走哪条路，返回值都按 `apiKeys` 下标对齐。
  */
 export async function checkModelWithMultipleKeys(
   provider: Provider,
   model: Model,
   apiKeys: string[],
-  timeout?: number
+  timeout?: number,
+  isConcurrent = true
 ): Promise<ApiKeyWithStatus[]> {
-  const checkPromises = apiKeys.map(async (key) => {
+  const checkWithKey = async (key: string): Promise<ApiKeyWithStatus> => {
     const startTime = Date.now()
     // 如果 checkModel 抛出错误，让这个 promise 失败
     await checkModel({ ...provider, apiKey: key }, model, timeout)
@@ -29,11 +34,23 @@ export async function checkModelWithMultipleKeys(
       status: HealthStatus.SUCCESS,
       latency
     }
-  })
+  }
 
-  const results = await Promise.allSettled(checkPromises)
+  const settled: PromiseSettledResult<ApiKeyWithStatus>[] = []
+  if (isConcurrent) {
+    settled.push(...(await Promise.allSettled(apiKeys.map((key) => checkWithKey(key)))))
+  } else {
+    // 串行：一个 key 结算后才发下一个（下标顺序与 apiKeys 一致，下面的 index 对齐仍然成立）
+    for (const key of apiKeys) {
+      try {
+        settled.push({ status: 'fulfilled', value: await checkWithKey(key) })
+      } catch (reason) {
+        settled.push({ status: 'rejected', reason })
+      }
+    }
+  }
 
-  return results.map((result, index) => {
+  return settled.map((result, index) => {
     if (result.status === 'fulfilled') {
       return result.value
     } else {
@@ -69,10 +86,10 @@ export async function checkModelsHealth(
   const { provider, models, apiKeys, isConcurrent, timeout } = options
   const results: ModelWithStatus[] = new Array(models.length)
 
-  const modelPromises = models.map(async (model, index) => {
+  const runModelCheck = async (model: Model, index: number): Promise<ModelWithStatus> => {
     let result: ModelWithStatus
     try {
-      const keyResults = await checkModelWithMultipleKeys(provider, model, apiKeys, timeout)
+      const keyResults = await checkModelWithMultipleKeys(provider, model, apiKeys, timeout, isConcurrent)
       const analysis = aggregateApiKeyResults(keyResults)
 
       result = {
@@ -97,13 +114,17 @@ export async function checkModelsHealth(
     results[index] = result
     onModelChecked?.(result, index)
     return result
-  })
+  }
 
   if (isConcurrent) {
-    await Promise.all(modelPromises)
+    // 并发：先构造全部请求再一起等（`models.map` 的既有语义）
+    await Promise.all(models.map((model, index) => runModelCheck(model, index)))
   } else {
-    for (const promise of modelPromises) {
-      await promise
+    // r2-39：非并发必须是**串行**。此前是 `models.map(async …)` 先构造全部 promise（map 阶段就
+    // 把请求全发出去了），再按序 await——只是等待有序，请求早就并发打出去了，开关形同虚设。
+    // 现在改成循环里逐个 await：下一个模型要等上一个结算。
+    for (let index = 0; index < models.length; index++) {
+      await runModelCheck(models[index], index)
     }
   }
 

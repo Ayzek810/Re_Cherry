@@ -6,6 +6,9 @@ import { MessageBlockType } from '@renderer/types/newMessage'
 // import type { MessageBlock, MainTextMessageBlock } from '@renderer/types/newMessageTypes';
 import { remove, takeRight } from 'lodash'
 import { isEmpty } from 'lodash'
+
+import { findBlocksByType } from './find'
+
 // Assuming getGroupedMessages is also moved here or imported
 // import { getGroupedMessages } from './path/to/getGroupedMessages';
 
@@ -18,11 +21,9 @@ export const filterMessages = (messages: Message[]) => {
   return messages
     .filter((message) => !['@', 'clear'].includes(message.type!))
     .filter((message) => {
-      const state = store.getState()
-      const mainTextBlock = message.blocks
-        ?.map((blockId) => messageBlocksSelectors.selectById(state, blockId))
-        .find((block) => block?.type === MessageBlockType.MAIN_TEXT)
-      return !isEmpty((mainTextBlock as any)?.content?.trim()) // Type assertion needed
+      // 复用 find.ts 的同一次分桶遍历，不再单独扫一遍块表。
+      const mainTextBlocks = findBlocksByType(message).get(MessageBlockType.MAIN_TEXT)
+      return !isEmpty((mainTextBlocks?.[0] as any)?.content?.trim()) // Type assertion needed
     })
 }
 
@@ -54,35 +55,29 @@ export function filterUserRoleStartMessages(messages: Message[]): Message[] {
 }
 
 /**
+ * 判定消息是否含「有内容」的块：主文本非空，或存在图片/文件/代码/工具/引用块。
+ * 复用 find.ts 的单次分桶遍历，供 filterEmptyMessages 与其它调用方共用。
+ */
+export const messageHasContent = (message: Message): boolean => {
+  const buckets = findBlocksByType(message)
+  const mainText = buckets.get(MessageBlockType.MAIN_TEXT)?.[0]
+  if (mainText && !isEmpty((mainText as any).content?.trim())) {
+    return true
+  }
+  return [
+    MessageBlockType.IMAGE,
+    MessageBlockType.FILE,
+    MessageBlockType.CODE,
+    MessageBlockType.TOOL,
+    MessageBlockType.CITATION
+  ].some((type) => (buckets.get(type)?.length ?? 0) > 0)
+}
+
+/**
  * Filters out messages considered "empty" based on block content.
  */
 export function filterEmptyMessages(messages: Message[]): Message[] {
-  return messages.filter((message) => {
-    const state = store.getState()
-    let hasContent = false
-    for (const blockId of message.blocks) {
-      const block = messageBlocksSelectors.selectById(state, blockId)
-      if (!block) continue
-      if (block.type === MessageBlockType.MAIN_TEXT && !isEmpty((block as any).content?.trim())) {
-        // Type assertion needed
-        hasContent = true
-        break
-      }
-      if (
-        [
-          MessageBlockType.IMAGE,
-          MessageBlockType.FILE,
-          MessageBlockType.CODE,
-          MessageBlockType.TOOL,
-          MessageBlockType.CITATION
-        ].includes(block.type)
-      ) {
-        hasContent = true
-        break
-      }
-    }
-    return hasContent
-  })
+  return messages.filter((message) => messageHasContent(message))
 }
 
 /**

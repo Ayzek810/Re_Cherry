@@ -1,11 +1,13 @@
 /**
  * v0.3.2 自 CS_V1 移植（启动台：顶栏"+"按钮的落地页，路由 /launchpad）。
  *
- * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的六张——小程序（/apps，v0.3.4 实装）、
+ * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的七张——小程序（/apps，v0.3.4 实装）、
  * 知识库（/knowledge）、文件（/files）、翻译（/translate，v0.3.3 批次3 回归）、
- * 绘画（/paintings，v0.3.3 批次4 回归）与笔记（/notes，v0.3.3-2 复活）。
+ * 绘画（/paintings，v0.3.3 批次4 回归）、笔记（/notes，v0.3.3-2 复活）与编码助手
+ * （/code，v0.3.4-1 移植）。网格不再是上游写死的 6 列，改为按最小磁贴宽度自适应
+ * （f2-62：7 个入口塞进 6 列会在第二行只剩 1 个磁贴；同一份列定义也供下方 Minapps 区使用）。
  * v0.3.4 补齐 V1 的 Minapps 区（固定 + 已打开的小程序磁贴，MinApp 组件 v0.3.4 已移植）。
- * 样式与交互照抄上游（6 列网格 + 悬停缩放；bgColor 用 v6 瞬态 prop $bgColor）。
+ * 交互照抄上游（悬停缩放；bgColor 用 v6 瞬态 prop $bgColor）。
  */
 import App from '@renderer/components/MinApp/MinApp'
 import { useMinapps } from '@renderer/hooks/useMinapps'
@@ -147,9 +149,14 @@ const SectionTitle = styled.h2`
   margin: 0;
   padding: 0 36px;
 `
+/**
+ * 自适应列数（f2-62）：写死 `repeat(6, 1fr)` 时 7 个磁贴会在第二行只留 1 个靠左的磁贴，
+ * 且列数语义被硬编码绑死。`auto-fit` + 96px 下限在 `Content` 的 720px 宽度下正好排满 7 列，
+ * 窗口收窄时自动折行而不是压缩磁贴。
+ */
 const Grid = styled.div`
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 8px;
   padding: 0 8px;
 `

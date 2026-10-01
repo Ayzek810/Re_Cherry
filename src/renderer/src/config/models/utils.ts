@@ -3,6 +3,7 @@ import type { Assistant } from '@renderer/types'
 import { type Model, SystemProviderIds } from '@renderer/types'
 import type { OpenAIVerbosity, ValidOpenAIVerbosity } from '@renderer/types/aiCoreTypes'
 import { getLowerBaseModelName } from '@renderer/utils'
+import { isGemini3ModelId } from '@shared/utils/model'
 
 import {
   isGPT5FamilyModel,
@@ -16,8 +17,11 @@ import {
 } from './openai'
 import { isQwenMTModel } from './qwen'
 import { isClaude45ReasoningModel } from './reasoning'
-import { isChatCandidateModel, isGenerateImageModel, isVisionModel } from './vision'
-export const NOT_SUPPORTED_REGEX = /(?:^tts|whisper|speech)/i
+import { isGenerateImageModel, isVisionModel } from './vision'
+// r2-110：本文件原先 export 了 `NOT_SUPPORTED_REGEX`（只被下面的 `isSupportedModel` 使用，
+// 而 `isSupportedModel` 自身只有测试引用），属"看起来是公共 API、实际无外部调用"的导出面。
+// 正则本体保留（`isSupportedModel` 仍在用），只是不再对外导出。
+const NOT_SUPPORTED_REGEX = /(?:^tts|whisper|speech)/i
 export const GEMINI_FLASH_MODEL_REGEX = new RegExp('gemini.*-flash.*$', 'i')
 
 export const withModelIdAndNameAsId = <T>(model: Model, fn: (model: Model) => T): { idResult: T; nameResult: T } => {
@@ -38,9 +42,9 @@ export function isSupportFlexServiceTierModel(model: Model): boolean {
   )
 }
 
-export function isSupportedFlexServiceTier(model: Model): boolean {
-  return isSupportFlexServiceTierModel(model)
-}
+// r2-110：`isSupportedFlexServiceTier` 是上面函数的纯转调别名，唯一消费者是测试
+//（生产用的是 `isSupportFlexServiceTierModel`，见 `components/ServiceTierSetting`）。
+// 别名已删除，测试直接指向真身。
 
 export function isSupportedModel(model: OpenAI.Models.Model): boolean {
   if (!model) {
@@ -52,17 +56,36 @@ export function isSupportedModel(model: OpenAI.Models.Model): boolean {
   return !NOT_SUPPORTED_REGEX.test(modelId)
 }
 
+/** 采样参数名（r2-103：temperature 与 top_p 的门控判据逐字相同，只差注释，故只留一份实现）。 */
+export type SamplingParam = 'temperature' | 'top_p'
+
 /**
- * Check if the model supports temperature parameter
+ * Check if the model supports a sampling parameter.
+ *
+ * r2-103：`isSupportTemperatureModel` / `isSupportTopPModel` 原本是两份逐行相同的五段判断
+ * （仅注释不同），现收敛为一份实现；两个旧名字保留为薄包装，既有消费方与测试不变。
+ * `param` 今天**不**参与判断（两个参数的门控完全相同），保留在签名里是为了将来分化时
+ * 只有一处需要分支。
+ *
  * @param model - The model to check
- * @returns true if the model supports temperature parameter
+ * @param assistant - The assistant whose settings may relax a gate (GPT-5.2 + reasoning_effort 'none')
+ * @param param - Which sampling parameter to gate
+ * @returns true if the model supports the parameter
  */
-export function isSupportTemperatureModel(model: Model | undefined | null, assistant?: Assistant): boolean {
+export function isSupportSamplingParam(
+  model: Model | undefined | null,
+  assistant: Assistant | undefined,
+  param: SamplingParam
+): boolean {
+  // `param` 是调用点自述意图的标签：两个采样参数今天共享同一组门控（见下），
+  // 故此处无需分支；将来的分化点就在这个函数里。
+  void param
+
   if (!model) {
     return false
   }
 
-  // OpenAI reasoning models (except open weight) don't support temperature
+  // OpenAI reasoning models (except open weight) don't support temperature / top_p
   if (isOpenAIReasoningModel(model) && !isOpenAIOpenWeightModel(model)) {
     if (isGPT52SeriesModel(model) && assistant?.settings?.reasoning_effort === 'none') {
       return true
@@ -70,17 +93,17 @@ export function isSupportTemperatureModel(model: Model | undefined | null, assis
     return false
   }
 
-  // OpenAI chat completion only models don't support temperature
+  // OpenAI chat completion only models don't support temperature / top_p
   if (isOpenAIChatCompletionOnlyModel(model)) {
     return false
   }
 
-  // Qwen MT models don't support temperature
+  // Qwen MT models don't support temperature / top_p
   if (isQwenMTModel(model)) {
     return false
   }
 
-  // Kimi K2.5 / K2.6 don't support custom temperature
+  // Kimi K2.5 / K2.6 don't support custom temperature (top_p is fixed at 0.95)
   if (isKimi25OrNewerModel(model)) {
     return false
   }
@@ -89,39 +112,21 @@ export function isSupportTemperatureModel(model: Model | undefined | null, assis
 }
 
 /**
+ * Check if the model supports temperature parameter
+ * @param model - The model to check
+ * @returns true if the model supports temperature parameter
+ */
+export function isSupportTemperatureModel(model: Model | undefined | null, assistant?: Assistant): boolean {
+  return isSupportSamplingParam(model, assistant, 'temperature')
+}
+
+/**
  * Check if the model supports top_p parameter
  * @param model - The model to check
  * @returns true if the model supports top_p parameter
  */
 export function isSupportTopPModel(model: Model | undefined | null, assistant?: Assistant): boolean {
-  if (!model) {
-    return false
-  }
-
-  // OpenAI reasoning models (except open weight) don't support top_p
-  if (isOpenAIReasoningModel(model) && !isOpenAIOpenWeightModel(model)) {
-    if (isGPT52SeriesModel(model) && assistant?.settings?.reasoning_effort === 'none') {
-      return true
-    }
-    return false
-  }
-
-  // OpenAI chat completion only models don't support top_p
-  if (isOpenAIChatCompletionOnlyModel(model)) {
-    return false
-  }
-
-  // Qwen MT models don't support top_p
-  if (isQwenMTModel(model)) {
-    return false
-  }
-
-  // Kimi K2.5 / K2.6 only accepts top_p=0.95
-  if (isKimi25OrNewerModel(model)) {
-    return false
-  }
-
-  return true
+  return isSupportSamplingParam(model, assistant, 'top_p')
 }
 
 /**
@@ -306,11 +311,14 @@ export const isGrokModel = (model: Model) => {
   return modelId.includes('grok')
 }
 
-// zhipu 视觉推理模型用这组 special token 标记推理结果
-export const ZHIPU_RESULT_TOKENS = ['<|begin_of_box|>', '<|end_of_box|>'] as const
-
-/** 代理/助手可用的模型过滤：与所有"挑对话模型"的出口同一判据。 */
-export const agentModelFilter = (model: Model): boolean => isChatCandidateModel(model)
+// r2-110：`ZHIPU_RESULT_TOKENS`（`<|begin_of_box|>` / `<|end_of_box|>`）经全仓两法确认零引用
+//（符号名 + 字面量 `begin_of_box` 均只命中定义行），原注释声称"zhipu 视觉推理模型用这组
+// special token 标记推理结果"与实际不符 —— 没有任何代码读取它们。按 §5.1 删除；
+// 若将来真要接入解析点，应在消费处定义并补用例。
+//
+// r2-110：`agentModelFilter` 曾是 `isChatCandidateModel` 的纯别名，约十处生产代码直接调用
+// `isChatCandidateModel`，别名本身只有测试引用（两法确认：符号名 + 别名文件搜索）。别名已删除，
+// 测试直接指向真身。
 
 export const isMaxTemperatureOneModel = (model: Model): boolean => {
   if (isZhipuModel(model) || isAnthropicModel(model) || isMoonshotModel(model)) {
@@ -320,15 +328,12 @@ export const isMaxTemperatureOneModel = (model: Model): boolean => {
 }
 
 // major version, including current 3.x aliases.
-// NOTE: gemini-flash-latest and gemini-pro-latest are treated as Gemini 3.x based on
-// current upstream alias targets and product expectations. Downstream UI capability
-// gates, reasoning behavior, and sampling-parameter filtering all depend on this helper.
-// If upstream repoints either alias to a non-3.x model, revisit this check and the
-// related Gemini UI / reasoning / sampling tests before updating the mapping.
-export const isGemini3Model = (model: Model) => {
-  const modelId = getLowerBaseModelName(model.id)
-  return modelId.includes('gemini-3') || modelId === 'gemini-flash-latest' || modelId === 'gemini-pro-latest'
-}
+// r2-104：判据本体已迁到 `@shared/utils/model` 的 `isGemini3ModelId`（生产在用的一份，
+// 由 `src/main/features/apiGateway/.../AnthropicMessageConverter.ts:295` 消费）。
+// 渲染侧这份现在**逐字委托**它，不再各写一份；`gemini-flash-latest` / `gemini-pro-latest`
+// 别名判定在 shared 里同样存在（`packages/shared/utils/model.ts:234-237`）。
+// 注意：本函数在渲染侧只被 `isGemini3ThinkingTokenModel` 使用，而后者目前只有测试引用。
+export const isGemini3Model = (model: Model) => isGemini3ModelId(model.id)
 
 // major version, including 3.x aliases
 export const isGemini3ThinkingTokenModel = (model: Model) => {
@@ -404,7 +409,9 @@ export const isGemini31ProModel = (model: Model | undefined | null): boolean => 
     return true
   }
   // Check for gemini-3.1-pro with optional suffixes, excluding image variants
-  return /gemini-3.1-pro(?!-image)(?:-[\w-]+)*$/i.test(modelId)
+  // r2-84：`.` 必须转义——未转义时 `gemini-3x1-pro` / `gemini-3-1-pro` 也会命中
+  // （同文件 `isGemini31FlashLiteModel` 已写作 `gemini-3\.1-flash-lite`）。
+  return /gemini-3\.1-pro(?!-image)(?:-[\w-]+)*$/i.test(modelId)
 }
 
 /**

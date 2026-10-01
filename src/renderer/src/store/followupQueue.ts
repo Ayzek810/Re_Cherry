@@ -48,6 +48,20 @@ const followupQueueSlice = createSlice({
       if (queue === undefined) return
       queue.items = queue.items.filter((item) => item.id !== action.payload.id)
     },
+    /**
+     * 把一条追问放回**队首原位**（r2-17/r2-18）。
+     *
+     * 限流或发送失败时，旧实现是 `removeFollowup` + `enqueueFollowup`：那会把队首推到队尾、
+     * 并重铸 `id`/`createdAt`——用户看到的队列顺序静默改变，任何按 id 定位的 UI（编辑/删除
+     * 某条）随之失配。这里原样 `unshift` 同一个对象，保 id、保顺序；重复回队是幂等的
+     * （同 id 已在队列里就只挪回队首，不产生副本）。
+     */
+    requeueFollowupHead(state, action: PayloadAction<{ topicId: string; item: FollowupItem }>) {
+      const queue = state.byTopic[action.payload.topicId] ?? emptyQueue()
+      const { item } = action.payload
+      queue.items = [item, ...queue.items.filter((existing) => existing.id !== item.id)]
+      state.byTopic[action.payload.topicId] = queue
+    },
     /** 编辑 = 移出队列交还输入框（V2 语义）；此处只负责删，文本由调用方带回。 */
     setFollowupPaused(state, action: PayloadAction<{ topicId: string; paused: boolean }>) {
       const queue = state.byTopic[action.payload.topicId] ?? emptyQueue()
@@ -60,7 +74,8 @@ const followupQueueSlice = createSlice({
   }
 })
 
-export const { enqueueFollowup, removeFollowup, setFollowupPaused, clearFollowupsForTopic } = followupQueueSlice.actions
+export const { enqueueFollowup, removeFollowup, requeueFollowupHead, setFollowupPaused, clearFollowupsForTopic } =
+  followupQueueSlice.actions
 
 export const selectFollowupQueue = (
   state: { followupQueue?: FollowupQueueState },

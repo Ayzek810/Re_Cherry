@@ -1,8 +1,8 @@
 import type { Context } from '@opentelemetry/api'
-import { trace } from '@opentelemetry/api'
 import type { BufferConfig, ReadableSpan, Span, SpanExporter } from '@opentelemetry/sdk-trace-base'
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 
+import { buildStartSpanSnapshot } from '../core/spanSnapshot'
 import type { TraceCache } from '../core/traceCache'
 
 export class CacheBatchSpanProcessor extends BatchSpanProcessor {
@@ -20,23 +20,6 @@ export class CacheBatchSpanProcessor extends BatchSpanProcessor {
 
   override onStart(span: Span, parentContext: Context): void {
     super.onStart(span, parentContext)
-    this.cache.createSpan({
-      name: span.name,
-      kind: span.kind,
-      spanContext: () => span.spanContext(),
-      parentSpanContext: trace.getSpanContext(parentContext),
-      startTime: span.startTime,
-      status: span.status,
-      attributes: span.attributes,
-      links: span.links,
-      events: span.events,
-      duration: span.duration,
-      ended: span.ended,
-      resource: span.resource,
-      instrumentationScope: span.instrumentationScope,
-      droppedAttributesCount: span.droppedAttributesCount,
-      droppedEventsCount: span.droppedEventsCount,
-      droppedLinksCount: span.droppedLinksCount
-    } as ReadableSpan)
+    this.cache.createSpan(buildStartSpanSnapshot(span, parentContext))
   }
 }

@@ -75,9 +75,9 @@ export class HermesDashboardService {
   private readonly operationMutex = new Mutex()
   private readonly startupAbortControllers = new Set<AbortController>()
   private child: ChildProcess | null = null
-  // V2 由 onStop 置 true 以挡应用退出窗口期的 start()；fork 无生命周期容器，本字段恒
-  // false（守卫与消息逐字保留；批次2 若接 shutdown 钩子再启用）。
-  private isLifecycleStopping = false
+  // v1 二轮审查 m2-21：V2 用 onStop 置位的 `isLifecycleStopping` 与它守护的早退分支已删除——
+  // fork 没有生命周期容器，该字段自始至终恒 false，那条 `reason: 'cancelled'` 是不可达路径。
+  // 「退出窗口期拒绝启动」的真守卫在下面那条 `signal.aborted` 检查里（可实际触发）。
   private status: HermesDashboardStatus = 'stopped'
   private stoppingChild: ChildProcess | null = null
   private url: string | undefined
@@ -132,13 +132,6 @@ export class HermesDashboardService {
     this.startupAbortControllers.add(startupAbortController)
     try {
       return await this.operationMutex.runExclusive(async () => {
-        if (this.isLifecycleStopping) {
-          return {
-            success: false,
-            reason: 'cancelled',
-            message: 'Hermes Dashboard is unavailable during application shutdown'
-          }
-        }
         if (startupAbortController.signal.aborted) {
           return { success: false, reason: 'cancelled', message: 'Hermes Dashboard startup was cancelled' }
         }

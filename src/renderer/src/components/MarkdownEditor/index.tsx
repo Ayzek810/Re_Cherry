@@ -1,7 +1,8 @@
 import 'katex/dist/katex.min.css'
 
+import DOMPurify from 'dompurify'
 import type { FC } from 'react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -19,10 +20,17 @@ interface MarkdownEditorProps {
   autoFocus?: boolean
 }
 
+/**
+ * c2-27：预览链上有 `rehypeRaw`（原始 HTML 会变成真实节点树），却没有任何 sanitize。
+ * 这里用仓库既有的 `dompurify`（`utils/export.ts`、`Preview/utils.ts` 同款）在交给 ReactMarkdown
+ * 之前先净化**含 HTML 的**源码；纯 Markdown（不含 `<`）原样透传，避免改动数学/表格等语法。
+ */
+const sanitizeMarkdownSource = (source: string): string => (source.includes('<') ? DOMPurify.sanitize(source) : source)
+
 const MarkdownEditor: FC<MarkdownEditorProps> = ({
   value,
   onChange,
-  placeholder = '请输入Markdown格式文本...',
+  placeholder,
   height = '300px',
   autoFocus = false
 }) => {
@@ -39,14 +47,18 @@ const MarkdownEditor: FC<MarkdownEditorProps> = ({
     onChange(newValue)
   }
 
+  const sanitizedValue = useMemo(() => sanitizeMarkdownSource(inputValue), [inputValue])
+  const resolvedPlaceholder =
+    placeholder ?? t('settings.provider.notes.markdown_editor_placeholder', 'Enter Markdown text...')
+
   return (
     <EditorContainer style={{ height }}>
-      <InputArea value={inputValue} onChange={handleChange} placeholder={placeholder} autoFocus={autoFocus} />
+      <InputArea value={inputValue} onChange={handleChange} placeholder={resolvedPlaceholder} autoFocus={autoFocus} />
       <PreviewArea className="markdown">
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkMath]}
           rehypePlugins={[rehypeRaw, rehypeKatex]}>
-          {inputValue || t('settings.provider.notes.markdown_editor_default_value')}
+          {sanitizedValue || t('settings.provider.notes.markdown_editor_default_value')}
         </ReactMarkdown>
       </PreviewArea>
     </EditorContainer>

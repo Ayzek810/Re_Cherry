@@ -208,14 +208,10 @@ describe('fetch', () => {
       expect(global.fetch).toHaveBeenCalledWith('https://example.com', expect.any(Object))
     })
 
-    it('should return original URL on error', async () => {
+    it('rejects when the redirect cannot be resolved (r2-91: no fake "no redirect" result)', async () => {
       vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'))
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      const result = await fetchRedirectUrl('https://example.com')
-      expect(result).toBe('https://example.com')
-
-      consoleSpy.mockRestore()
+      await expect(fetchRedirectUrl('https://example.com')).rejects.toThrow('Network error')
     })
   })
 })

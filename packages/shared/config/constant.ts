@@ -154,8 +154,6 @@ export const customTextExts = new Map([
  */
 export const textExts = [...new Set([...Array.from(customTextExts.values()).flat(), ...codeLangExts])]
 
-export const ZOOM_LEVELS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
-
 export const ZOOM_SHORTCUTS = [
   {
     key: 'zoom_in',
@@ -192,52 +190,7 @@ export const SECOND_MIN_WINDOW_WIDTH = 520
 export const MIN_WINDOW_HEIGHT = 600
 export const defaultByPassRules = 'localhost,127.0.0.1,::1'
 
-export enum codeTools {
-  qwenCode = 'qwen-code',
-  claudeCode = 'claude-code',
-  geminiCli = 'gemini-cli',
-  openaiCodex = 'openai-codex',
-  iFlowCli = 'iflow-cli',
-  githubCopilotCli = 'github-copilot-cli',
-  kimiCli = 'kimi-cli',
-  openCode = 'opencode'
-}
-
-export enum terminalApps {
-  systemDefault = 'Terminal',
-  iterm2 = 'iTerm2',
-  kitty = 'kitty',
-  alacritty = 'Alacritty',
-  wezterm = 'WezTerm',
-  ghostty = 'Ghostty',
-  tabby = 'Tabby',
-  // Windows terminals
-  windowsTerminal = 'WindowsTerminal',
-  powershell = 'PowerShell',
-  cmd = 'CMD',
-  wsl = 'WSL'
-}
-
-export interface TerminalConfig {
-  id: string
-  name: string
-  bundleId?: string
-  customPath?: string // For user-configured terminal paths on Windows
-}
-
-export interface TerminalConfigWithCommand extends TerminalConfig {
-  command: (directory: string, fullCommand: string) => { command: string; args: string[] }
-}
-
 // resources/scripts should be maintained manually
 export const HOME_CHERRY_DIR = '.re_cherry'
-
-// Git Bash path configuration types
-export type GitBashPathSource = 'manual' | 'auto'
-
-export interface GitBashPathInfo {
-  path: string | null
-  source: GitBashPathSource | null
-}
 
 export const APP_NAME = 'Re_Cherry'

@@ -57,6 +57,8 @@ const TranslatePage = () => {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [history, setHistory] = useState<TranslateRecord[]>([])
+  /** 历史读取失败原因（null = 没有失败）。见 f2-24：失败不得伪装成"暂无记录"。 */
+  const [historyError, setHistoryError] = useState<string | null>(null)
 
   const cancelledRef = useRef(false)
   const requestIdRef = useRef<string | undefined>(undefined)
@@ -74,8 +76,12 @@ const TranslatePage = () => {
     try {
       const records = await db.translate_records.orderBy('createdAt').reverse().limit(50).toArray()
       setHistory(records)
+      setHistoryError(null)
     } catch (error) {
-      logger.warn('load translate history failed', error as Error)
+      // 二轮审查 f2-24：Dexie 打不开/表结构不符时不能只落一条 warn——抽屉会渲染成官方的
+      // "暂无翻译记录"空态，误导用户以为没有记录（本地历史是唯一副本），进而重复翻译或误判数据丢失。
+      logger.error('load translate history failed', error as Error)
+      setHistoryError(error instanceof Error ? error.message : String(error))
     }
   }, [])
 
@@ -178,7 +184,9 @@ const TranslatePage = () => {
         window.toast.error(`${t('translate.error.failed')}: ${error instanceof Error ? error.message : String(error)}`)
       }
     } finally {
-      if (requestId === requestIdRef.current) {
+      // 二轮审查 f2-32：卸载守卫此前只覆盖事件回调与成功/失败分支，漏了 `finally`——
+      // 翻译中切走路由（懒加载页面，卸载很常见）后仍在已卸载组件上 `setTranslating(false)`。
+      if (!cancelledRef.current && requestId === requestIdRef.current) {
         setTranslating(false)
         requestIdRef.current = undefined
       }
@@ -374,6 +382,8 @@ const TranslatePage = () => {
           isOpen={historyOpen}
           items={history}
           languageLabel={languageLabel}
+          error={historyError}
+          onRetry={() => void loadHistory()}
           onClose={() => setHistoryOpen(false)}
           onHistoryItemClick={handleHistoryItemClick}
         />

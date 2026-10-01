@@ -47,7 +47,7 @@ const MiniAppSettings: FC = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const { maxKeepAliveMinapps, showOpenedMinappsInSidebar, minappsOpenLinkExternal } = useSettings()
-  const { minapps, disabled, updateMinapps, updateDisabledMinapps } = useMinapps()
+  const { minapps, disabled, pinned, updateMinapps, updateDisabledMinapps, updatePinnedMinapps } = useMinapps()
 
   const [visibleMiniApps, setVisibleMiniApps] = useState(minapps)
   const [disabledMiniApps, setDisabledMiniApps] = useState(disabled || [])
@@ -72,7 +72,15 @@ const MiniAppSettings: FC = () => {
     const temp = visibleMiniApps
     setVisibleMiniApps(disabledMiniApps)
     setDisabledMiniApps(temp)
-  }, [disabledMiniApps, visibleMiniApps])
+    // 交换必须落库（f2-55）：只改本地 state 的话，任何触发上面同步 effect 的 store 变化
+    // （切地区、拖一个图标）都会把界面弹回原样——用户操作静默丢失。写入路径与
+    // `MiniAppIconsManager.handleListUpdate` 一致：两个列表都写，并让固定项不再指向被禁用的应用。
+    updateMinapps(disabledMiniApps)
+    updateDisabledMinapps(visibleMiniApps)
+    // 交换后**新的**禁用集合是 `visibleMiniApps`：固定项里不能再留下这些应用。
+    const disabledIds = new Set(visibleMiniApps.map((app) => app.id))
+    updatePinnedMinapps(pinned.filter((item) => !disabledIds.has(item.id)))
+  }, [disabledMiniApps, pinned, updateDisabledMinapps, updateMinapps, updatePinnedMinapps, visibleMiniApps])
 
   // 恢复默认缓存数量
   const handleResetCacheLimit = useCallback(() => {

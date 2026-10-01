@@ -109,8 +109,12 @@ export const ApiKeyList: FC<ApiKeyListProps> = ({ provider, updateProvider, show
               renderItem={(keyStatus, index) => {
                 const isNew = pendingNewKey && index === displayKeys.length - 1
                 return (
+                  // c2-30：已存在的 key 用数组下标作 React key，`ApiKeyItem` 又持有本地
+                  // `isEditing`/`editValue` state。删掉中间一行后下标前移，React 会把「原来是第 3 行」
+                  // 的实例复用给「现在的第 2 行」——幸存行会显示被删行的编辑缓冲与编辑模式。
+                  // 改用稳定标识：已存在的行用它自己的 key，新增行用 pending 条目的 id。
                   <ApiKeyItem
-                    key={isNew ? pendingNewKey.id : index}
+                    key={isNew ? `pending-${pendingNewKey.id}` : keyStatus.key}
                     keyStatus={keyStatus}
                     showHealthCheck={showHealthCheck}
                     isNew={!!isNew}

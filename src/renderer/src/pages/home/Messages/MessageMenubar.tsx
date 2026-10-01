@@ -10,7 +10,6 @@ import { DEFAULT_MESSAGE_MENUBAR_SCOPE, getMessageMenubarConfig } from '@rendere
 import type { TranslateLanguage } from '@renderer/config/translateLanguages'
 import { langCodeToI18nKey } from '@renderer/config/translateLanguages'
 import { useMessageEditing } from '@renderer/context/MessageEditingContext'
-import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMessageOperations } from '@renderer/hooks/useMessageOperations'
 import { useMessageTranslationStatus, useTranslateLanguages } from '@renderer/hooks/useMessageTranslate'
 import { useEnableDeveloperMode, useMessageStyle, useSettings } from '@renderer/hooks/useSettings'
@@ -65,6 +64,7 @@ import { useTranslation } from 'react-i18next'
 import { useSelector } from 'react-redux'
 import styled from 'styled-components'
 
+import { useChatContextValue } from './ChatContextProvider'
 import MessageTokens from './MessageTokens'
 
 interface Props {
@@ -132,7 +132,7 @@ const MessageMenubar: FC<Props> = (props) => {
     onUpdateUseful
   } = props
   const { t } = useTranslation()
-  const { toggleMultiSelectMode } = useChatContext(props.topic)
+  const { toggleMultiSelectMode } = useChatContextValue()
   const [copied, setCopied] = useTemporaryValue(false, 2000)
   // remove confirm for regenerate; tooltip stays simple
   const [showDeleteTooltip, setShowDeleteTooltip] = useState(false)
@@ -338,7 +338,7 @@ const MessageMenubar: FC<Props> = (props) => {
             label: t('chat.topics.export.obsidian'),
             key: 'obsidian',
             onClick: async () => {
-              const title = topic.name?.replace(/\\/g, '_') || 'Untitled'
+              const title = topic.name?.replace(/\\/g, '_') || t('common.unnamed')
               await ObsidianExportPopup.show({ title, message, processingMethod: '1' })
             }
           },
@@ -874,7 +874,7 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
       </Tooltip>
     )
   },
-  'inspect-data': ({ message, enableDeveloperMode }) => {
+  'inspect-data': ({ message, enableDeveloperMode, t }) => {
     if (!enableDeveloperMode) {
       return null
     }
@@ -893,7 +893,7 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
     }
 
     return (
-      <Tooltip title="Inspect Data (Dev)" mouseEnterDelay={0.8}>
+      <Tooltip title={t('message.inspect_data')} mouseEnterDelay={0.8}>
         <ActionButton className="message-action-button" onClick={handleInspect}>
           <Bug size={15} />
         </ActionButton>

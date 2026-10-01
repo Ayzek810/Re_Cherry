@@ -16,9 +16,11 @@ import { scrollIntoView } from '@renderer/utils/dom'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { Avatar } from 'antd'
 import { CircleChevronDown } from 'lucide-react'
-import { type FC, useCallback, useEffect, useRef, useState } from 'react'
+import { type FC, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
+
+import { scrollMessagesToBottom } from './shared'
 
 interface MessageLineProps {
   messages: Message[]
@@ -27,6 +29,12 @@ interface MessageLineProps {
 const getAvatarSource = (isLocalAi: boolean, modelId: string | undefined) => {
   if (isLocalAi) return AppLogo
   return modelId ? getModelLogoById(modelId) : undefined
+}
+
+interface AnchorDistanceValues {
+  opacity: number
+  scale: number
+  size: number
 }
 
 const MessageAnchorLine: FC<MessageLineProps> = ({ messages }) => {
@@ -80,6 +88,28 @@ const MessageAnchorLine: FC<MessageLineProps> = ({ messages }) => {
     },
     [mouseY]
   )
+
+  // hover 态的距离量按 [mouseY, 条数] 缓存：calculateValueByDistance 每次读 getBoundingClientRect，
+  // 流式期间 messages 每帧换引用会把 N 次强制布局重复做一遍（旧实现的 layout thrash）。
+  // 非 hover 态完全不读 DOM —— calculateValueByDistance 本身在 mouseY === null 时早退。
+  const distanceCacheRef = useRef<{ key: string; values: Map<string, AnchorDistanceValues> } | null>(null)
+  const distanceValues = useMemo(() => {
+    if (mouseY === null) return null
+
+    const key = `${mouseY}|${messages.length}`
+    if (distanceCacheRef.current?.key === key) return distanceCacheRef.current.values
+
+    const values = new Map<string, AnchorDistanceValues>()
+    for (const id of ['bottom-anchor', ...messages.map((message) => message.id)]) {
+      values.set(id, {
+        opacity: 0.5 + calculateValueByDistance(id, 1),
+        scale: 1 + calculateValueByDistance(id, 1.2),
+        size: 10 + calculateValueByDistance(id, 20)
+      })
+    }
+    distanceCacheRef.current = { key, values }
+    return values
+  }, [mouseY, messages, calculateValueByDistance])
 
   const getUserName = useCallback(
     (message: Message) => {
@@ -147,11 +177,23 @@ const MessageAnchorLine: FC<MessageLineProps> = ({ messages }) => {
     [setSelectedMessage]
   )
 
+  // 回到底部：`#messages` 是 column-reverse，坐标语义由 shared.scrollMessagesToBottom 单点承载
   const scrollToBottom = useCallback(() => {
-    const messagesContainer = document.getElementById('messages')
-    if (messagesContainer) {
-      messagesContainer.scrollTo({ top: messagesContainer.scrollHeight, behavior: 'smooth' })
-    }
+    scrollMessagesToBottom(document.getElementById('messages'))
+  }, [])
+
+  // onSelect 必须稳定：scrollToMessage 的依赖含 messages，逐 delta 换引用会让 memo 子项全部失效
+  const scrollToMessageRef = useRef(scrollToMessage)
+  useEffect(() => {
+    scrollToMessageRef.current = scrollToMessage
+  }, [scrollToMessage])
+  const handleSelectMessage = useCallback((message: Message) => {
+    scrollToMessageRef.current(message)
+  }, [])
+
+  const registerMessageItem = useCallback((id: string, element: HTMLDivElement | null) => {
+    if (element) messageItemsRef.current.set(id, element)
+    else messageItemsRef.current.delete(id)
   }, [])
 
   if (messages.length === 0) return null
@@ -195,69 +237,105 @@ const MessageAnchorLine: FC<MessageLineProps> = ({ messages }) => {
           }}
           onClick={scrollToBottom}>
           <CircleChevronDown
-            size={10 + calculateValueByDistance('bottom-anchor', 20)}
+            size={distanceValues?.get('bottom-anchor')?.size ?? 10}
             style={{ color: theme === 'dark' ? 'var(--color-text)' : 'var(--color-primary)' }}
           />
         </MessageItem>
         {messages.map((message, index) => {
-          const opacity = 0.5 + calculateValueByDistance(message.id, 1)
-          const scale = 1 + calculateValueByDistance(message.id, 1.2)
-          const size = 10 + calculateValueByDistance(message.id, 20)
-          const avatarSource = getAvatarSource(isLocalAi, getMessageModelId(message))
-          const username = removeLeadingEmoji(getUserName(message))
-          const content = getMainTextContent(message)
-
           if (message.type === 'clear') return null
 
-          return (
-            <MessageItem
-              key={message.id}
-              ref={(el) => {
-                if (el) messageItemsRef.current.set(message.id, el)
-                else messageItemsRef.current.delete(message.id)
-              }}
-              style={{
-                opacity: mouseY ? opacity : Math.max(0, 0.6 - (0.3 * Math.abs(index - messages.length / 2)) / 5)
-              }}
-              onClick={() => scrollToMessage(message)}>
-              <MessageItemContainer style={{ transform: ` scale(${scale})` }}>
-                <MessageItemTitle>{username}</MessageItemTitle>
-                <MessageItemContent>{content.substring(0, 50)}</MessageItemContent>
-              </MessageItemContainer>
+          // 非 hover 态的三个量只由 index / 条数决定（不读 DOM）；hover 态才按距离取值。
+          // 以原语 prop 交给 memo 子项：流式期间未变化的条目 props 全等，React 跳过它们的重渲染。
+          const distance = distanceValues?.get(message.id)
+          const opacity = mouseY
+            ? (distance?.opacity ?? 0.5)
+            : Math.max(0, 0.6 - (0.3 * Math.abs(index - messages.length / 2)) / 5)
+          const scale = distance?.scale ?? 1
+          const size = distance?.size ?? 10
 
-              {message.role === 'assistant' ? (
-                <MessageItemAvatar
-                  src={avatarSource}
-                  size={size}
-                  style={{
-                    border: isLocalAi ? '1px solid var(--color-border-soft)' : 'none',
-                    filter: theme === 'dark' ? 'invert(0.05)' : undefined
-                  }}
-                />
-              ) : (
-                <>
-                  {isEmoji(avatar) ? (
-                    <EmojiAvatar
-                      size={size}
-                      fontSize={size * 0.6}
-                      style={{
-                        cursor: 'default',
-                        pointerEvents: 'none'
-                      }}>
-                      {avatar}
-                    </EmojiAvatar>
-                  ) : (
-                    <MessageItemAvatar src={avatar} size={size} />
-                  )}
-                </>
-              )}
-            </MessageItem>
+          return (
+            <MessageAnchorItem
+              key={message.id}
+              message={message}
+              opacity={opacity}
+              scale={scale}
+              size={size}
+              avatar={avatar}
+              theme={theme}
+              getUserName={getUserName}
+              onSelect={handleSelectMessage}
+              registerElement={registerMessageItem}
+            />
           )
         })}
       </MessagesList>
     </MessageLineContainer>
   )
 }
+
+interface AnchorItemProps {
+  message: Message
+  opacity: number
+  scale: number
+  size: number
+  avatar: string
+  theme: string
+  getUserName: (message: Message) => string
+  onSelect: (message: Message) => void
+  registerElement: (id: string, element: HTMLDivElement | null) => void
+}
+
+/**
+ * 单条锚点项。props 全是原语/稳定引用：流式期间未变化的条目被 memo 直接跳过重渲染
+ * （旧实现整条锚点线每个 delta 全量重建，并对每项重算 getMainTextContent）。
+ */
+const MessageAnchorItem: FC<AnchorItemProps> = memo(
+  ({ message, opacity, scale, size, avatar, theme, getUserName, onSelect, registerElement }) => {
+    const avatarSource = getAvatarSource(isLocalAi, getMessageModelId(message))
+    const username = removeLeadingEmoji(getUserName(message))
+    const content = getMainTextContent(message)
+    const setItemRef = useCallback(
+      (element: HTMLDivElement | null) => registerElement(message.id, element),
+      [registerElement, message.id]
+    )
+
+    return (
+      <MessageItem style={{ opacity }} ref={setItemRef} onClick={() => onSelect(message)}>
+        <MessageItemContainer style={{ transform: ` scale(${scale})` }}>
+          <MessageItemTitle>{username}</MessageItemTitle>
+          <MessageItemContent>{content.substring(0, 50)}</MessageItemContent>
+        </MessageItemContainer>
+
+        {message.role === 'assistant' ? (
+          <MessageItemAvatar
+            src={avatarSource}
+            size={size}
+            style={{
+              border: isLocalAi ? '1px solid var(--color-border-soft)' : 'none',
+              filter: theme === 'dark' ? 'invert(0.05)' : undefined
+            }}
+          />
+        ) : (
+          <>
+            {isEmoji(avatar) ? (
+              <EmojiAvatar
+                size={size}
+                fontSize={size * 0.6}
+                style={{
+                  cursor: 'default',
+                  pointerEvents: 'none'
+                }}>
+                {avatar}
+              </EmojiAvatar>
+            ) : (
+              <MessageItemAvatar src={avatar} size={size} />
+            )}
+          </>
+        )}
+      </MessageItem>
+    )
+  }
+)
 
 const MessageItemContainer = styled.div`
   line-height: 1;
@@ -339,4 +417,4 @@ const MessageItemContent = styled.div`
   max-width: 200px;
 `
 
-export default MessageAnchorLine
+export default memo(MessageAnchorLine)

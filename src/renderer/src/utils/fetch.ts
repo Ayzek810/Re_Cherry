@@ -163,6 +163,16 @@ export async function fetchXOEmbed(url: string): Promise<{ author: string; text:
   }
 }
 
+/**
+ * 取 url 的最终跳转地址。
+ *
+ * r2-91：失败**不再伪装成「没有重定向」**。旧实现 `catch { return url }` 让「取重定向失败」
+ * 与「确实没有重定向」在类型与调用方语义上完全同形（都是原 url），失败被折成正常结果。
+ * 现在非取消的失败一律 rethrow（`isAbortError` 直通，调用方能区分用户取消），日志用 `warn`
+ *（渲染层 debug/info 不落盘，warn 可取证）。
+ *
+ * 注意：本导出当前**无生产调用者**（全仓仅 `utils/__tests__/fetch.test.ts`）。
+ */
 export async function fetchRedirectUrl(url: string) {
   try {
     const response = await fetch(url, {
@@ -175,7 +185,10 @@ export async function fetchRedirectUrl(url: string) {
     })
     return response.url
   } catch (e) {
-    logger.error('Failed to fetch redirect url', e as Error)
-    return url
+    if (isAbortError(e)) {
+      throw e
+    }
+    logger.warn(`Failed to fetch redirect url for ${url}`, e as Error)
+    throw e
   }
 }

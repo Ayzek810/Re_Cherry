@@ -222,7 +222,9 @@ SearchResultRow.displayName = 'SearchResultRow'
 const SkillsSettings: FC = () => {
   const { t } = useTranslation()
   const { skills, loading, uninstall, refresh } = useInstalledSkills()
-  const { results, searching, search, clear } = useSkillSearch()
+  // v1 二轮审查 s2-12：此前丢掉了 hook 已经算好的 `error`，三个注册表（含网络）全失败时
+  // 下拉里显示的是「没有结果」——一个权威的「市场上没有这个技能」结论。
+  const { results, searching, error: searchError, search, clear } = useSkillSearch()
   const { isInstalling, install, installFromZip, installFromDirectory } = useSkillInstall()
 
   const [selectedSkill, setSelectedSkill] = useState<InstalledSkill | null>(null)
@@ -358,11 +360,28 @@ const SkillsSettings: FC = () => {
       title: t('settings.skills.confirmBatchUninstall', { count: toDelete.length }),
       centered: true,
       onOk: async () => {
-        await Promise.all(toDelete.map((skill) => uninstall(skill.id)))
-        setSelectedIds(new Set())
-        setMultiSelectMode(false)
+        // v1 二轮审查 s2-13：`uninstall` 以 boolean 表达逐条结果，此前返回值被丢弃 →
+        // 单条失败弹了 error toast，紧接着又弹「已卸载 N 个」的成功 toast，两个信号互相矛盾，
+        // 且失败项已退出多选、用户不知道哪条没删掉。现在按「N 成功 / M 失败」如实报告，
+        // 失败项保留选中态，让用户看得见还剩哪几条。
+        const uninstallResults = await Promise.all(toDelete.map((skill) => uninstall(skill.id)))
+        const failed = toDelete.filter((_skill, index) => !uninstallResults[index])
+        const okCount = toDelete.length - failed.length
+
+        setSelectedIds(new Set(failed.map((skill) => skill.id)))
         setSelectedSkill(null)
-        message.success(t('settings.skills.batchUninstallSuccess', { count: toDelete.length }))
+        if (failed.length === 0) {
+          setMultiSelectMode(false)
+          message.success(t('settings.skills.batchUninstallSuccess', { count: okCount }))
+        } else {
+          message.warning(
+            t('settings.skills.batchUninstallPartial', {
+              count: okCount,
+              failed: failed.length,
+              defaultValue: '{{count}} uninstalled, {{failed}} failed'
+            })
+          )
+        }
       }
     })
   }, [skills, selectedIds, uninstall, t])
@@ -489,17 +508,27 @@ const SkillsSettings: FC = () => {
                 </Typography.Text>
               </ListHeader>
               <FileTreeContainer>
-                {fileTree.map((node) => (
-                  <FileTreeNode
-                    key={node.path}
-                    node={node}
-                    depth={0}
-                    expandedDirs={expandedDirs}
-                    selectedFile={selectedFile}
-                    onToggleDir={toggleDir}
-                    onSelectFile={setSelectedFile}
-                  />
-                ))}
+                {fileTree.length === 0 ? (
+                  // v1 二轮审查 s2-45：技能文件列举的主进程 IPC 尚未接线（批次1 UI-only）。
+                  // 「功能未接线」与「这个技能没有文件」在 UI 上必须可区分，不能都画成空列表。
+                  <DropdownEmpty>
+                    {t('settings.skills.fileBrowserUnavailable', {
+                      defaultValue: 'File browsing is not wired up in this build'
+                    })}
+                  </DropdownEmpty>
+                ) : (
+                  fileTree.map((node) => (
+                    <FileTreeNode
+                      key={node.path}
+                      node={node}
+                      depth={0}
+                      expandedDirs={expandedDirs}
+                      selectedFile={selectedFile}
+                      onToggleDir={toggleDir}
+                      onSelectFile={setSelectedFile}
+                    />
+                  ))
+                )}
               </FileTreeContainer>
             </>
           ) : (
@@ -666,7 +695,17 @@ const SkillsSettings: FC = () => {
                           <Spin size="small" />
                         </DropdownLoading>
                       ) : null}
-                      {!searching && searchQuery && filteredResults.length === 0 ? (
+                      {/* v1 二轮审查 s2-12：搜索失败与「没有结果」必须分开，否则网络/注册表
+                          不可达会被读成「市场上没有这个技能」。 */}
+                      {!searching && searchQuery && searchError ? (
+                        <DropdownEmpty>
+                          {t('settings.skills.searchFailed', { defaultValue: 'Search failed' })}
+                          <Button type="link" size="small" onClick={() => void search(searchQuery)}>
+                            {t('common.retry')}
+                          </Button>
+                        </DropdownEmpty>
+                      ) : null}
+                      {!searching && searchQuery && !searchError && filteredResults.length === 0 ? (
                         <DropdownEmpty>{t('settings.skills.noResults')}</DropdownEmpty>
                       ) : null}
                       {filteredResults.map((result) => (
@@ -704,8 +743,15 @@ const SkillsSettings: FC = () => {
                 )
               ) : (
                 <EmptyStateContainer>
+                  {/* v1 二轮审查 s2-45：文件区未接线时不能提示「选择文件」——那是做不到的事。 */}
                   <Empty
-                    description={selectedFile ? t('settings.skills.noSkillFile') : t('settings.skills.selectFile')}
+                    description={
+                      selectedFile
+                        ? t('settings.skills.noSkillFile')
+                        : t('settings.skills.fileBrowserUnavailable', {
+                            defaultValue: 'File browsing is not wired up in this build'
+                          })
+                    }
                   />
                 </EmptyStateContainer>
               )

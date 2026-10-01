@@ -2,7 +2,7 @@ import { loggerService } from '@logger'
 import { useInPlaceEdit } from '@renderer/hooks/useInPlaceEdit'
 import { fetchNoteSummary } from '@renderer/services/ApiService'
 import type { NotesTreeNode } from '@renderer/types/note'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('UseNotesEditing')
@@ -31,13 +31,18 @@ export const useNotesEditing = ({ onRenameNode }: UseNotesEditingProps) => {
     }
   })
 
-  const handleStartEdit = useCallback(
-    (node: NotesTreeNode) => {
-      setEditingNodeId(node.id)
-      inPlaceEdit.startEdit(node.name)
-    },
-    [inPlaceEdit]
-  )
+  /**
+   * f2-36：`useInPlaceEdit` 每次渲染都返回新对象，若把它放进 `handleStartEdit` 的依赖数组，
+   * `handleStartEdit` 就每渲染换引用 → `useNotesMenu.getMenuItems` → `NotesActionsContext`
+   * 一路跟着换 → `memo` 的 TreeNode 全量重渲染。方法本身逐次取最新即可，引用固定。
+   */
+  const inPlaceEditRef = useRef(inPlaceEdit)
+  inPlaceEditRef.current = inPlaceEdit
+
+  const handleStartEdit = useCallback((node: NotesTreeNode) => {
+    setEditingNodeId(node.id)
+    inPlaceEditRef.current.startEdit(node.name)
+  }, [])
 
   const handleAutoRename = useCallback(
     async (note: NotesTreeNode) => {

@@ -84,24 +84,58 @@ const McpServersList: FC = () => {
     return () => container?.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const fetchServerVersion = useCallback(async (server: MCPServer) => {
-    if (!server.isActive) return
-
-    try {
-      const version = await mcpApi.getServerVersion(server)
-      setServerVersions((prev) => ({ ...prev, [server.id]: version }))
-    } catch (error) {
-      setServerVersions((prev) => ({ ...prev, [server.id]: null }))
+  /**
+   * 版本探测（v1 二轮审查 s2-27）。
+   *
+   * 旧实现对每一次 `mcpServers` 身份变化**全体重探**：`store/mcp.ts` 的任一写入（开关、
+   * 工具开关、日志回写、DXT 回写）都会换数组身份 → 一次点击 = 1 次即时探测 + N 次全体重探，
+   * 一个会话内 O(N²)，每次都是主进程 `initClient` + ping 或真起进程。
+   * 现在：按 id 记账「已探测过的活跃服务器」，只在它**变成活跃**时探一次；同 id 并发去重；
+   * 卸载后不再写状态。
+   */
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
     }
   }, [])
 
-  // Fetch versions for all active servers
+  const probedActiveIdsRef = useRef<Set<string>>(new Set())
+  const inFlightVersionIdsRef = useRef<Set<string>>(new Set())
+
+  const fetchServerVersion = useCallback(async (server: MCPServer) => {
+    if (!server.isActive || inFlightVersionIdsRef.current.has(server.id)) return
+
+    inFlightVersionIdsRef.current.add(server.id)
+    try {
+      const version = await mcpApi.getServerVersion(server)
+      if (mountedRef.current) {
+        setServerVersions((prev) => ({ ...prev, [server.id]: version }))
+      }
+    } catch (error) {
+      logger.warn(`Failed to get MCP server version: ${server.id}`, error as Error)
+      if (mountedRef.current) {
+        setServerVersions((prev) => ({ ...prev, [server.id]: null }))
+      }
+    } finally {
+      inFlightVersionIdsRef.current.delete(server.id)
+    }
+  }, [])
+
+  // 只在「活跃且此前没探过」时探测；已不活跃的 id 从账上清掉，下次重新启用会再探一次。
   useEffect(() => {
-    mcpServers.forEach((server) => {
-      if (server.isActive) {
+    const activeIds = new Set(mcpServers.filter((server) => server.isActive).map((server) => server.id))
+    for (const probedId of probedActiveIdsRef.current) {
+      if (!activeIds.has(probedId)) {
+        probedActiveIdsRef.current.delete(probedId)
+      }
+    }
+    for (const server of mcpServers) {
+      if (server.isActive && !probedActiveIdsRef.current.has(server.id)) {
+        probedActiveIdsRef.current.add(server.id)
         void fetchServerVersion(server)
       }
-    })
+    }
   }, [mcpServers, fetchServerVersion])
 
   const onAddMcpServer = useCallback(async () => {
@@ -121,21 +155,26 @@ const McpServersList: FC = () => {
   }, [addMCPServer, navigate, t])
 
   const onDeleteMcpServer = useCallback(
-    async (server: MCPServer) => {
-      try {
-        window.modal.confirm({
-          title: t('settings.mcp.deleteServer'),
-          content: t('settings.mcp.deleteServerConfirm'),
-          centered: true,
-          onOk: async () => {
+    (server: MCPServer) => {
+      window.modal.confirm({
+        title: t('settings.mcp.deleteServer'),
+        content: t('settings.mcp.deleteServerConfirm'),
+        centered: true,
+        onOk: async () => {
+          // v1 二轮审查 s2-22：`onOk` 的 rejection 不会冒泡到外面的 try/catch（antd 内部
+          // `setLoading(false, true); return Promise.reject(e)`），删除失败会零用户可见信号。
+          try {
             await mcpApi.removeServer(server)
             deleteMCPServer(server.id)
             window.toast.success(t('settings.mcp.deleteSuccess'))
+          } catch (error: unknown) {
+            logger.error('Failed to delete MCP server', error as Error)
+            window.toast.error(
+              `${t('settings.mcp.deleteError')}: ${error instanceof Error ? error.message : String(error)}`
+            )
           }
-        })
-      } catch (error: any) {
-        window.toast.error(`${t('settings.mcp.deleteError')}: ${error.message}`)
-      }
+        }
+      })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [t]
@@ -167,8 +206,11 @@ const McpServersList: FC = () => {
     logger.silly('toggle activate', { serverId: serverForUpdate.id, active })
     try {
       if (active) {
+        // 记账后再探：探测账本让下面的 effect 不会为同一次启用再探一遍（见 s2-27）。
+        probedActiveIdsRef.current.add(serverForUpdate.id)
         await fetchServerVersion({ ...serverForUpdate, isActive: active })
       } else {
+        probedActiveIdsRef.current.delete(serverForUpdate.id)
         await mcpApi.stopServer(serverForUpdate)
         setServerVersions((prev) => ({ ...prev, [serverForUpdate.id]: null }))
       }

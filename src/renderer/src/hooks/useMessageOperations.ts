@@ -30,11 +30,13 @@ import { type Assistant, type FileMetadata, type Model, type Topic, TopicType } 
 import { objectKeys } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { AssistantMessageStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { abortCompletion } from '@renderer/utils/abortController'
+import { abortCompletion, hasAbortRegistration } from '@renderer/utils/abortController'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { materializeKernelTopicRow, requestTopicSwitch } from '@renderer/utils/topicBranch'
+import { t as translate } from 'i18next'
 import { difference } from 'lodash'
 import { useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('UseMessageOperations')
 
@@ -91,6 +93,7 @@ function collectMessageFiles(state: RootState, message: Message): FileMetadata[]
 
 export function useMessageOperations(topic: Topic) {
   const dispatch = useAppDispatch()
+  const { t } = useTranslation()
 
   /**
    * 分支重发核心：把（编辑后）的文本作为一次重发，在内核把当前会话按锚点 fork 成子分支
@@ -120,7 +123,7 @@ export function useMessageOperations(topic: Topic) {
         id: forked.id,
         type: TopicType.Chat,
         assistantId: assistant.id,
-        name: preview.length > 0 ? preview : topic.name || '新分支',
+        name: preview.length > 0 ? preview : topic.name || translate('chat.branches.new_branch'),
         createdAt: new Date(forked.createdAt ?? Date.now()).toISOString(),
         updatedAt: new Date(forked.updatedAt ?? Date.now()).toISOString(),
         messages: [],
@@ -141,7 +144,12 @@ export function useMessageOperations(topic: Topic) {
       // 关键顺序：先把子分支的完整日志（含与父分支共享的上文）从内核加载进 store，
       // 再发新文本 —— 否则 store 里先有 stub 会让 loadTopicMessagesThunk 短路，
       // 子分支视图将看不到该轮之上的历史。
-      await dispatch(loadTopicMessagesThunk(childTopic.id, true))
+      try {
+        await dispatch(loadTopicMessagesThunk(childTopic.id, true))
+      } catch (error) {
+        // X9：子会话首次加载失败不应打断分叉流程（新话题尚无消息时内核侧也确实是空的）。
+        logger.warn(`useMessageOperations: failed to load fork child ${childTopic.id}`, error as Error)
+      }
 
       void dispatch(sendMessageThunk(userMessage, blocks ?? [], assistant, childTopic.id))
       requestTopicSwitch(childTopic)
@@ -255,6 +263,15 @@ export function useMessageOperations(topic: Topic) {
         } else if (row !== undefined) {
           requestTopicSwitch(row)
         }
+      }
+
+      // 4) 半成功必须可见（k2-05 / k2-09）：内核已把会话从注册表删掉，但物理清库失败。
+      // 静默会让用户以为"已经彻底删除"，而数据其实还留在盘上——这是 §9「失败不能伪装成成功」的正面案例。
+      if (result.purgeFailures.length > 0) {
+        logger.warn(
+          '[applyDestroyTurns] kernel removed the registry rows but failed to erase: ' + result.purgeFailures.join(', ')
+        )
+        window.toast?.warning(translate('kernel.topicDestroyTurns.purgeFailed'))
       }
     },
     [dispatch, topic.id, topic.assistantId]
@@ -390,21 +407,58 @@ export function useMessageOperations(topic: Topic) {
 
   /**
    * 暂停当前主题正在进行的消息生成。 / Pauses ongoing message generation for the current topic.
+   *
+   * r2-47：中止登记的键是**用户消息 id**（`addAbortController(userMessageId!, …)`，
+   * `userMessageId = assistantMessage.askId`）；这里收集的是 streaming 消息的 `askId`。
+   * 两者在"streaming 的是助手消息"时一致，但 `askId` 为空（或指向已被重映射的消息 id）时
+   * `abortCompletion` 查不到键、暂停静默变成无操作——而 UI 已经显示"已停止"，内核回合继续跑。
+   * 因此：空 `askId` 显式 warn（不再静默过滤），并按话题补一次 `dshTopicStop` 兜底
+   * （话题粒度是内核真正的停止入口，不新增第二套取消真相源）。
    */
   const pauseMessages = useCallback(async () => {
     const state = store.getState()
     const topicMessages = selectMessagesForTopic(state, topic.id)
-    if (!topicMessages) return
 
     const streamingMessages = topicMessages.filter((m) => m.status === 'processing' || m.status === 'pending')
-    const askIds = [...new Set(streamingMessages?.map((m) => m.askId).filter((id) => !!id) as string[])]
+    const askIds: string[] = []
+    let missingAskIdCount = 0
+    for (const message of streamingMessages) {
+      if (message.askId) {
+        askIds.push(message.askId)
+      } else {
+        missingAskIdCount += 1
+      }
+    }
+    if (missingAskIdCount > 0) {
+      logger.warn(
+        `[pauseMessages] ${missingAskIdCount} streaming message(s) in topic ${topic.id} carry no askId; ` +
+          'they cannot be matched to an abort registration (topic-level stop will cover them)'
+      )
+    }
 
-    for (const askId of askIds) {
+    const uniqueAskIds = [...new Set(askIds)]
+    let aborted = false
+    for (const askId of uniqueAskIds) {
+      // 只有真正命中登记键才算"停到了"：空 askId / 已被重映射的 id 都查不到键。
+      if (hasAbortRegistration(askId)) aborted = true
       abortCompletion(askId)
+    }
+    if (!aborted && streamingMessages.length > 0) {
+      // 有在途消息但没有任何可用注册键（或键全部失配）：直接按话题停内核回合。否则用户看到
+      // "已停止"而内核回合继续跑（`kernelChat.finishTurn` 之前不会有人再发 `dshTopicStop`）。
+      try {
+        await window.api.dshTopicStop(topic.id)
+      } catch (error) {
+        logger.error('pauseMessages: failed to stop the kernel turn', error as Error)
+        window.toast.error(t('chat.pause.failed'))
+        // 停止失败 → 不谎报"已停止"：恢复 loading 使 UI 与内核实际状态一致。
+        dispatch(newMessagesActions.setTopicLoading({ topicId: topic.id, loading: true }))
+        return
+      }
     }
     void pauseTrace(topic.id)
     dispatch(newMessagesActions.setTopicLoading({ topicId: topic.id, loading: false }))
-  }, [topic.id, dispatch])
+  }, [topic.id, dispatch, t])
 
   /**
    * 恢复/重发用户消息（目前复用 resendMessage 逻辑）。 / Resumes/Resends a user message (currently reuses resendMessage logic).
@@ -619,14 +673,7 @@ export function useMessageOperations(topic: Topic) {
           blocks: updatedBlockIds
         }
 
-        // 6. Log operations for debugging
-        // console.log('[editMessageBlocks] Operations:', {
-        //   blocksToRemove: blockIdsToRemove.length,
-        //   blocksToUpdate: blocksToUpdate.length,
-        //   blocksToAdd: blocksToAdd.length
-        // })
-
-        // 7. Update Redux state and database
+        // 6. Update Redux state and database
         // First update message and add/update blocks
         if (blocksToAdd.length > 0) {
           await dispatch(updateMessageAndBlocksThunk(topic.id, messageUpdates, blocksToAdd))

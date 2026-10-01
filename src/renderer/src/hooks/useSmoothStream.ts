@@ -138,9 +138,22 @@ export const useSmoothStream = ({
   const [internalStreamDone, setInternalStreamDone] = useState<boolean>(false)
   const streamDone = externalStreamDone ?? internalStreamDone
 
+  /**
+   * r2-34：`streamDone` 只经 ref 进入渲染循环。旧结构里 `renderLoop` 依赖 `streamDone`
+   * → `ensureLoop` 换 identity → 挂载 effect 依赖变化 → 每次流终态翻转都
+   * `cancelAnimationFrame` + 重新 `requestAnimationFrame`。ref 在提交后的 effect 内同步；
+   * 即使某一帧读到旧值，循环仍会继续（`loopContinues` 含 `!streamDone`）并在下一帧按
+   * 新值收尾，字符不丢。
+   */
+  const streamDoneRef = useRef<boolean>(streamDone)
+  /** 外部 `streamDone` 是否传入：`reset`/`update` 经 ref 读取，使它们 identity 恒定
+   *  （旧实现依赖该 prop，翻转即换 identity —— r2-01 死循环链条的结构侧共犯）。 */
+  const externalStreamDoneRef = useRef(externalStreamDone)
   const onUpdateRef = useRef(onUpdate)
   useEffect(() => {
     onUpdateRef.current = onUpdate
+    streamDoneRef.current = streamDone
+    externalStreamDoneRef.current = externalStreamDone
   })
 
   const addChunk = useCallback((chunk: string) => {
@@ -190,34 +203,31 @@ export const useSmoothStream = ({
     ensureLoopRef.current()
   }, [])
 
-  const reset = useCallback(
-    (newText = '') => {
-      if (animationFrameRef.current !== null) {
-        cancelAnimationFrame(animationFrameRef.current)
-        animationFrameRef.current = null
-      }
-      chunkQueueRef.current = []
-      totalCharsRef.current = 0
-      firstChunkTRef.current = -1
-      stallEstRef.current = 0
-      gapsRef.current = []
-      lastArrivalTRef.current = 0
-      sawFirstChunkRef.current = false
-      creditRef.current = 0
-      lastFrameTimeRef.current = 0
-      // reset 立即回调（换块/内容重置）：钳制窗口同步复位，否则新流的首帧可能被
-      // 上一段流的最后一次回调压掉
-      lastNotifyTRef.current = 0
-      displayedTextRef.current = newText
-      lastAccumulatedRef.current = newText
-      if (externalStreamDone === undefined) setInternalStreamDone(false)
-      onUpdateRef.current(newText)
-      // Revive the loop: it was just cancelled, and a same-value
-      // setInternalStreamDone wouldn't change renderLoop identity.
-      ensureLoopRef.current()
-    },
-    [externalStreamDone]
-  )
+  const reset = useCallback((newText = '') => {
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+    chunkQueueRef.current = []
+    totalCharsRef.current = 0
+    firstChunkTRef.current = -1
+    stallEstRef.current = 0
+    gapsRef.current = []
+    lastArrivalTRef.current = 0
+    sawFirstChunkRef.current = false
+    creditRef.current = 0
+    lastFrameTimeRef.current = 0
+    // reset 立即回调（换块/内容重置）：钳制窗口同步复位，否则新流的首帧可能被
+    // 上一段流的最后一次回调压掉
+    lastNotifyTRef.current = 0
+    displayedTextRef.current = newText
+    lastAccumulatedRef.current = newText
+    if (externalStreamDoneRef.current === undefined) setInternalStreamDone(false)
+    onUpdateRef.current(newText)
+    // Revive the loop: it was just cancelled, and a same-value
+    // setInternalStreamDone wouldn't change renderLoop identity.
+    ensureLoopRef.current()
+  }, [])
 
   /**
    * Accumulated-text-style entry point. Matches the `(text, isComplete)`
@@ -246,13 +256,15 @@ export const useSmoothStream = ({
         }
         ensureLoopRef.current()
       }
-      if (isComplete && externalStreamDone === undefined) setInternalStreamDone(true)
+      if (isComplete && externalStreamDoneRef.current === undefined) setInternalStreamDone(true)
     },
-    [addChunk, externalStreamDone]
+    [addChunk]
   )
 
   const renderLoop = useCallback(() => {
     const queue = chunkQueueRef.current
+    // r2-34：从 ref 读取终态（identity 不随 `streamDone` 翻转变化）。
+    const streamDone = streamDoneRef.current
 
     // Empty queue: finalize + stop if the stream ended, else idle one frame.
     if (queue.length === 0) {
@@ -380,7 +392,7 @@ export const useSmoothStream = ({
     } else {
       animationFrameRef.current = null
     }
-  }, [streamDone, minDelay])
+  }, [minDelay])
 
   // The loop stops itself (animationFrameRef → null) when there is nothing
   // to do. `ensureLoop` revives it; `addChunk`/`reset` call it so a queued
@@ -395,7 +407,7 @@ export const useSmoothStream = ({
   const ensureLoopRef = useRef(ensureLoop)
   useEffect(() => {
     ensureLoopRef.current = ensureLoop
-  })
+  }, [ensureLoop])
 
   useEffect(() => {
     ensureLoop()

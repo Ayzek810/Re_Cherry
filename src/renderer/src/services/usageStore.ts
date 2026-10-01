@@ -34,7 +34,8 @@ export type UsageQueryResult = { ok: true; summary: UsageSummary } | { ok: false
 export async function queryUsage(range: UsageRange): Promise<UsageQueryResult> {
   try {
     const records = await db.usage_records.where('timestamp').between(range.start, range.end, true, true).toArray()
-    return { ok: true, summary: summarizeUsage(records, range) }
+    // r2-56：`between(..., true, true)` 已按同一闭区间筛过，聚合不必再整表判定一遍。
+    return { ok: true, summary: summarizeUsage(records, range, true) }
   } catch (error) {
     logger.error('usageStore: failed to query usage', error as Error)
     return { ok: false, error: error instanceof Error ? error.message : safeToString(error) }

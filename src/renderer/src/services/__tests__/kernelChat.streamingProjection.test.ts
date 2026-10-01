@@ -9,11 +9,13 @@
  *   3. assistant/message 最终替换块携带同一冻结值；正文块全文就位
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { initKernelBridge, sendToKernel } from '@renderer/services/kernelChat'
+import { initKernelBridge, kernelAnchorOf, sendToKernel } from '@renderer/services/kernelChat'
 import type { KernelSessionEventPayload } from '@renderer/services/kernelEventStream'
 import store from '@renderer/store'
-import type { MessageBlock, ThinkingMessageBlock } from '@renderer/types/newMessage'
+import { newMessagesActions } from '@renderer/store/newMessage'
+import type { Message, MessageBlock, ThinkingMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
+import { abortMap, addAbortController } from '@renderer/utils/abortController'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type SessionListener = (payload: KernelSessionEventPayload) => void
@@ -189,5 +191,128 @@ describe('kernelChat 直播投影（v0.4.6-1 思考计时冻结 + 正文流式�
       nowSpy.mockRestore()
       warnSpy.mockRestore()
     }
+  })
+})
+
+/**
+ * r2-20：回合收尾必须把「未回执的本地 user 消息 FIFO」清掉。旧实现只在回执到达时 shift，
+ * 回执没到（内核侧失败/中断/删除轮次）的那一条会永久留在队列里，并让下一回合的回执
+ * 把 seq 配对到**错误的**本地消息 id 上（锚点错位）。
+ */
+describe('kernelChat 回合收尾的 FIFO 清理（r2-20）', () => {
+  const TOPIC = 'topic-fifo-cleanup'
+  const putUserMessage = (id: string, blockId: string): void => {
+    store.dispatch(
+      newMessagesActions.messagesReceived({
+        topicId: TOPIC,
+        messages: [
+          {
+            id,
+            role: 'user',
+            topicId: TOPIC,
+            assistantId: 'assistant-1',
+            createdAt: new Date().toISOString(),
+            status: 'success',
+            blocks: [blockId]
+          } as unknown as Message
+        ]
+      })
+    )
+  }
+
+  it('上一回合的回执没到 → 下一回合回执不得错配到旧消息（旧 id 的 seq 残留被清）', async () => {
+    initKernelBridge()
+    // 第一回合：本地登记 user-a，但内核**没有**回执（只有 turn/start + turn/end）
+    const first = sendToKernel(TOPIC, 'first', 'stub-fifo-1', 'user-a')
+    await Promise.resolve()
+    emit(TOPIC, 2, 'turn/start', { turn: 1 })
+    emit(TOPIC, 3, 'turn/end', { reason: { kind: 'aborted' } })
+    await first
+
+    // 第二回合：登记 user-b，回执 seq=4
+    const second = sendToKernel(TOPIC, 'second', 'stub-fifo-2', 'user-b')
+    await Promise.resolve()
+    putUserMessage('user-a', 'block-a')
+    putUserMessage('user-b', 'block-b')
+    emit(TOPIC, 4, 'user/message', { content: [{ type: 'text', text: 'second' }] })
+    await second
+
+    const state = store.getState().messages
+    // 回执只能认领 user-b：user-a 的残留登记不得抢占 FIFO 队首
+    expect(state.entities['user-a']).toBeDefined()
+    expect(state.entities['user-b']).toBeUndefined()
+    const remapped = state.entities[`kernel-${TOPIC}-4`]
+    expect(remapped).toBeDefined()
+    expect(remapped?.blocks).toEqual(['block-b'])
+    // 改写后的 id 即锚点：r2-21 的"锚点从 id 解析"在改写后成立
+    expect(kernelAnchorOf(TOPIC, remapped)).toEqual({ sessionId: TOPIC, seq: 4 })
+  })
+
+  it('回执前的本地 uuid 没有内核锚点（"回执前 fork"显式不支持，r2-21）', () => {
+    expect(kernelAnchorOf(TOPIC, { id: 'kernel-x-7' } as Message)).toEqual({ sessionId: 'x', seq: 7 })
+    expect(kernelAnchorOf(TOPIC, { id: 'local-uuid-no-receipt' } as Message)).toBeUndefined()
+    expect(kernelAnchorOf(TOPIC, { id: 'kernel-x-notaseq' } as Message)).toBeUndefined()
+  })
+})
+
+/**
+ * r2-47 / r2-13：登记键是**用户消息 id**，而 user/message 回执会把该 id 改写为
+ * `kernel-<topic>-<seq>`（`renameAbortController` 不迁移 `abortKeysByTopic` 索引）。
+ * 回合收尾若只按话题清，改写后的键永远留在 abortMap 里（每回合泄一个闭包）。
+ */
+describe('kernelChat 回合收尾的中止登记清理（r2-47）', () => {
+  const TOPIC = 'topic-abort-registration'
+  const STUB = 'stub-abort-registration'
+  const USER_UUID = 'user-uuid-abort-registration'
+
+  it('id 改写后（uuid → kernel-<topic>-<seq>）回合收尾仍能摘掉登记', async () => {
+    initKernelBridge()
+    const send = sendToKernel(TOPIC, 'hi', STUB, USER_UUID)
+    await Promise.resolve()
+    store.dispatch(
+      newMessagesActions.messagesReceived({
+        topicId: TOPIC,
+        messages: [
+          {
+            id: USER_UUID,
+            role: 'user',
+            topicId: TOPIC,
+            assistantId: 'assistant-1',
+            createdAt: new Date().toISOString(),
+            status: 'success',
+            blocks: []
+          } as unknown as Message,
+          {
+            id: STUB,
+            role: 'assistant',
+            topicId: TOPIC,
+            assistantId: 'assistant-1',
+            askId: USER_UUID,
+            createdAt: new Date().toISOString(),
+            status: 'processing',
+            blocks: []
+          } as unknown as Message
+        ]
+      })
+    )
+    // messageThunk 的登记口径：键 = 用户消息 id，话题索引 = topicId
+    addAbortController(USER_UUID, () => undefined, TOPIC)
+
+    emit(TOPIC, 2, 'user/message', { content: [{ type: 'text', text: 'hi' }] })
+    emit(TOPIC, 3, 'turn/start', { turn: 1 })
+    await flushFrames()
+    const kernelUserId = `kernel-${TOPIC}-2`
+    // 改写已发生：登记键迁到 kernel id（停止按钮按新 askId 才查得到）
+    expect(store.getState().messages.entities[USER_UUID]).toBeUndefined()
+    expect(store.getState().messages.entities[STUB]?.askId).toBe(kernelUserId)
+    expect(abortMap.has(kernelUserId)).toBe(true)
+
+    emit(TOPIC, 4, 'turn/end', { reason: { kind: 'completed' } })
+    await send
+    await flushFrames()
+
+    // 收尾后两种键都不得残留（旧实现只清话题索引指向的旧 uuid，kernel id 键永久泄漏）
+    expect(abortMap.has(kernelUserId)).toBe(false)
+    expect(abortMap.has(USER_UUID)).toBe(false)
   })
 })

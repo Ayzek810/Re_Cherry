@@ -13,7 +13,7 @@ import {
 import type { MinAppType } from '@renderer/types'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
 import { LRUCache } from 'lru-cache'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { useNavbarPosition } from './useSettings'
 
@@ -64,24 +64,39 @@ export const useMinappPopup = () => {
     })
   }, [dispatch, maxKeepAliveMinapps])
 
-  // 缓存不存在
+  // 缓存不存在：渲染期只创建**空**缓存 —— LRU 的 `onInsert`/`disposeAfter` 只在写入/淘汰
+  // 时触发，空构造不 dispatch，故这里没有「渲染期更新 store」。模块级单例是刻意的
+  // （多个组件共享同一缓存；改成 per-instance ref 会让 `closeAllMinapps` 只换掉一个实例）。
   if (!minAppsCache) {
     minAppsCache = createLRUCache()
   }
 
-  // 缓存数量大小发生了改变
-  if (minAppsCache.max !== maxKeepAliveMinapps) {
-    // 1. 当前小程序数量小于等于设置的缓存数量，直接重新建立缓存
-    if (minAppsCache.size <= maxKeepAliveMinapps) {
-      // LRU cache 机制，后 set 的会被放到前面，所以需要反转一下
-      const oldEntries = Array.from(minAppsCache.entries()).reverse()
-      minAppsCache = createLRUCache()
-      oldEntries.forEach(([key, value]) => {
-        minAppsCache.set(key, value)
-      })
+  /**
+   * r2-37：容量变化后的重建从渲染期移入 effect。重建会用 `set()` 回填旧条目，LRU 的
+   * `onInsert` 会同步 `dispatch(setOpenedKeepAliveMinapps(...))`（`disposeAfter` 还会
+   * `dispatch` + `TabsService.closeTab`）—— 那是「渲染另一个组件时更新 store」的非法副作用
+   * （React 可能丢弃或重复执行该渲染）。`lru-cache@11` 的 `max` 是只读 getter，改容量只能
+   * 新建实例，所以重建仍保留；同时用一次强制渲染把重建后的实例交回消费方
+   * （否则本次渲染返回的引用与重建后的单例不是同一个）。
+   */
+  const [, bumpCacheVersion] = useState(0)
+
+  useEffect(() => {
+    if (minAppsCache.max !== maxKeepAliveMinapps) {
+      // 1. 当前小程序数量小于等于设置的缓存数量，直接重新建立缓存
+      if (minAppsCache.size <= maxKeepAliveMinapps) {
+        // LRU cache 机制，后 set 的会被放到前面，所以需要反转一下
+        const oldEntries = Array.from(minAppsCache.entries()).reverse()
+        minAppsCache = createLRUCache()
+        oldEntries.forEach(([key, value]) => {
+          minAppsCache.set(key, value)
+        })
+        // 让消费方重新渲染并拿到重建后的实例（dispatch 已在 effect 中完成）
+        bumpCacheVersion((version) => version + 1)
+      }
+      // 2. 大于设置的缓存的话，就直到数量减少到设置的缓存数量
     }
-    // 2. 大于设置的缓存的话，就直到数量减少到设置的缓存数量
-  }
+  }, [createLRUCache, maxKeepAliveMinapps])
 
   /** Open a minapp (popup shows and minapp loaded) */
   const openMinapp = useCallback(

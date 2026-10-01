@@ -29,7 +29,8 @@ const getTerminalStyles = (theme: ThemeMode) => ({
 
 const HtmlArtifactsCard: FC<Props> = ({ html, onSave, isStreaming = false }) => {
   const { t } = useTranslation()
-  const title = extractHtmlTitle(html) || 'HTML Artifacts'
+  // c2-41：产物默认标题是用户可见文案，不能硬编码英文。
+  const title = extractHtmlTitle(html) || t('html_artifacts.default_title', 'HTML Artifacts')
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const { theme } = useTheme()
 
@@ -46,8 +47,15 @@ const HtmlArtifactsCard: FC<Props> = ({ html, onSave, isStreaming = false }) => 
 
   const handleDownload = async () => {
     const fileName = `${getFileNameFromHtmlTitle(title) || 'html-artifact'}.html`
-    await window.api.file.save(fileName, htmlContent)
-    window.toast.success(t('message.download.success'))
+    // c2-29：成功提示原先在 `await` 之后**无条件**发出，写盘失败也会告诉用户「下载成功」；
+    // 而 IPC 抛错先产生一个未捕获 rejection。这里只在真正 resolve 之后提示成功。
+    try {
+      await window.api.file.save(fileName, htmlContent)
+      window.toast.success(t('message.download.success'))
+    } catch (error) {
+      logger.error('Failed to download HTML artifact:', error as Error)
+      window.toast.error(t('common.save_failed'))
+    }
   }
 
   return (

@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import { loggerService } from '@logger'
 import type { Extension } from '@uiw/react-codemirror'
 import { keymap } from '@uiw/react-codemirror'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getNormalizedExtension } from './utils'
 
@@ -210,6 +210,21 @@ interface UseScrollToLineOptions {
 }
 
 export function useScrollToLine(editorViewRef: React.MutableRefObject<EditorView | null>) {
+  // c2-44：200ms 回退定时器与高亮监听都必须有取消通道。
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const highlightCleanupRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (fallbackTimerRef.current !== null) {
+        clearTimeout(fallbackTimerRef.current)
+        fallbackTimerRef.current = null
+      }
+      highlightCleanupRef.current?.()
+      highlightCleanupRef.current = null
+    }
+  }, [])
+
   const findLineElement = useCallback((view: EditorView, position: number): HTMLElement | null => {
     const domAtPos = view.domAtPos(position)
     let node: Node | null = domAtPos.node
@@ -229,6 +244,9 @@ export function useScrollToLine(editorViewRef: React.MutableRefObject<EditorView
   }, [])
 
   const highlightLine = useCallback((view: EditorView, element: HTMLElement) => {
+    // 上一个高亮的监听先摘掉，避免动画不结束时连同被捕获的 DOM 节点一起泄漏。
+    highlightCleanupRef.current?.()
+
     const previousHighlight = view.dom.querySelector('.animation-locate-highlight') as HTMLElement | null
     if (previousHighlight) {
       previousHighlight.classList.remove('animation-locate-highlight')
@@ -236,11 +254,18 @@ export function useScrollToLine(editorViewRef: React.MutableRefObject<EditorView
 
     element.classList.add('animation-locate-highlight')
 
-    const handleAnimationEnd = () => {
+    const cleanup = () => {
       element.classList.remove('animation-locate-highlight')
       element.removeEventListener('animationend', handleAnimationEnd)
+      if (highlightCleanupRef.current === cleanup) {
+        highlightCleanupRef.current = null
+      }
+    }
+    function handleAnimationEnd() {
+      cleanup()
     }
 
+    highlightCleanupRef.current = cleanup
     element.addEventListener('animationend', handleAnimationEnd)
   }, [])
 
@@ -271,10 +296,15 @@ export function useScrollToLine(editorViewRef: React.MutableRefObject<EditorView
         return
       }
 
-      setTimeout(() => {
-        const fallbackElement = findLineElement(view, targetLine.from)
+      fallbackTimerRef.current = setTimeout(() => {
+        fallbackTimerRef.current = null
+        // 编辑器在此期间被卸载（弹窗关闭、备注面板切走）时 view 可能已 destroy(),
+        // 对已销毁实例操作 DOM 会抛错。
+        const currentView = editorViewRef.current
+        if (!currentView || !currentView.dom.isConnected) return
+        const fallbackElement = findLineElement(currentView, targetLine.from)
         if (fallbackElement) {
-          highlightLine(view, fallbackElement)
+          highlightLine(currentView, fallbackElement)
         }
       }, 200)
     },

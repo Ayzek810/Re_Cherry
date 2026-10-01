@@ -107,11 +107,35 @@ const MinAppPage: FC = () => {
     webviewRef.current = el
     const handleInPageNav = (e: any) => setCurrentUrl(e.url)
     el.addEventListener('did-navigate-in-page', handleInPageNav)
+    // 附着即从**新元素**同步一次地址（f2-54）：`currentUrl` 是 state，切 appId 后旧值还在，
+    // 而 `did-navigate-in-page` 只在 B 内部导航时才触发，首帧加载不触发 → 工具栏"在浏览器打开"
+    // 会打开上一个应用的地址。读元素自己的 URL 是这里唯一的权威来源。
+    try {
+      setCurrentUrl(el.getURL() || (app.url ?? null))
+    } catch {
+      // webview 后端尚未就绪时 getURL 会抛：退回应用首页，不改变任何加载状态。
+      setCurrentUrl(app.url ?? null)
+    }
     webviewCleanupRef.current = () => {
       el.removeEventListener('did-navigate-in-page', handleInPageNav)
     }
     return true
   }, [app])
+
+  // 每应用状态随 appId 重置（f2-54）：本组件实例跨 appId 存活（路由 `/apps/:appId` 没有 key，
+  // 标签页切换走 `navigate(tab.path)`），而 `isReady` / `currentUrl` 的初始化器只跑一次。
+  // 不重置的话：B 的 LoadingMask 不显示（webview 就绪前那块区域静默留白），
+  // `WebviewSearch` 还会拿到 `isWebviewReady=true`，把搜索动作打到尚未就绪的 B 上。
+  //
+  // 这条 effect **必须排在下面的附着 effect 之前**：同一轮 effect 按声明顺序执行，复位先跑、
+  // 附着后跑（附着会立刻从元素读回真实地址），反过来会把刚读到的地址清成 null。
+  const activeAppId = app?.id
+  useEffect(() => {
+    if (!activeAppId) return
+    setIsReady(getWebviewLoaded(activeAppId))
+    // 地址先清掉；附着成功后由 `attachWebview` 从元素读回权威值。
+    setCurrentUrl(null)
+  }, [activeAppId])
 
   useEffect(() => {
     if (!app) return
@@ -153,7 +177,9 @@ const MinAppPage: FC = () => {
       mounted = false
       unsubscribe()
     }
-  }, [app, isReady])
+    // `app.id` 而不是 `app`：切换 appId 时必须重新订阅新应用的加载事件（f2-54）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app?.id, isReady])
 
   // 如果条件不满足，提前返回（所有 hooks 已调用）
   if (!app || !initialIsTopNavbar.current) {
@@ -188,7 +214,7 @@ const MinAppPage: FC = () => {
       </ToolbarWrapper>
       <WebviewSearch webviewRef={webviewRef} isWebviewReady={isReady} appId={app.id} />
       {!isReady && (
-        <LoadingMask>
+        <LoadingMask data-testid="minapp-loading-mask">
           <Avatar src={app.logo} size={60} style={{ border: '1px solid var(--color-border)' }} />
           <BeatLoader color="var(--color-text-2)" size={8} style={{ marginTop: 12 }} />
         </LoadingMask>

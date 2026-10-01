@@ -86,6 +86,10 @@ export enum IpcChannel {
   File_Clear = 'file:clear',
   File_Read = 'file:read',
   File_ReadExternal = 'file:readExternal',
+  // 二轮审查 r2-79/⑥：按 id 读文件仓成员并要求区分「不存在」与「读失败」。
+  // `File_Read` 对任何失败都抛同一个通用错误（消费方无法区分），本通道返回
+  // `FileReadByIdResult` 判别式，供 `config/minapps.ts` 正确播种自定义小应用。
+  File_ReadById = 'file:readById',
   File_Delete = 'file:delete',
   File_DeleteDir = 'file:deleteDir',
   File_DeleteExternalFile = 'file:deleteExternalFile',
@@ -110,6 +114,8 @@ export enum IpcChannel {
   File_Download = 'file:download',
   File_Copy = 'file:copy',
   File_BinaryImage = 'file:binaryImage',
+  /** 文件仓变更事件（主 → 渲染）：迁移前是枚举外裸字面量（v1 二轮 k2-07）。 */
+  File_Change = 'file-change',
   File_Base64File = 'file:base64File',
   File_GetPdfInfo = 'file:getPdfInfo',
   Fs_Read = 'fs:read',
@@ -173,6 +179,17 @@ export enum IpcChannel {
   FullscreenStatusChanged = 'fullscreen-status-changed',
 
   ShowMiniWindow = 'show-mini-window',
+
+  /** 通知点击（主 → 渲染）：随 loadURL 的 electron Notification 'click' 事件下发。 */
+  Notification_Click = 'notification-click',
+
+  /** cherrystudio:// deep link 的原始载荷（主 → 渲染；preload 桥此前用的是裸字符串）。 */
+  Protocol_Data = 'protocol-data',
+
+  /** trace 窗口的选中目标（主 → 渲染 traceWindow.html）。 */
+  Trace_SetTrace = 'trace:set-trace',
+  /** trace 窗口语言（主 → 渲染 traceWindow.html；与 App_SetLanguage='app:set-language' 不是同一条）。 */
+  Trace_SetLanguage = 'trace:set-language',
 
   // Search Window
   SearchWindow_OpenUrl = 'search-window:open-url',

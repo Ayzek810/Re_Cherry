@@ -1,11 +1,12 @@
 import { loggerService } from '@logger'
 import CodeEditor from '@renderer/components/CodeEditor'
 import { TopView } from '@renderer/components/TopView'
+import { mcpApi } from '@renderer/services/mcpApi'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setMCPServers } from '@renderer/store/mcp'
 import type { MCPServer } from '@renderer/types'
 import { safeValidateMcpConfig } from '@renderer/types'
-import { parseJSON } from '@renderer/utils'
+import { modalConfirm, parseJSON } from '@renderer/utils'
 import { formatErrorMessage, formatZodError } from '@renderer/utils/error'
 import { Modal, Spin, Typography } from 'antd'
 import { useEffect, useState } from 'react'
@@ -53,20 +54,68 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
     }
   }, [mcpServers, t])
 
+  /**
+   * 保存 = 用编辑器内容整体替换服务器列表（v1 二轮审查 s2-23）。
+   *
+   * 修改前：清空编辑器再确定 = **无确认**地删掉所有服务器；且只 `dispatch(setMCPServers(...))`，
+   * 绕过了正常删除路径 `mcpApi.removeServer`（主进程关客户端 + DXT 解包目录清理）——
+   * 消失的服务器在主进程留下 DXT 目录泄漏，也没有任何「N 成功 / M 失败」汇总。
+   */
+  const applyServers = async (nextServers: MCPServer[]) => {
+    const nextIds = new Set(nextServers.map((server) => server.id))
+    const removed = mcpServers.filter((server) => !nextIds.has(server.id))
+
+    if (removed.length > 0) {
+      const confirmed = await modalConfirm({
+        title: t('settings.mcp.jsonSaveRemoveConfirm.title', { defaultValue: 'Remove MCP servers?' }),
+        content: t('settings.mcp.jsonSaveRemoveConfirm.content', {
+          count: removed.length,
+          defaultValue: 'Saving removes {{count}} server(s) from this list. Continue?'
+        })
+      })
+      if (!confirmed) return
+    }
+
+    const failed: string[] = []
+    for (const server of removed) {
+      try {
+        await mcpApi.removeServer(server)
+      } catch (error) {
+        logger.error(`Failed to remove MCP server ${server.id}`, error as Error)
+        failed.push(server.name || server.id)
+      }
+    }
+
+    dispatch(setMCPServers(nextServers))
+
+    if (failed.length === 0) {
+      window.toast.success(t('settings.mcp.jsonSaveSuccess'))
+    } else {
+      window.toast.warning(
+        t('settings.mcp.jsonSavePartial', {
+          count: nextServers.length,
+          failed: failed.length,
+          defaultValue: '{{count}} server(s) saved, {{failed}} failed to remove'
+        })
+      )
+    }
+    setJsonError('')
+    setOpen(false)
+  }
+
   const onOk = async () => {
     setJsonSaving(true)
 
     try {
       if (!jsonConfig.trim()) {
-        dispatch(setMCPServers([]))
-        window.toast.success(t('settings.mcp.jsonSaveSuccess'))
-        setJsonError('')
-        setJsonSaving(false)
+        await applyServers([])
         return
       }
 
       const parsedJson = parseJSON(jsonConfig)
-      if (parseJSON === null) {
+      // v1 二轮审查 s2-24：比较的是「导入的函数」而非解析结果，恒为 false —— 语法错误会带着
+      // `null` 进入 zod 校验，用户看到的是 "expected object, received null" 而不是本意的导入格式无效。
+      if (parsedJson === null) {
         throw new Error(t('settings.mcp.addServer.importFrom.invalid'))
       }
 
@@ -88,11 +137,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
         serversArray.push(server)
       }
 
-      dispatch(setMCPServers(serversArray))
-
-      window.toast.success(t('settings.mcp.jsonSaveSuccess'))
-      setJsonError('')
-      setOpen(false)
+      await applyServers(serversArray)
     } catch (error: unknown) {
       setJsonError(formatErrorMessage(error) || t('settings.mcp.jsonSaveError'))
       window.toast.error(t('settings.mcp.jsonSaveError'))
@@ -109,7 +154,8 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
     resolve({})
   }
 
-  EditMcpJsonPopup.hide = onCancel
+  // v1 二轮审查 s2-43 同类：不在渲染期给静态类写属性（严格模式下执行两次；卸载后引用仍指向
+  // 旧闭包）。关闭路径由 show() 内的 TopView.hide 与 `static hide()` 覆盖。
 
   return (
     <Modal

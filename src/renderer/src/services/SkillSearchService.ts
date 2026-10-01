@@ -127,43 +127,58 @@ async function searchClawhub(query: string): Promise<SkillSearchResult[]> {
 // ===========================================================================
 
 /**
- * Search all 3 skill registries with race semantics.
- * Returns results from whichever source responds first,
- * then merges remaining sources as they complete.
+ * 技能检索结果（二轮审查 r2-07：失败源必须结构化返回）。
+ *
+ * 旧实现给每个源挂 `.catch(() => [])`，把「源失败」替换成「成功但空」——与「该源确实没有
+ * 命中」不可区分，`useSkills.ts` 的 `setError` 永不置位（三个源全断网时界面显示「无结果」，
+ * 违反 CLAUDE.md §9「A failure must never look like an empty result」）。
  */
-export async function searchSkills(query: string): Promise<SkillSearchResult[]> {
-  if (!query.trim()) return []
+export interface SkillSearchOutcome {
+  results: SkillSearchResult[]
+  /** 本次检索中失败/不可用的源（有序，便于调用方提示「N 个来源失败」）。 */
+  failed: SkillSearchSource[]
+}
 
-  const sources = [
-    searchSkillsSh(query).catch((err) => {
-      logger.warn('skills.sh search failed', { error: err instanceof Error ? err.message : String(err) })
-      return [] as SkillSearchResult[]
-    }),
-    searchClaudePlugins(query).catch((err) => {
-      logger.warn('claude-plugins search failed', { error: err instanceof Error ? err.message : String(err) })
-      return [] as SkillSearchResult[]
-    }),
-    searchClawhub(query).catch((err) => {
-      logger.warn('clawhub search failed', { error: err instanceof Error ? err.message : String(err) })
-      return [] as SkillSearchResult[]
-    })
-  ]
+/** 三个源固定顺序：索引 i 与下方 sources[i] 一一对应（去重键与失败归因都用得到）。 */
+const SEARCH_SOURCES: readonly SkillSearchSource[] = ['skills.sh', 'claude-plugins.dev', 'clawhub.ai']
 
-  const results = await Promise.allSettled(sources)
+/**
+ * Search all 3 skill registries.
+ *
+ * r2-07 修正两点：
+ * 1. 失败按源结构化返回（不再吞成空数组）——调用方可以区分「零命中」与「有源失败」；
+ * 2. 去重键改为 `registry + slug`。旧注释写「keep first occurrence = fastest source」是错的
+ *    （`Promise.allSettled` 等最慢的源，顺序只由 `sources` 数组决定），而按裸 `name` 去重会把
+ *    不同 registry 的同名 skill 当成重复吞掉。
+ */
+export async function searchSkills(query: string): Promise<SkillSearchOutcome> {
+  if (!query.trim()) return { results: [], failed: [] }
+
+  const sources = [searchSkillsSh(query), searchClaudePlugins(query), searchClawhub(query)]
+
+  const settled = await Promise.allSettled(sources)
   const allResults: SkillSearchResult[] = []
+  const failed: SkillSearchSource[] = []
 
-  for (const result of results) {
+  settled.forEach((result, index) => {
+    const source = SEARCH_SOURCES[index]
     if (result.status === 'fulfilled') {
       allResults.push(...result.value)
+      return
     }
-  }
+    failed.push(source)
+    const error = result.reason instanceof Error ? result.reason : new Error(String(result.reason))
+    logger.warn(`${source} search failed`, { error: error.message })
+  })
 
-  // Deduplicate by name (keep first occurrence = fastest source)
+  // 去重键 = 来源 registry + slug（同名不同源的 skill 是两个可安装的实体，不得互相吞掉）
   const seen = new Set<string>()
-  return allResults.filter((r) => {
-    const key = r.name.toLowerCase()
+  const results = allResults.filter((r) => {
+    const key = `${r.sourceRegistry}\u0000${r.slug}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
+
+  return { results, failed }
 }

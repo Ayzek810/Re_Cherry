@@ -44,6 +44,10 @@ const WebviewContainer = memo(
       if (!webviewRef.current) return
 
       let loadCallbackFired = false
+      // c2-17：这个定时器必须可被清理。小程序在 100ms 窗口内被关闭/淘汰时，回调仍会
+      // `setWebviewLoaded(appid, true)` 写进模块级全局 Map，下一个同名 appid 实例会以
+      // 「已加载」身份重现（加载遮罩不再出现，用户看到空白 webview）。
+      let loadCallbackTimer: ReturnType<typeof setTimeout> | null = null
 
       const handleLoaded = () => {
         logger.debug(`WebView did-finish-load for app: ${appid}`)
@@ -51,7 +55,8 @@ const WebviewContainer = memo(
         if (!loadCallbackFired) {
           loadCallbackFired = true
           // Small delay to ensure content is actually visible
-          setTimeout(() => {
+          loadCallbackTimer = setTimeout(() => {
+            loadCallbackTimer = null
             logger.debug(`Calling onLoadedCallback for app: ${appid}`)
             onLoadedCallback(appid)
           }, 100)
@@ -96,6 +101,10 @@ const WebviewContainer = memo(
       webviewRef.current.src = url
 
       return () => {
+        if (loadCallbackTimer !== null) {
+          clearTimeout(loadCallbackTimer)
+          loadCallbackTimer = null
+        }
         webviewRef.current?.removeEventListener('did-start-loading', handleStartLoading)
         webviewRef.current?.removeEventListener('dom-ready', handleDomReady)
         webviewRef.current?.removeEventListener('did-finish-load', handleLoaded)

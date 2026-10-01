@@ -1,12 +1,13 @@
 import { Navbar, NavbarMain } from '@renderer/components/app/Navbar'
 import App from '@renderer/components/MinApp/MinApp'
 import Scrollbar from '@renderer/components/Scrollbar'
+import { takeCustomMiniAppsLoadError } from '@renderer/config/minapps'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useNavbarPosition } from '@renderer/hooks/useSettings'
 import { Button, Input } from 'antd'
 import { Search, SettingsIcon } from 'lucide-react'
 import type { FC } from 'react'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -18,6 +19,17 @@ const AppsPage: FC = () => {
   const [search, setSearch] = useState('')
   const { minapps } = useMinapps()
   const { isTopNavbar } = useNavbarPosition()
+
+  // r2-79/⑥：启动播种失败的提示在这里落地。`config/minapps.ts` 在渲染层启动期求值，
+  // 那时 `window.toast` 还没赋值（TopView 在挂载 effect 里才设置）——当场弹 toast 会静默
+  // no-op，失败就只剩一条日志。这里在挂载后取走一次性提示并展示（用户正是在这一页管理
+  // 自定义小应用，提示落在上下文里）。
+  useEffect(() => {
+    const loadError = takeCustomMiniAppsLoadError()
+    if (loadError) {
+      window.toast?.error(loadError)
+    }
+  }, [])
 
   const filteredApps = search
     ? minapps.filter(

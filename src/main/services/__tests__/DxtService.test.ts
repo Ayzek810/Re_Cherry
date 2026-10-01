@@ -348,6 +348,17 @@ describe('cleanupDxtServerByPath', () => {
     expect(fs.existsSync(dir)).toBe(false)
   })
 
+  // v1 二轮审查 m2-13：清理用途此前复用 ensurePathWithin 的「直系子目录」判据，二级子目录
+  // 一律抛错并被 catch 吞成 false —— 配置已从注册表消失、解包目录永久留在磁盘上。
+  it('删除 mcpDir 下的二级子目录（清理判据是「后代」而非「直系子目录」）', () => {
+    const dir = path.join(mcpDir, 'group', 'server-nested-cleanup')
+    fs.mkdirSync(path.join(dir, 'nested'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'nested', 'file.txt'), 'x')
+
+    expect(makeService().cleanupDxtServerByPath(dir)).toBe(true)
+    expect(fs.existsSync(dir)).toBe(false)
+  })
+
   it('拒绝删除 mcpDir 之外的路径（误用防墙）', async () => {
     const outside = path.join(tempRoot, 'outside-dir')
     fs.mkdirSync(outside, { recursive: true })
@@ -356,7 +367,27 @@ describe('cleanupDxtServerByPath', () => {
     expect(fs.existsSync(outside)).toBe(true)
   })
 
+  it('拒绝删除 mcpDir 的同名前缀兄弟目录（isPathInside 而非 startsWith）', () => {
+    const sibling = `${mcpDir}-sibling`
+    fs.mkdirSync(sibling, { recursive: true })
+
+    expect(makeService().cleanupDxtServerByPath(sibling)).toBe(false)
+    expect(fs.existsSync(sibling)).toBe(true)
+    fs.rmSync(sibling, { recursive: true, force: true })
+  })
+
   it('目录不存在返回 false', () => {
     expect(makeService().cleanupDxtServerByPath(path.join(mcpDir, 'server-never-was'))).toBe(false)
+  })
+
+  it('dxtServerDirExists 区分「本就不在」与「仍在」（调用方的可见信号判据）', () => {
+    const dir = path.join(mcpDir, 'server-exists-probe')
+    fs.mkdirSync(dir, { recursive: true })
+
+    expect(makeService().dxtServerDirExists(dir)).toBe(true)
+    fs.rmSync(dir, { recursive: true, force: true })
+    expect(makeService().dxtServerDirExists(dir)).toBe(false)
+    // mcpDir 之外的路径不参与存在性判定
+    expect(makeService().dxtServerDirExists(path.join(tempRoot, 'outside-dir'))).toBe(false)
   })
 })

@@ -171,7 +171,9 @@ const executeNotionExport = async (title: string, allBlocks: any[]): Promise<boo
         }
       }
     })
-    window.toast.loading({ title: i18n.t('message.loading.notion.preparing'), promise: responsePromise })
+    // oxlint 看不到「promise 交给 antd toast.loading」这一消费方式；显式 `void` 表明有意不 await
+    //（该 promise 由 toast 与紧随其后的 await 共同消费）。
+    void window.toast.loading({ title: i18n.t('message.loading.notion.preparing'), promise: responsePromise })
     const response = await responsePromise
 
     const exportPromise = appendBlocks({
@@ -179,7 +181,7 @@ const executeNotionExport = async (title: string, allBlocks: any[]): Promise<boo
       children: allBlocks,
       client: notion
     })
-    window.toast.loading({ title: i18n.t('message.loading.notion.exporting_progress'), promise: exportPromise })
+    void window.toast.loading({ title: i18n.t('message.loading.notion.exporting_progress'), promise: exportPromise })
 
     window.toast.success(i18n.t('message.success.notion.export'))
     return true

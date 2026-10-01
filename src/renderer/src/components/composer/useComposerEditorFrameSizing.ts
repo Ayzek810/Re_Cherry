@@ -2,27 +2,20 @@
 // 抄自 V2:13-16 的 class 常量与 V2:79-107 `getComposerEditorContentStyle` 的 CSS 变量；
 // 高度动画/`useResizeDrag`（fork 无该 hook）换成等价的内联拖拽 + 键盘步进。
 import type { CSSProperties } from 'react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getComposerEditorMinHeight } from './composerSizing'
 
 /** V2 useComposerEditorFrameSizing.ts:13-16，逐字。 */
 export const COMPOSER_EDITOR_COLLAPSED_MAX_HEIGHT = 'max(220px, 40vh)'
 export const COMPOSER_EDITOR_EXPANDED_MAX_HEIGHT = 'max(220px, 50vh)'
-export const COMPOSER_EDITOR_COLLAPSED_MAX_HEIGHT_CLASS = 'max-h-[max(220px,40vh)]!'
-export const COMPOSER_EDITOR_EXPANDED_MAX_HEIGHT_CLASS = 'max-h-[max(220px,50vh)]!'
 
 const COMPOSER_EDITOR_HEIGHT_TRANSITION_MS = 260
 const COMPOSER_EDITOR_RESIZE_KEYBOARD_STEP = 16
 
 type ComposerEditorContentStyle = CSSProperties & {
   '--composer-editor-padding': string
-  '--composer-editor-min-height': string
-  '--composer-editor-font-size': string
-  '--composer-editor-line-height': string
   '--composer-editor-max-height': string
-  '--composer-editor-overflow-y': 'auto' | 'hidden'
-  '--composer-editor-height': 'auto' | '100%'
 }
 
 /** V2 useComposerEditorFrameSizing.ts:79-107 `getComposerEditorContentStyle`（非 compact 分支）。 */
@@ -33,23 +26,22 @@ export function getComposerEditorContentStyle(
 ): ComposerEditorContentStyle {
   const minHeight = getComposerEditorMinHeight(fontSize)
   const hasCustomHeight = isExpanded || manualEditorFrameHeight !== null
-  const isFixedHeight = hasCustomHeight
   const maxHeight = isExpanded
     ? COMPOSER_EDITOR_EXPANDED_MAX_HEIGHT
     : manualEditorFrameHeight !== null
       ? `${manualEditorFrameHeight}px`
       : COMPOSER_EDITOR_COLLAPSED_MAX_HEIGHT
 
+  // c2-08：高度契约必须有消费方。`--composer-editor-max-height` 由 `ComposerSurface` 的 textarea
+  // 就地消费（见该文件的 maxHeight）。V2 的 `--composer-editor-min-height` / `--composer-editor-height`
+  // 与这里直接输出的 `minHeight` / `height` 重复且零消费方；`--composer-editor-overflow-y`
+  // 在非 compact 子集里恒为 'auto'（textarea 的 `overflow-auto` class 已表达同一件事），
+  // 三者一并删除，避免留下「看起来生效、实则无人读」的变量。
   return {
     height: hasCustomHeight ? '100%' : undefined,
     minHeight,
     '--composer-editor-padding': '6px 44px 0 15px',
-    '--composer-editor-min-height': `${minHeight}px`,
-    '--composer-editor-font-size': `${fontSize}px`,
-    '--composer-editor-line-height': '1.4',
-    '--composer-editor-max-height': maxHeight,
-    '--composer-editor-overflow-y': 'auto',
-    '--composer-editor-height': isFixedHeight ? '100%' : 'auto'
+    '--composer-editor-max-height': maxHeight
   }
 }
 
@@ -89,6 +81,10 @@ export function useComposerEditorFrameSizing({
   const frameRef = useRef<HTMLDivElement>(null)
   const [manualHeight, setManualHeight] = useState<number | null>(null)
   const dragStateRef = useRef<{ startClientY: number; startHeight: number; collapseExpanded: boolean } | null>(null)
+  // c2-14：拖拽期间挂在 window 上的两条监听的统一拆除函数。手势正常结束（mouseup）与
+  // 组件卸载都会走到它，避免「拖拽中切页/关面板」把监听永久留在 window 上，
+  // 之后每次 mousemove 都去调已卸载实例的 setManualHeight。
+  const dragCleanupRef = useRef<(() => void) | null>(null)
 
   const hasCustomHeight = isExpanded || manualHeight !== null
   const resizeHandleValue = isExpanded ? maxHeight : (manualHeight ?? minHeight)
@@ -128,16 +124,28 @@ export function useComposerEditorFrameSizing({
         startHeight: getCurrentHeight(),
         collapseExpanded: isExpanded
       }
-      const handleUp = () => {
+      // 先拆除上一次可能仍在挂的监听，保证同一时刻只有一组。
+      dragCleanupRef.current?.()
+      const stopDrag = () => {
         dragStateRef.current = null
         window.removeEventListener('mousemove', handleResizeMove)
-        window.removeEventListener('mouseup', handleUp)
+        window.removeEventListener('mouseup', stopDrag)
+        if (dragCleanupRef.current === stopDrag) {
+          dragCleanupRef.current = null
+        }
       }
+      dragCleanupRef.current = stopDrag
       window.addEventListener('mousemove', handleResizeMove)
-      window.addEventListener('mouseup', handleUp)
+      window.addEventListener('mouseup', stopDrag)
     },
     [getCurrentHeight, handleResizeMove, isExpanded]
   )
+
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.()
+    }
+  }, [])
 
   const handleResizeKeyDown = useCallback(
     (event: React.KeyboardEvent) => {

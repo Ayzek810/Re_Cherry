@@ -22,6 +22,23 @@ export interface UseFullTextSearchReturn {
     bothMatches: number
   }
   error: Error | null
+  /**
+   * 逐文件失败数（`searchAllFiles` 的 failures 汇总，r2-05 起服务层显式给出）。
+   *
+   * 全库检索的"部分失败"必须可见：整棵树读失败时结果集是空的，若只有 `error` 一个信号，
+   * 用户看到的就是"搜到 0 条"（§9 failure must never look like an empty result）。
+   */
+  failedFiles: number
+  /** 第一条失败的原因，供状态条的 `title` 展示（无失败时为 null）。 */
+  failureMessage: string | null
+  /**
+   * 已产出 `results` / `stats` 的关键词（`null` = 尚无结果）。
+   *
+   * 消费方要靠它区分"这次关键词搜到了 0 条"与"这次关键词还没搜完"——`stats.total === 0`
+   * 单独无法表达后者（防抖窗口内它仍是上一个关键词的值），二轮审查 f2-35 的
+   * 空结果占位必须落在真答案上，不能落在旧答案上。
+   */
+  searchedKeyword: string | null
 }
 
 /**
@@ -33,6 +50,9 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
   const [isSearching, setIsSearching] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
   const [error, setError] = useState<Error | null>(null)
+  const [searchedKeyword, setSearchedKeyword] = useState<string | null>(null)
+  const [failedFiles, setFailedFiles] = useState(0)
+  const [failureMessage, setFailureMessage] = useState<string | null>(null)
   const [stats, setStats] = useState({
     total: 0,
     fileNameMatches: 0,
@@ -71,6 +91,9 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
     setResults([])
     setStats({ total: 0, fileNameMatches: 0, contentMatches: 0, bothMatches: 0 })
     setError(null)
+    setSearchedKeyword(null)
+    setFailedFiles(0)
+    setFailureMessage(null)
   }, [cancel])
 
   const performSearch = useCallback(
@@ -84,6 +107,9 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       if (!keyword) {
         setResults([])
         setStats({ total: 0, fileNameMatches: 0, contentMatches: 0, bothMatches: 0 })
+        setSearchedKeyword(null)
+        setFailedFiles(0)
+        setFailureMessage(null)
         return
       }
 
@@ -94,7 +120,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       abortControllerRef.current = abortController
 
       try {
-        const searchResults = await searchAllFiles(
+        const { results: searchResults, failures } = await searchAllFiles(
           nodes,
           keyword.trim(),
           searchOptionsRef.current,
@@ -116,9 +142,19 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
 
         setResults(limitedResults)
         setStats(newStats)
+        setFailedFiles(failures.length)
+        setFailureMessage(failures[0]?.error.message ?? null)
+        // 只有真正拿到答案（含 0 条）才认领关键词：空结果占位与结果数都挂在这个事实上。
+        setSearchedKeyword(keyword.trim())
       } catch (err) {
         if (err instanceof Error && err.name !== 'AbortError') {
           setError(err)
+          // 失败不得长得像"没有结果"：清掉旧答案，让消费方走错误态而不是空态。
+          setResults([])
+          setStats({ total: 0, fileNameMatches: 0, contentMatches: 0, bothMatches: 0 })
+          setFailedFiles(0)
+          setFailureMessage(null)
+          setSearchedKeyword(null)
         }
       } finally {
         if (!abortController.signal.aborted) {
@@ -155,6 +191,9 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
     isSearching,
     results,
     stats,
-    error
+    error,
+    failedFiles,
+    failureMessage,
+    searchedKeyword
   }
 }

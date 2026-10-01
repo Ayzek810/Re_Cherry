@@ -1,6 +1,7 @@
 import { allMinApps } from '@renderer/config/minapps'
 import type { MinAppType } from '@renderer/types'
 import type { FC } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import DeepSeekLogo from '../../assets/images/providers/deepseek.png'
 import NousresearchIcon from './NousresearchIcon'
@@ -17,7 +18,7 @@ interface Props {
 // code-mate 应用（dsh/hermes/paper-agent）在侧栏/启动台/固定区都需要一个图标。dsh 用 DeepSeek
 // provider 位图，hermes 用 Nousresearch SVG（fill=currentColor 主题自适应），paper-agent 用
 // 用户提供的位图（与 CliIcon 同一个组件，两处图标不会各自漂移）。
-function CodeMateIcon({ app, size }: { app: MinAppType; size: number }) {
+function CodeMateIcon({ app, size, alt }: { app: MinAppType; size: number; alt: string }) {
   if (app.id === 'code-mate-deepseek-harness') {
     return (
       <img
@@ -25,7 +26,7 @@ function CodeMateIcon({ app, size }: { app: MinAppType; size: number }) {
         className="select-none rounded-2xl"
         style={{ width: `${size}px`, height: `${size}px`, userSelect: 'none' }}
         draggable={false}
-        alt={app.name || 'MinApp Icon'}
+        alt={alt}
       />
     )
   }
@@ -39,6 +40,9 @@ function CodeMateIcon({ app, size }: { app: MinAppType; size: number }) {
 }
 
 const MinAppIcon: FC<Props> = ({ app, size = 48, style, sidebar = false }) => {
+  const { t } = useTranslation()
+  // c2-41：`alt` 是读屏可闻的用户可见文案，不能硬编码英文。
+  const alt = app.name || t('minapp.title')
   // First try to find in allMinApps for predefined styling
   const _app = allMinApps.find((item) => item.id === app.id)
 
@@ -58,7 +62,7 @@ const MinAppIcon: FC<Props> = ({ app, size = 48, style, sidebar = false }) => {
           ...style
         }}
         draggable={false}
-        alt={app.name || 'MinApp Icon'}
+        alt={alt}
       />
     )
   }
@@ -79,13 +83,13 @@ const MinAppIcon: FC<Props> = ({ app, size = 48, style, sidebar = false }) => {
           ...style
         }}
         draggable={false}
-        alt={app.name || 'MinApp Icon'}
+        alt={alt}
       />
     )
   }
 
   // 批次5：code-mate 受管 Web UI 的图标 fallback（无 logo 资产的品牌图标组件）。
-  const codeMateIcon = CodeMateIcon({ app, size })
+  const codeMateIcon = CodeMateIcon({ app, size, alt })
   if (codeMateIcon) return codeMateIcon
 
   return null

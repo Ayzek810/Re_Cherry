@@ -35,6 +35,7 @@ const WebDavSettings: FC = () => {
     webdavSyncInterval: webDAVSyncInterval,
     webdavMaxBackups: webDAVMaxBackups,
     webdavSkipBackupFile: webdDAVSkipBackupFile,
+    webdavAutoSync: webDAVAutoSync,
     webdavDisableStream: webDAVDisableStream
   } = useSettings()
 
@@ -237,7 +238,12 @@ const WebDavSettings: FC = () => {
       <SettingRow>
         <SettingHelpText>{t('settings.data.webdav.disableStream.help')}</SettingHelpText>
       </SettingRow>
-      {webdavSync && syncInterval > 0 && (
+      {/* v1 二轮审查 s2-30：此前守卫读的是 `webdavSync`（`RemoteSyncState` 对象，恒为真），
+          读起来像在检查「自动同步是否开启」，实际什么都没检查——只要 interval 非 0（含从旧配置
+          恢复、同步从未启动的情况）就渲染状态行并展示过期的 lastSync / 错误行。真正表达
+          「自动同步开着」的是 `webdavAutoSync`（`init.ts` 启动时读的也是它），Nutstore 面板
+          用的就是自己的 ntstore 同名字段。 */}
+      {webDAVAutoSync && syncInterval > 0 && (
         <>
           <SettingDivider />
           <SettingRow>

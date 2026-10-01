@@ -43,7 +43,7 @@ function descriptionOf(node: Record<string, unknown>, suffix = ''): string | und
  * 有界映射：标量/enum 直映；array/object 递归（深度封顶）；其余复合（allOf/anyOf/
  * 无 type）回退 {type:'json'}——dsh 的无约束 lossless JSON 节点，任何 JSON 都合法。
  */
-export function convertMcpInputSchema(schema: {
+function convertMcpInputSchema(schema: {
   properties?: Record<string, unknown>
   required?: string[]
 }): ParameterSchemaSpec {
@@ -123,7 +123,7 @@ function jsonSpec(node: Record<string, unknown>, isRequired = false, description
 }
 
 /** MCP 调用结果 → 纯文本（上游 mcpResultToTextSummary 同语义：多模态压占位防 base64 超限）。 */
-export function mcpResultToTextSummary(result: { content?: unknown }): string {
+function mcpResultToTextSummary(result: { content?: unknown }): string {
   const content = Array.isArray(result?.content) ? (result.content as unknown[]) : []
   if (content.length === 0) return JSON.stringify(result)
   const parts: string[] = []

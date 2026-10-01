@@ -20,7 +20,7 @@ import os from 'node:os'
 import * as path from 'node:path'
 
 import { loggerService } from '@logger'
-import { getMcpDir, getTempDir } from '@main/utils/file'
+import { getMcpDir, getTempDir, isPathInside } from '@main/utils/file'
 import type { DxtManifest, DxtResolvedMcpConfig, DxtUploadResult } from '@shared/config/types'
 import { redactSecretText } from '@shared/utils/redaction'
 import StreamZip from 'node-stream-zip'
@@ -431,12 +431,27 @@ class DxtService {
   }
 
   /**
-   * 删除一个 DXT 服务器的解包目录（removeServer 时调用）。目标经 mcpDir 内直系子目录
-   * 校验后才删除；目录不存在返回 false（调用方记日志，不当作错误吞掉）。
+   * 删除一个 DXT 服务器的解包目录（removeServer 时调用）。
+   *
+   * 清理用途的校验是「必须是 mcpDir 的**后代**」，不是「直系子目录」——`ensurePathWithin`
+   * 的直系约束是为**落位**设计的（`uploadDxt` 自己拼 `server-${name}`）。此前清理复用同一
+   * 判据（v1 二轮审查 m2-13），于是任何二级子目录形状的 `dxtPath`（旧版本落位形态、用户
+   * 在 mcpDir 下手工分组）都会抛错并被吞成 `false`：配置已从注册表消失、解包目录（含可
+   * 执行物）永久留在磁盘上，界面上再也看不到它。
+   *
+   * 返回 `true` = 目录已删除；`false` = 目录不存在或删除失败（调用方按 `logger.warn` 记录
+   * 并给出信号，不得静默当作「清理成功」）。
    */
   public cleanupDxtServerByPath(dxtPath: string): boolean {
     try {
-      const serverDir = ensurePathWithin(this.getMcpRootDir(), dxtPath)
+      const mcpRoot = this.getMcpRootDir()
+      const serverDir = path.resolve(path.normalize(dxtPath))
+
+      // 误用防墙：目标必须在 mcpDir 之内（isPathInside 正确处理 `/root/a` 与 `/root/ab`）。
+      if (!isPathInside(serverDir, mcpRoot)) {
+        logger.warn(`Refusing to clean up a path outside the MCP root: ${serverDir}`)
+        return false
+      }
 
       if (fs.existsSync(serverDir)) {
         logger.debug(`Removing DXT server directory: ${serverDir}`)
@@ -448,6 +463,19 @@ class DxtService {
       return false
     } catch (error) {
       logger.error('Failed to cleanup DXT server:', error instanceof Error ? error : new Error(String(error)))
+      return false
+    }
+  }
+
+  /**
+   * 解包目录是否**仍然存在于** mcpDir 内。供调用方区分「本就不在」（无需信号）与
+   * 「仍在但清理失败」（必须给出可见失败信号）。
+   */
+  public dxtServerDirExists(dxtPath: string): boolean {
+    try {
+      const serverDir = path.resolve(path.normalize(dxtPath))
+      return isPathInside(serverDir, this.getMcpRootDir()) && fs.existsSync(serverDir)
+    } catch {
       return false
     }
   }

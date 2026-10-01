@@ -220,7 +220,6 @@ Numbered list:
 1. item with [2]`
 
       const result = normalizeCitationMarks(content, citationMap)
-      console.log(result)
 
       expect(result).toContain('citation [cite:1]')
       expect(result).toContain('blockquote with [cite:2]')

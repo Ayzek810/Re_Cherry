@@ -79,12 +79,21 @@ export function formatErrorMessage(error: unknown): string {
   }
 }
 
+/**
+ * 唯一的 getErrorMessage 实现（`utils/index.ts` 从这里再导出，r2-89）。
+ * 只要有可用的 message 就返回它；否则返回 i18n 的 `error.unknown`，
+ * 绝不返回空串——空串会让调用方的错误提示变成空尾巴（失败看起来像没发生）。
+ */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message
-  } else {
-    return t('error.unknown')
   }
+  // 非 Error 实例但带 message 的对象（axios/AI SDK/自定义错误包装）同样取用。
+  if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
+    const message = (error as { message: string }).message
+    if (message) return message
+  }
+  return t('error.unknown')
 }
 
 export const isTimeoutError = (error: any): boolean => {

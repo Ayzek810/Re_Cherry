@@ -1,4 +1,5 @@
 import { LoadingOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import BackupPopup from '@renderer/components/Popups/BackupPopup'
 import RestorePopup from '@renderer/components/Popups/RestorePopup'
@@ -17,10 +18,16 @@ import styled from 'styled-components'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
+const logger = loggerService.withContext('BasicDataSettings')
+
 const BasicDataSettings: React.FC = () => {
   const { t } = useTranslation()
   const [appInfo, setAppInfo] = useState<AppInfo>()
   const [cacheSize, setCacheSize] = useState<string>('')
+  // v1 二轮审查 s2-34：两个读取此前都没有 catch —— 拒绝时路径字段渲染成空文本、
+  // 「打开」按钮失去目标、缓存大小整行消失（失败伪装成空）。
+  const [appInfoFailed, setAppInfoFailed] = useState(false)
+  const [cacheSizeFailed, setCacheSizeFailed] = useState(false)
   const { theme } = useTheme()
   const { setTimeoutTimer } = useTimer()
 
@@ -30,8 +37,25 @@ const BasicDataSettings: React.FC = () => {
   const dispatch = useAppDispatch()
 
   useEffect(() => {
-    void window.api.getAppInfo().then(setAppInfo)
-    void window.api.getCacheSize().then(setCacheSize)
+    void window.api
+      .getAppInfo()
+      .then(setAppInfo)
+      .catch((error: unknown) => {
+        logger.warn('Failed to read app info', error as Error)
+        setAppInfoFailed(true)
+        window.toast.error({
+          timeout: 8000,
+          title: t('settings.data.app_info.load_failed', { defaultValue: 'Failed to read application paths' })
+        })
+      })
+    void window.api
+      .getCacheSize()
+      .then(setCacheSize)
+      .catch((error: unknown) => {
+        logger.warn('Failed to read cache size', error as Error)
+        setCacheSizeFailed(true)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSelectAppDataPath = async () => {
@@ -465,13 +489,16 @@ const BasicDataSettings: React.FC = () => {
           <SettingRowTitle>{t('settings.data.app_data.label')}</SettingRowTitle>
           <PathRow>
             <PathText style={{ color: 'var(--color-text-3)' }} onClick={() => handleOpenPath(appInfo?.appDataPath)}>
-              {appInfo?.appDataPath}
+              {appInfo?.appDataPath ??
+                (appInfoFailed ? t('settings.data.app_info.unavailable', { defaultValue: 'Unavailable' }) : '…')}
             </PathText>
             <Tooltip title={t('settings.data.app_data.select')}>
               <FolderOutput onClick={handleSelectAppDataPath} style={{ cursor: 'pointer' }} size={16} />
             </Tooltip>
             <HStack gap="5px" style={{ marginLeft: '8px' }}>
-              <Button onClick={() => handleOpenPath(appInfo?.appDataPath)}>{t('settings.data.app_data.open')}</Button>
+              <Button onClick={() => handleOpenPath(appInfo?.appDataPath)} disabled={!appInfo?.appDataPath}>
+                {t('settings.data.app_data.open')}
+              </Button>
             </HStack>
           </PathRow>
         </SettingRow>
@@ -480,10 +507,13 @@ const BasicDataSettings: React.FC = () => {
           <SettingRowTitle>{t('settings.data.app_logs.label')}</SettingRowTitle>
           <PathRow>
             <PathText style={{ color: 'var(--color-text-3)' }} onClick={() => handleOpenPath(appInfo?.logsPath)}>
-              {appInfo?.logsPath}
+              {appInfo?.logsPath ??
+                (appInfoFailed ? t('settings.data.app_info.unavailable', { defaultValue: 'Unavailable' }) : '…')}
             </PathText>
             <HStack gap="5px" style={{ marginLeft: '8px' }}>
-              <Button onClick={() => handleOpenPath(appInfo?.logsPath)}>{t('settings.data.app_logs.button')}</Button>
+              <Button onClick={() => handleOpenPath(appInfo?.logsPath)} disabled={!appInfo?.logsPath}>
+                {t('settings.data.app_logs.button')}
+              </Button>
             </HStack>
           </PathRow>
         </SettingRow>
@@ -492,6 +522,11 @@ const BasicDataSettings: React.FC = () => {
           <SettingRowTitle>
             {t('settings.data.clear_cache.title')}
             {cacheSize && <CacheText>({cacheSize}MB)</CacheText>}
+            {cacheSizeFailed && (
+              <CacheText>
+                ({t('settings.data.clear_cache.size_unavailable', { defaultValue: 'size unavailable' })})
+              </CacheText>
+            )}
           </SettingRowTitle>
           <HStack gap="5px">
             <Button onClick={handleClearCache}>{t('settings.data.clear_cache.button')}</Button>

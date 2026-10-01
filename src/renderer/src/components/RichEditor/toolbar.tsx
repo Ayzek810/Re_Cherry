@@ -1,11 +1,12 @@
+import type { Editor } from '@tiptap/core'
 import { Tooltip } from 'antd'
 import type { TFunction } from 'i18next'
 import type { LucideProps } from 'lucide-react'
 import type { ForwardRefExoticComponent, RefAttributes } from 'react'
-import React, { useEffect, useState } from 'react'
+import React, { memo, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { getCommandsByGroup } from './command'
+import { getCommandsByGroup, subscribeCommandRegistry } from './command'
 import { ImageUploader } from './components/ImageUploader'
 import MathInputDialog from './components/MathInputDialog'
 import { ToolbarButton, ToolbarDivider, ToolbarWrapper } from './styles'
@@ -16,7 +17,14 @@ interface ToolbarItemInternal {
   command?: FormattingCommand
   icon?: ForwardRefExoticComponent<Omit<LucideProps, 'ref'> & RefAttributes<SVGSVGElement>>
   type?: 'divider'
-  handler?: () => void
+  /**
+   * 动态命令自己的执行体（`Command.handler`）。
+   * c2-20：原实现把它包成 `() => cmd.handler` 存在 `handler` 字段里，而**没有任何地方读取它**，
+   * 于是「注册了工具栏命令、但没给 `formattingCommand`」的命令点下去什么也不做。
+   */
+  run?: (editor: Editor) => void
+  /** 动态命令的可读名（`Command.title`），用作 tooltip 兜底。 */
+  label?: string
 }
 
 // Group ordering for toolbar layout
@@ -35,9 +43,10 @@ function getToolbarItems(): ToolbarItemInternal[] {
     groupCommands.forEach((cmd) => {
       items.push({
         id: cmd.id,
-        command: cmd.formattingCommand as FormattingCommand,
+        command: cmd.formattingCommand as FormattingCommand | undefined,
         icon: cmd.icon,
-        handler: () => cmd.handler
+        run: cmd.handler,
+        label: cmd.title
       })
     })
   })
@@ -78,10 +87,18 @@ const getTooltipText = (t: TFunction, command: FormattingCommand): string => {
   return tooltipMap[command] || command
 }
 
-export const Toolbar: React.FC<ToolbarProps> = ({ editor, formattingState, onCommand, scrollContainer }) => {
+export const Toolbar: React.FC<ToolbarProps> = memo(function Toolbar({
+  editor,
+  formattingState,
+  onCommand,
+  scrollContainer
+}) {
   const { t } = useTranslation()
   const [showImageUploader, setShowImageUploader] = useState(false)
   const [showMathInput, setShowMathInput] = useState(false)
+  // c2-21：命令注册表是模块级可变的，工具栏条目按注册表版本号记忆化——
+  // 没有它时每次按键重渲染都会重建整排按钮（约 24 个按钮 + 19 个 Tooltip）。
+  const [registryVersion, setRegistryVersion] = useState(0)
   const [placeholderCallbacks, setPlaceholderCallbacks] = useState<{
     onMathSubmit?: (latex: string) => void
     onMathCancel?: () => void
@@ -122,6 +139,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({ editor, formattingState, onCom
     }
   }, [])
 
+  useEffect(() => subscribeCommandRegistry(() => setRegistryVersion((version) => version + 1)), [])
+
+  // c2-21：命令注册表是模块级可变的，工具栏条目按注册表版本号记忆化。
+  // 这个 useMemo 必须在下面那条 `if (!editor)` 早退**之前**：放在早退之后就变成条件 Hook，
+  // editor 从 null 变为实例时 Hook 数量变化，React 直接抛「Rendered more hooks than during
+  // the previous render」。回调体不读 registryVersion，它只是失效键。
+  const toolbarItems = useMemo(() => getToolbarItems(), [registryVersion])
+
   if (!editor) {
     return null
   }
@@ -145,8 +170,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ editor, formattingState, onCom
     setShowImageUploader(false)
   }
 
-  const toolbarItems = getToolbarItems()
-
   return (
     <ToolbarWrapper data-testid="rich-editor-toolbar">
       {toolbarItems.map((item) => {
@@ -156,22 +179,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ editor, formattingState, onCom
 
         const Icon = item.icon
         const command = item.command
+        const runCommand = item.run
 
-        if (!Icon || !command) {
+        if (!Icon || (!command && !runCommand)) {
           return null
         }
 
-        const isActive = getFormattingState(formattingState, command)
-        const isDisabled = getDisabledState(formattingState, command)
-        const tooltipText = getTooltipText(t, command)
+        const isActive = command ? getFormattingState(formattingState, command) : false
+        const isDisabled = command ? getDisabledState(formattingState, command) : false
+        const tooltipText = command ? getTooltipText(t, command) : item.label || item.id
 
         const buttonElement = (
           <ToolbarButton
             $active={isActive}
             data-active={isActive}
             disabled={isDisabled}
-            onClick={() => handleCommand(command)}
-            data-testid={`toolbar-${command}`}
+            onClick={() => (command ? handleCommand(command) : runCommand?.(editor))}
+            data-testid={`toolbar-${command ?? item.id}`}
             aria-label={tooltipText}
             aria-pressed={isActive}>
             <Icon color={isActive ? 'var(--color-primary)' : 'var(--color-text)'} />
@@ -257,7 +281,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({ editor, formattingState, onCom
       />
     </ToolbarWrapper>
   )
-}
+})
+
+Toolbar.displayName = 'RichEditorToolbar'
 
 function getFormattingState(state: FormattingState, command: FormattingCommand): boolean {
   switch (command) {

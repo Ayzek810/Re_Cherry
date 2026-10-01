@@ -263,18 +263,6 @@ export const EMBEDDING_MODELS = [
     max_context: 1024
   },
   {
-    id: 'voyage-code-3',
-    max_context: 256
-  },
-  {
-    id: 'voyage-code-3',
-    max_context: 512
-  },
-  {
-    id: 'voyage-code-3',
-    max_context: 2048
-  },
-  {
     id: 'voyage-finance-2',
     max_context: 1024
   },
@@ -288,7 +276,18 @@ export const EMBEDDING_MODELS = [
   }
 ]
 
-export function getEmbeddingMaxContext(id: string) {
+/**
+ * 查询模型的分段上限。
+ *
+ * 三值契约（家规 §9 / 不变式 6）：返回**数值** = 确定上限；返回 `null` = 「没有答案」，
+ * 调用方**不得**把它当成「没有上限」而静默放过任意 `chunkSize`，必须给出用户可见信号。
+ *
+ * r2-82：此前未命中一律 `return undefined`，且 `EMBEDDING_MODELS` 里有四条重复的
+ * `voyage-code-3`（1024/256/512/2048），`.find` 只能取到首条，后三条是死数据。
+ * 重复项已删除（保留 1024：`voyage-3-large`=2048、`voyage-3`=1024、`voyage-3-lite`=512，
+ * 同族口径一致；`voyage-code-3` 与 `voyage-3` 同为 1024 维）。
+ */
+export function getEmbeddingMaxContext(id: string): number | null {
   const model = EMBEDDING_MODELS.find((m) => m.id === id)
 
   if (model) {
@@ -303,5 +302,6 @@ export function getEmbeddingMaxContext(id: string) {
     return 8000
   }
 
-  return undefined
+  // 「没有答案」：显式返回 null，与「有上限」区分开。
+  return null
 }

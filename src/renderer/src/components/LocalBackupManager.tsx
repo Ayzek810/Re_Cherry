@@ -1,10 +1,13 @@
 import { DeleteOutlined, ExclamationCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { restoreFromLocal } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import { Button, message, Modal, Space, Table, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+const logger = loggerService.withContext('LocalBackupManager')
 
 interface BackupFile {
   fileName: string
@@ -85,21 +88,40 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       centered: true,
       onOk: async () => {
         setDeleting(true)
-        try {
-          // Delete selected files one by one
-          for (const key of selectedRowKeys) {
-            await window.api.backup.deleteLocalBackupFile(key.toString(), localBackupDir)
-          }
-          window.toast.success(
-            t('settings.data.local.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
+        // c2-18：批量删除必须报「N 成功 / M 失败」。原实现把串行 await 放在同一个 try 里，
+        // 第 k 条失败即跳出：前 k-1 条已经真删了、后面的没删，却只弹一条通用错误，
+        // 用户无法知道到底删掉了几个；`selectedRowKeys` 也只在全成功路径才清空。
+        const requestedKeys = [...selectedRowKeys]
+        const results = await Promise.allSettled(
+          requestedKeys.map((key) => window.api.backup.deleteLocalBackupFile(key.toString(), localBackupDir))
+        )
+
+        const succeededKeys = requestedKeys.filter((_, index) => results[index].status === 'fulfilled')
+        const failedResults = results.filter((result) => result.status === 'rejected')
+
+        if (failedResults.length > 0) {
+          logger.error(
+            `Failed to delete ${failedResults.length} of ${requestedKeys.length} backup files`,
+            failedResults[0].reason as Error
           )
-          setSelectedRowKeys([])
-          await fetchBackupFiles()
-        } catch (error: any) {
-          window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
-        } finally {
-          setDeleting(false)
+          window.toast.error(
+            t('settings.data.local.backup.manager.delete.partial', {
+              succeeded: succeededKeys.length,
+              failed: failedResults.length,
+              total: requestedKeys.length,
+              defaultValue: 'Deleted {{succeeded}} of {{total}} backup files. {{failed}} failed.'
+            })
+          )
+        } else {
+          window.toast.success(
+            t('settings.data.local.backup.manager.delete.success.multiple', { count: succeededKeys.length })
+          )
         }
+
+        // 只保留真正没删掉的那些，用户可以直接重试。
+        setSelectedRowKeys(requestedKeys.filter((_, index) => results[index].status === 'rejected'))
+        await fetchBackupFiles()
+        setDeleting(false)
       }
     })
   }
@@ -221,6 +243,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       </Button>
       <Button
         key="delete"
+        data-testid="local-backup-delete-selected"
         danger
         icon={<DeleteOutlined />}
         onClick={handleDeleteSelected}

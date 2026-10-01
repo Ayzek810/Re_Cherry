@@ -1,10 +1,13 @@
 import { CopyOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { DEFAULT_LANGUAGES, getHighlighter, getShiki } from '@renderer/utils/shiki'
 import { NodeViewContent, NodeViewWrapper, type ReactNodeViewProps, ReactNodeViewRenderer } from '@tiptap/react'
 import { Button, Select, Tooltip } from 'antd'
 import type { FC } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+const logger = loggerService.withContext('RichEditorCodeBlockNodeView')
 
 const CodeBlockNodeView: FC<ReactNodeViewProps> = (props) => {
   const { node, updateAttributes } = props
@@ -47,14 +50,18 @@ const CodeBlockNodeView: FC<ReactNodeViewProps> = (props) => {
   )
 
   // Handle copy code block content
+  // c2-29：原来把剪贴板失败完全吞掉（catch 里连日志都没有），成功也没有任何反馈——
+  // 失败与成功不可区分。对照 `CodeBlockView/view.tsx:142-147` 的既有范式：记日志 + 双信号。
   const handleCopy = useCallback(async () => {
     const codeText = props.node.textContent || ''
     try {
       await navigator.clipboard.writeText(codeText)
-    } catch {
-      // Clipboard may fail (e.g. non-secure context)
+      window.toast.success(t('code_block.copy.success'))
+    } catch (error) {
+      logger.error('Failed to copy code block content:', error as Error)
+      window.toast.error(t('code_block.copy.failed'))
     }
-  }, [props.node.textContent])
+  }, [props.node.textContent, t])
 
   return (
     <NodeViewWrapper className="code-block-wrapper">

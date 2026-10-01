@@ -167,6 +167,19 @@ describe('降级面（模型失败/为空/开关关）', () => {
     })
   })
 
+  it('summary 返回 error 字段（不 reject）→ 仍走兜底，不静默丢弃失败（r2-63）', async () => {
+    summaryResult = { text: null, error: 'invalid api key' }
+    const { autoNameKernelTopic } = await import('../topicNaming')
+    await autoNameKernelTopic('topic-a')
+
+    // ApiService 用返回值表达失败（不 reject），旧实现只解构 `text`、`error` 被整条丢掉。
+    expect(summaryApi).toHaveBeenCalledTimes(1)
+    expect(dispatched).toContainEqual({
+      type: 'assistants/updateTopicName',
+      payload: { topicId: 'topic-a', name: '截断名' }
+    })
+  })
+
   it('开关关 → 不调模型，直接首条消息兜底（V1 语义：省钱）', async () => {
     settingsState = { enableTopicNaming: false }
     const { autoNameKernelTopic } = await import('../topicNaming')

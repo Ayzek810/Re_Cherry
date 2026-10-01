@@ -48,7 +48,7 @@ export function useBinaryActions() {
     async (
       toolId: CodeCli,
       setBusy: Dispatch<SetStateAction<Set<string>>>,
-      messages: { successKey: string; logLabel: string },
+      messages: { successKey: string; failureKey: string; logLabel: string },
       targetVersion?: string
     ) => {
       // v0.4.5-1（O2）：targetVersion 真的传下去了——"检查到 A 却装了 B"是通道 tag 漂移下的
@@ -74,7 +74,12 @@ export function useBinaryActions() {
           window.toast.error(withDetail(t('code.install_failed'), result.message))
         }
       } catch (error) {
+        // 二轮审查 f2-50（§9「Never fail silently … Do this also for fire-and-forget writes」）：
+        // 上面那条 toast 只覆盖"主进程正常返回 {success:false}"。IPC 调用本身 reject（通道缺失、
+        // preload 未桥、主进程 handler 抛错）时主进程什么都没记录，版本卡也不会出现失败行——
+        // 旧实现只写日志，用户看到的是"安装按钮转一圈又变回来"。这一臂必须自己报错。
         logger.error(messages.logLabel, error as Error)
+        window.toast.error(withDetail(t(messages.failureKey), error instanceof Error ? error.message : String(error)))
       } finally {
         setBusy((prev) => {
           const next = new Set(prev)
@@ -99,6 +104,7 @@ export function useBinaryActions() {
         setInstallingTools,
         {
           successKey: 'code.install_success',
+          failureKey: 'code.install_failed',
           logLabel: 'Failed to install:'
         },
         targetVersion
@@ -113,6 +119,7 @@ export function useBinaryActions() {
         setUpgradingTools,
         {
           successKey: 'code.upgrade_success',
+          failureKey: 'code.upgrade_failed',
           logLabel: 'Failed to upgrade:'
         },
         latestVersion

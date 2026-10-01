@@ -10,7 +10,7 @@ import FileManager from '@renderer/services/FileManager'
 import type { FileMetadata, FileType } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import { formatFileSize } from '@renderer/utils'
-import { Button, Checkbox, Dropdown, Empty, Flex, Popconfirm } from 'antd'
+import { Button, Checkbox, Dropdown, Empty, Flex, Popconfirm, Spin } from 'antd'
 import dayjs from 'dayjs'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
+import { runBatchDelete } from './batchDelete'
 import FileList from './FileList'
 
 type SortField = 'created_at' | 'size' | 'name'
@@ -54,13 +55,45 @@ const FilesPage: FC = () => {
     return db.files.where('type').equals(fileType).sortBy('count').then(tempFilesSort)
   }, [fileType])
 
+  // f2-42：`useLiveQuery` 在首个结果到达前返回 `undefined`（= 加载中），与"查到了 0 行"是两件事。
+  // 旧实现两者都落到 `Empty`，每次进文件页先闪一下"暂无数据"。读取异常不走这里
+  //（dexie-react-hooks 会在渲染期 throw monitor.current.error），本条只针对"加载中"这一态。
+  const isLoading = files === undefined
   const sortedFiles = files ? sortFiles(files, sortField, sortOrder) : []
 
   const handleBatchDelete = async () => {
-    const selectedFiles = await Promise.all(selectedFileIds.map((id) => FileManager.getFile(id)))
-    const validFiles = selectedFiles.filter((file) => file !== null && file !== undefined)
+    let validFiles: FileMetadata[]
+    try {
+      const selectedFiles = await Promise.all(selectedFileIds.map((id) => FileManager.getFile(id)))
+      validFiles = selectedFiles.filter((file) => file !== null && file !== undefined)
+    } catch (error) {
+      logger.error('Failed to load the selected files for batch deletion:', error as Error)
+      window.toast.error(t('common.delete_failed'))
+      return
+    }
 
-    await Promise.all(validFiles.map((file) => handleDelete(file.id, t)))
+    if (validFiles.length === 0) {
+      setSelectedFileIds([])
+      return
+    }
+
+    // f2-39：逐个删除并收全结果——旧实现用 `Promise.all`，第一个 reject 就整体抛出，
+    // 选中态既不清理也不报错；成功/失败也从不计数（§9 要求批量删除报告"N 成功 / M 失败"）。
+    const { succeededIds, failures } = await runBatchDelete(
+      validFiles.map((file) => file.id),
+      (fileId) => handleDelete(fileId, t)
+    )
+
+    if (failures.length > 0) {
+      logger.error(
+        `Batch delete failed for ${failures.length}/${validFiles.length} files:`,
+        failures[0].reason as Error
+      )
+      window.toast.error(t('files.batch_delete_result', { success: succeededIds.length, failed: failures.length }))
+      // 失败项保留选中，用户可原地重试；已成功的项不该再被当成待删对象。
+      setSelectedFileIds(failures.map((failure) => failure.fileId))
+      return
+    }
 
     setSelectedFileIds([])
   }
@@ -81,8 +114,9 @@ const FilesPage: FC = () => {
     }
   }
 
+  // f2-41：这里原来每行一条 `logger.debug('FileItem', file)`（第一个参数是 context 名而非消息）。
+  // `dataSource` 没有 memo，每次渲染都会对全部文件跑一遍 map 并刷日志——纯脚手架语句，删除。
   const dataSource = sortedFiles?.map((file) => {
-    logger.debug('FileItem', file)
     return {
       key: file.id,
       file: (
@@ -105,7 +139,13 @@ const FilesPage: FC = () => {
             description={t('files.delete.content')}
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
-            onConfirm={() => handleDelete(file.id, t)}
+            onConfirm={() =>
+              // r2-45：handleDelete 现在会 throw。antd 的 ActionButton 在拒绝分支里 `Promise.reject(e)`，
+              // 无人接住即 unhandled rejection。用户可见信号由 handleDelete 给出，这里只留取证行。
+              handleDelete(file.id, t).catch((error) => {
+                logger.warn(`Failed to delete file ${file.id}`, error as Error)
+              })
+            }
             placement="left"
             icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}>
             <Button type="text" danger icon={<DeleteIcon size={14} className="lucide-custom" />} />
@@ -201,7 +241,11 @@ const FilesPage: FC = () => {
               </Dropdown.Button>
             )}
           </SortContainer>
-          {dataSource && dataSource?.length > 0 ? (
+          {isLoading ? (
+            <LoadingPlaceholder data-testid="files-loading">
+              <Spin />
+            </LoadingPlaceholder>
+          ) : dataSource && dataSource.length > 0 ? (
             <FileList id={fileType} list={dataSource} files={sortedFiles} />
           ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -273,6 +317,14 @@ const SideNav = styled.div`
       border: 0.5px solid var(--color-border);
     }
   }
+`
+
+const LoadingPlaceholder = styled.div`
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
 `
 
 const SortButton = styled(Button)<{ active?: boolean }>`

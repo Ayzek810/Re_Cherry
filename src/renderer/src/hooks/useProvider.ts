@@ -38,6 +38,8 @@ const selectAllProviders = createSelector(selectProviders, (providers) => provid
 
 const providerKeyLogger = loggerService.withContext('useProvider:ProviderKeyVault')
 
+const logger = loggerService.withContext('useProvider')
+
 /** v0.2.4 K4 写路径：renderer 侧 key 变更即时同步进 main 加密存储（持久真源）。空串/undefined = 删除。 */
 async function syncProviderKeyToVault(providerId: string, apiKey: string | undefined): Promise<void> {
   try {
@@ -89,7 +91,23 @@ export function useAllProviders() {
 
 export function useProvider(id: string) {
   const allProviders = useAppSelector(selectAllProviders)
-  const provider = useMemo(() => allProviders.find((p) => p.id === id) || getDefaultProvider(), [allProviders, id])
+  /**
+   * 显式回落（r2-42）：本 hook 的 `id` 可能指不到现存 provider——调用方传的是助手当前模型
+   * 的 `provider`（该 provider 可能已被删除），或空串（`InputEmbeddingDimension` 未拿到 model）。
+   * 设置页需要一个 provider 对象才能渲染，故按「精确 `id` → 默认模型所属 provider → 清单第一项」
+   * 依次回落，并在回落时留一条 warn。
+   *
+   * 这只是本 hook 的既定 UI 语义（旧行为就是回落到清单第一项），**不**适用于「按模型解析
+   * provider」的场景——那里必须失败可见（`ProviderService.getProviderByModel` 的三值契约）。
+   */
+  const provider = useMemo(() => {
+    const exactMatch = allProviders.find((p) => p.id === id)
+    if (exactMatch) return exactMatch
+
+    logger.warn('useProvider: provider id not found, falling back to the default provider', { id })
+
+    return getDefaultProvider() ?? allProviders[0]
+  }, [allProviders, id])
   const dispatch = useAppDispatch()
 
   const handleAddModel = useCallback(

@@ -3,7 +3,6 @@ import HorizontalScrollContainer from '@renderer/components/HorizontalScrollCont
 import Scrollbar from '@renderer/components/Scrollbar'
 import { useMessageEditing } from '@renderer/context/MessageEditingContext'
 import { useAssistant } from '@renderer/hooks/useAssistant'
-import { useChatContext } from '@renderer/hooks/useChatContext'
 import { useMessageOperations } from '@renderer/hooks/useMessageOperations'
 import { useModel } from '@renderer/hooks/useModel'
 import { useSettings } from '@renderer/hooks/useSettings'
@@ -19,8 +18,10 @@ import { scrollIntoView } from '@renderer/utils/dom'
 import { isMessageProcessing } from '@renderer/utils/messageUtils/is'
 import type { Dispatch, FC, SetStateAction } from 'react'
 import React, { memo, useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
+import { useChatContextValue } from './ChatContextProvider'
 import MessageContent from './MessageContent'
 import MessageEditor from './MessageEditor'
 import MessageErrorBoundary from './MessageErrorBoundary'
@@ -68,7 +69,8 @@ const MessageItem: FC<Props> = ({
   isHorizontalMultiModelLayout = false
 }) => {
   const { assistant, setModel } = useAssistant(message.assistantId)
-  const { isMultiSelectMode } = useChatContext(topic)
+  const { isMultiSelectMode } = useChatContextValue()
+  const { t } = useTranslation()
   const model = useModel(getMessageModelId(message), message.model?.provider) || message.model
   const { messageFont, fontSize, messageStyle, showMessageOutline } = useSettings()
   const { editMessageBlocks, resendUserMessageWithEdit, editMessage } = useMessageOperations(topic)
@@ -96,9 +98,11 @@ const MessageItem: FC<Props> = ({
         stopEditing()
       } catch (error) {
         logger.error('Failed to save message blocks:', error as Error)
+        // 失败不 stopEditing（编辑器保持打开、可直接重试）并给出可见信号：旧实现只落一条渲染层日志
+        window.toast.error(t('message.edit.save_failed'))
       }
     },
-    [message, editMessageBlocks, stopEditing, editMessage]
+    [message, editMessageBlocks, stopEditing, editMessage, t]
   )
 
   const handleEditResend = useCallback(
@@ -108,9 +112,10 @@ const MessageItem: FC<Props> = ({
         stopEditing()
       } catch (error) {
         logger.error('Failed to resend message:', error as Error)
+        window.toast.error(t('message.edit.resend_failed'))
       }
     },
-    [message, resendUserMessageWithEdit, assistant, stopEditing]
+    [message, resendUserMessageWithEdit, assistant, stopEditing, t]
   )
 
   const handleEditCancel = useCallback(() => {

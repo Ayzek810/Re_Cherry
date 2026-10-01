@@ -48,11 +48,22 @@ describe('file', () => {
       expect(result).toBe('.png')
     })
 
-    it('should return dot only for file without extension', () => {
-      // 验证没有扩展名的文件
-      const filePath = 'noextension'
-      const result = getFileExtension(filePath)
-      expect(result).toBe('.')
+    it('should return empty string for file without extension (audit2 r2-92)', () => {
+      // 原先返回 '.'，与「扩展名就是一个点」不可区分
+      expect(getFileExtension('noextension')).toBe('')
+      expect(getFileExtension('C:\\a\\b')).toBe('')
+    })
+
+    it('should return empty string when the path ends with a bare dot', () => {
+      expect(getFileExtension('C:\\a\\b.')).toBe('')
+      expect(getFileExtension('noextension.')).toBe('')
+      // 与「无扩展名」结果相同，但两者都不再是 '.' 这个伪扩展名
+      expect(getFileExtension('C:\\a\\b')).toBe(getFileExtension('C:\\a\\b.'))
+    })
+
+    it('should not treat a dotfile with no base name as an extension', () => {
+      expect(getFileExtension('.hidden')).toBe('')
+      expect(getFileExtension('.gitignore')).toBe('')
     })
 
     it('should handle hidden files with extension', () => {
@@ -66,7 +77,7 @@ describe('file', () => {
       // 验证空字符串输入的边界情况
       const filePath = ''
       const result = getFileExtension(filePath)
-      expect(result).toBe('.')
+      expect(result).toBe('')
     })
   })
 

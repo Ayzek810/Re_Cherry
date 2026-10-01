@@ -52,8 +52,14 @@ vi.mock('react-i18next', async (importOriginal) => {
 describe('BackupPopup failure handling', () => {
   beforeEach(() => {
     backupMock.mockReset()
+    // k2-06：进度订阅走 preload 的具名事件桥（`window.api.events`），不再是
+    // `window.electron.ipcRenderer.on`。桩保留两者，避免测试只钉在旧通路上。
     window.electron = {
-      ipcRenderer: { on: vi.fn(() => vi.fn()), send: vi.fn(), invoke: vi.fn() }
+      ipcRenderer: { on: vi.fn(() => vi.fn()), send: vi.fn(), invoke: vi.fn() },
+      process: { platform: 'win32', env: { NODE_ENV: 'test' } }
+    } as any
+    window.api = {
+      events: { onBackupProgress: vi.fn(() => vi.fn()), onRestoreProgress: vi.fn(() => vi.fn()) }
     } as any
     window.toast = { success: vi.fn(), error: vi.fn() } as any
   })

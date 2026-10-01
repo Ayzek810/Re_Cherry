@@ -18,7 +18,7 @@ import CodeViewer from '@renderer/components/CodeViewer'
 import ImageViewer from '@renderer/components/ImageViewer'
 import type { BasicPreviewHandles } from '@renderer/components/Preview'
 import { MAX_COLLAPSED_CODE_HEIGHT } from '@renderer/config/constant'
-import { useSettings } from '@renderer/hooks/useSettings'
+import { useSetting } from '@renderer/hooks/useSettings'
 import { pyodideService } from '@renderer/services/PyodideService'
 import { getExtensionByLanguage } from '@renderer/utils/code-language'
 import { getFileIconName } from '@renderer/utils/fileIconName'
@@ -64,7 +64,11 @@ interface Props {
 export const CodeBlockView: React.FC<Props> = memo(
   ({ children, language, onSave, editable = true, isStreaming = false, showToolbar = true, maxHeight }) => {
     const { t } = useTranslation()
-    const { codeEditor, codeExecution, codeImageTools, codeCollapsible, codeWrappable } = useSettings()
+    const codeEditor = useSetting('codeEditor')
+    const codeExecution = useSetting('codeExecution')
+    const codeImageTools = useSetting('codeImageTools')
+    const codeCollapsible = useSetting('codeCollapsible')
+    const codeWrappable = useSetting('codeWrappable')
 
     const [viewState, setViewState] = useState({
       mode: 'special' as ViewMode,
