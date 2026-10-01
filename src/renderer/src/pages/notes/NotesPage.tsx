@@ -138,20 +138,30 @@ const NotesPage: FC = () => {
     [starredSet, expandedSet]
   )
 
-  const refreshTree = useCallback(async () => {
+  /**
+   * 刷新笔记树。
+   *
+   * 失败语义（二轮审查 f2-33 第 6 条写路径）：读失败**不得**静默——否则用户看到的是"刚建的笔记
+   * 不在列表里"这种与数据丢失同形的画面。这里保留旧树（stale-while-error），只补一条可见信号。
+   * @returns true = 本次装载成功；false = 失败（已弹 toast.warning）。
+   */
+  const refreshTree = useCallback(async (): Promise<boolean> => {
     if (!notesPath) {
       setNotesTree([])
-      return
+      return true
     }
 
     try {
       const rawTree = await loadTree(notesPath)
       const sortedTree = sortTree(rawTree, sortType)
       setNotesTree(mergeTreeState(sortedTree))
+      return true
     } catch (error) {
       logger.error('Failed to refresh notes tree:', error as Error)
+      window.toast.warning(t('notes.refresh_failed_stale'))
+      return false
     }
-  }, [mergeTreeState, notesPath, sortType])
+  }, [mergeTreeState, notesPath, sortType, t])
 
   useEffect(() => {
     const updateCharCount = () => {
@@ -184,10 +194,12 @@ const NotesPage: FC = () => {
         // 保存后立即刷新缓存，确保下次读取时获取最新内容
         invalidateFileContent(targetPath)
       } catch (error) {
+        // 防抖保存是 fire-and-forget 写：§9 要求它也必须有用户可见信号，否则用户以为已经保存。
         logger.error('Failed to save note:', error as Error)
+        window.toast.error(t('notes.save_failed'))
       }
     },
-    [activeFilePath, currentContent, invalidateFileContent]
+    [activeFilePath, currentContent, invalidateFileContent, t]
   )
 
   // 防抖保存函数，在停止输入后才保存，避免输入过程中的文件写入
@@ -488,10 +500,12 @@ const NotesPage: FC = () => {
         updateExpandedPaths((prev) => addUniquePath(prev, normalizePathValue(targetPath)))
         await refreshTree()
       } catch (error) {
+        // §9：写路径失败必须可见——旧实现只落 logger.error，用户看到的是"点了没反应"。
         logger.error('Failed to create folder:', error as Error)
+        window.toast.error(t('notes.create_folder_failed'))
       }
     },
-    [getTargetFolderPath, refreshTree, updateExpandedPaths]
+    [getTargetFolderPath, refreshTree, t, updateExpandedPaths]
   )
 
   // 创建笔记
@@ -513,6 +527,7 @@ const NotesPage: FC = () => {
         await refreshTree()
       } catch (error) {
         logger.error('Failed to create note:', error as Error)
+        window.toast.error(t('notes.create_note_failed'))
       } finally {
         // 延迟重置标志，给数据库同步一些时间
         setTimeout(() => {
@@ -520,7 +535,7 @@ const NotesPage: FC = () => {
         }, 500)
       }
     },
-    [dispatch, getTargetFolderPath, refreshTree, updateExpandedPaths]
+    [dispatch, getTargetFolderPath, refreshTree, t, updateExpandedPaths]
   )
 
   const handleToggleExpanded = useCallback(
@@ -584,7 +599,13 @@ const NotesPage: FC = () => {
         const nodeToDelete = findNode(notesTree, nodeId)
         if (!nodeToDelete) return
 
-        await delNode(nodeToDelete)
+        // delNode 返回 Promise<boolean>（§9 删除纪律）：false 不是"已删除"的同一件事——
+        // 不改本地状态，交给 refreshTree 对齐真实树。
+        const deleted = await delNode(nodeToDelete)
+        if (!deleted) {
+          await refreshTree()
+          return
+        }
 
         updateStarredPaths((prev) => removePathEntries(prev, nodeToDelete.externalPath, nodeToDelete.type === 'folder'))
         updateExpandedPaths((prev) =>
@@ -607,9 +628,10 @@ const NotesPage: FC = () => {
         await refreshTree()
       } catch (error) {
         logger.error('Failed to delete node:', error as Error)
+        window.toast.error(t('notes.delete_failed'))
       }
     },
-    [notesTree, activeFilePath, dispatch, refreshTree, updateStarredPaths, updateExpandedPaths]
+    [notesTree, activeFilePath, dispatch, refreshTree, t, updateStarredPaths, updateExpandedPaths]
   )
 
   // 重命名节点
@@ -625,6 +647,12 @@ const NotesPage: FC = () => {
 
         const oldPath = node.externalPath
         const renamed = await renameEntry(node, newName)
+
+        if (!renamed.ok) {
+          // 重名是**业务结果**而非异常（f2-33）：明确告诉用户撞了哪个名字，并保持编辑器可重试。
+          window.toast.warning(t('notes.rename_name_exists', { name: renamed.safeName }))
+          return
+        }
 
         if (node.type === 'file' && activeFilePath === oldPath) {
           debouncedSaveRef.current?.cancel()
@@ -644,13 +672,14 @@ const NotesPage: FC = () => {
         await refreshTree()
       } catch (error) {
         logger.error('Failed to rename node:', error as Error)
+        window.toast.error(t('notes.rename_failed'))
       } finally {
         setTimeout(() => {
           isRenamingRef.current = false
         }, 500)
       }
     },
-    [activeFilePath, dispatch, notesTree, refreshTree, updateStarredPaths, updateExpandedPaths]
+    [activeFilePath, dispatch, notesTree, refreshTree, t, updateStarredPaths, updateExpandedPaths]
   )
 
   // 处理文件上传
@@ -800,9 +829,10 @@ const NotesPage: FC = () => {
         await refreshTree()
       } catch (error) {
         logger.error('Failed to move nodes:', error as Error)
+        window.toast.error(t('notes.move_failed'))
       }
     },
-    [activeFilePath, dispatch, notesPath, notesTree, refreshTree, updateStarredPaths, updateExpandedPaths]
+    [activeFilePath, dispatch, notesPath, notesTree, refreshTree, t, updateStarredPaths, updateExpandedPaths]
   )
 
   // 处理节点排序

@@ -97,6 +97,7 @@ export function HtmlArtifactPopupHost({ children }: { children: ReactNode }) {
             title={popupSession.title}
             html={popupSession.html}
             onSave={popupSession.onSave}
+            editable={popupSession.editable}
             interactive={popupSession.kind === 'document' && htmlArtifactRequiresUserConsent(popupSession.html)}
             onClose={closePopup}
           />

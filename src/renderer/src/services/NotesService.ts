@@ -140,30 +140,61 @@ export async function resolveNotesPath(parentPath: string): Promise<ResolvedNote
   }
 }
 
-export async function delNode(node: NotesTreeNode): Promise<void> {
+/**
+ * 删除节点。
+ *
+ * 删除纪律（CLAUDE.md §9 / 二轮审查 f2-33）：返回 `Promise<boolean>`，调用方必须能区分成败。
+ * 旧签名是 `Promise<void>`，页面结构上无法给出"删除失败"的信号，只能靠异常冒泡——而异常在
+ * 页面 catch 里也只落日志。
+ *
+ * 主进程的两条删除 handler（`FileStorage.deleteExternalFile` / `deleteExternalDir`）对
+ * "目标不存在"是**幂等成功**（`fs.existsSync` 早退、不抛错），只有真实 IO 失败才抛；因此这里
+ * 成功一律 `true`，真实失败原样抛出交由调用方 presentToast。
+ * @returns true = 已删除。
+ * @throws 文件被占用、无权限、IPC 断链等真实失败。
+ */
+export async function delNode(node: NotesTreeNode): Promise<boolean> {
   if (node.type === 'folder') {
     await window.api.file.deleteExternalDir(node.externalPath)
   } else {
     await window.api.file.deleteExternalFile(node.externalPath)
   }
+  return true
 }
 
-export async function renameNode(node: NotesTreeNode, newName: string): Promise<{ path: string; name: string }> {
+/**
+ * 重命名节点的结果。
+ *
+ * `conflict` 是**业务结果**而非异常（二轮审查 f2-33）：改成已存在的名字是最常见的用户输入分支，
+ * 旧实现把它 `throw new Error('Target name already exists')`，页面只能落一条日志，用户看到的是
+ * "对话框关了、列表没变、什么都没有"。
+ */
+export type RenameNodeResult =
+  | { ok: true; path: string; name: string }
+  | { ok: false; reason: 'conflict'; safeName: string }
+
+/**
+ * 重命名节点或笔记。
+ * @returns `ok: false` + `reason: 'conflict'` = 目标名已存在（业务结果，调用方按提示分支处理）。
+ * @throws 其余失败（占用、权限、IPC 断链）原样抛出。
+ */
+export async function renameNode(node: NotesTreeNode, newName: string): Promise<RenameNodeResult> {
   const isFile = node.type === 'file'
   const parentDir = normalizePath(getFileDirectory(node.externalPath))
   const { safeName, exists } = await window.api.file.checkFileName(parentDir, newName, isFile)
 
   if (exists) {
-    throw new Error(`Target name already exists: ${safeName}`)
+    logger.warn('Rename target name already exists', { path: node.externalPath, safeName })
+    return { ok: false, reason: 'conflict', safeName }
   }
 
   if (isFile) {
     await window.api.file.rename(node.externalPath, safeName)
-    return { path: `${parentDir}/${safeName}${MARKDOWN_EXT}`, name: safeName }
+    return { ok: true, path: `${parentDir}/${safeName}${MARKDOWN_EXT}`, name: safeName }
   }
 
   await window.api.file.renameDir(node.externalPath, safeName)
-  return { path: `${parentDir}/${safeName}`, name: safeName }
+  return { ok: true, path: `${parentDir}/${safeName}`, name: safeName }
 }
 
 export async function uploadNotes(files: File[], targetPath: string): Promise<UploadResult> {

@@ -99,9 +99,18 @@ export async function extractPdfViaWorker(filePath: string, signal?: AbortSignal
   const child = acquireWorker()
   const id = nextId++
   return new Promise<string>((resolve, reject) => {
+    // v1 二轮审查 m2-26：`pending` 的置空必须收进单一出口。此前「已中止」早退分支直接
+    // `onAbortWrapped(); return`，绕过 `pending = null`——外部 signal 进入时已 aborted
+    // （预算耗尽/用户按停）会让这次调用 reject 的同时留下 `pending` 非空，此后**所有**
+    // PDF 抽取都报 'serial queue violation'，直到 worker 自己空闲退出（5 分钟）才清。
+    const settle = (): void => {
+      pending = null
+      signal?.removeEventListener('abort', onAbort)
+    }
     const onAbort = (): void => {
       const reason = signal?.reason ?? new Error('pdf extraction aborted')
       killWorker()
+      settle()
       reject(reason instanceof Error ? reason : new Error(String(reason)))
     }
     const onAbortWrapped = (): void => {
@@ -112,22 +121,20 @@ export async function extractPdfViaWorker(filePath: string, signal?: AbortSignal
     workerDispatch = (message) => {
       if (message.id !== id) return
       if (message.type === 'result') {
-        signal?.removeEventListener('abort', onAbort)
-        pending = null
+        settle()
         resolve(message.text ?? '')
       } else if (message.type === 'error') {
-        signal?.removeEventListener('abort', onAbort)
-        pending = null
+        settle()
         reject(new Error(message.message ?? 'pdf extract worker error'))
       }
     }
     pending = {
       resolve: (text) => {
-        signal?.removeEventListener('abort', onAbort)
+        settle()
         resolve(text)
       },
       reject: (error) => {
-        signal?.removeEventListener('abort', onAbort)
+        settle()
         reject(error)
       }
     }

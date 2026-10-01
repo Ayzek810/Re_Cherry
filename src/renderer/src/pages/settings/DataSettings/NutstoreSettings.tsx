@@ -1,4 +1,5 @@
 import { CheckOutlined, FolderOutlined, LoadingOutlined, SyncOutlined, WarningOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { HStack } from '@renderer/components/Layout'
 import NutstorePathPopup from '@renderer/components/Popups/NutsorePathPopup'
 import Selector from '@renderer/components/Selector'
@@ -34,6 +35,8 @@ import { useTranslation } from 'react-i18next'
 import { type FileStat } from 'webdav'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+
+const logger = loggerService.withContext('NutstoreSettings')
 
 const NutstoreSettings: FC = () => {
   const { theme } = useTheme()
@@ -102,22 +105,44 @@ const NutstoreSettings: FC = () => {
     }
   }, [dispatch, t])
 
+  /**
+   * 连接检测：被调方会 reject（`checkConnection` → IPC → `WebDav.ts` 抛错）。
+   * 修改前没有 try/catch，「凭据 / 主机 / 路径写错」这条最该有反馈的路径会让
+   * `setCheckConnectionLoading(false)` 永不执行 —— 按钮永久转圈、状态停在旧值、
+   * 用户既看不到原因也无法重试（v1 二轮审查 s2-07）。对照 SiyuanSettings 的样板。
+   */
   const handleCheckConnection = async () => {
     if (!nutstoreToken) return
     setCheckConnectionLoading(true)
-    const isConnectedToNutstore = await checkConnection()
 
-    window.toast[isConnectedToNutstore ? 'success' : 'error']({
-      timeout: 2000,
-      title: isConnectedToNutstore
-        ? t('settings.data.nutstore.checkConnection.success')
-        : t('settings.data.nutstore.checkConnection.fail')
-    })
+    try {
+      const isConnectedToNutstore = await checkConnection()
 
-    setNsConnected(isConnectedToNutstore)
-    setCheckConnectionLoading(false)
+      window.toast[isConnectedToNutstore ? 'success' : 'error']({
+        timeout: 2000,
+        title: isConnectedToNutstore
+          ? t('settings.data.nutstore.checkConnection.success')
+          : t('settings.data.nutstore.checkConnection.fail')
+      })
 
-    setTimeoutTimer('handleCheckConnection', () => setNsConnected(false), 3000)
+      setNsConnected(isConnectedToNutstore)
+
+      if (isConnectedToNutstore) {
+        setTimeoutTimer('handleCheckConnection', () => setNsConnected(false), 3000)
+      }
+    } catch (error) {
+      logger.error('Check Nutstore connection failed:', error as Error)
+      setNsConnected(false)
+      window.toast.error({
+        timeout: 3000,
+        title: t('settings.data.nutstore.checkConnection.fail', {
+          defaultValue: 'Nutstore connection failed'
+        })
+      })
+    } finally {
+      // 无论成功、失败还是抛错都要复位，否则按钮会永久 loading。
+      setCheckConnectionLoading(false)
+    }
   }
 
   const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =

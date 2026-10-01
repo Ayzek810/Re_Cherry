@@ -1,6 +1,5 @@
-import type { BinaryToolSnapshot } from '@renderer/pages/code/utils/binarySnapshot'
 import type { ManagedToolStatusState } from '@shared/types/managedTool'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // fork 缝（批次4a 原创缝 hook，~60 行）：V2 的状态读取走 useSharedCacheValue
 //（'feature.deepseek_harness.status' / 'feature.hermes_dashboard.status' / gateway 运行态 /
@@ -20,26 +19,57 @@ export interface ApiGatewayStatusState {
 const STOPPED: ManagedToolStatusState = { status: 'stopped' }
 const GATEWAY_IDLE: ApiGatewayStatusState = { running: false }
 
+/**
+ * 浅比较：IPC 每次 invoke 都返回**新反序列化对象**，但内容往往一字未变。
+ * 内容相同就保持旧 state 引用，订阅组件才不会因一次无变化的推送重渲染。
+ */
+function isSameStatusRecord(a: object, b: object): boolean {
+  const keysA = Object.keys(a)
+  const keysB = Object.keys(b)
+  if (keysA.length !== keysB.length) return false
+  for (const key of keysA) {
+    if ((a as Record<string, unknown>)[key] !== (b as Record<string, unknown>)[key]) return false
+  }
+  return true
+}
+
+/**
+ * 四个同形状态 hook 的公共实现（deepseek / hermes / paperAgent / gateway）。
+ *
+ * **为什么用 ref 固定两个回调**：`getStatus` / `onStatus` 由调用方写成箭头函数字面量，每次渲染都是新
+ * 引用。若把它们放进依赖数组，effect 每次渲染都重跑——重新发一次 `getStatus()` IPC 并重新
+ * `onStatus` 订阅/退订；而 IPC 回来的对象引用必然与上次不同 ⇒ `setState` 每次都算变化 ⇒ 组件重渲染
+ * ⇒ 依赖再次变化 ⇒ 形成**自持的"渲染 → IPC → setState → 渲染"环**，只能靠 IPC 往返延迟限速。
+ * `useDeepSeekHarnessController` 无条件挂载本 hook，因此只要打开 /code 页这个环就在跑。
+ * effect 现在只在挂载/卸载时各跑一次；回调经 ref 取最新，语义不变。
+ */
 function useManagedToolStatusState(
   getStatus: () => Promise<unknown>,
   onStatus: (callback: (status: unknown) => void) => () => void,
   initial: ManagedToolStatusState
 ): ManagedToolStatusState {
   const [state, setState] = useState<ManagedToolStatusState>(initial)
+  const getStatusRef = useRef(getStatus)
+  getStatusRef.current = getStatus
+  const onStatusRef = useRef(onStatus)
+  onStatusRef.current = onStatus
+
   useEffect(() => {
     let cancelled = false
     const apply = (status: unknown) => {
-      if (!cancelled && status) setState(status as ManagedToolStatusState)
+      if (cancelled || !status) return
+      setState((prev) => (isSameStatusRecord(prev, status as object) ? prev : (status as ManagedToolStatusState)))
     }
-    void getStatus()
+    void getStatusRef
+      .current()
       .then(apply)
       .catch(() => {})
-    const unsubscribe = onStatus(apply)
+    const unsubscribe = onStatusRef.current(apply)
     return () => {
       cancelled = true
       unsubscribe()
     }
-  }, [getStatus, onStatus])
+  }, [])
   return state
 }
 
@@ -79,7 +109,8 @@ export function useApiGatewayStatus(): ApiGatewayStatusState {
   useEffect(() => {
     let cancelled = false
     const apply = (status: unknown) => {
-      if (!cancelled && status) setState(status as ApiGatewayStatusState)
+      if (cancelled || !status) return
+      setState((prev) => (isSameStatusRecord(prev, status as object) ? prev : (status as ApiGatewayStatusState)))
     }
     void window.api.codeCli.apiGateway
       .getStatus()
@@ -92,27 +123,4 @@ export function useApiGatewayStatus(): ApiGatewayStatusState {
     }
   }, [])
   return state
-}
-
-/** binary 快照（V2 useSharedCacheValue('feature.code_cli.binaries') 读取面的 fork 对位）。 */
-export function useBinarySnapshots(): Record<string, BinaryToolSnapshot> {
-  const [snapshots, setSnapshots] = useState<Record<string, BinaryToolSnapshot>>({})
-  useEffect(() => {
-    let cancelled = false
-    const refresh = async () => {
-      try {
-        const next = (await window.api.codeCli.binary.snapshots()) as Record<string, BinaryToolSnapshot>
-        if (!cancelled) setSnapshots(next ?? {})
-      } catch {
-        // 快照读取失败保形为空表（消费方按 resolved=false 的重试语义兜底，见 useCliVersionStatuses）。
-      }
-    }
-    void refresh()
-    const unsubscribe = window.api.codeCli.binary.onChanged(() => void refresh())
-    return () => {
-      cancelled = true
-      unsubscribe()
-    }
-  }, [])
-  return snapshots
 }

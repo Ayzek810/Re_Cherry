@@ -30,14 +30,6 @@ type DirectoryListOptions = {
   searchPattern?: string
 }
 
-export function tracedInvoke(channel: string, spanContext: SpanContext | undefined, ...args: any[]) {
-  if (spanContext) {
-    const data = { type: 'trace', context: spanContext }
-    return ipcRenderer.invoke(channel, ...args, data)
-  }
-  return ipcRenderer.invoke(channel, ...args)
-}
-
 // Custom APIs for renderer
 const api = {
   dshSyncProviders: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncProviders, providers),

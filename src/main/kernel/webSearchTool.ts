@@ -109,7 +109,15 @@ export function apply(ctx: Context): void {
         // 唯一权威上限，缺省即设置值，模型显式 count 由服务统一钳到 [1, 设置值]。
         // 工具侧只负责把模型参数原样（或 undefined）下传，不再自带硬编码钳制。
         const count = typeof args.count === 'number' && Number.isFinite(args.count) ? Math.trunc(args.count) : undefined
-        const result = await webSearchService.search(providerId, query, { count, signal: exec.signal })
+        // 引擎抛出（提供商未就绪 / 网络断 / 引擎不可用）与"真的搜到 0 条"是两件事：
+        // 前者**必须**以失败上行，不得折叠成"No web results found"（CLAUDE.md §9 第一条硬规则）。
+        let result: Awaited<ReturnType<typeof webSearchService.search>>
+        try {
+          result = await webSearchService.search(providerId, query, { count, signal: exec.signal })
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error)
+          throw new Error(`web_search: search failed via provider "${providerId}": ${reason}`)
+        }
         // 同轮多次搜索的全局编号偏移（每轮发送时重置）。
         const offset = webSearchService.bumpTurnResultOffset(topicId, result.results.length)
         logger.info(

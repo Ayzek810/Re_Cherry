@@ -4,7 +4,7 @@ import { TopView } from '@renderer/components/TopView'
 import { searchKnowledgeBase } from '@renderer/services/knowledgeBaseApi'
 import type { FileMetadata, KnowledgeBase, KnowledgeSearchResult } from '@renderer/types'
 import type { InputRef } from 'antd'
-import { Divider, Input, List, Modal, Spin } from 'antd'
+import { Button, Divider, Empty, Input, List, Modal, Spin } from 'antd'
 import { Search } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -27,6 +27,7 @@ const PopupContainer: React.FC<Props> = ({ base, resolve }) => {
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<Array<KnowledgeSearchResult & { file: FileMetadata | null }>>([])
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [searchError, setSearchError] = useState<string | null>(null)
   const { t } = useTranslation()
   const searchInputRef = useRef<InputRef>(null)
 
@@ -34,18 +35,23 @@ const PopupContainer: React.FC<Props> = ({ base, resolve }) => {
     if (!value.trim()) {
       setResults([])
       setSearchKeyword('')
+      setSearchError(null)
       return
     }
 
     setSearchKeyword(value.trim())
     setLoading(true)
+    setSearchError(null)
     try {
       const searchResults = await searchKnowledgeBase(value, base)
       logger.debug(`KnowledgeSearchPopup Search Results: ${searchResults}`)
       setResults(searchResults)
     } catch (error) {
+      // 检索失败**不得**渲染成"没有结果"（CLAUDE.md §9）：置错误态并给出可重试的三态之一。
       logger.error(`Failed to search knowledge base ${base.name}:`, error as Error)
       setResults([])
+      setSearchError(error instanceof Error ? error.message : String(error))
+      window.toast.error(t('knowledge.search_failed'))
     } finally {
       setLoading(false)
     }
@@ -123,6 +129,18 @@ const PopupContainer: React.FC<Props> = ({ base, resolve }) => {
           <LoadingContainer>
             <Spin size="large" />
           </LoadingContainer>
+        ) : searchError !== null ? (
+          // 失败态与空态显式分离（二轮审查 f2-13）：loading / error / empty 三态并列。
+          <ErrorContainer data-testid="knowledge-search-error" title={searchError}>
+            <span>{t('knowledge.search_failed')}</span>
+            <Button size="small" onClick={() => void handleSearch(searchKeyword)}>
+              {t('common.retry')}
+            </Button>
+          </ErrorContainer>
+        ) : results.length === 0 && searchKeyword.trim() !== '' ? (
+          <EmptyContainer>
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('knowledge.search_no_results')} />
+          </EmptyContainer>
         ) : (
           <List
             dataSource={results}
@@ -145,6 +163,25 @@ const ResultsContainer = styled.div`
 `
 
 const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+`
+
+/** 检索失败态（与空态分离）：一行文案 + 重试。 */
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  height: 200px;
+  font-size: 13px;
+  color: var(--color-error);
+`
+
+const EmptyContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;

@@ -35,6 +35,13 @@ vi.mock('electron', () => {
       removeHandler: vi.fn(),
       removeAllListeners: vi.fn()
     },
+    // 全局快捷键（ShortcutService 的注册面；测试断言注册/退订，不触碰真实系统 API）。
+    globalShortcut: {
+      register: vi.fn(),
+      unregister: vi.fn(),
+      unregisterAll: vi.fn(),
+      isRegistered: vi.fn(() => false)
+    },
     BrowserWindow: vi.fn(),
     utilityProcess: {
       // OCR utility 子进程（pdfOcr.test.ts 用 mockImplementation 覆盖行为）。

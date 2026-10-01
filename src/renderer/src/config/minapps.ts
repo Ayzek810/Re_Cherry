@@ -18,17 +18,24 @@ const logger = loggerService.withContext('Config:minapps')
 
 // 加载自定义小应用
 const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
+  let content: string
   try {
-    let content: string
-    try {
-      content = await window.api.file.read('custom-minapps.json')
-    } catch (error) {
-      // 如果文件不存在，创建一个空的 JSON 数组
-      content = '[]'
-      await window.api.file.writeWithId('custom-minapps.json', content)
-    }
+    content = await window.api.file.read('custom-minapps.json')
+  } catch (error) {
+    // r2-79：主进程 readFile 对**任何**失败都抛（占用/权限/编码/IO），此前这里一律按
+    // "文件不存在"处理并向同一路径覆盖写 '[]' —— 一次瞬时读失败就永久清空用户的自定义
+    // 小应用（家规不变式 6：不可判定的状态不得授权破坏性动作）。现在**绝不写盘**：
+    // 只记 warn 并返回空列表（文件确实不存在时也走这里——文件由用户首次添加小应用时创建，
+    // 没有种子文件不影响默认应用，见 `pages/apps/NewAppButton`）。
+    logger.warn('Failed to read custom mini apps; keeping the file untouched and using none', error as Error)
+    return []
+  }
 
+  try {
     const customApps = JSON.parse(content)
+    if (!Array.isArray(customApps)) {
+      throw new Error('custom-minapps.json does not contain an array')
+    }
     const now = new Date().toISOString()
 
     return customApps.map((app: any) => ({
@@ -39,7 +46,8 @@ const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
       supportedRegions: ['CN', 'Global'] // Custom mini apps should always be visible for all regions
     }))
   } catch (error) {
-    logger.error('Failed to load custom mini apps:', error as Error)
+    // JSON 损坏同样不得降级为"用户没有小应用"后重写文件：保留原文件，如实记 warn。
+    logger.warn('Failed to parse custom mini apps; keeping the file untouched and using none', error as Error)
     return []
   }
 }

@@ -82,7 +82,26 @@ export const messageBlocksSlice = createSlice({
       state.error = action.payload
     },
     // 注意：如果只想更新现有块，也可以使用 `updateOne`
-    updateOneBlock: messageBlocksAdapter.updateOne // 期望 { id: EntityId, changes: Partial<MessageBlock> }
+    updateOneBlock: messageBlocksAdapter.updateOne, // 期望 { id: EntityId, changes: Partial<MessageBlock> }
+    /**
+     * 流式内容的**增量**写入口（v1 二轮性能审计 p2-11）。
+     *
+     * 此前流式期每帧 `updateOneBlock({ content: <累积全文> })`：每帧把整条消息字符串放进
+     * action 与 state（旧值在 GC 前并存 N 份引用），每帧拷贝量 O(全文)，叠加"每帧全量正文 →
+     * ReactMarkdown 全量重解析"（p2-09）构成 E1 的线性劣化链。改为只搬运本次新增的 delta：
+     * immer draft 上 `content += chunk`，每帧 O(delta)；store 里的最终内容仍是同一份 delta
+     * 序列逐字拼出的全文（与逐帧渲染一致，不引入"第二真源"）。
+     *
+     * 只服务仍处于流式期的块（MAIN_TEXT/THINKING/COMPACT 等有 `content` 字段者）；落定由既有
+     * `upsertManyBlocks` / `updateOneBlock` 全量替换，两条路径都写同一个 `content` 字段。
+     */
+    appendBlockContent: (state, action: PayloadAction<{ id: string; chunks: readonly string[] }>) => {
+      const block = state.entities[action.payload.id]
+      if (block === undefined || !('content' in block) || typeof block.content !== 'string') return
+      let next = block.content
+      for (const chunk of action.payload.chunks) next += chunk
+      block.content = next
+    }
   }
   // 如果需要处理其他 slice 的 action，可以在这里添加 extraReducers。
 })
@@ -96,7 +115,8 @@ export const {
   removeAllBlocks,
   setMessageBlocksLoading,
   setMessageBlocksError,
-  updateOneBlock
+  updateOneBlock,
+  appendBlockContent
 } = messageBlocksSlice.actions
 
 export const messageBlocksSelectors = messageBlocksAdapter.getSelectors<RootState>(

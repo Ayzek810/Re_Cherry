@@ -277,15 +277,20 @@ const fetchAndProcessAssistantResponseImpl = async (
       assistant
     })
 
-    const abortController = new AbortController()
+    // r2-13：中止登记按**话题**收口（发新回合即摘掉上一回合的键）。此前这里还新建了一个
+    // 从未被接线的 `AbortController`（真正的取消走 dshTopicStop），每条用户消息留下一个
+    // 永不释放的闭包 + 一个无用 controller——那个空转对象已删除。
     logger.silly('Add Abort Controller', { id: userMessageId })
-    addAbortController(userMessageId!, () => {
-      abortController.abort()
-      // 内核替换：停止生成改为通知内核中止回合
-      void window.api.dshTopicStop(topicId).catch((error) => {
-        logger.error('kernelChat: failed to stop topic', error)
-      })
-    })
+    addAbortController(
+      userMessageId!,
+      () => {
+        // 内核替换：停止生成改为通知内核中止回合
+        void window.api.dshTopicStop(topicId).catch((error) => {
+          logger.error('kernelChat: failed to stop topic', error)
+        })
+      },
+      topicId
+    )
 
     // dsh 内核替换：网络调用改为内核会话（provider/model/prompt 同步进内核，
     // 流式回复由内核 session 事件投影回 Redux）。

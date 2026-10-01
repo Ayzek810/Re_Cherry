@@ -58,6 +58,28 @@ describe('abortController', () => {
 
       expect(abortMap.get('')).toContain(fn)
     })
+
+    // r2-13：abortMap 原先只增不减（每条用户消息一个永不释放的闭包）。给 topicId 后按话题收口。
+    it('replaces the previous turn registration when the same topic sends again', () => {
+      const firstTurn = vi.fn()
+      const secondTurn = vi.fn()
+      addAbortController('user-message-1', firstTurn, 'topic-1')
+      addAbortController('user-message-2', secondTurn, 'topic-1')
+
+      expect(abortMap.has('user-message-1')).toBe(false)
+      expect(abortMap.get('user-message-2')).toEqual([secondTurn])
+      expect(abortMap.size).toBe(1)
+    })
+
+    it('keeps registrations of other topics untouched', () => {
+      const fnTopic1 = vi.fn()
+      const fnTopic2 = vi.fn()
+      addAbortController('msg-1', fnTopic1, 'topic-1')
+      addAbortController('msg-2', fnTopic2, 'topic-2')
+
+      expect(abortMap.get('msg-1')).toEqual([fnTopic1])
+      expect(abortMap.get('msg-2')).toEqual([fnTopic2])
+    })
   })
 
   describe('removeAbortController', () => {
@@ -87,7 +109,8 @@ describe('abortController', () => {
       const fn = vi.fn()
       addAbortController('', fn)
       removeAbortController('', fn)
-      expect(abortMap.get('')).toEqual([])
+      // r2-13：摘空后连键一起删（此前只留一个空数组，每条已结束回合都留一份）。
+      expect(abortMap.has('')).toBe(false)
     })
 
     it('should handle non-existent id gracefully', () => {
@@ -109,8 +132,8 @@ describe('abortController', () => {
       // 验证所有函数被调用
       expect(fn1).toHaveBeenCalledTimes(1)
       expect(fn2).toHaveBeenCalledTimes(1)
-      // 验证清理完成 - 数组变为空但条目仍存在
-      expect(abortMap.get('test-id')).toEqual([])
+      // r2-13：清理完成后整条登记消失（不再留空数组占位）
+      expect(abortMap.has('test-id')).toBe(false)
     })
 
     it('should handle non-existent id gracefully', () => {

@@ -28,8 +28,15 @@ const logger = loggerService.withContext('ShortcutService')
 let showAppAccelerator: string | null = null
 let showMiniWindowAccelerator: string | null = null
 
-//indicate if the shortcuts are registered on app boot time
-let isRegisterOnBoot = true
+/**
+ * v1 二轮审查 m2-10：boot 注册此前用一个模块级布尔 `isRegisterOnBoot` 记账，只在
+ * **第一次** `createMainWindow` 时挂 `ready-to-show`。主窗可在运行期重建
+ * （`WindowService.showMainWindow()` 在窗口已销毁时新建、`index.ts` 的 activate 分支同理），
+ * 而新建窗口的 `isFocused()` 在重建瞬间通常为 false ⇒ show_app/mini_window 要等用户手动
+ * 点一次窗口才回来。改成按窗口记账：每个窗口各自挂一次 `ready-to-show`（唯一不依赖焦点的
+ * boot 注册点）。WeakSet 不阻止窗口被回收。
+ */
+const bootRegistrationWindows = new WeakSet<BrowserWindow>()
 
 // store the focus and blur handlers for each window to unregister them later
 const windowOnHandlers = new Map<BrowserWindow, { onFocusHandler: () => void; onBlurHandler: () => void }>()
@@ -230,13 +237,13 @@ export function registerUniversalShortcuts() {
 }
 
 export function registerShortcuts(window: BrowserWindow) {
-  if (isRegisterOnBoot) {
+  if (!bootRegistrationWindows.has(window)) {
+    bootRegistrationWindows.add(window)
     window.once('ready-to-show', () => {
       if (configManager.getLaunchToTray()) {
         registerInternal(window, true)
       }
     })
-    isRegisterOnBoot = false
   }
 
   const unregister = () => {

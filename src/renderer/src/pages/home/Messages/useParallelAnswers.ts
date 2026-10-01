@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
 import { loadKernelTopicMessages } from '@renderer/services/kernelChat'
-import store, { useAppDispatch, useAppSelector } from '@renderer/store'
+import store, { type RootState, useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectAllTopics } from '@renderer/store/assistants'
 import { upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
@@ -8,7 +8,7 @@ import type { Topic } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import { loadConversationTree } from '@renderer/utils/conversationTreeCache'
 import { branchKindsOf, familyRowSignature, kernelRootTopicId } from '@renderer/utils/topicBranch'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const logger = loggerService.withContext('useParallelAnswers')
 
@@ -48,8 +48,87 @@ export function buildParallelAnswerMap(
   return map
 }
 
+/** children 列表内容等价（逐字段比较；顺序有意义——它就是展示序）。 */
+function parallelChildrenHaveSameItems(a: ParallelChildInfo[], b: ParallelChildInfo[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i += 1) {
+    if (
+      a[i].id !== b[i].id ||
+      a[i].anchorQuestionId !== b[i].anchorQuestionId ||
+      a[i].copyQuestionId !== b[i].copyQuestionId
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
 /** 装载去重（家族签名不随子会话消息入 store 变化，需防止重复投影）。 */
 const loadingTopics = new Set<string>()
+
+/** 无旁答时的共享空 Map：引用恒定，`Messages.tsx` 的 `groupedMessages` 依赖不会因此变化。 */
+const EMPTY_PARALLEL_ANSWER_MAP: Map<string, Message[]> = new Map()
+
+/** children 为空（本机没有 parallel 子会话）时短路：不读 store，也不重建 Map。 */
+const EMPTY_CHILDREN: ParallelChildInfo[] = []
+
+/** Map 内容等价（key 序 + value 数组逐元素同一引用）。 */
+function parallelAnswerMapsHaveSameItems(a: Map<string, Message[]>, b: Map<string, Message[]>): boolean {
+  if (a.size !== b.size) return false
+  for (const [key, value] of a) {
+    const other = b.get(key)
+    if (other === undefined || other.length !== value.length) return false
+    for (let i = 0; i < value.length; i += 1) {
+      if (value[i] !== other[i]) return false
+    }
+  }
+  return true
+}
+
+/**
+ * 旁答投影的选择器（细粒度 + 内容稳定）。
+ *
+ * 为什么不能直接订阅整个 `state.messages` 切片：那是 `createSlice` 的顶层对象，**任何** messages
+ * reducer（含每个流式 tick 的 `updateMessage`/`upsertBlockReference`/`replaceMessageId`）都会换掉它的
+ * 引用。而返回值是 `Messages.tsx` 的 `groupedMessages` 的 useMemo 依赖之一，于是一个 token 到达就让
+ * 消息区整棵重渲。本 hook 的真实输入只有两个：`entities` 与 `messageIdsByTopic`。
+ *
+ * 第二层保险：流式期间 `entities` 每 rAF 都换引用，重算无法避免；但旁答集合只在子会话消息真正变化时
+ * 才变。内容不变时返回上一次的 Map 引用（与 `store/newMessage.ts` 的 `selectGeneratingTopicIds`
+ * 同法），订阅者才不会逐 token 重渲染。
+ *
+ * 缓存以 `entities` / `messageIdsByTopic` 两个**引用**为键：流式期间它们每帧都变，所以这里是真重算；
+ * 内容等价时返回旧 Map。**不用 `createSelector(state, children)` 的二元形态**——reselect 的槽位缓存以
+ * 首参（state）为键，state 未变而 children 变时会错误复用上一次结果。
+ *
+ * 导出供单测（与 `buildParallelAnswerMap` 同为纯函数面）。
+ */
+let parallelAnswerCacheKey: { entities: Record<string, Message | undefined>; idsByTopic: Record<string, string[]> } = {
+  entities: {},
+  idsByTopic: {}
+}
+let parallelAnswerCacheChildren: ParallelChildInfo[] | undefined
+let cachedParallelAnswerMap: Map<string, Message[]> | undefined
+
+export function selectParallelAnswerMap(state: RootState, children: ParallelChildInfo[]): Map<string, Message[]> {
+  if (children.length === 0) return EMPTY_PARALLEL_ANSWER_MAP
+  const entities = state.messages.entities as Record<string, Message | undefined>
+  const messageIdsByTopic = state.messages.messageIdsByTopic
+  const sameInputs =
+    children === parallelAnswerCacheChildren &&
+    entities === parallelAnswerCacheKey.entities &&
+    messageIdsByTopic === parallelAnswerCacheKey.idsByTopic
+  if (sameInputs && cachedParallelAnswerMap !== undefined) return cachedParallelAnswerMap
+
+  parallelAnswerCacheKey = { entities, idsByTopic: messageIdsByTopic }
+  parallelAnswerCacheChildren = children
+  const next = buildParallelAnswerMap({ messages: { entities, messageIdsByTopic } }, children)
+  if (cachedParallelAnswerMap !== undefined && parallelAnswerMapsHaveSameItems(cachedParallelAnswerMap, next)) {
+    return cachedParallelAnswerMap
+  }
+  cachedParallelAnswerMap = next
+  return next
+}
 
 /**
  * 并行回答投影（v1 多模型卡片的数据源）：
@@ -61,8 +140,9 @@ const loadingTopics = new Set<string>()
  */
 export function useParallelAnswers(topic: Topic): Map<string, Message[]> {
   const dispatch = useAppDispatch()
-  const [children, setChildren] = useState<ParallelChildInfo[]>([])
-  const messagesState = useAppSelector((state) => state.messages)
+  const [children, setChildren] = useState<ParallelChildInfo[]>(EMPTY_CHILDREN)
+  // 细粒度选择器（见 selectParallelAnswerMap）：不再订阅 state.messages 切片根。
+  const parallelAnswers = useAppSelector((state) => selectParallelAnswerMap(state, children))
   // 口径与页码条/分支图统一：branchKind = **跨助手联合**（branchKindsOf，首个有值获胜）；
   // 签名 = 家族行（联合域）familyRowSignature——无关话题的 updatedAt 变动不再推翻旁答投影，
   // 另一侧持有者改行照样刷新。
@@ -94,7 +174,9 @@ export function useParallelAnswers(topic: Topic): Map<string, Message[]> {
             copyQuestionId: 'kernel-' + session.id + '-' + copySeq
           })
         }
-        setChildren(next)
+        // 内容不变则保持旧数组引用：选择器的第三个输入是 children 本身，
+        // 换引用会让「内容稳定的 Map 引用」这层保险白做（并让 effect 依赖的 setChildren 触发无谓重渲）。
+        setChildren((prev) => (parallelChildrenHaveSameItems(prev, next) ? prev : next))
 
         // 重启恢复：还没进 store 的子会话从内核日志按需还原
         for (const child of next) {
@@ -134,7 +216,7 @@ export function useParallelAnswers(topic: Topic): Map<string, Message[]> {
     }
   }, [topic.id, signature, dispatch])
 
-  return useMemo(() => buildParallelAnswerMap({ messages: messagesState }, children), [messagesState, children])
+  return parallelAnswers
 }
 
 export default useParallelAnswers

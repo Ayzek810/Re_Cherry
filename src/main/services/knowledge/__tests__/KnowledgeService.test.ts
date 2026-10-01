@@ -35,7 +35,8 @@ vi.mock('../embeddings', () => ({
 }))
 vi.mock('../vectorStore', () => ({
   BaseVectorStore: {
-    open: vi.fn(async () => ({ insert: vi.fn(async () => {}) }))
+    open: vi.fn(async () => ({ insert: vi.fn(async () => {}), close: vi.fn(async () => {}) })),
+    dbDir: vi.fn((dataDir: string, baseId: string) => `${dataDir}/${baseId}`)
   }
 }))
 
@@ -241,5 +242,57 @@ describe('processItem PDF 路由（V2 对齐：配置即路由，2026-09-22 用�
 
     expect(parsePdfWithProvider).not.toHaveBeenCalled()
     expect(extractFromFile).toHaveBeenCalledWith('C:/books/notes.docx')
+  })
+})
+
+describe('库生命周期（v1 二轮审查 m2-08 / m2-09）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('m2-08：每轮登记表有淘汰上限，不随话题数无界增长', () => {
+    const svc = service()
+    // 512 是 MAX_TURN_TOPICS；登记 512 + 64 个话题后，最早的 key 必须已被淘汰。
+    for (let i = 0; i < 576; i++) {
+      svc.setTurnDocuments(`evict-${i}`, [{ name: `doc-${i}.txt`, path: `C:/books/doc-${i}.txt` }])
+      svc.setTurnBases(`evict-${i}`, [{ id: `base-${i}`, embedding: { providerId: 'p', modelId: 'm' } }])
+    }
+    // 最早的 key 已淘汰 → read_document 报"未登记"（不是静默返回旧文档）。
+    expect(svc.getTurnDocuments('evict-0')).toBeUndefined()
+    expect(svc.getTurnBases('evict-0')).toBeUndefined()
+    // 最近的 key 仍在。
+    expect(svc.getTurnDocuments('evict-575')).toHaveLength(1)
+    expect(svc.getTurnBases('evict-575')).toHaveLength(1)
+    // 清理，避免影响同进程内其他用例。
+    for (let i = 0; i < 576; i++) {
+      svc.setTurnDocuments(`evict-${i}`, undefined)
+      svc.setTurnBases(`evict-${i}`, undefined)
+    }
+  })
+
+  it('m2-09：resetBase 把新开的向量库登记回注册表（不再泄漏句柄）', async () => {
+    const { BaseVectorStore } = await import('../vectorStore')
+    const opened: Array<{ close: ReturnType<typeof vi.fn> }> = []
+    vi.mocked(BaseVectorStore.open).mockImplementation(async () => {
+      const store = { insert: vi.fn(async () => {}), close: vi.fn(async () => {}) }
+      opened.push(store)
+      return store as never
+    })
+
+    const svc = service()
+    await svc.createBase({ id: 'reset-base' })
+    expect(opened).toHaveLength(1)
+
+    await svc.resetBase('reset-base')
+    // 旧句柄被关闭，新句柄被打开并登记——紧接着的 openStore 复用新句柄而不是再开一个。
+    expect(opened[0].close).toHaveBeenCalledTimes(1)
+    expect(opened).toHaveLength(2)
+
+    await svc.createBase({ id: 'reset-base' })
+    expect(opened).toHaveLength(2)
+
+    // 收尾：关闭并删除，避免句柄跨用例残留。
+    await svc.deleteBase('reset-base')
+    expect(opened[1].close).toHaveBeenCalledTimes(1)
   })
 })

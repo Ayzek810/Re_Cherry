@@ -22,6 +22,7 @@ import * as path from 'node:path'
 import { loggerService } from '@logger'
 import { getMcpDir, getTempDir } from '@main/utils/file'
 import type { DxtManifest, DxtResolvedMcpConfig, DxtUploadResult } from '@shared/config/types'
+import { redactSecretText } from '@shared/utils/redaction'
 import StreamZip from 'node-stream-zip'
 
 const logger = loggerService.withContext('DxtService')
@@ -384,7 +385,8 @@ class DxtService {
 
       return {
         success: false,
-        error: errorMessage
+        // 失败出口同样脱敏（v1 二轮审查 m2-05）：错误文本可能回显含 key 的 args。
+        error: redactSecretText(errorMessage)
       }
     }
   }
@@ -413,9 +415,11 @@ class DxtService {
       // Apply platform overrides and variable substitution
       const resolvedConfig = applyPlatformOverrides(manifest.server.mcp_config, dxtPath, userConfig)
 
+      // args 是 `${user_config.KEY}` 插值的载体（该功能的设计用法），必然含 provider key——
+      // 与 codeCli/hermes/dsh/paper-agent 四处同纪律，落盘日志必须脱敏（v1 二轮审查 m2-05）。
       logger.debug('Resolved MCP config:', {
         command: resolvedConfig.command,
-        args: resolvedConfig.args,
+        args: resolvedConfig.args?.map((arg) => redactSecretText(arg)),
         env: resolvedConfig.env ? Object.keys(resolvedConfig.env) : undefined
       })
 

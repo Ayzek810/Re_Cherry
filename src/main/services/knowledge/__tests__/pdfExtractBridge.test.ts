@@ -103,6 +103,23 @@ describe('extractPdfViaWorker（常驻 worker 编排）', () => {
     await expect(promise).rejects.toThrow('pdf parse failed')
   })
 
+  // v1 二轮审查 m2-26：进入时 signal 已 aborted 的早退分支曾绕过 `pending = null`，
+  // 于是这次调用 reject 的同时留下 pending 非空——此后所有 PDF 抽取都报
+  // 'serial queue violation'，直到 worker 空闲退出（5 分钟）才清。
+  it('进入时 signal 已中止：拒绝且不留下 pending（下一次抽取不被自锁）', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('budget exhausted'))
+
+    await expect(extractPdfViaWorker('C:/books/a.pdf', controller.signal)).rejects.toThrow('budget exhausted')
+
+    // 队列未被自锁：下一次抽取正常开始（若 pending 仍在，这一行会抛 serial queue violation）。
+    const next = extractPdfViaWorker('C:/books/b.pdf')
+    const child = currentChild as FakeChild
+    const id = lastExtractId(child)
+    emit(child, { type: 'result', id, text: '恢复' })
+    await expect(next).resolves.toBe('恢复')
+  })
+
   it('解析中途 worker 崩溃：拒绝；下一次抽取自动重 fork', async () => {
     const first = extractPdfViaWorker('C:/books/a.pdf')
     const child = currentChild as FakeChild

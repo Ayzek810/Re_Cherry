@@ -140,14 +140,43 @@ export function getReactStyleFromToken(
 }
 
 /**
- * 获取 markdown-it，避免并发问题
+ * 获取 markdown-it（**装配一次**的模块级单例）
+ *
+ * r2-77：`mdInitializer` 是单例（`AsyncInitializer` 只跑一次工厂），而 `md.use()` 是**追加**
+ * 语义。此前 `md.use(fromHighlighter(...))` 写在 `getMarkdownIt` 里，每次调用都往同一个
+ * 实例再挂一份高亮插件（消费点 `CodeStyleProvider` 的 `shikiMarkdownIt` 按渲染调用），
+ * 插件数、内存与单次 render 的 CPU 随调用次数线性增长且永不自愈。
+ * 现在插件在工厂里装配一次，`getMarkdownIt` 只做「按 markdown 预加载语言 + 切换本轮主题
+ * + 返回实例」；插件选项是同一个可变对象，主题在解析时读取。
  */
+const markdownItOptions: { themes: Record<string, string>; defaultColor: string } = {
+  themes: {
+    'one-light': 'one-light',
+    'material-theme-darker': 'material-theme-darker'
+  },
+  defaultColor: DEFAULT_THEMES[0]
+}
+
 const mdInitializer = new AsyncInitializer(async () => {
   const md = await import('markdown-it')
-  return md.default({
+  const instance = md.default({
     linkify: true, // 自动转换 URL 为链接
     typographer: true // 启用印刷格式优化
   })
+
+  const highlighter = await getHighlighter()
+  const { fromHighlighter } = await import('@shikijs/markdown-it/core')
+
+  instance.use(
+    fromHighlighter(highlighter, {
+      themes: markdownItOptions.themes,
+      defaultColor: markdownItOptions.defaultColor,
+      defaultLanguage: 'json',
+      fallbackLanguage: 'json'
+    })
+  )
+
+  return instance
 })
 
 /**
@@ -158,8 +187,6 @@ const mdInitializer = new AsyncInitializer(async () => {
 export async function getMarkdownIt(theme: string, markdown: string) {
   const highlighter = await getHighlighter()
   await loadMarkdownLanguage(markdown, highlighter)
-  const md = await mdInitializer.get()
-  const { fromHighlighter } = await import('@shikijs/markdown-it/core')
 
   let actualTheme = theme
   try {
@@ -168,26 +195,14 @@ export async function getMarkdownIt(theme: string, markdown: string) {
     logger.debug(`Failed to load theme '${theme}', using 'one-light' as fallback:`, error as Error)
     actualTheme = 'one-light'
   }
-
-  const themes: Record<string, string> = {
-    'one-light': 'one-light',
-    'material-theme-darker': 'material-theme-darker'
+  // 插件只注册一次：本轮生效的主题写进装配时的同一对象（`@shikijs/markdown-it`
+  // 在每次解析时按 `themes` + `defaultColor` 取用），不再重复 `md.use()`。
+  if (markdownItOptions.themes[actualTheme] === undefined) {
+    markdownItOptions.themes[actualTheme] = actualTheme
   }
+  markdownItOptions.defaultColor = actualTheme
 
-  if (actualTheme !== 'one-light' && actualTheme !== 'material-theme-darker') {
-    themes[actualTheme] = actualTheme
-  }
-
-  md.use(
-    fromHighlighter(highlighter, {
-      themes,
-      defaultColor: actualTheme,
-      defaultLanguage: 'json',
-      fallbackLanguage: 'json'
-    })
-  )
-
-  return md
+  return mdInitializer.get()
 }
 
 /**

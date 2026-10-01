@@ -12,9 +12,13 @@
  * process.ts 工具未移植。
  */
 import { spawn } from 'node:child_process'
-import path from 'node:path'
+import fs from 'node:fs'
+// 具名导入 resolve：`path` 默认导出在部分测试的模块桩里只替换 join/resolve，
+// 而"绝对路径归一化"是安全判定的一部分，必须走真实实现。
+import path, { resolve as resolvePath } from 'node:path'
 
 import { loggerService } from '@logger'
+import { killProcessTree } from '@main/utils/processRunner'
 
 const logger = loggerService.withContext('MCPService:commandResolution')
 
@@ -30,7 +34,20 @@ const VALID_COMMAND_NAME_REGEX = /^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,127}$/
 const MAX_OUTPUT_SIZE = 10240
 
 /**
- * 快照 process.env 为 Record<string, string>（过滤 undefined），可再叠加服务器私有 env。
+ * 绝对路径命令的可用扩展名（仅 Windows）。`.cmd`/`.bat` 由 cross-spawn 转发，
+ * MCP SDK 的 StdioClientTransport 内部同样用 cross-spawn（`shell: false` 但带
+ * `.cmd` 转发），故这两类是可执行入口，不再是"未找到"。
+ */
+const WINDOWS_EXECUTABLE_EXTENSIONS = ['.exe', '.cmd', '.bat']
+
+/**
+ * shell 元字符与引号：这些字符会让 `cmd.exe` 上的 `%VAR%` 展开、`&`/`|` 串联、
+ * 引号改变解析边界。裸名与绝对路径都一律拒绝——路径里合法出现它们的可能性远低于
+ * 被当成注入面的代价。空白字符同样在内：`node -e 1` 这类"命令 + 参数"值必须整体拒绝。
+ */
+const SHELL_METACHARACTER_REGEX = /[\s&|<>^%!;"'`$(){}[\]]/
+
+/** 快照 process.env 为 Record<string, string>（过滤 undefined），可再叠加服务器私有 env。
  * StdioClientTransport 的 env 参数要求 Record<string, string>。
  */
 export function getInheritedEnv(extra?: Record<string, string>): Record<string, string> {
@@ -44,10 +61,70 @@ export function getInheritedEnv(extra?: Record<string, string>): Record<string, 
 }
 
 /**
+ * v1 二轮审查 m2-06：MCP `server.command` 进 `StdioClientTransport` 之前的准入校验。
+ *
+ * `MCPService.initTransport` 此前只在 `npx`/`uvx`/`uv` 三条分支走 `findCommandInShellEnv`
+ * （注入面收在那里），其余情况直接 spawn 渲染层给的任意字符串——`C:\evil.exe`、
+ * `node -e "..."` 都能落进 `command`。本函数把注入面收敛到真正 spawn 的那一处：
+ *
+ * - 裸命令名（无路径分隔符）：必须匹配 `VALID_COMMAND_NAME_REGEX`（字母数字/下划线/连字符），
+ *   由 PATH 解析——这是 `node`/`python`/`bun` 等常规形态；
+ * - 绝对路径：必须是真实存在的**文件**（不是目录），扩展名限 `.exe`/`.cmd`/`.bat` 或无扩展名；
+ * - 两者共同：不得含 shell 元字符（`&`、`|`、`^`、`%`、引号等），相对路径一律拒绝。
+ *
+ * 非法输入返回 `{ ok: false, reason }`，由调用方抛出明确错误——绝不照 spawn。
+ */
+export function normalizeMcpCommand(command: string): { ok: true; command: string } | { ok: false; reason: string } {
+  const trimmed = command.trim()
+  if (trimmed.length === 0) {
+    return { ok: false, reason: 'command is empty' }
+  }
+  if (SHELL_METACHARACTER_REGEX.test(trimmed)) {
+    return { ok: false, reason: 'command contains shell metacharacters' }
+  }
+  // Windows 分隔符在 POSIX 上不算分隔符，但 `C:\evil.exe` 这类值仍必须按绝对路径处理。
+  const hasSeparator = trimmed.includes('/') || trimmed.includes('\\')
+  if (!hasSeparator) {
+    if (!VALID_COMMAND_NAME_REGEX.test(trimmed)) {
+      return {
+        ok: false,
+        reason: 'command must be a bare executable name (letters, digits, underscore, hyphen) or an absolute path'
+      }
+    }
+    return { ok: true, command: trimmed }
+  }
+
+  const windowsStyleAbsolute = /^[a-zA-Z]:[\\/]/.test(trimmed)
+  const resolved = isWin || windowsStyleAbsolute ? path.win32.resolve(trimmed) : resolvePath(trimmed)
+  if (!(path.win32.isAbsolute(trimmed) || path.posix.isAbsolute(trimmed))) {
+    return { ok: false, reason: 'command must be an absolute path' }
+  }
+
+  const extension = path.extname(resolved).toLowerCase()
+  if (extension !== '' && !WINDOWS_EXECUTABLE_EXTENSIONS.includes(extension)) {
+    return {
+      ok: false,
+      reason: `command path must end with ${WINDOWS_EXECUTABLE_EXTENSIONS.join('/')} or have no extension`
+    }
+  }
+  let stats: fs.Stats
+  try {
+    stats = fs.statSync(resolved)
+  } catch {
+    return { ok: false, reason: `command path does not exist: ${resolved}` }
+  }
+  if (!stats.isFile()) {
+    return { ok: false, reason: `command path is not a file: ${resolved}` }
+  }
+  return { ok: true, command: resolved }
+}
+
+/**
  * 在用户 shell 环境中查找命令的完整路径（如 'npx'、'uvx'）。
- * Windows 用 `where` 且只接受 .exe（.cmd/.bat 无法被 SDK StdioClientTransport 的
- * spawn({shell:false}) 执行）；Unix 用 POSIX `command -v` 且只接受绝对路径。
- * 找不到返回 null（不抛错），由调用方决定兜底文案。
+ * Windows 用 `where`，按 `.exe` → `.cmd` → `.bat` → 无扩展名绝对路径的优先级取第一条命中
+ * （Node 官方安装器落的是 `npx.cmd`，只认 `.exe` 会把已装 Node 的用户误判为未安装；
+ * `.cmd`/`.bat` 由 cross-spawn 转发，MCP SDK 的 StdioClientTransport 也走 cross-spawn）。
+ * Unix 用 POSIX `command -v` 且只接受绝对路径。找不到返回 null（不抛错），由调用方决定兜底文案。
  */
 export async function findCommandInShellEnv(command: string, env: Record<string, string>): Promise<string | null> {
   if (!VALID_COMMAND_NAME_REGEX.test(command)) {
@@ -74,7 +151,8 @@ export async function findCommandInShellEnv(command: string, env: Record<string,
       let output = ''
       const timeoutId = setTimeout(() => {
         if (resolved) return
-        child.kill('SIGKILL')
+        // 杀树而非只杀直接子进程（仓库子进程纪律：where.exe 无后代，但口径统一）。
+        killProcessTree(child)
         logger.debug(`Timeout checking command '${command}' on Windows`)
         safeResolve(null)
       }, COMMAND_LOOKUP_TIMEOUT_MS)
@@ -91,12 +169,16 @@ export async function findCommandInShellEnv(command: string, env: Record<string,
 
         if (code === 0 && output.trim()) {
           const paths = output.trim().split(/\r?\n/)
-          // Windows 上只接受 .exe——.cmd/.bat 无法用 spawn({shell:false}) 执行（SDK 行为）
-          const exePath = paths.find((p) => p.toLowerCase().endsWith('.exe'))
-          if (exePath) {
-            safeResolve(exePath)
+          // 优先级：.exe → .cmd → .bat → 无扩展名的绝对路径（后者是 POSIX 风格脚本入口）。
+          const ranked = WINDOWS_EXECUTABLE_EXTENSIONS.map((extension) =>
+            paths.find((candidate) => candidate.toLowerCase().endsWith(extension))
+          ).find((candidate) => candidate !== undefined)
+          const extensionless = paths.find((candidate) => path.extname(candidate) === '')
+          const commandPath = ranked ?? extensionless
+          if (commandPath) {
+            safeResolve(commandPath)
           } else {
-            logger.debug(`Command '${command}' found but not as .exe (${paths[0]}), treating as not found`)
+            logger.debug(`Command '${command}' found but not in a spawnable form (${paths[0]}), treating as not found`)
             safeResolve(null)
           }
         } else {
@@ -122,7 +204,7 @@ export async function findCommandInShellEnv(command: string, env: Record<string,
       let output = ''
       const timeoutId = setTimeout(() => {
         if (resolved) return
-        child.kill('SIGKILL')
+        killProcessTree(child)
         logger.debug(`Timeout checking command '${command}'`)
         safeResolve(null)
       }, COMMAND_LOOKUP_TIMEOUT_MS)

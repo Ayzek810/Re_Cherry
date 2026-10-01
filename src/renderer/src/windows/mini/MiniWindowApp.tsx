@@ -44,6 +44,8 @@ function MiniWindow(): React.ReactElement {
       <ThemeProvider>
         <AntdProvider>
           <CodeStyleProvider>
+            {/* r2-03：小窗保留 PersistGate 只是为了等"从主窗口快照 rehydrate 完成"这一次读取；
+                本窗口的 persistor 已被 `miniWindowStoreRole` 暂停，不会回写 localStorage。 */}
             <PersistGate loading={null} persistor={persistor}>
               <ErrorBoundary>
                 <MiniWindowContent />

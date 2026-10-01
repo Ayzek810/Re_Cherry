@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createHash } from 'node:crypto'
-import { copyFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -39,7 +39,7 @@ import * as documentTool from './documentTool'
 import * as generateImageTool from './generateImageTool'
 import * as knowledgeReadTool from './knowledgeReadTool'
 import * as knowledgeSearchTool from './knowledgeSearchTool'
-import { migrateLegacyIgnorableEvents } from './legacySessionMigration'
+import { type LegacyIgnorableMigrationOutcome, migrateLegacyIgnorableEvents } from './legacySessionMigration'
 import { createMcpBridgeModule } from './mcpBridge'
 import { getTurnMemoryRoot } from './memoryKernelService'
 import * as memoryTool from './memoryTool'
@@ -49,7 +49,7 @@ import * as saveAttachmentTool from './saveAttachmentTool'
 import { isInjectedUserEvent } from './sessionEventView'
 import { resumeOrCreateSession } from './sessionResumeFallback'
 import * as skillTool from './skillTool'
-import { sanitizeUntrustedText } from './untrustedContent'
+import { hardenUntrustedText } from './untrustedContent'
 import * as webFetchTool from './webFetchTool'
 import * as webSearchTool from './webSearchTool'
 
@@ -609,15 +609,30 @@ async function backupCorruptRegistry(): Promise<void> {
 /**
  * 允不允许清扫孤儿会话（**纯函数**，便于穷举三态；`reason` 用于日志）。
  *
- * 唯一的否决项是 `failed`：注册表不可知时，"库里每个会话都不在注册表里"这一观测**不构成孤儿证据**。
+ * 两个独立的否决项——都是"不可知状态"（架构规则 #6），都必须先于清扫判定：
+ *
+ * 1. 注册表 `failed`：注册表不可知时，"库里每个会话都不在注册表里"**不构成孤儿证据**。
+ * 2. 遗留事件迁移 `failed`（k2-10）：迁移写不进去时，含遗留 `cherry/work-mode` 事件的旧会话
+ *    *仍然整段不可读*，因此启动阶段不会把它们登记进注册表——它们看上去"不在注册表里"，
+ *    但真实原因是"读不出来"。若照常清扫，这些日志会被物理 DELETE。
+ *
  * @param outcome - 注册表加载结果。
  * @param registrySize - 当前注册表行数。
+ * @param migration - 遗留事件迁移结果；缺省按"已迁移"处理（旧的二元调用不因此改变判定）。
  * @returns `sweep` 与给日志用的理由。
  */
 export function shouldSweepOrphans(
   outcome: RegistryLoadOutcome,
-  registrySize: number
+  registrySize: number,
+  migration: LegacyIgnorableMigrationOutcome = 'migrated'
 ): { sweep: boolean; reason: string } {
+  if (migration === 'failed') {
+    return {
+      sweep: false,
+      reason:
+        'legacy ignorable-event migration failed: sessions that contain legacy events stay unreadable, so they cannot be told apart from orphans'
+    }
+  }
   if (outcome === 'failed') {
     return {
       sweep: false,
@@ -669,8 +684,9 @@ export async function initTopics(ctx: Context): Promise<void> {
   await loadRegistry()
   // 先补历史事件的 ignorable 标记，再清扫：含遗留事件的旧会话此前对内核是"整段不可读"，
   // 而"不可读"与"孤儿"是两回事，不该被同一个兜底路径吞掉（详见 legacySessionMigration.ts）。
-  await migrateLegacyIgnorableEvents()
-  await sweepOrphanSessions(ctx)
+  // 迁移结果**必须参与清扫闸门**（k2-10）：写不进去时"读不出来"的会话不得被当孤儿物理删除。
+  const migration = await migrateLegacyIgnorableEvents()
+  await sweepOrphanSessions(ctx, migration)
 
   logger.info(`kernel: topic registry ready (${topics.size} topics)`)
 }
@@ -828,16 +844,25 @@ export async function forkTopic(
   return child
 }
 
-/** 删除话题：销毁 agent + 物理清盘；其 fork 出的子分支一并递归删除。清盘统一经 ctx.sessionGC 服务。 */
-export async function deleteTopic(ctx: Context, id: string): Promise<void> {
-  await deleteTopicRecursive(ctx, id, new Set())
+/**
+ * 删除话题：销毁 agent + 物理清盘；其 fork 出的子分支一并递归删除。清盘统一经 ctx.sessionGC 服务。
+ *
+ * @returns `true` = 注册表行删除且会话数据已从磁盘清掉；`false` = 注册表行已删，但**物理清盘失败**
+ *   （会话数据仍在磁盘上）。调用方必须消费该信号（k2-09：删除返回真实结果，不得只记日志）。
+ */
+export async function deleteTopic(ctx: Context, id: string): Promise<boolean> {
+  return await deleteTopicRecursive(ctx, id, new Set())
 }
 
-async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<string>): Promise<void> {
-  if (visited.has(id)) return
+async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<string>): Promise<boolean> {
+  if (visited.has(id)) return true
   visited.add(id)
+  // 逐个记账（不用短路折叠）：一个子分支清盘失败不得掩盖其余分支的结果。
+  let failures = 0
   for (const child of [...topics.values()]) {
-    if (child.parentTopicId === id) await deleteTopicRecursive(ctx, child.id, visited)
+    if (child.parentTopicId === id) {
+      if (!(await deleteTopicRecursive(ctx, child.id, visited))) failures += 1
+    }
   }
   const handle = liveHandles.get(id)
   if (handle !== undefined) {
@@ -848,8 +873,17 @@ async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<strin
   }
   topics.delete(id)
   await persistRegistry()
-  await purgeViaSessionGC(ctx, id)
-  logger.info(`kernel: topic "${id}" deleted`)
+  const purgedHere = await purgeViaSessionGC(ctx, id)
+  if (purgedHere) {
+    logger.info(`kernel: topic "${id}" deleted`)
+  } else {
+    failures += 1
+    logger.error(
+      `kernel: topic "${id}" removed from the registry but its persisted session is still on disk ` +
+        '(physical purge failed; the session is no longer reachable from the UI)'
+    )
+  }
+  return failures === 0
 }
 
 // ---------------------------------------------------------------------------
@@ -888,6 +922,11 @@ export interface DestroyTurnsResult {
   truncated: { id: string; fromSeq: number }[]
   /** 删除后 UI 焦点话题；null = 无可聚焦（整棵根话题被删空）。 */
   focusTopicId: string | null
+  /**
+   * 注册表行已删、但**磁盘上的会话数据仍在**的话题（k2-09）。非空即"删不干净"这一失败信号，
+   * 必须透传到调用方；旧写法把清盘失败吞成一条 warn，UI 呈现为完全成功。
+   */
+  purgeFailures: string[]
 }
 
 /** 读若干会话的 seed_length（构造种子长度 = 血统边界）。行缺失/不可读记 null。 */
@@ -1093,10 +1132,13 @@ export async function destroyTurns(
   let purgedTopics: string[]
   let truncated: { id: string; fromSeq: number }[]
   let focusTopicId: string | null
+  let purgeFailures: string[]
 
   if (!keepsOwnTurn) {
     purgedTopics = collectSubtree(owner.id)
-    await deleteTopicRecursive(ctx, owner.id, new Set())
+    const purgeOk = await deleteTopicRecursive(ctx, owner.id, new Set())
+    // 清盘失败时注册表行已删（话题从 UI 消失），失败必须如实上报，不得呈现为完全成功。
+    purgeFailures = purgeOk ? [] : [...purgedTopics]
     // 焦点血统邻接：同接点（seed_length 同值）存活同级 createdAt 就近 → 无则父级
     const parentId = owner.parentTopicId ?? null
     if (parentId === null) {
@@ -1116,8 +1158,11 @@ export async function destroyTurns(
     truncated = []
   } else {
     purgedTopics = doomedChildren.flatMap((t) => collectSubtree(t.id))
+    purgeFailures = []
     for (const child of doomedChildren) {
-      await deleteTopicRecursive(ctx, child.id, new Set())
+      // 先取子树 id 快照（deleteTopicRecursive 会把它们从注册表摘掉，之后再枚举就空了）。
+      const subtree = collectSubtree(child.id)
+      if (!(await deleteTopicRecursive(ctx, child.id, new Set()))) purgeFailures.push(...subtree)
     }
     // 先卸活体句柄（排空批量落盘）再物理截断，杜绝截断后旧事件补写回来
     const handle = liveHandles.get(owner.id)
@@ -1140,9 +1185,9 @@ export async function destroyTurns(
   await sweepOrphanSessions(ctx)
 
   logger.info(
-    `kernel: destroyTurns on "${targetTopicId}" anchors=[${anchors.join(',')}] -> owner="${owner.id}" cutoff=${cutoff} purged=${purgedTopics.length} focus=${focusTopicId ?? '(none)'}`
+    `kernel: destroyTurns on "${targetTopicId}" anchors=[${anchors.join(',')}] -> owner="${owner.id}" cutoff=${cutoff} purged=${purgedTopics.length} focus=${focusTopicId ?? '(none)'} purgeFailures=${purgeFailures.length}`
   )
-  return { purgedTopics, truncated, focusTopicId }
+  return { purgedTopics, truncated, focusTopicId, purgeFailures }
 }
 
 /** 每轮发送能力载荷（Dsh_TopicSend handler 校验后透传的权威形状；
@@ -1349,59 +1394,131 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   agent.send(message, 'next-turn', true)
 }
 
-/** 物理清盘统一经 ctx.sessionGC 服务（插件可接管）；服务缺失时退回默认实现。 */
-async function purgeViaSessionGC(ctx: Context, id: string): Promise<void> {
-  const gc = (ctx as unknown as { sessionGC?: { purge: (id: string) => Promise<void> } }).sessionGC
+/**
+ * 物理清盘统一经 ctx.sessionGC 服务（插件可接管）；服务缺失或失败时退回默认实现。
+ *
+ * **返回值是真的清盘结果**（k2-09）：`false` = 磁盘上的会话数据仍在。调用方
+ * （`deleteTopicRecursive` / `sweepOrphanSessions`）必须消费它——旧写法吞掉两次异常、
+ * 只记 warn，于是"删不干净"被 UI 呈现为删除成功。
+ *
+ * 回退本身也失败时记 **error**（不是 warn）：这条链的失败必须可被日志检索到。
+ */
+async function purgeViaSessionGC(ctx: Context, id: string): Promise<boolean> {
+  const gc = (ctx as unknown as { sessionGC?: { purge: (id: string) => Promise<boolean> } }).sessionGC
   if (gc?.purge !== undefined) {
     try {
-      await gc.purge(id)
-      return
+      // 接管方返回 false 同样是"数据还在"，不再盲目回退（回退会重复删同一批行）。
+      return await gc.purge(id)
     } catch (error) {
-      logger.warn(
-        'kernel: ctx.sessionGC.purge failed, falling back to default purge',
+      logger.error(
+        'kernel: ctx.sessionGC.purge threw, falling back to default purge',
         error instanceof Error ? error : new Error(String(error))
       )
     }
   }
-  await purgePersistedSession(id)
+  return await purgePersistedSession(id)
 }
 
-export async function purgePersistedSession(id: string): Promise<void> {
+/** 文件是否存在（`stat` 不跟随竞态：删除窗口内的并发消失按"不存在"处理）。 */
+async function exists(path: string): Promise<boolean> {
   try {
-    const { DatabaseSync } = await import('node:sqlite')
-    const dbPath = join(app.getPath('userData'), 'kernel', 'sessions.db')
-    const db = new DatabaseSync(dbPath)
-    try {
-      db.prepare('DELETE FROM events WHERE session_id = ?').run(id)
-      db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
-      // 真删加固：回收 WAL，尽力压缩主库文件，避免已删内容残留在文件页里被工具/字节搜索翻出
-      try {
-        db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
-        db.exec('VACUUM')
-      } catch (vacuumError) {
-        logger.warn(
-          'kernel: post-purge checkpoint/vacuum skipped',
-          vacuumError instanceof Error ? vacuumError : new Error(String(vacuumError))
-        )
-      }
-    } finally {
-      db.close()
-    }
-    logger.info(`kernel: purged persisted session "${id}"`)
-  } catch (error) {
+    await stat(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 强制回收 WAL 并压缩主库（真删加固）；失败只记 warn——数据已删，页回收是尽力而为。 */
+function compactAfterPurge(db: { exec: (sql: string) => void }, label: string): void {
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    db.exec('VACUUM')
+  } catch (vacuumError) {
     logger.warn(
-      `kernel: failed to purge persisted session "${id}"`,
-      error instanceof Error ? error : new Error(String(error))
+      `kernel: post-${label} checkpoint/vacuum skipped`,
+      vacuumError instanceof Error ? vacuumError : new Error(String(vacuumError))
     )
   }
 }
 
-async function sweepOrphanSessions(ctx: Context): Promise<void> {
+/**
+ * 物理清盘一个已持久化的会话（`events` + `sessions`）。
+ *
+ * 这是 fork 侧**唯一**直接开 `sessions.db` 的写路径。架构规则 #1 要求"不在内核外开 SQLite"，
+ * 但内核当前只暴露 `ctx.sessionPersistence`（读写事件）与 `ctx.sessionGC`（本函数自身），
+ * **没有任何公开的"删除整个会话"API**，故此处只能在本地补偿内核连接的两条契约：
+ * 1. `busy_timeout`（内核 `openDatabase` 带 `busyTimeoutMs` + `isSqliteBusy` 退避；默认 0 会立刻
+ *    在落盘批次期间拿到 `SQLITE_BUSY`）；
+ * 2. 单事务（`BEGIN IMMEDIATE`）：两条 DELETE 要么都生效、要么都不生效，不留无 header 的 events 行。
+ *
+ * 表范围前提（依据内核包 `resources/sql/schema.sql`）：全库只有 `persistence_state` / `sessions` /
+ * `events` 三张表，且 `events.session_id REFERENCES sessions(id) ON DELETE CASCADE`，无其他
+ * 以 `session_id` 为外键的子表。内核新增子表时，这两条 DELETE 必须同步。
+ *
+ * @returns `true` = 已从磁盘删除；`false` = 失败（数据仍在），失败原因已记 error。
+ */
+export async function purgePersistedSession(id: string): Promise<boolean> {
+  const dbPath = join(app.getPath('userData'), 'kernel', 'sessions.db')
+  try {
+    // 库文件还不存在（全新安装 / 首次启动窗口内）：没有任何已持久化的会话，删除是幂等成功。
+    // 不能直接 `new DatabaseSync`——那会**创建**一个空库并把"没有数据"变成一次写副作用。
+    if (!(await exists(dbPath))) {
+      logger.info(`kernel: no persisted session database yet, nothing to purge for "${id}"`)
+      return true
+    }
+    const { DatabaseSync } = await import('node:sqlite')
+    const db = new DatabaseSync(dbPath)
+    try {
+      // 与内核自己的持久化连接并存：忙等窗口 + 事务，避免落盘批次期间的 SQLITE_BUSY 变成静默丢失。
+      db.exec('PRAGMA busy_timeout = 5000')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        db.prepare('DELETE FROM events WHERE session_id = ?').run(id)
+        db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+        db.exec('COMMIT')
+      } catch (txError) {
+        try {
+          db.exec('ROLLBACK')
+        } catch (rollbackError) {
+          // BEGIN IMMEDIATE 自身失败时没有活动事务，ROLLBACK 会再抛——原始错误更重要。
+          logger.warn(
+            'kernel: purge rollback skipped',
+            rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError))
+          )
+        }
+        throw txError
+      }
+      // 真删加固：回收 WAL，尽力压缩主库文件，避免已删内容残留在文件页里被工具/字节搜索翻出
+      compactAfterPurge(db, 'purge')
+    } finally {
+      db.close()
+    }
+    logger.info(`kernel: purged persisted session "${id}"`)
+    return true
+  } catch (error) {
+    logger.error(
+      `kernel: failed to purge persisted session "${id}" — session data is still on disk`,
+      error instanceof Error ? error : new Error(String(error))
+    )
+    return false
+  }
+}
+
+/**
+ * 清扫孤儿会话。
+ * @param ctx - 内核上下文。
+ * @param migration - 遗留事件迁移结果（k2-10）：`'failed'` 时本轮整体跳过。
+ */
+async function sweepOrphanSessions(
+  ctx: Context,
+  migration: LegacyIgnorableMigrationOutcome = 'migrated'
+): Promise<void> {
   try {
     const headers = await ctx.sessionPersistence.list()
-    // 注册表不可知时**整体跳过**：`failed` 态下"每个会话都不在注册表里"不是孤儿证据
-    //（v0.3.0-4 问题 D：这条闸门之前不存在，一次解析失败就会把全部会话日志物理删掉）。
-    const decision = shouldSweepOrphans(registryLoadOutcome, topics.size)
+    // 两个不可知前置条件都否决清扫（详见 shouldSweepOrphans）：注册表读不出来
+    //（v0.3.0-4 问题 D）与遗留迁移写不进去（k2-10）。
+    const decision = shouldSweepOrphans(registryLoadOutcome, topics.size, migration)
     if (!decision.sweep) {
       logger.error(
         `kernel: orphan sweep skipped — ${decision.reason} (${headers.length} persisted session(s) left untouched)`
@@ -1415,19 +1532,24 @@ async function sweepOrphanSessions(ctx: Context): Promise<void> {
       )
     }
     const known = new Set(topics.keys())
-    let removed = 0
+    // 失败必须与成功分开计数（§9 批删报告"N succeeded / M failed"）：purge 失败时行确实还在磁盘上，
+    // 旧写法把 `removed += 1` 无条件执行，于是"清不掉"被报成"已清掉"。
+    let purged = 0
+    let failed = 0
     let registryDirty = false
+    const count = (ok: boolean): void => {
+      if (ok) purged += 1
+      else failed += 1
+    }
     for (const header of headers) {
       if (!known.has(header.id)) {
-        await purgeViaSessionGC(ctx, header.id)
-        removed += 1
+        count(await purgeViaSessionGC(ctx, header.id))
       } else {
         const topic = topics.get(header.id)
         if (topic !== undefined && topic.supersededByTopicId !== undefined) {
           topics.delete(header.id)
           registryDirty = true
-          await purgeViaSessionGC(ctx, header.id)
-          removed += 1
+          count(await purgeViaSessionGC(ctx, header.id))
         }
       }
     }
@@ -1436,12 +1558,17 @@ async function sweepOrphanSessions(ctx: Context): Promise<void> {
       if (topicRow.parentTopicId !== undefined && !topics.has(topicRow.parentTopicId)) {
         topics.delete(topicRow.id)
         registryDirty = true
-        await purgeViaSessionGC(ctx, topicRow.id)
-        removed += 1
+        count(await purgeViaSessionGC(ctx, topicRow.id))
       }
     }
     if (registryDirty) await persistRegistry()
-    if (removed > 0) logger.info(`kernel: purged ${removed} orphan persisted session(s)`)
+    if (purged > 0) logger.info(`kernel: purged ${purged} orphan persisted session(s)`)
+    if (failed > 0) {
+      logger.error(
+        `kernel: ${failed} orphan persisted session(s) could not be purged and are still on disk ` +
+          `(${purged} purged) — their registry rows are gone, so they are no longer reachable from the UI`
+      )
+    }
   } catch (error) {
     logger.warn('kernel: orphan session sweep failed', error instanceof Error ? error : new Error(String(error)))
   }
@@ -1654,7 +1781,7 @@ async function ensureAgent(
           ? turnSkills
               .map(
                 (skill) =>
-                  `- ${sanitizeUntrustedText(skill.name)}${skill.description ? `: ${sanitizeUntrustedText(skill.description)}` : ''}`
+                  `- ${hardenUntrustedText(skill.name)}${skill.description ? `: ${hardenUntrustedText(skill.description)}` : ''}`
               )
               .join('\n')
           : '(no skills are attached to this turn)'
@@ -1668,12 +1795,12 @@ async function ensureAgent(
     // v0.4.4-1（ASD-STE100 + 拼名修复）：文档名加引号定边界（名字含空格/混合文字，
     // 裸名 + 冗余扩展标记导致模型首轮拼错文件名）；OCR 提示压成一句（与
     // ocr_document 描述不重复）。工具挂载态决定动词短语（ocr_document 未挂载不提及）。
-    // v0.4.6：文档名经 sanitizeUntrustedText（进受信边界的用户可写文本）。
+    // v0.4.6：文档名经 hardenUntrustedText（归一 + 拆解真标签；进受信边界的用户可写文本）。
     if (builtinsMounted.includes('read_document')) {
       const turnDocuments = knowledgeService.getTurnDocuments(topic.id) ?? []
       const index =
         turnDocuments.length > 0
-          ? turnDocuments.map((document) => `- "${sanitizeUntrustedText(document.name)}"`).join('\n')
+          ? turnDocuments.map((document) => `- "${hardenUntrustedText(document.name)}"`).join('\n')
           : '(no documents are attached to this turn)'
       const verbs = builtinsMounted.includes('ocr_document') ? 'read_document or ocr_document' : 'read_document'
       const ocrHint = builtinsMounted.includes('ocr_document')
@@ -1690,7 +1817,7 @@ async function ensureAgent(
     }
     // 持久记忆（v0.4.6，外置——工作模式作用域）：memory 工具挂载且有登记根的轮，FACT.md
     // 内容（存在且非空时）注入快照节——V2 的 recall side 同构（工具是唯一写入口，注入只
-    // 读回放）。内容是模型自己写的持久文本，进受信边界前清洗（sanitizeUntrustedText）。
+    // 读回放）。内容是模型自己写的持久文本，进受信边界前清洗（hardenUntrustedText：归一 + 拆解真标签）。
     if (externalsMounted.includes('memory')) {
       const memoryRoot = getTurnMemoryRoot(topic.id)
       if (memoryRoot !== undefined) {
@@ -1709,7 +1836,7 @@ async function ensureAgent(
               "These are your durable notes accumulated across this assistant's past conversations. Trust them " +
               'as ground truth unless you have direct evidence otherwise; update them via the memory tool ' +
               '(action: update) so the next conversation also benefits.\n' +
-              sanitizeUntrustedText(factContent)
+              hardenUntrustedText(factContent)
           })
         }
       }

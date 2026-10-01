@@ -47,10 +47,12 @@ import { DEFAULT_TOOL_ORDER, DEFAULT_TOOL_ORDER_BY_SCOPE } from './inputTools'
 import { initialState as llmInitialState, moveProvider } from './llm'
 import { initialState as settingsInitialState } from './settings'
 import { initialState as shortcutsInitialState } from './shortcuts'
-
-// WebSearch subsystem was removed in batch 5; keep an empty stub so legacy
-// migrations referencing `defaultWebSearchProviders` stay compilable.
-const defaultWebSearchProviders: any[] = []
+// r2-12：WebSearch 切片**没有**被删除（批次5 只是把执行机制换成内核工具），真正的默认
+// provider 表就在 websearch 切片里。此前这里放了一个 `any[] = []` 的空桩，导致下面
+// 8 处补种调用（'77'/'96?'/'98?'/'139'/'201'）全部静默 no-op：老用户持久化的
+// `websearch.providers` 数组永远缺这些默认条目。方向安全（websearch 切片不 import migrate），
+// 与上面 llm/settings/shortcuts 的 initialState 导入同形。
+import { defaultWebSearchProviders } from './websearch'
 
 const logger = loggerService.withContext('Migrate')
 
@@ -122,6 +124,9 @@ function updateProvider(state: RootState, id: string, provider: Partial<Provider
   }
 }
 
+/** r2-12：按 id 把默认 websearch provider 补进持久化数组（老用户数组里没有这些条目）。
+ *  `{ ...provider }` 副本是必需的：默认表与 `store/websearch.ts` 的 initialState 是同一批对象，
+ *  就地 push 同一引用会让 Redux/migrate 的后续就地改写污染模块级默认表。 */
 function addWebSearchProvider(state: RootState, id: string) {
   if ((state as any).websearch && (state as any).websearch.providers) {
     if (!(state as any).websearch.providers.find((p) => p.id === id)) {
@@ -3095,7 +3100,12 @@ const migrateConfig = {
   '209': (state: RootState) => {
     try {
       // v2-trim: purge sidebar icons and tabs for removed subsystems
-      const VALID_SIDEBAR_ICONS = ['assistants', 'minapp', 'files'] as const
+      // r2-11：白名单必须与 DEFAULT_SIDEBAR_ICONS 同源。这里原本硬编码
+      // ['assistants','minapp','files']，把当时**仍在发行**的图标（notes 等）一起从
+      // visible/disabled 里剥掉——'141' 排在 209 之前早已跑过，此后再没有任何分支补
+      // 'notes'，升级账号的笔记入口永久消失（新装默认表里却有它）。本分支只允许删
+      // "已移除子系统"的图标，不删在售图标；'229' 负责把已经跑过旧 209 的账号对账回来。
+      const VALID_SIDEBAR_ICONS = DEFAULT_SIDEBAR_ICONS
       if (state.settings?.sidebarIcons) {
         state.settings.sidebarIcons.visible = state.settings.sidebarIcons.visible.filter((icon) =>
           (VALID_SIDEBAR_ICONS as readonly string[]).includes(icon)
@@ -3464,6 +3474,44 @@ const migrateConfig = {
       return state
     } catch (error) {
       logger.error('migrate 228 error', error as Error)
+      return state
+    }
+  },
+  '229': (state: RootState) => {
+    try {
+      // r2-11 侧栏图标对账：'209'（v2-trim）曾把 sidebarIcons 白名单硬编码成
+      // ['assistants','minapp','files']。**本分支要修的老账号正是已经跑过 '209' 的那批**：
+      // 迁移链不重跑，209 之后才补位的图标（'217' knowledge / '220' translate+paintings /
+      // '222' code / '141' notes）里，只有 '141' 排在 209 之前，所以那批账号按下述顺序
+      // 收尾：209 砍到 3 项 → 217 补 knowledge → 220 补 translate/paintings → 222 补 code
+      // → 'notes' 无任何后续分支补回，永久丢失。209 新分支（同批改动）挡住了尚未跑 209 的
+      // 账号，本分支负责把已跑过的账号收敛到同一形态：`visible` 按 DEFAULT_SIDEBAR_ICONS
+      // 对账补缺，`disabled` 原样保留（用户显式隐藏的选择优先，不重新点亮）。
+      const sidebarIcons = state.settings?.sidebarIcons
+      if (sidebarIcons) {
+        const visible = Array.isArray(sidebarIcons.visible) ? sidebarIcons.visible : []
+        const disabled = Array.isArray(sidebarIcons.disabled) ? sidebarIcons.disabled : []
+        const hidden = new Set<string>(disabled)
+        const missingDefaults = DEFAULT_SIDEBAR_ICONS.filter((icon) => !visible.includes(icon) && !hidden.has(icon))
+        if (missingDefaults.length > 0 || !Array.isArray(sidebarIcons.visible)) {
+          sidebarIcons.visible = [...visible, ...missingDefaults]
+        }
+        if (!Array.isArray(sidebarIcons.disabled)) {
+          sidebarIcons.disabled = disabled
+        }
+      }
+
+      // r2-50 settings.pinnedTabs 回填：pinnedTabs 是后加的持久化字段，`tabs` 切片在 persist
+      // blacklist 里，固定标签页跨重启只能靠 settings 这个键。老账号的持久化 settings 里没有
+      // 这个键（redux-persist 整片回水覆盖 initialState，initialState 永不到达老用户），
+      // 于是 restorePinnedTabs 的 `?? []` 把"字段缺失"静默呈现成"用户没固定过标签页"。
+      // 照 '226'/'227' 先例显式落字段。
+      if (state.settings && state.settings.pinnedTabs === undefined) {
+        state.settings.pinnedTabs = []
+      }
+      return state
+    } catch (error) {
+      logger.error('migrate 229 error', error as Error)
       return state
     }
   }

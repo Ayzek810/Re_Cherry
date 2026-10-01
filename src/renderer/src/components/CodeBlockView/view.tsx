@@ -231,12 +231,17 @@ export const CodeBlockView: React.FC<Props> = memo(
       setTools
     })
 
+    // 展开/换行的 toggle 必须是稳定身份：写在 props 位置的 useCallback 每次渲染都会返回新函数，
+    // 会让注册 effect 每次渲染都摘挂一次并向 setTools 写入新数组 → 触发再渲染 → 自持回路。
+    const toggleExpand = useCallback(() => setExpandOverride((prev) => !prev), [])
+    const toggleWrap = useCallback(() => setWrapOverride((prev) => !prev), [])
+
     // 源代码视图的展开/折叠按钮
     useExpandTool({
       enabled: !isInSpecialView,
       expanded: shouldExpand,
       expandable,
-      toggle: useCallback(() => setExpandOverride((prev) => !prev), []),
+      toggle: toggleExpand,
       setTools
     })
 
@@ -245,7 +250,7 @@ export const CodeBlockView: React.FC<Props> = memo(
       enabled: !isInSpecialView,
       wrapped: shouldWrap,
       wrappable: codeWrappable,
-      toggle: useCallback(() => setWrapOverride((prev) => !prev), []),
+      toggle: toggleWrap,
       setTools
     })
 

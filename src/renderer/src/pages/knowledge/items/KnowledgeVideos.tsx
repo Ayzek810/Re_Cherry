@@ -150,7 +150,7 @@ const KnowledgeVideos: FC<KnowledgeContentProps> = ({ selectedBase }) => {
                               type="file"
                             />
                           </StatusIconWrapper>
-                          <Button type="text" danger onClick={() => removeItem(item)} icon={<DeleteOutlined />} />
+                          <Button type="text" danger onClick={() => void removeItem(item)} icon={<DeleteOutlined />} />
                         </FlexAlignCenter>
                       )
                     }}

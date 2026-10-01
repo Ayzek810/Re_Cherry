@@ -15,8 +15,11 @@ export function aggregateApiKeyResults(keyResults: ApiKeyWithStatus[]): {
 
   if (failedResults.length > 0) {
     // 只要有一个密钥失败，整个检查就失败
+    // v1 二轮审查 s2-03：`ApiKeyWithStatus.error` 是 `SerializedError`（对象），
+    // 直接 join 会得到 "[object Object]" —— 失败原因对用户不可见。取 message 文本。
     const errors = failedResults
-      .map((r) => r.error)
+      .map((r) => r.error?.message)
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
       .filter((v, i, a) => a.indexOf(v) === i) // 去重
       .join('; ')
     return {

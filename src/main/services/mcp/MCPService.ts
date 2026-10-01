@@ -38,6 +38,7 @@
  *   服务器私有 PATH 覆盖参与 npx/uvx 解析，行为更优。
  */
 import { createHash, randomUUID } from 'node:crypto'
+import path from 'node:path'
 
 import { loggerService } from '@logger'
 import DxtService from '@main/services/DxtService'
@@ -57,7 +58,7 @@ import type { MCPCallToolResponse, MCPPrompt, MCPResource, MCPServer, MCPTool } 
 import { MCPToolInputSchema, MCPToolOutputSchema } from '@types'
 import { app, net } from 'electron'
 
-import { findCommandInShellEnv, getInheritedEnv } from './commandResolution'
+import { findCommandInShellEnv, getInheritedEnv, normalizeMcpCommand } from './commandResolution'
 import { type MCPServerLogEntryWithServer, ServerLogBuffer } from './ServerLogBuffer'
 import { TTLCache } from './ttlCache'
 
@@ -251,33 +252,52 @@ export class McpService {
         }
       }
 
+      // v1 二轮审查 m2-06：注入面收敛到真正 spawn 的这一步。此前只有 npx/uvx/uv 三条
+      // 分支走 findCommandInShellEnv（命令名白名单），其余 command 直接进 StdioClientTransport。
+      // 现在裸名走命令名白名单、绝对路径走"存在 + 是文件 + 扩展名受限"，非法即明确报错。
+      const normalized = normalizeMcpCommand(cmd)
+      if (!normalized.ok) {
+        throw new Error(`Invalid MCP server command for "${server.name}": ${normalized.reason}`)
+      }
+      cmd = normalized.command
+
       // 命令查找用 process.env 快照；transport 环境在 registryUrl 注入后再取一次
       //（getInheritedEnv(server.env) 两处调用故意分开：中间可能改写 server.env）。
       const lookupEnv = getInheritedEnv(server.env)
 
-      // 查找与注入按解析后的 cmd 判（非 DXT 时 cmd === server.command，行为不变；
+      // 裸名解析按解析后的 cmd 判（非 DXT 时 cmd === server.command，行为不变；
       // DXT 覆写后以上游 manifest 解析结果为准，不被 npx 查找反向覆盖）。
-      if (cmd === 'npx' || cmd === 'uvx' || cmd === 'uv') {
+      const registryCommand = cmd
+      if ((registryCommand === 'uvx' || registryCommand === 'uv') && server.registryUrl) {
+        server.env = {
+          ...server.env,
+          UV_DEFAULT_INDEX: server.registryUrl,
+          PIP_INDEX_URL: server.registryUrl
+        }
+      }
+      if (registryCommand === 'npx' && server.registryUrl) {
+        server.env = { ...server.env, NPM_CONFIG_REGISTRY: server.registryUrl }
+      }
+
+      // 裸名（node/python/bun/npx…）由 PATH 解析：Windows 下 `node` 实际是 `node.exe`，
+      // StdioClientTransport 的解析不查 PATHEXT，故先解析成绝对路径再交给它。
+      if (!path.isAbsolute(cmd) && !path.win32.isAbsolute(cmd)) {
         const resolved = await findCommandInShellEnv(cmd, lookupEnv)
         if (resolved === null) {
           // bundled binary 兜底不在本构建（见头注释）：双缺时引导安装。
-          throw new Error(
-            cmd === 'npx'
-              ? 'npx not found in PATH. Please install Node.js (which includes npx) from https://nodejs.org and restart the app.'
-              : `${cmd} not found in PATH. Please install uv from https://github.com/astral-sh/uv and restart the app.`
-          )
+          if (cmd === 'npx') {
+            throw new Error(
+              'npx not found in PATH. Please install Node.js (which includes npx) from https://nodejs.org and restart the app.'
+            )
+          }
+          if (cmd === 'uvx' || cmd === 'uv') {
+            throw new Error(
+              `${cmd} not found in PATH. Please install uv from https://github.com/astral-sh/uv and restart the app.`
+            )
+          }
+          throw new Error(`MCP server command "${cmd}" was not found in PATH`)
         }
         cmd = resolved
-        if (cmd === 'npx' && server.registryUrl) {
-          server.env = { ...server.env, NPM_CONFIG_REGISTRY: server.registryUrl }
-        }
-        if ((cmd === 'uvx' || cmd === 'uv') && server.registryUrl) {
-          server.env = {
-            ...server.env,
-            UV_DEFAULT_INDEX: server.registryUrl,
-            PIP_INDEX_URL: server.registryUrl
-          }
-        }
       }
 
       const transport = new StdioClientTransport({

@@ -43,12 +43,13 @@ vi.unmock('node:os')
 vi.unmock('node:path')
 
 const { initTopics, loadRegistry, shouldSweepOrphans } = await import('../topics')
+const legacyMigration = await import('../legacySessionMigration')
 
 let dir = ''
 let loggerError: ReturnType<typeof vi.spyOn>
 
 /** 只提供清扫真正用到的东西：会话列表（枚举）+ 可选的 sessionGC（缺失时走真实物理删除）。 */
-function makeCtx(ids: string[], purge?: (id: string) => Promise<void>): Context {
+function makeCtx(ids: string[], purge?: (id: string) => Promise<boolean>): Context {
   return {
     sessionPersistence: { list: async () => ids.map((id) => ({ id })) },
     ...(purge === undefined ? {} : { sessionGC: { purge } }),
@@ -80,7 +81,7 @@ describe('损坏注册表守卫（问题 D）', () => {
 
   it('验D-2：注册表**读不出来**（failed）→ purge 次数为 0，且记 logger.error', async () => {
     await seedKernelState({ dir, registry: 'corrupt', sessions: [{ id: 'sess-a', events: 3 }, { id: 'sess-b' }] })
-    const purge = vi.fn(async () => {})
+    const purge = vi.fn(async () => true)
     await loadRegistry(dir)
 
     await initTopics(makeCtx(['sess-a', 'sess-b'], purge))
@@ -151,11 +152,25 @@ describe('损坏注册表守卫（问题 D）', () => {
     for (const reason of reasons) expect(reason.length).toBeGreaterThan(20)
   })
 
+  it('验D-5 补（k2-10）：迁移失败是**独立**的否决项，与注册表三态正交', () => {
+    // 三种注册表状态下都必须否决：迁移写不进去时"读不出来"的会话与孤儿无法区分。
+    for (const outcome of ['failed', 'absent', 'loaded'] as const) {
+      expect(shouldSweepOrphans(outcome, 0, 'failed').sweep).toBe(false)
+      expect(shouldSweepOrphans(outcome, 3, 'failed').sweep).toBe(false)
+    }
+    expect(shouldSweepOrphans('loaded', 0, 'failed').reason).toContain('legacy ignorable-event migration failed')
+    // 另外两态不改变既有判定
+    expect(shouldSweepOrphans('loaded', 3, 'migrated').sweep).toBe(true)
+    expect(shouldSweepOrphans('loaded', 3, 'not-needed').sweep).toBe(true)
+    // 缺省参数 = 'migrated'（旧的二元调用语义不变）
+    expect(shouldSweepOrphans('loaded', 3).sweep).toBe(true)
+  })
+
   it('结构补：注册表能解析但没有 topics 数组（手改成 {}）→ 同样按"读不出来"处理，不清扫', async () => {
     // 这是"能解析的坏文件"：若按 loaded/0 行处理，清扫照样删库
     await seedKernelState({ dir, sessions: [{ id: 'sess-a' }] })
     await writeFile(registryFile(dir), '{}', 'utf8')
-    const purge = vi.fn(async () => {})
+    const purge = vi.fn(async () => true)
     expect(await loadRegistry(dir)).toBe('failed')
 
     await initTopics(makeCtx(['sess-a'], purge))
@@ -163,5 +178,38 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(purge).not.toHaveBeenCalled()
     expect(await readSessionCounts(dir)).toEqual({ sessions: 1, events: 1 })
     expect(await listCorruptBackups(dir)).toHaveLength(1)
+  })
+
+  it('验D-6（k2-10）：**遗留迁移失败** → 不清扫，含遗留事件的旧会话不被物理删除', async () => {
+    // 故障链：注册表加载成功（'loaded'，库里两个会话都不在注册表里）+ 迁移**写不进去**
+    // → 含遗留 `cherry/work-mode` 事件的旧会话读不出来（SessionFormatUnsupportedError），
+    // 因此上面那个闸门（只看注册表）会放行清扫，把"读不出来"当成"孤儿"物理 DELETE。
+    // k2-10 的修法：迁移返回三值，'failed' 与注册表 'failed' 同样否决本轮清扫。
+    await seedKernelState({ dir, registry: { topics: [] }, sessions: [{ id: 'legacy-a', events: 2 }] })
+    expect(await readSessionCounts(dir)).toEqual({ sessions: 1, events: 2 })
+    const purge = vi.fn(async () => true)
+    expect(await loadRegistry(dir)).toBe('loaded')
+    const migrationSpy = vi.spyOn(legacyMigration, 'migrateLegacyIgnorableEvents').mockResolvedValue('failed')
+    try {
+      await initTopics(makeCtx(['legacy-a'], purge))
+    } finally {
+      migrationSpy.mockRestore()
+    }
+
+    expect(purge).not.toHaveBeenCalled()
+    // 库原封不动：会话日志还在（这是"不可知状态不授权破坏性动作"的直接证据）
+    expect(await readSessionCounts(dir)).toEqual({ sessions: 1, events: 2 })
+    const messages = loggerError.mock.calls.map((call) => String(call[0]))
+    expect(messages.some((message) => message.includes('orphan sweep skipped'))).toBe(true)
+    expect(messages.some((message) => message.includes('legacy ignorable-event migration failed'))).toBe(true)
+  })
+
+  it('验D-6 补（k2-10）：迁移**成功**（确实无需迁移）→ 清扫照常执行，孤儿仍被清掉', async () => {
+    await seedKernelState({ dir, registry: { topics: [] }, sessions: [{ id: 'orphan-a', events: 2 }] })
+    expect(await loadRegistry(dir)).toBe('loaded')
+
+    await initTopics(makeCtx(['orphan-a']))
+
+    expect(await readSessionCounts(dir)).toEqual({ sessions: 0, events: 0 })
   })
 })

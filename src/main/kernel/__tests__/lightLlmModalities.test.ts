@@ -442,6 +442,79 @@ describe('lightEditImage', () => {
   })
 })
 
+describe('k2-13：渲染层取消与 exec.signal 取并集（旧写法 `signal ?? abort` 丢弃 abort）', () => {
+  const generatePending = (overrides: Record<string, unknown> = {}, signal?: AbortSignal): Promise<unknown> =>
+    lightGenerateImage(
+      {
+        provider: 'silicon',
+        model: 'img-model',
+        prompt: 'a cat',
+        paramValues: { size: '1024x1024', numImages: 1 },
+        ...overrides
+      } as Parameters<typeof lightGenerateImage>[0],
+      signal
+    )
+
+  /**
+   * 契约：只要**任一**来源取消，在途请求的 fetch 必须收到 aborted 的 signal。
+   * 旧实现在 signal 非空时丢弃 requestId 注册表的 controller，于是用户点"停止生成"后
+   * 请求继续跑（继续计费），UI 却已显示停止。
+   */
+  it('lightEditImage：传了 exec.signal 时，Dsh_LightImageAbort(requestId) 仍能取消', async () => {
+    const aborted = Promise.withResolvers<void>()
+    let seenSignal: AbortSignal | undefined
+    fetchMock.mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          seenSignal = init.signal ?? undefined
+          void aborted.promise.then(() => reject(new DOMException('aborted', 'AbortError')))
+        })
+    )
+    const pending = lightEditImage(
+      {
+        provider: 'silicon',
+        model: 'img-model',
+        prompt: 'make it blue',
+        inputImages: ['data:image/png;base64,AAAA'],
+        requestId: 'edit-req-1'
+      },
+      new AbortController().signal // 回合 signal 从不 abort（回合还在跑）
+    )
+    await vi.waitFor(() => expect(seenSignal).toBeDefined())
+    expect(seenSignal?.aborted).toBe(false)
+    abortLightImage('edit-req-1')
+    expect(seenSignal?.aborted).toBe(true)
+    aborted.resolve()
+    await expect(pending).rejects.toThrow()
+  })
+
+  it('lightGenerateImage：无 requestId 时 exec.signal 原样透传（单一来源不被包装丢失）', async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({ data: [{ b64_json: 'AA' }] }))
+    const controller = new AbortController()
+    await generatePending({}, controller.signal)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(init.signal).toBe(controller.signal)
+  })
+
+  it('lightGenerateImage：传了 exec.signal 时，requestId 取消同样生效（并集两个来源都在）', async () => {
+    const aborted = Promise.withResolvers<void>()
+    let seenSignal: AbortSignal | undefined
+    fetchMock.mockImplementationOnce(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          seenSignal = init.signal ?? undefined
+          void aborted.promise.then(() => reject(new DOMException('aborted', 'AbortError')))
+        })
+    )
+    const pending = generatePending({ requestId: 'gen-req-1' })
+    await vi.waitFor(() => expect(seenSignal).toBeDefined())
+    abortLightImage('gen-req-1')
+    expect(seenSignal?.aborted).toBe(true)
+    aborted.resolve()
+    await expect(pending).rejects.toThrow()
+  })
+})
+
 describe('lightVisionDocument（文档处理通道 vision-model 执行缝）', () => {
   const image = { mediaType: 'image/png' as const, data: 'UE5H' }
 

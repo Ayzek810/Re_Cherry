@@ -128,7 +128,7 @@ const KnowledgeNotes: FC<KnowledgeContentProps> = ({ selectedBase }) => {
                     <Button
                       type="text"
                       danger
-                      onClick={() => removeItem(note)}
+                      onClick={() => void removeItem(note)}
                       icon={<DeleteIcon size={14} className="lucide-custom" />}
                     />
                   </FlexAlignCenter>

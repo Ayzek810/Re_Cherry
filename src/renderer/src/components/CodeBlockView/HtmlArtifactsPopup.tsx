@@ -16,19 +16,21 @@ interface CodePanelProps {
   codeEditorRef: React.RefObject<CodeEditorHandles | null>
   html: string
   onSave?: (html: string) => void
+  /** 会话的只读契约：调用方（产物卡片）fail-closed 传 false 时不得改写。 */
+  editable: boolean
   saved: boolean
   onClickSave: () => void
   saveLabel: string
 }
 
-const CodePanel = memo<CodePanelProps>(({ codeEditorRef, html, onSave, saved, onClickSave, saveLabel }) => {
+const CodePanel = memo<CodePanelProps>(({ codeEditorRef, html, onSave, editable, saved, onClickSave, saveLabel }) => {
   return (
     <CodeSection>
       <CodeEditor
         ref={codeEditorRef}
         value={html}
         language="html"
-        editable={true}
+        editable={editable}
         onSave={onSave}
         height="100%"
         expanded={false}
@@ -45,6 +47,8 @@ const CodePanel = memo<CodePanelProps>(({ codeEditorRef, html, onSave, saved, on
           <ToolbarButton
             shape="circle"
             size="large"
+            data-testid="html-artifact-save"
+            data-saved={saved || undefined}
             icon={
               saved ? (
                 <Check size={16} color="var(--color-status-success)" />
@@ -96,6 +100,11 @@ interface HtmlArtifactsPopupProps {
   title: string
   html: string
   onSave?: (html: string) => void
+  /**
+   * 是否允许改写这份产物。默认 false，与产物卡片的 fail-closed 默认值一致：
+   * 缺失分类绝不能把弹窗里的代码面板打开成可编辑。
+   */
+  editable?: boolean
   /** 含活动内容的文档：预览面换成专用 partition 的沙箱 webview（见 InteractiveHtmlPreview）。 */
   interactive?: boolean
   onClose: () => void
@@ -108,6 +117,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({
   title,
   html,
   onSave,
+  editable = false,
   interactive = false,
   onClose
 }) => {
@@ -146,9 +156,16 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({
   }, [isFullscreen, open])
 
   const handleSave = useCallback(() => {
-    codeEditorRef.current?.save?.()
+    // 勾只代表「真的落了盘」：没有 onSave（或还没挂上编辑器句柄）时不许亮绿勾。
+    const save = codeEditorRef.current?.save
+    if (!onSave || !save) {
+      window.toast.error(t('code_block.edit.save.failed.label'))
+      return
+    }
+
+    save()
     setSaved(true)
-  }, [setSaved])
+  }, [onSave, setSaved, t])
 
   const renderHeader = () => (
     <ModalHeader onDoubleClick={() => setIsFullscreen(!isFullscreen)} className={classNames({ drag: isFullscreen })}>
@@ -222,6 +239,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({
                 codeEditorRef={codeEditorRef}
                 html={html}
                 onSave={onSave}
+                editable={editable}
                 saved={saved}
                 onClickSave={handleSave}
                 saveLabel={t('code_block.edit.save.label')}

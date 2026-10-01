@@ -164,8 +164,11 @@ const PaintingPageView: FC = () => {
                 selectedPaintingId={currentPainting.id}
                 runningPaintingId={generating ? currentPainting.id : undefined}
                 items={history.items}
+                isLoading={history.isLoading}
                 hasMore={history.hasMore}
+                error={history.error}
                 loadMore={history.loadMore}
+                retry={history.retry}
                 onDeletePainting={list.remove}
                 onSelectPainting={list.select}
                 onAddPainting={list.add}

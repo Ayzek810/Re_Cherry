@@ -278,11 +278,30 @@ Do not change these without a reason and a test.
 
 ## 12. Open items
 
-- **Main-text streaming stall (E1).** The current forensic hook measures the gap between text deltas only.
-  It also records a thinking period or a tool period as a gap. Log evidence shows such a false gap.
-  Measure the gap between events of any type instead. Compare against the `dt` arrays in `sessions.db`.
-- **Startup and idle cost.** The first-paint payload is 14.1 MB. The remaining large chunks are
-  the trace window, `svg`, `jsx-runtime`, and the app store chunk.
+- **Main-text streaming stall (E1).** The stall itself is not reproduced yet.
+  The forensic hook measures the gap between events of any type (`noteStreamActivity` in `kernelChat.ts`).
+  A thinking period or a tool period no longer counts as a stall. A gap over 5 seconds writes a warn line
+  with the text `no stream activity`. The text-gap hook was wrong: log evidence showed
+  `text delta gap 73217ms (accumulated 2 chars)` with interaction events around it.
+  The most likely renderer-side cause is known: `useSmoothStream` sends the **whole accumulated text** each frame,
+  and `Markdown` then re-parses the whole message through ReactMarkdown (about 2.4 MB of text per second for a 40 KB reply).
+  Fix that with a stable-prefix split and a reduced streaming pipeline. Prove the fix with a behavior test.
+- **First-paint payload.** The first-paint face is the resource list in `index.html` (about 12.5 MB raw bytes).
+  KaTeX and MathJax are lazy. Vite still writes a `modulepreload` hint for the KaTeX chunk, so the KaTeX change
+  removes parse and execute cost, not the file read. The executed startup code is the `store` chunk
+  (4.61 MB after the KaTeX change). The large files `svg-*`, `esm-*`, `traceWindow-*`, and `viz-*` are **not**
+  in the executed face — they are lazy chunks. `jsx-runtime-*` is a shared base (React, antd, i18n).
+- **Do not add renderer `manualChunks`.** A measurement rejected that idea: grouping vendor libraries by package
+  raised the first-paint face from 12.50 MB to 14.95 MB (+22.7%). Forced grouping breaks the default chunk that
+  the first paint and the lazy routes share, so an eager consumer pulls a whole library in. Measure the first-paint
+  total before and after any chunking change. Use `tools/audit2-fixes/measure-eager.cjs`.
+- **Open audit findings.** The second-pass review produced 336 findings in `reports/audit2/*.md`.
+  Most of the high-severity items are fixed (see `reports/audit2-fixes/`). The remaining items are:
+  the renderer does not consume the kernel `purgeFailures` list (`useMessageOperations.ts`);
+  `CodeStyleProvider` and the Markdown code-block unmount path still do not call `cleanupTokenizers`;
+  `utils/shiki.ts` can load the same Shiki language chunk twice; a fresh install cannot create
+  `custom-minapps.json` because the renderer cannot tell "missing" from "unreadable";
+  and `settings.pinnedTabs` has no migration input other than the v1 backfill.
 
 ## 13. Related documents
 

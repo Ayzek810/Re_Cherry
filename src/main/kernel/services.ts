@@ -51,7 +51,12 @@ export interface TopicTreeService {
   }) => Promise<KernelTopic>
   rename: (id: string, name: string) => Promise<KernelTopic>
   open: (id: string) => Promise<Agent>
-  delete: (id: string) => Promise<void>
+  /**
+   * 删除话题（注册表 + 物理清盘）。
+   * @returns `true` = 会话数据已从磁盘清掉；`false` = 注册表行已删但**物理清盘失败**
+   *  （k2-09：删除返回真实结果，`false` 必须透传到 UI，不得只记日志）。
+   */
+  delete: (id: string) => Promise<boolean>
   /** 消息级删除引擎：锚点集合计算 + 物理截断/清盘 + 焦点推导，一次事务内核权威。 */
   destroyTurns: (topicId: string, anchorUserSeqs: number[]) => Promise<DestroyTurnsResult>
   fork: (sourceTopicId: string, anchorUserMessageSeq: number) => Promise<KernelTopic>
@@ -76,7 +81,11 @@ export interface TopicTreeService {
 
 /** ctx.sessionGC 服务面（物理清盘；插件可接管）。 */
 export interface SessionGCService {
-  purge: (sessionId: string) => Promise<void>
+  /**
+   * 物理清盘一个会话。
+   * @returns `true` = 已从磁盘删除；`false` = **失败，数据仍在**（消费方不得当成成功，见 k2-09）。
+   */
+  purge: (sessionId: string) => Promise<boolean>
 }
 
 /** ctx.reasoning 服务面（思考档位能力/收敛；独立配置插件可接管）。 */

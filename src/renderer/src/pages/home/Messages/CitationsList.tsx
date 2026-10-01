@@ -142,9 +142,14 @@ const CopyButton: React.FC<{ content: string }> = ({ content }) => {
 }
 
 const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
+  const { t } = useTranslation()
   const isXPost = Boolean(citation.url && isXPostUrl(citation.url))
 
-  const { data: fetchedContent, isLoading } = useQuery({
+  const {
+    data: fetchedContent,
+    isLoading,
+    isError
+  } = useQuery({
     queryKey: ['webContent', citation.url],
     queryFn: async () => {
       if (!citation.url) return ''
@@ -155,6 +160,8 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
         }
         return ''
       }
+      // r2-75：抓取失败会 reject（不再返回 'No content found' 的假成功），
+      // 由 useQuery 落 isError，下面渲染可见的失败态而不是空正文。
       const res = await fetchWebContent(citation.url, 'markdown')
       return cleanMarkdown(res.content)
     },
@@ -187,6 +194,10 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
         </WebSearchCardHeader>
         {isLoading ? (
           <Skeleton active paragraph={{ rows: 1 }} title={false} />
+        ) : isError ? (
+          <WebSearchCardContent className="selectable-text">
+            {t('message.error.citation_fetch_failed', { defaultValue: 'Failed to load the page summary.' })}
+          </WebSearchCardContent>
         ) : (
           <WebSearchCardContent className="selectable-text">{fetchedContent}</WebSearchCardContent>
         )}

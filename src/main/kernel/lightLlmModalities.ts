@@ -291,6 +291,20 @@ export function abortLightImage(requestId: string): void {
 }
 
 /**
+ * 合并调用方 signal 与渲染层 requestId 注册表 signal（k2-13）。
+ *
+ * 两个来源都必须在场：`exec.signal` 由**内核 agent 回合**持有（回合中止/暂停），
+ * `abort` 由 `Dsh_LightImageAbort(requestId)` 命中。旧写法 `signal ?? abort` 在工具路径
+ * （`generateImageTool` 总传 `exec.signal`）下**丢弃** abort ⇒ 用户点"停止生成"后请求继续跑、
+ * 继续计费，UI 却已显示停止。任一 signal 中止都必须取消在途请求，故取并集而非二选一。
+ */
+function mergeAbortSignals(signal: AbortSignal | undefined, abort: AbortSignal | undefined): AbortSignal | undefined {
+  if (signal === undefined) return abort
+  if (abort === undefined) return signal
+  return AbortSignal.any([signal, abort])
+}
+
+/**
  * 解析本请求要用的 v2 wire profile。缺省（`generate_image` 工具等无目录信息的
  * 调用方）走 `diffusion` 兼容档，只下发 `size`/`n` 两个基础字段；登记在表的
  * provider（openai / openrouter / dmxapi / zhipu / silicon …）按表改名。
@@ -376,7 +390,7 @@ export async function lightGenerateImage(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(route) },
       body: JSON.stringify(generationBody(call)),
-      signal: signal ?? abort
+      signal: mergeAbortSignals(signal, abort)
     })
     if (!response.ok) {
       throw new Error(`lightLlm: image generation failed (${response.status}): ${await readErrorDetail(response)}`)
@@ -430,7 +444,7 @@ export async function lightEditImage(call: LightImageEditCall, signal?: AbortSig
         method: 'POST',
         headers: authHeaders(route),
         body: form,
-        signal: signal ?? abort
+        signal: mergeAbortSignals(signal, abort)
       })
       if (!response.ok) {
         throw new Error(`lightLlm: image edit failed (${response.status}): ${await readErrorDetail(response)}`)

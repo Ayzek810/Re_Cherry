@@ -85,19 +85,50 @@ describe('「重置数据」的清除范围', () => {
     expect(fns.writeJson).toHaveBeenCalledWith(`${USER_DATA}/config.json.restore`, {})
   })
 
-  it('handleStartupRestore：下次启动用空副本顶掉 kernel / provider-keys.json / config.json', async () => {
+  it('handleStartupRestore：用空副本顶掉真身，且真身是先挪开再删（v1 m2-02：不得先删后改名）', async () => {
+    // 真身与 .restore 同时存在（真实还原场景）
     fns.pathExists.mockImplementation(async (target: string) =>
-      ROOT_ENTRIES.some((name) => target === `${USER_DATA}/${name}.restore`)
+      ROOT_ENTRIES.some((name) => target === `${USER_DATA}/${name}.restore` || target === `${USER_DATA}/${name}`)
     )
 
     await BackupManager.handleStartupRestore()
 
-    const removed = fns.remove.mock.calls.map((call) => call[0])
     for (const name of ROOT_ENTRIES) {
-      expect(removed).toContain(`${USER_DATA}/${name}`)
-      expect(fns.rename).toHaveBeenCalledWith(`${USER_DATA}/${name}.restore`, `${USER_DATA}/${name}`)
+      const dest = `${USER_DATA}/${name}`
+      const staged = `${dest}.restore`
+      // ① 旧真身被改名挪开（不是被 remove——先删后改名在改名失败时会双失）
+      const asideCall = fns.rename.mock.calls.find(
+        (call) => call[0] === dest && String(call[1]).startsWith(`${dest}.pre-restore-`)
+      )
+      expect(asideCall).toBeDefined()
+      // ② 空副本顶到真身
+      expect(fns.rename).toHaveBeenCalledWith(staged, dest)
+      // ③ 只有挪开的那份被删；真身路径与 .restore 都不被删
+      expect(fns.remove).not.toHaveBeenCalledWith(dest)
+      expect(fns.remove).not.toHaveBeenCalledWith(staged)
+      expect(fns.remove).toHaveBeenCalledWith(asideCall?.[1])
     }
-    expect(fns.rename).toHaveBeenCalledTimes(ROOT_ENTRIES.length)
+  })
+
+  it('还原失败时回滚旧真身并保留 .restore（v1 m2-02：失败不能清掉用户数据的唯一副本）', async () => {
+    fns.pathExists.mockImplementation(async (target: string) =>
+      ROOT_ENTRIES.some((name) => target === `${USER_DATA}/${name}.restore` || target === `${USER_DATA}/${name}`)
+    )
+    // staged → dest 的改名失败（Windows 上 sessions.db 被占的情形）
+    fns.rename.mockImplementation(async (from: string) => {
+      if (String(from).endsWith('.restore')) throw new Error('EBUSY')
+    })
+
+    await BackupManager.handleStartupRestore()
+
+    for (const name of ROOT_ENTRIES) {
+      expect(fns.remove).not.toHaveBeenCalledWith(`${USER_DATA}/${name}.restore`)
+    }
+    // 旧真身被改回原名（回滚），否则用户只剩一个 .pre-restore-* 目录
+    const rollbacks = fns.rename.mock.calls.filter(
+      (call) => String(call[0]).includes('.pre-restore-') && String(call[1]).startsWith(USER_DATA)
+    )
+    expect(rollbacks).toHaveLength(ROOT_ENTRIES.length)
   })
 
   it('没有任何 .restore 标记时直接返回，不碰用户数据', async () => {

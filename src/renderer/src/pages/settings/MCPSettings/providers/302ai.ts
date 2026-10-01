@@ -116,6 +116,9 @@ export const syncAi302Servers = async (token: string, existingServers: MCPServer
           // Add new server
           addedServers.push(mcpServer)
         }
+        // v1 二轮审查 s2-05：这里此前漏了 push，allServers 恒为空 —— 面板恒空、
+        // 还弹「获取成功」，并用空数组覆盖上一次的缓存。五个兄弟 provider 都 push。
+        allServers.push(mcpServer)
       } catch (err) {
         logger.error('Error processing 302ai server:', err as Error)
       }

@@ -1075,6 +1075,7 @@
       "message": "定位到消息"
     },
     "search": {
+      "failed": "检索消息失败，请重试",
       "match": {
         "substring": "包含",
         "whole_word": "整词"
@@ -1085,6 +1086,7 @@
         "newest": "最新优先",
         "oldest": "最早优先"
       },
+      "stats": "在 {{time}} 秒内找到 {{count}} 条结果",
       "topics": {
         "empty": "没有找到相关话题，点击回车键搜索所有消息"
       }
@@ -1135,6 +1137,17 @@
       "unsupported_format": "不支持的文件格式"
     },
     "title": "导入外部对话"
+  },
+  "kernel": {
+    "topicDelete": {
+      "purgeFailed": "话题已从列表移除，但会话数据仍留在磁盘上。请重试删除。"
+    },
+    "topicDestroyTurns": {
+      "purgeFailed": "消息已删除，但部分会话数据仍留在磁盘上。请重试删除。"
+    },
+    "webFetch": {
+      "cancelled": "已取消抓取。没有取回任何页面。"
+    }
   },
   "kernelChat": {
     "emptyResponse": "模型已结束本轮，但没有返回任何内容。可重试或更换模型。",
@@ -1203,8 +1216,12 @@
     "name_required": "知识库名称为必填项",
     "notes": "笔记",
     "provider_not_found": "未找到服务商",
+    "remove_failed": "删除失败，条目已恢复",
+    "remove_file_cleanup_failed": "索引已删除，但本地文件未能清理",
     "rename": "重命名",
     "search": "搜索知识库",
+    "search_failed": "知识库检索失败，请重试",
+    "search_no_results": "没有找到匹配内容",
     "search_placeholder": "输入查询内容",
     "settings": {
       "title": "知识库设置"
@@ -1314,6 +1331,7 @@
     },
     "error": {
       "chunk_overlap_too_large": "分段重叠不能大于分段大小",
+      "citation_fetch_failed": "网页摘要抓取失败，展开引用可打开原文。",
       "copy": "复制失败",
       "dimension_too_large": "内容尺寸过大",
       "enter": {
@@ -1666,8 +1684,11 @@
     "characters": "字符",
     "collapse": "收起",
     "copyContent": "复制内容",
+    "create_folder_failed": "新建文件夹失败",
+    "create_note_failed": "新建笔记失败",
     "crossPlatformRestoreWarning": "检测到从其他设备恢复配置，但笔记目录为空。请将笔记文件复制到: {{path}}",
     "delete": "删除",
+    "delete_failed": "删除失败",
     "delete_folder_confirm": "确定要删除文件夹 \"{{name}}\" 及其所有内容吗？",
     "delete_note_confirm": "确定要删除笔记 \"{{name}}\" 吗？",
     "drop_markdown_hint": "拖拽 .md 文件或目录到此处导入",
@@ -1678,6 +1699,7 @@
     "export_knowledge": "导出笔记到知识库",
     "export_success": "成功导出到知识库",
     "export_to_word_failed": "导出为 Word 失败",
+    "move_failed": "移动失败",
     "new_folder": "新建文件夹",
     "new_note": "新建笔记",
     "no_content_to_copy": "没有内容可复制",
@@ -1686,13 +1708,18 @@
     "no_note_selected": "请先选择一个笔记",
     "no_valid_files": "没有上传有效的文件",
     "open_outside": "从外部打开",
+    "refresh_failed_stale": "列表刷新失败，显示的可能不是最新内容",
     "rename": "重命名",
+    "rename_failed": "重命名失败",
+    "rename_name_exists": "已存在同名项目：{{name}}",
     "save": "保存到笔记",
+    "save_failed": "笔记保存失败",
     "search": {
       "both": "名称+内容",
       "content": "内容",
       "found_results": "找到 {{count}} 个结果 (名称: {{nameCount}}, 内容: {{contentCount}})",
       "more_matches": "个匹配",
+      "no_results": "没有匹配的内容",
       "searching": "搜索中...",
       "show_less": "收起"
     },
@@ -1861,6 +1888,8 @@
     "generic_params_hint": "该模型未声明参数集，以下为通用参数",
     "guidance_scale": "引导比例",
     "guidance_scale_tip": "无分类器指导 ({{min}}-{{max}})。控制模型在寻找相关图像时对提示词的遵循程度",
+    "history_empty": "暂无绘画历史",
+    "history_load_failed": "绘画历史加载失败",
     "image": {
       "size": "图片尺寸"
     },
@@ -2089,6 +2118,221 @@
       "validating": "验证备份..."
     },
     "title": "数据恢复"
+  },
+  "richEditor": {
+    "action": {
+      "table": {
+        "deleteColumn": "删除列",
+        "deleteRow": "删除行",
+        "insertColumnAfter": "在右侧插入",
+        "insertColumnBefore": "在左侧插入",
+        "insertRowAfter": "在下方插入",
+        "insertRowBefore": "在上方插入"
+      }
+    },
+    "commands": {
+      "blockMath": {
+        "description": "插入数学公式",
+        "title": "数学公式"
+      },
+      "blockquote": {
+        "description": "插入引用文本",
+        "title": "引用"
+      },
+      "bold": {
+        "description": "标记为粗体",
+        "title": "粗体"
+      },
+      "bulletList": {
+        "description": "创建简单的项目符号列表",
+        "title": "无序列表"
+      },
+      "calloutInfo": {
+        "description": "添加信息提示框",
+        "title": "信息提示框"
+      },
+      "calloutWarning": {
+        "description": "添加警告提示框",
+        "title": "警告提示框"
+      },
+      "code": {
+        "description": "插入代码片段",
+        "title": "代码"
+      },
+      "codeBlock": {
+        "description": "插入代码片段",
+        "title": "代码块"
+      },
+      "columns": {
+        "description": "创建分栏布局",
+        "title": "分栏"
+      },
+      "date": {
+        "description": "插入当前日期",
+        "title": "日期"
+      },
+      "divider": {
+        "description": "添加水平分割线",
+        "title": "分割线"
+      },
+      "hardBreak": {
+        "description": "插入换行符",
+        "title": "换行符"
+      },
+      "heading1": {
+        "description": "大段落标题",
+        "title": "一级标题"
+      },
+      "heading2": {
+        "description": "中段落标题",
+        "title": "二级标题"
+      },
+      "heading3": {
+        "description": "小段落标题",
+        "title": "三级标题"
+      },
+      "heading4": {
+        "description": "较小的段落标题",
+        "title": "四级标题"
+      },
+      "heading5": {
+        "description": "更小的段落标题",
+        "title": "五级标题"
+      },
+      "heading6": {
+        "description": "最小的段落标题",
+        "title": "六级标题"
+      },
+      "image": {
+        "description": "插入图片",
+        "title": "图片"
+      },
+      "inlineCode": {
+        "description": "添加行内代码",
+        "title": "行内代码"
+      },
+      "inlineMath": {
+        "description": "插入行内数学公式",
+        "title": "行内数学公式"
+      },
+      "italic": {
+        "description": "标记为斜体",
+        "title": "斜体"
+      },
+      "link": {
+        "description": "添加链接",
+        "title": "链接"
+      },
+      "noCommandsFound": "未找到命令",
+      "orderedList": {
+        "description": "创建带编号的列表",
+        "title": "有序列表"
+      },
+      "paragraph": {
+        "description": "开始编写普通文本",
+        "title": "正文"
+      },
+      "redo": {
+        "description": "重做上一步操作",
+        "title": "重做"
+      },
+      "strike": {
+        "description": "标记为删除线",
+        "title": "删除线"
+      },
+      "table": {
+        "description": "插入表格",
+        "title": "表格"
+      },
+      "taskList": {
+        "description": "创建待办事项清单",
+        "title": "任务列表"
+      },
+      "underline": {
+        "description": "标记为下划线",
+        "title": "下划线"
+      },
+      "undo": {
+        "description": "撤销上一步操作",
+        "title": "撤销"
+      }
+    },
+    "dragHandle": "拖拽块",
+    "frontMatter": {
+      "addProperty": "添加属性",
+      "addTag": "添加标签",
+      "changeToBoolean": "复选框",
+      "changeToDate": "日期",
+      "changeToNumber": "数字",
+      "changeToTags": "标签",
+      "changeToText": "文本",
+      "changeType": "更改类型",
+      "deleteProperty": "删除属性",
+      "editValue": "编辑值",
+      "empty": "空",
+      "moreActions": "更多操作",
+      "propertyName": "属性名称"
+    },
+    "image": {
+      "placeholder": "添加图片"
+    },
+    "imageUploader": {
+      "embedImage": "嵌入图片",
+      "embedLink": "嵌入链接",
+      "embedSuccess": "图片嵌入成功",
+      "invalidType": "请选择图片文件",
+      "invalidUrl": "无效的图片链接",
+      "processing": "正在处理图片...",
+      "title": "添加图片",
+      "tooLarge": "图片大小不能超过 10MB",
+      "upload": "上传",
+      "uploadError": "图片上传失败",
+      "uploadFile": "上传文件",
+      "uploadHint": "支持 JPG、PNG、GIF 等格式，最大 10MB",
+      "uploadSuccess": "图片上传成功",
+      "uploadText": "点击或拖拽图片到此处上传",
+      "uploading": "正在上传图片",
+      "urlPlaceholder": "粘贴图片链接地址",
+      "urlRequired": "请输入图片链接地址"
+    },
+    "link": {
+      "remove": "移除链接",
+      "text": "链接标题",
+      "textPlaceholder": "请输入链接标题",
+      "url": "链接地址"
+    },
+    "math": {
+      "placeholder": "输入 LaTeX 公式"
+    },
+    "placeholder": "输入'/'调用命令",
+    "plusButton": "点击在下方添加",
+    "toolbar": {
+      "blockMath": "数学公式块",
+      "blockquote": "引用",
+      "bold": "粗体",
+      "bulletList": "无序列表",
+      "clearMarks": "清除格式",
+      "code": "行内代码",
+      "codeBlock": "代码块",
+      "heading1": "一级标题",
+      "heading2": "二级标题",
+      "heading3": "三级标题",
+      "heading4": "四级标题",
+      "heading5": "五级标题",
+      "heading6": "六级标题",
+      "image": "图片",
+      "inlineMath": "行内数学公式",
+      "italic": "斜体",
+      "link": "链接",
+      "orderedList": "有序列表",
+      "paragraph": "正文",
+      "redo": "重做",
+      "strike": "删除线",
+      "table": "表格",
+      "taskList": "任务清单",
+      "underline": "下划线",
+      "undo": "撤销"
+    }
   },
   "settings": {
     "about": {
@@ -3545,7 +3789,10 @@
         },
         "subscribe_update": "立即更新",
         "subscribe_update_failed": "订阅源更新失败",
+        "subscribe_update_failed_for_url": "更新订阅源失败：{{url}}",
+        "subscribe_update_partial": "已更新 {{count}} 个订阅源，{{failed}} 个失败",
         "subscribe_update_success": "订阅源更新成功",
+        "subscribe_update_success_count": "已更新 {{count}} 个订阅源",
         "subscribe_url": "订阅源地址",
         "title": "网络搜索",
         "url_invalid": "输入了无效的URL",
@@ -3572,6 +3819,7 @@
       "daily": "按日",
       "empty": "该范围内暂无用量记录",
       "input_tokens": "输入 Tokens",
+      "load_failed": "读取本地用量记录失败",
       "output_tokens": "输出 Tokens",
       "range": {
         "30d": "近 30 天",

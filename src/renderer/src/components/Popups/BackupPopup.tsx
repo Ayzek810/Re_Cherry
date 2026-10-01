@@ -26,6 +26,8 @@ interface ProgressData {
 const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
+  const [isRunning, setIsRunning] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
   const { t } = useTranslation()
   const skipBackupFile = store.getState().settings.skipBackupFile
 
@@ -42,8 +44,21 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const onOk = async () => {
     logger.debug(`skipBackupFile: ${skipBackupFile}`)
 
-    await backup(skipBackupFile)
-    setOpen(false)
+    // 失败必须可见：进度停在未完成阶段时不能再把两个按钮一起禁掉，
+    // 否则用户面对一个什么都点不动、也没有任何提示的模态框。
+    setFailed(null)
+    setIsRunning(true)
+    try {
+      await backup(skipBackupFile)
+      setOpen(false)
+    } catch (error) {
+      logger.error('Backup failed:', error as Error)
+      setProgressData(undefined)
+      setFailed((error as Error)?.message || t('common.save_failed'))
+      window.toast?.error(t('common.save_failed', 'Backup failed'))
+    } finally {
+      setIsRunning(false)
+    }
   }
 
   const onCancel = () => {
@@ -67,7 +82,8 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 
   BackupPopup.hide = onCancel
 
-  const isDisabled = progressData ? progressData.stage !== 'completed' : false
+  // 只由「正在跑」驱动禁用，成功与失败都必须复位（失败后按钮必须能点）。
+  const isRunningLock = isRunning
   const title = t('backup.title')
   const okText = t('backup.confirm.button')
   const content = t('backup.content')
@@ -79,13 +95,14 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       onOk={onOk}
       onCancel={onCancel}
       afterClose={onClose}
-      okButtonProps={{ disabled: isDisabled }}
-      cancelButtonProps={{ disabled: isDisabled }}
+      okButtonProps={{ disabled: isRunningLock }}
+      cancelButtonProps={{ disabled: isRunningLock }}
       okText={okText}
       maskClosable={false}
       transitionName="animation-move-down"
       centered>
-      {!progressData && <div>{content}</div>}
+      {!progressData && !failed && <div>{content}</div>}
+      {failed && <div data-testid="backup-error">{failed}</div>}
       {progressData && (
         <div style={{ textAlign: 'center', padding: '20px 0' }}>
           <Progress percent={Math.floor(progressData.progress)} strokeColor="var(--color-primary)" />
@@ -97,6 +114,9 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 }
 
 const TopViewKey = 'BackupPopup'
+
+// 导出给行为测试直接挂载；默认导出仍是 TopView 入口。
+export { PopupContainer as BackupPopupContainer }
 
 export default class BackupPopup {
   static topviewId = 0

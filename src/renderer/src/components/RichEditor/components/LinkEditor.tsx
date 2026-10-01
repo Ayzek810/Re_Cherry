@@ -50,18 +50,25 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
 
   // Auto-focus href input when dialog opens
   useEffect(() => {
-    if (visible && hrefInputRef.current) {
-      setTimeout(() => {
-        hrefInputRef.current?.focus()
-      }, 100)
-    }
+    if (!visible || !hrefInputRef.current) return
+
+    const timer = setTimeout(() => {
+      hrefInputRef.current?.focus()
+    }, 100)
+
+    return () => clearTimeout(timer)
   }, [visible])
 
   // Handle clicks outside to close
   useEffect(() => {
     if (!visible) return
 
+    // 打开弹窗的那次 mousedown 会先于本 effect 到达，必须忽略，否则一开就关。
+    let ignoreOpeningClick = true
+
     const handleClickOutside = (event: MouseEvent) => {
+      if (ignoreOpeningClick) return
+
       const target = event.target as HTMLElement
 
       // Don't close if clicking within the editor or on a link
@@ -72,11 +79,17 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
       onCancel()
     }
 
-    setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside)
+    // 用一次性定时器只用来吞掉打开瞬间的那一下点击；监听器本身必须同步挂上，
+    // 否则 visible 在 100ms 内变 false 时 cleanup 摘不掉一个「还没挂上」的监听器，
+    // 挂起的定时器随后会把它永久留在 document 上。
+    const guardTimer = setTimeout(() => {
+      ignoreOpeningClick = false
     }, 100)
 
+    document.addEventListener('mousedown', handleClickOutside)
+
     return () => {
+      clearTimeout(guardTimer)
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [visible, onCancel])

@@ -1,8 +1,38 @@
 import { is } from '@electron-toolkit/utils'
 import { loggerService } from '@logger'
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, type Session, session } from 'electron'
 
 const logger = loggerService.withContext('SearchService')
+
+/**
+ * 刮取窗口的专用会话（内存态，不带 `persist:` 前缀）。
+ *
+ * 为什么单开会话：刮取窗口加载的是**任意第三方页面**（搜索引擎结果页、抓取目标页）。
+ * 它必须与应用自身的 `defaultSession` 隔离——否则被刮取的站点能读应用 cookie/存储。
+ */
+const SCRAPE_PARTITION = 'scrape'
+
+/** 只允许 http(s)。`file:`、`data:`、`javascript:` 等一律拒绝。 */
+function isAllowedScrapeUrl(rawUrl: string): boolean {
+  try {
+    const { protocol } = new URL(rawUrl)
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+let scrapeSessionConfigured = false
+/** 取得（并在首次调用时配置）刮取专用会话：禁一切权限请求与下载。 */
+function scrapeSession(): Session {
+  const target = session.fromPartition(SCRAPE_PARTITION)
+  if (!scrapeSessionConfigured) {
+    scrapeSessionConfigured = true
+    target.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+    target.on('will-download', (event) => event.preventDefault())
+  }
+  return target
+}
 
 export class SearchService {
   private static instance: SearchService | null = null
@@ -20,14 +50,28 @@ export class SearchService {
       height: 768,
       show,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-        devTools: is.dev
+        // 刮取窗口只经 executeJavaScript 读 `document.documentElement.outerHTML`，不需要任何
+        // Node 能力。此前为 `nodeIntegration: true` + `contextIsolation: false`（上游 V1 同形），
+        // 等于把「打开一个被投毒的搜索结果页」变成宿主机任意代码执行（v1 二轮审查 m2-01）。
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        devTools: is.dev,
+        session: scrapeSession()
       }
     })
 
     this.searchWindows[uid] = newWindow
     newWindow.on('closed', () => delete this.searchWindows[uid])
+
+    // 加固：不许开新窗口，不许导航到非 http(s)。
+    newWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    newWindow.webContents.on('will-navigate', (event, targetUrl) => {
+      if (!isAllowedScrapeUrl(targetUrl)) {
+        logger.warn(`search window blocked navigation to ${targetUrl}`)
+        event.preventDefault()
+      }
+    })
 
     newWindow.webContents.userAgent =
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)  Safari/537.36'
@@ -49,6 +93,10 @@ export class SearchService {
   }
 
   public async openUrlInSearchWindow(uid: string, url: string): Promise<any> {
+    if (!isAllowedScrapeUrl(url)) {
+      // 失败不伪装：非法 scheme 直接拒绝，不静默加载空页。
+      throw new Error(`search window refused non-http(s) url: ${url.slice(0, 80)}`)
+    }
     let window = this.searchWindows[uid]
     logger.debug(`Searching with URL: ${url}`)
     if (window === undefined) {

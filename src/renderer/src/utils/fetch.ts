@@ -25,25 +25,17 @@ export function isValidUrl(urlString: string): boolean {
   }
 }
 
+/** 批量抓取：`fetchWebContent` 在 r2-75 之后对失败一律 reject，这里保持"整体失败即抛"
+ *  的语义。此前它把单条失败折成 `{ title: 'Error', content: 'No content found' }` 的
+ *  **成功**结果——失败被伪装成"页面没有正文"，正是家规禁止的形态。
+ *  （无生产消费者；消费者要求"部分成功也算结果"时，应改为返回 `{ results, failures }`。） */
 export async function fetchWebContents(
   urls: string[],
   format: ResponseFormat = 'markdown',
   usingBrowser: boolean = false,
   httpOptions: RequestInit = {}
 ): Promise<WebSearchProviderResult[]> {
-  // parallel using fetchWebContent
-  const results = await Promise.allSettled(urls.map((url) => fetchWebContent(url, format, usingBrowser, httpOptions)))
-  return results.map((result, index) => {
-    if (result.status === 'fulfilled') {
-      return result.value
-    } else {
-      return {
-        title: 'Error',
-        content: noContent,
-        url: urls[index]
-      }
-    }
-  })
+  return Promise.all(urls.map((url) => fetchWebContent(url, format, usingBrowser, httpOptions)))
 }
 
 export async function fetchWebContent(
@@ -121,15 +113,13 @@ export async function fetchWebContent(
       throw e
     }
 
-    // v0.4 验收轮降噪：目标站反爬（403）与不可达（Failed to fetch）是引用卡摘要
-    // 抓取的常态（saturdaygift/facebook/bbc 等必然拒绝）——降为 debug（这些错误
-    // 已被 noContent 兜底消化，非缺陷信号；error 级在真机日志里全是噪音）。
-    logger.debug(`Failed to fetch ${url}`, e as Error)
-    return {
-      title: url,
-      url: url,
-      content: noContent
-    }
+    // r2-75：非取消的抓取失败（403/超时/网络/DOMParser 异常）**必须 reject**。
+    // 此前它返回一个 content = noContent 的"成功"结果，调用方（引用卡摘要）把它当正文
+    // 渲染，于是"抓取失败"与"页面确实没有正文"在界面上不可区分——家规明写「失败必须
+    // 拒绝，绝不渲染部分或伪造结果」。日志提到 warn：渲染层 debug/info 不落盘，
+    // 这里要留可取证的一行。
+    logger.warn(`Failed to fetch ${url}`, e as Error)
+    throw e
   }
 }
 

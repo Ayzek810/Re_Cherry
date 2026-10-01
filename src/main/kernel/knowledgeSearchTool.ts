@@ -154,6 +154,12 @@ export function apply(ctx: Context): void {
           }
         }
         merged.sort((a, b) => b.score - a.score)
+        // 全部数据源都失败 ≠ 命中 0 条（CLAUDE.md §9 第一条硬规则）。此时直接以失败拒绝：
+        // 模型若拿到"No ... results"这一确定结论，会据此对用户说"你的知识库里没有相关内容"，
+        // 而真实原因是嵌入服务不可用 / 库读不出来。
+        if (errors.length === bases.length) {
+          throw new Error(`knowledge_search: every knowledge base failed (${bases.length}): ${errors.join('; ')}`)
+        }
         // 文档级去重（V2 kb_search 同语义）：同一文档（source）的多个 chunk 合并为
         // 一条引用——否则引用卡同文档重复多行、序号散乱（真机反馈"知识库的引用是
         // 乱的"）。正文按行去重后拼接（总量截 1200），模型仍拿到该文档的全部素材；
@@ -194,16 +200,24 @@ export function apply(ctx: Context): void {
         const text =
           documents.length === 0
             ? [
-                `No knowledge base results for "${query}".`,
-                ...(errors.length > 0 ? [`Search errors: ${errors.join('; ')}`] : [])
-              ].join('\n')
+                `The knowledge bases returned no matching fragments for "${query}".`,
+                ...(errors.length > 0
+                  ? [
+                      `Warning: search was incomplete. ${errors.length} of ${bases.length} knowledge base(s) failed: ${errors.join('; ')}`
+                    ]
+                  : [])
+              ].join('\n\n')
             : [
                 `Knowledge base results for "${query}" (cited as [n]):`,
                 // 条目形态与 web_search 完全一致（[n] 标题行 + 正文）——web 的 [n]
                 // 被模型稳定回引，知识库此前带 "(source: ..., score: ...)" 元数据
                 // 括注，[n] 易被模型当作注释而非引用标记。
                 ...documents.map((doc, index) => `[${index + 1}] ${doc.source}\n${doc.content}`),
-                ...(errors.length > 0 ? [`Partial search errors: ${errors.join('; ')}`] : []),
+                ...(errors.length > 0
+                  ? [
+                      `Warning: results are incomplete. ${errors.length} of ${bases.length} knowledge base(s) failed: ${errors.join('; ')}`
+                    ]
+                  : []),
                 'Citation rule: in your answer, place the matching [n] marker immediately after each statement these fragments support.'
               ].join('\n\n')
         logger.info(

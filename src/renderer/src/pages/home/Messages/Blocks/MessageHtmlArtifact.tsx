@@ -103,6 +103,7 @@ export const MessageHtmlArtifact = memo(function MessageHtmlArtifact({
             type="text"
             size="small"
             className="nodrag"
+            data-testid="html-artifact-open-popup"
             icon={<Maximize2 size={14} />}
             onClick={() => popupContext.openPopup({ artifactId, html, title, onSave, editable, kind, zoom: 100 })}
           />

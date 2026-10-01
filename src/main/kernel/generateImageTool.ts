@@ -118,7 +118,9 @@ export function apply(ctx: Context): void {
             paramValues: { size: imageSize, numImages: batchSize },
             requestId
           },
-          // exec.signal（暂停/中止）优先于 requestId 注册表——工具路径无渲染层取消方。
+          // exec.signal（回合暂停/中止）与 requestId 注册表（Dsh_LightImageAbort）在
+          // lightGenerateImage 内取并集，任一来源取消都打断在途请求（k2-13）；
+          // 旧注释"工具路径无渲染层取消方"是错的：绘画页与工具共用同一 requestId 通道。
           exec.signal
         )
         logger.info(`generate_image: ${result.images.length} image(s) via ${config.modelId}`)

@@ -119,9 +119,16 @@ export class KnowledgeService {
   /** 条目处理 FIFO（进程内串行；失败不堵塞后续条目）。 */
   private queue: Promise<unknown> = Promise.resolve()
   /** knowledge_search 的每轮登记（topics.sendMessage 写入；工具执行时按 topicId 反查）。 */
-  private turnBases = new Map<string, KnowledgeTurnBase[]>()
+  private readonly turnBases = new Map<string, KnowledgeTurnBase[]>()
   /** read_document 的每轮登记（topics.sendMessage 写入；工具执行时按 topicId 反查）。 */
-  private turnDocuments = new Map<string, TurnDocument[]>()
+  private readonly turnDocuments = new Map<string, TurnDocument[]>()
+  /**
+   * v1 二轮审查 m2-08：每轮登记表的 key 是 topicId，而话题只增不减——长会话用户会
+   * 无限累积（每个 value 还持有绝对路径与知识库清单）。复刻 SpanCacheService 的做法：
+   * Map 保持插入序，超限淘汰最早的 key（最老的回合早已完结，淘汰只影响历史回合的
+   * 工具重放，该回合重放本就应重新登记）。
+   */
+  private static readonly MAX_TURN_TOPICS = 512
 
   static getInstance(): KnowledgeService {
     if (!KnowledgeService.instance) {
@@ -153,13 +160,15 @@ export class KnowledgeService {
 
   /**
    * 每轮知识检索登记（topics.sendMessage 按发送参数写入；undefined = 本轮未启用，
-   * knowledge_search 工具此时不该被调，执行侧防线拒答）。即设即覆盖，无清理需求。
+   * knowledge_search 工具此时不该被调，执行侧防线拒答）。即设即覆盖；登记表有淘汰上限
+   * （见 {@link MAX_TURN_TOPICS}）。
    */
   setTurnBases(topicId: string, bases: KnowledgeTurnBase[] | undefined): void {
     if (bases === undefined || bases.length === 0) {
       this.turnBases.delete(topicId)
     } else {
       this.turnBases.set(topicId, bases)
+      this.evictOldestTurns(this.turnBases)
     }
   }
 
@@ -174,13 +183,23 @@ export class KnowledgeService {
 
   /**
    * read_document 的每轮登记（topics.sendMessage 按发送参数写入；undefined = 本轮
-   * 无文档附件，工具执行侧防线拒答）。即设即覆盖，无清理需求——与 turnBases 同形态。
+   * 无文档附件，工具执行侧防线拒答）。即设即覆盖；登记表有淘汰上限（与 turnBases 同形态）。
    */
   setTurnDocuments(topicId: string, documents: TurnDocument[] | undefined): void {
     if (documents === undefined || documents.length === 0) {
       this.turnDocuments.delete(topicId)
     } else {
       this.turnDocuments.set(topicId, documents)
+      this.evictOldestTurns(this.turnDocuments)
+    }
+  }
+
+  /** 插入序淘汰：Map 超限时删除最早的 key（SpanCacheService.setTopicId 同写法）。 */
+  private evictOldestTurns(map: Map<string, unknown>): void {
+    while (map.size > KnowledgeService.MAX_TURN_TOPICS) {
+      const oldest = map.keys().next().value
+      if (oldest === undefined) break
+      map.delete(oldest)
     }
   }
 
@@ -283,7 +302,10 @@ export class KnowledgeService {
       await store.close()
       this.stores.delete(baseId)
     }
-    await BaseVectorStore.open(baseId, this.dataDir())
+    // v1 二轮审查 m2-09：此前丢弃了 `BaseVectorStore.open` 的返回值——新建的 LibSQL
+    // 客户端无人引用、永不关闭，而下一次 addItem/search 因注册表里没有该 key 会**再开一个**，
+    // 同一 vec.db 上并存两个句柄（Windows 上还会让后续 deleteBase 的 rm 撞占用）。
+    this.stores.set(baseId, await BaseVectorStore.open(baseId, this.dataDir()))
     logger.info(`knowledge: reset base "${baseId}"`)
   }
 

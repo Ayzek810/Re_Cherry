@@ -133,6 +133,46 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
+    Re_Cherry 1.0.1 - Second review fixes
+
+    A second full review produced 336 findings. This release fixes the open high-severity items.
+
+    🛡️ Safety and correctness
+    - The session sweep no longer deletes a session that exists but cannot be read.
+    - The backup restore moves the old directory aside first. A failed restore keeps the backup.
+    - Four tools report a total source failure as a failure, not as "no results".
+    - The web-search source update keeps the sources you did not select.
+    - The health check no longer shows a total failure as "0/N passed".
+    - A programmatic edit in the notes editor no longer gets discarded or silently reverted.
+    - The MCP server command is validated before spawn. Bare names like node and python resolve correctly.
+
+    ⚡ Performance
+    - Stable-prefix streaming: the Markdown pipeline runs twice per reply instead of once per frame.
+    - The reply text writes to Redux as a delta, not as the whole text.
+    - The Notion export loads on demand.
+    - First-paint payload: 12.502 MB to 12.184 MB.
+
+    <!--LANG:zh-CN-->
+    Re_Cherry 1.0.1 - 第二轮审查修复
+
+    第二轮全量审查产出 336 条发现，本版修复其中的高严重度未闭环项。
+
+    🛡️ 安全与正确性
+    - 启动清扫不再物理删除「存在但读不出来」的会话。
+    - 备份还原改为先把旧目录挪开；还原失败保留备份。
+    - 四个工具把「数据源全部失败」如实报为失败，不再说成「没有结果」。
+    - 更新搜索订阅源时，未选中的订阅源不再丢失。
+    - 健康检查不再把整体失败显示成「0/N 通过」。
+    - 笔记编辑器的程序化写入不再被丢弃或被静默还原。
+    - MCP 服务器命令在 spawn 前校验；node、python 这类裸名现在能正确解析。
+
+    ⚡ 性能
+    - 流式稳定前缀复用：Markdown 管线每次回复只跑 2 次，而非每帧 1 次。
+    - 正文写 Redux 改为增量，不再每帧写全文。
+    - Notion 导出改为按需加载。
+    - 首屏载荷 12.502 MB → 12.184 MB。
+
+    <!--LANG:en-->
     Re_Cherry 1.0.0 - v1 Release
 
     Full code review, performance work and cleanup before the official release.

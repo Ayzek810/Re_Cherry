@@ -185,7 +185,9 @@ export async function executeCommand(
       if (options?.maxOutputBytes !== undefined && nextOutputBytes > options.maxOutputBytes) {
         outputLimitError = new CommandOutputLimitError(options.maxOutputBytes)
         if (timeoutId) clearTimeout(timeoutId)
-        child.kill('SIGKILL')
+        // v1 二轮审查 m2-27：`child.kill()` 在 Windows 上只收割 cmd.exe 包装层，真正的
+        // node/pip 进程树会继续跑并持有文件句柄（紧接着的删除会撞占用）。统一走杀树。
+        killProcessTree(child)
         return null
       }
       outputBytes = nextOutputBytes
@@ -202,7 +204,9 @@ export async function executeCommand(
 
     if (options?.timeout) {
       timeoutId = setTimeout(() => {
-        child.kill('SIGKILL')
+        // v1 二轮审查 m2-27：同 collectOutput——只杀直接子进程会留下孤儿进程树
+        //（pip/npm 会自行 fork，继续占文件句柄与镜像带宽）。
+        killProcessTree(child)
         reject(new Error(`Command timed out after ${options.timeout}ms`))
       }, options.timeout)
     }

@@ -24,6 +24,9 @@ export const useCodeHighlight = ({ rawLines, language, callerId }: UseCodeHighli
   const latestRequestedContentRef = useRef<string | null>(null)
   const tokenLinesCountRef = useRef(0)
   const shikiThemeRef = useRef(activeShikiTheme)
+  // 实例级挂载守卫：高亮是 async 的，await 之后组件可能已经卸载
+  // （聊天流里代码块被折叠/消息被回收）。继续 setTokenLines 会写到已死实例上。
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     tokenLinesCountRef.current = tokenLines.length
@@ -54,6 +57,9 @@ export const useCodeHighlight = ({ rawLines, language, callerId }: UseCodeHighli
 
           // 传入完整内容，让 ShikiStreamService 检测变化并处理增量高亮
           const result = await highlightStreamingCode(contentToProcess, language, callerId)
+
+          // 已经卸载：丢掉结果并打断循环，不再写 state
+          if (!mountedRef.current) return
 
           // 如有结果，更新 tokenLines
           if (result.lines.length > 0 || result.recall !== 0) {
@@ -86,7 +92,10 @@ export const useCodeHighlight = ({ rawLines, language, callerId }: UseCodeHighli
 
   // 组件卸载时清理资源
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
+      latestRequestedContentRef.current = null
       cleanupTokenizers(callerId)
     }
   }, [callerId, cleanupTokenizers])

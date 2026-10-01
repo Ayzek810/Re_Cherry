@@ -24,7 +24,7 @@ import Typography from '@tiptap/extension-typography'
 import { useEditor, useEditorState } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { t } from 'i18next'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { commandSuggestion } from './command'
 import { CodeBlockShiki } from './extensions/code-block-shiki/code-block-shiki'
@@ -164,6 +164,29 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
   } = options
 
   const [markdown, setMarkdownState] = useState<string>(initialContent)
+
+  // 整体替换（setMarkdown/setHtml/初始化）会触发一次 docChanged 事务；那次事务的 markdown
+  // 由调用方给出，不需要再回序列化一遍（否则会覆盖调用方刚写入的内容）。
+  // 用户编辑与其它程序化写入（数学弹窗、加号按钮等）**不**置位，必须回流。
+  const suppressUpdateRef = useRef(false)
+
+  /** 把编辑器当前文档回写成 markdown，并通知父组件。 */
+  const serializeMarkdown = useCallback(
+    (currentEditor: Editor): string => {
+      const content = currentEditor.getText()
+      const htmlContent = currentEditor.getHTML()
+      const convertedMarkdown = htmlToMarkdown(htmlContent)
+      setMarkdownState(convertedMarkdown)
+      onChange?.(convertedMarkdown)
+
+      onContentChange?.(content)
+      if (onHtmlChange) {
+        onHtmlChange(htmlContent)
+      }
+      return convertedMarkdown
+    },
+    [onChange, onContentChange, onHtmlChange]
+  )
 
   const html = useMemo(() => {
     if (!markdown) return ''
@@ -450,26 +473,28 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
       }
     },
     onUpdate: ({ editor, transaction }) => {
-      // Ignore non-user updates (initialization/mode toggles/programmatic transactions)
-      // to avoid re-serializing markdown while switching view modes.
-      if (!editable || !transaction.docChanged || !editor.isFocused) return
+      // 只跳过「整体替换」事务（setContent/setMarkdown），不再用 editor.isFocused 当守卫：
+      // 焦点在数学弹窗或加号按钮上时，程序化写入也必须回流，否则内容写不进 .md 并被静默回滚。
+      if (suppressUpdateRef.current) return
+      if (!editable || !transaction.docChanged) return
 
-      const content = editor.getText()
-      const htmlContent = editor.getHTML()
       try {
-        const convertedMarkdown = htmlToMarkdown(htmlContent)
-        setMarkdownState(convertedMarkdown)
-        onChange?.(convertedMarkdown)
-
-        onContentChange?.(content)
-        if (onHtmlChange) {
-          onHtmlChange(htmlContent)
-        }
+        serializeMarkdown(editor)
       } catch (error) {
         logger.error('Error converting HTML to markdown:', error as Error)
       }
     },
-    onBlur: () => {
+    onBlur: ({ editor }) => {
+      // 双保险：任何未被回流的文档差异在失焦时补一次序列化，父组件总能拿到最终 markdown。
+      if (!editable || suppressUpdateRef.current) return
+      if (editor.getHTML() === html) return
+
+      try {
+        serializeMarkdown(editor)
+      } catch (error) {
+        logger.error('Error converting HTML to markdown on blur:', error as Error)
+      }
+
       onBlur?.()
     },
     onCreate: ({ editor: currentEditor }) => {
@@ -768,7 +793,12 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
 
         const convertedHtml = markdownToHtml(content)
 
-        editor.commands.setContent(convertedHtml)
+        suppressUpdateRef.current = true
+        try {
+          editor.commands.setContent(convertedHtml)
+        } finally {
+          suppressUpdateRef.current = false
+        }
 
         onHtmlChange?.(convertedHtml)
       } catch (error) {
@@ -785,7 +815,12 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
         setMarkdownState(convertedMarkdown)
         onChange?.(convertedMarkdown)
 
-        editor.commands.setContent(htmlContent)
+        suppressUpdateRef.current = true
+        try {
+          editor.commands.setContent(htmlContent)
+        } finally {
+          suppressUpdateRef.current = false
+        }
 
         onHtmlChange?.(htmlContent)
       } catch (error) {

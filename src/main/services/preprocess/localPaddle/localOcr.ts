@@ -104,6 +104,19 @@ export async function terminateActiveOcrProcess(): Promise<void> {
   await exited
 }
 
+/** 同步终止常驻 worker（app before-quit 释放 onnxruntime/PaddleOCR 句柄；与 pdfExtractBridge
+ *  的 `disposePdfExtractWorker` 同形）。在跑的解析不再结算——进程退出即终点，调用方不等待。
+ *  为什么需要它（v1 二轮审查 m2-03）：该 worker 加载 onnxruntime + OCR 模型（数百 MB），
+ *  空闲 5 分钟才自退；解析后 5 分钟内退出应用会留下残留子进程。此前只有删模型路径会终止它。 */
+export function disposeOcrWorker(): void {
+  const child = worker
+  if (child === null) return
+  worker = null
+  workerDispatch = null
+  workerExited = null
+  child.kill()
+}
+
 function acquireWorker(): UtilityProcessLike {
   if (worker !== null) return worker
   const workerPath = join(app.getAppPath(), 'out', 'main', 'localOcrWorker.js')
@@ -192,9 +205,6 @@ async function runOnWorker(
   )
   const child = acquireWorker()
 
-  // 内部中断链：外部 signal（预算/用户中止）→ abort 在途等待 + 发 cancel 给 worker。
-  const controller = new AbortController()
-
   return new Promise<string>((resolve, reject) => {
     const pages = new Map<number, string>()
     const inflight = new Set<Promise<void>>()
@@ -207,7 +217,9 @@ async function runOnWorker(
       if (onAbort !== null) signal?.removeEventListener('abort', onAbort)
       if (workerDispatch === dispatch) workerDispatch = null
       if (workerExited === notifyExit) workerExited = null
-      controller.abort()
+      // v1 二轮审查 m2-26：此处原有 `controller.abort()`，但 `controller.signal` 全链
+      // 没有任何消费者——真正的打断链是「外部 signal → 发 `{type:'cancel'}` 给 worker」，
+      // 死代码会让人误以为这里有第二条中断路径，故删除。
       fn()
     }
 

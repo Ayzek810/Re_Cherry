@@ -89,6 +89,11 @@ export const getKnowledgeBaseParams = (base: KnowledgeBase): KnowledgeBaseParams
 /**
  * 语义检索（批次4 真实化）：主进程单库余弦检索 → 渲染层阈值过滤 + 截断。
  * 形参与上游 KnowledgeService.searchKnowledgeBase 保持一致，调用点无需改动。
+ *
+ * 失败语义（二轮审查 f2-13）：**检索失败必须 reject，不得返回空数组**。
+ * 旧实现把异常吞成 `[]`，调用点的 catch 因此永不执行、UI 无法区分"没有命中"与"检索失败"，
+ * 用户会得出"知识库里没有相关内容"的错误结论（CLAUDE.md §9「A failure must never look like an
+ * empty result」）。命中 0 条仍是**成功**结果：返回空数组由调用方按空态渲染。
  */
 export const searchKnowledgeBase = async (
   query: string,
@@ -116,10 +121,8 @@ export const searchKnowledgeBase = async (
       .slice(0, documentCount)
       .map((hit) => ({ pageContent: hit.pageContent, score: hit.score, metadata: hit.metadata, file: null }))
   } catch (error) {
-    logger.error(
-      `searchKnowledgeBase failed for base "${base.id}"`,
-      error instanceof Error ? error : new Error(String(error))
-    )
-    return []
+    const failure = error instanceof Error ? error : new Error(String(error))
+    logger.error(`searchKnowledgeBase failed for base "${base.id}"`, failure)
+    throw failure
   }
 }

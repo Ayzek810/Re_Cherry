@@ -16,7 +16,7 @@ import { autoNameKernelTopic } from '@renderer/services/topicNaming'
 import { recordUsage } from '@renderer/services/usageStore'
 import store from '@renderer/store'
 import { updateTopicUpdatedAt } from '@renderer/store/assistants'
-import { updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
+import { appendBlockContent, updateOneBlock, upsertManyBlocks } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
 import { toolPermissionsActions } from '@renderer/store/toolPermissions'
 import { type UserQuestionEntry, userQuestionsActions } from '@renderer/store/userQuestions'
@@ -40,7 +40,7 @@ import {
   MessageBlockType,
   type ToolMessageBlock
 } from '@renderer/types/newMessage'
-import { renameAbortController } from '@renderer/utils/abortController'
+import { clearAbortControllersForTopic, renameAbortController } from '@renderer/utils/abortController'
 import {
   createCitationBlock,
   createErrorBlock,
@@ -85,6 +85,14 @@ interface TurnState {
   thinkingBlockId?: string
   thinkingText: string
   /**
+   * 尚在 rAF 队列里、未派发进 store 的正文字符（p2-11）：块 content 由 store 侧
+   * **增量**追加（`appendBlockContentAction`），故这里只记"已 flush 的长度"这一游标
+   * （`mainText` 仍是逐 delta 累积的全文，供计长与最终一致性核对）。
+   */
+  mainFlushedLen: number
+  /** 同上，思考块。 */
+  thinkingFlushedLen: number
+  /**
    * 推理计时段（v0.4.6-1 修复"完成态归 0.1"）：startedAt = 首条 reasoning-delta；
    * thinkingMillsec = 冻结值（推理结束瞬间——首条 text-delta / tool 块 / step 收尾/
    * 回合收尾最早者——一次性落块，值 = 冻结时刻 − startedAt，与用户看到的跳动器同值；
@@ -94,8 +102,12 @@ interface TurnState {
   thinkingMillsec?: number
   /** 本轮块序（消息 blocks 列表的权威；按事件顺序追加，assistant/message 时替换回当前 step 的流式块）。 */
   blockIds: string[]
-  /** 取证钩子：上一条正文 delta 的 performance.now()（间隔 >1s 记 warn，定位流式停顿层）。 */
-  lastTextDeltaAt?: number
+  /** 取证钩子（v1 改进）：上一条**任意**内核对本话题事件（含思考/工具/收尾）的
+   *  performance.now()。旧实现只量"正文 delta 间隔"，把模型的思考期与工具期误报成
+   *  流式停顿——真机日志实证 `text delta gap 73217ms (accumulated 2 chars)` 前后有
+   *  thinking-trim 与 interaction 事件，属"没有正文"而非"通路断流"。真正的停顿
+   *  = 任意事件都断流（见 noteStreamActivity）。 */
+  lastStreamActivityAt?: number
   /** callId → 工具块（tool/result 按 callId 回填同一块）。 */
   toolBlocks: Map<string, ToolMessageBlock>
   /** 跨 step 累计的 token 用量（每条 assistant/message 携带其 step 的用量）。 */
@@ -188,6 +200,8 @@ export interface DestroyTurnsResponse {
   purgedTopics: string[]
   truncated: { id: string; fromSeq: number }[]
   focusTopicId: string | null
+  /** 内核侧删了注册表但物理清库失败的会话 id（v1 二轮 k2-05/k2-09：半成功必须可被看见）。 */
+  purgeFailures: string[]
 }
 
 /** 消息级删除：受影响集合/物理/焦点全部由内核一次事务算完（kernel/topics.ts destroyTurns）。 */
@@ -500,8 +514,34 @@ export async function loadKernelTopicMessages(
 // 事件投影
 // ---------------------------------------------------------------------------
 
+/** 停顿告警阈值（毫秒）：任意内核事件都断流超过它才记 warn。 */
+const STREAM_STALL_WARN_MS = 5000
+
+/**
+ * 记录一次流活动，并在**任意事件**断流超阈值时记 warn（renderer warn 落主进程盘）。
+ *
+ * 与旧的"正文 delta 间隔"钩子的区别：本函数在 `handleSessionEvent` 的入口调用，因此
+ * 思考 delta、工具调用/结果、step 收尾、turn 收尾都算活动。模型长时间推理或跑工具时
+ * 不告警——那不是停顿。只有事件流真的中断（内核/IPC 断流）才告警。
+ * 阈值取 5s：真机观察到的思考/工具间隙通常 <5s，而用户可感知的停顿远大于此。
+ */
+function noteStreamActivity(topicId: string, kind: string): void {
+  const state = streams.get(topicId)
+  if (state === undefined) return
+  const now = performance.now()
+  const previous = state.lastStreamActivityAt
+  state.lastStreamActivityAt = now
+  if (previous === undefined) return
+  const gap = now - previous
+  if (gap > STREAM_STALL_WARN_MS) {
+    logger.warn(`kernelChat: no stream activity for ${Math.round(gap)}ms (resumed at ${kind}, topic=${topicId})`)
+  }
+}
+
 function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): void {
   const { topicId, event } = payload
+  // 取证钩子（v1）：任意内核事件都算流活动；只有"什么都没来"才算停顿。
+  noteStreamActivity(topicId, event.type)
   switch (event.type) {
     case 'user/message': {
       // 注入的插件源消息（RuntimeContextProjection 的工具面快照、档位标注等）已由内核在
@@ -565,7 +605,9 @@ function startTurn(topicId: string, turn: number): void {
     turn,
     mainBlockId: mainBlock.id,
     mainText: '',
+    mainFlushedLen: 0,
     thinkingText: '',
+    thinkingFlushedLen: 0,
     blockIds: [mainBlock.id],
     toolBlocks: new Map(),
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -614,8 +656,10 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
   if (state.currentStep !== undefined && state.currentStep !== step) {
     state.mainBlockId = undefined
     state.mainText = ''
+    state.mainFlushedLen = 0
     state.thinkingBlockId = undefined
     state.thinkingText = ''
+    state.thinkingFlushedLen = 0
     state.thinkingStartedAt = undefined
     state.thinkingMillsec = undefined
   }
@@ -643,16 +687,7 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
         syncMessageBlocks(topicId, state)
       }
       state.mainText += chunk.text
-      // 取证钩子（v0.4.6-1 正文流式停顿排查）：相邻正文 delta 间隔 >1s 记 warn
-      //（renderer warn 落主进程盘）——区分"内核/IPC 断流"与"渲染层饥饿"。
-      const now = performance.now()
-      if (state.lastTextDeltaAt !== undefined && now - state.lastTextDeltaAt > 1000) {
-        logger.warn(
-          `kernelChat: text delta gap ${Math.round(now - state.lastTextDeltaAt)}ms (accumulated ${state.mainText.length} chars, topic=${topicId})`
-        )
-      }
-      state.lastTextDeltaAt = now
-      flushBlockUpdate(state.mainBlockId, { content: state.mainText })
+      state.mainFlushedLen = flushStreamChunk(state.mainBlockId, chunk.text, state.mainText, state.mainFlushedLen)
       break
     }
     case 'reasoning-delta': {
@@ -663,6 +698,7 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
           status: MessageBlockStatus.STREAMING
         })
         state.thinkingBlockId = thinkingBlock.id
+        state.thinkingFlushedLen = 0
         // 思考块置于本段文本块之前（沿用现有展示顺序）
         const mainIndex = state.mainBlockId !== undefined ? state.blockIds.indexOf(state.mainBlockId) : -1
         if (mainIndex >= 0) {
@@ -673,9 +709,12 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
         store.dispatch(upsertManyBlocks([thinkingBlock]))
         syncMessageBlocks(topicId, state)
       }
-      if (state.thinkingBlockId !== undefined) {
-        flushBlockUpdate(state.thinkingBlockId, { content: state.thinkingText })
-      }
+      state.thinkingFlushedLen = flushStreamChunk(
+        state.thinkingBlockId,
+        chunk.text,
+        state.thinkingText,
+        state.thinkingFlushedLen
+      )
       break
     }
     case 'tool-call-delta':
@@ -690,11 +729,34 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
 /** 块内容更新走 rAF 合并，避免高频 delta 刷爆渲染。
  * 派发异常必须放行队列（v0.4.6-1：dispatch 抛错时旧实现不 delete，条目变僵尸——
  * 该块后续所有 flush 永久合并进死条目，表现为"流几字停顿、收尾一次性全文"）。 */
+/**
+ * 流式正文/思考的**增量**派发（v1 二轮性能审计 p2-11）。
+ *
+ * reducer 与 action 都在 `store/messageBlock.ts`（`appendBlockContent`，immer draft 上
+ * `content += chunk`）。`getDefaultMiddleware().concat(...)` 会携带**全部** slice 的 matcher
+ * 到每个 reducer，故该 action 能命中 `messageBlocks` slice 的 reducer（RTK 标准跨 slice 用法），
+ * 无需在服务层另造写入口。
+ */
+export const CONTENT_CHUNKS_KEY = '__contentChunks' as const
+
+/** rAF 合并队列条目：`changes` 里可携带 `__contentChunks`（本次新增的 delta 列表）。 */
 const blockFlushQueue = new Map<string, { timer: number; changes: Record<string, unknown>; queuedAt: number }>()
+
 function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void {
   const existing = blockFlushQueue.get(blockId)
   if (existing !== undefined) {
-    existing.changes = { ...existing.changes, ...changes }
+    // 增量载荷是**追加**语义，不能像普通字段那样被后者覆盖（否则同一帧内的
+    // 第二、三个 delta 会顶掉前一个，正文丢字）
+    const incomingChunks = (changes as Record<string, unknown>)[CONTENT_CHUNKS_KEY]
+    let incoming: Partial<MessageBlock> = changes
+    if (Array.isArray(incomingChunks) && incomingChunks.length > 0) {
+      const merged = (existing.changes[CONTENT_CHUNKS_KEY] as readonly string[] | undefined) ?? []
+      incoming = {
+        ...changes,
+        [CONTENT_CHUNKS_KEY]: [...merged, ...incomingChunks]
+      } as unknown as Partial<MessageBlock>
+    }
+    existing.changes = { ...existing.changes, ...incoming }
     return
   }
   const entry = { timer: 0, changes: changes as Record<string, unknown>, queuedAt: performance.now() }
@@ -709,7 +771,17 @@ function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void
       logger.warn(`kernelChat: block flush rAF delayed ${Math.round(delay)}ms (blockId=${blockId})`)
     }
     try {
-      store.dispatch(updateOneBlock({ id: blockId, changes: current.changes as Partial<MessageBlock> }))
+      const { [CONTENT_CHUNKS_KEY]: rawChunks, ...rest } = current.changes as {
+        [CONTENT_CHUNKS_KEY]?: readonly string[]
+      } & Record<string, unknown>
+      const chunks = rawChunks ?? []
+      if (chunks.length > 0) {
+        // 增量先落地（与 rest 同一 tick 内先后派发，订阅者一次重算即可）
+        store.dispatch(appendBlockContent({ id: blockId, chunks }))
+      }
+      if (Object.keys(rest).length > 0) {
+        store.dispatch(updateOneBlock({ id: blockId, changes: rest as Partial<MessageBlock> }))
+      }
     } catch (error) {
       // 取证钩子：渲染层 error 不落盘，升 warn（forensic——静默失败被禁）。
       logger.warn(
@@ -718,6 +790,26 @@ function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void
       )
     }
   })
+}
+
+/** 流式块的增量写入口（p2-11）。
+ *
+ * 把 `next` 相对 `flushedLen` 的新增后缀作为 delta 交给 rAF 合并队列（同一帧的多个 delta
+ * 在队列里累积成一个 chunks 数组，一次派发）。返回新的"已提交长度"游标。
+ *
+ * 长度回退（理论上是同一 step 内文本被改写，未在事件形态中出现）走全量兜底：此时把
+ * 游标复位为 0 并直接派发全文，保证 store 内容与 `next` 逐字一致——宁可慢一次，不可分叉。
+ */
+function flushStreamChunk(blockId: string, _delta: string, next: string, flushedLen: number): number {
+  if (next.length < flushedLen) {
+    flushBlockUpdate(blockId, { content: next })
+    return next.length
+  }
+  const tail = next.slice(flushedLen)
+  if (tail.length > 0) {
+    flushBlockUpdate(blockId, { [CONTENT_CHUNKS_KEY]: [tail] } as unknown as Partial<MessageBlock>)
+  }
+  return next.length
 }
 
 /**
@@ -1159,6 +1251,8 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   store.dispatch(userQuestionsActions.clearByTopic({ topicId }))
   streams.delete(topicId)
   pendingStubs.delete(topicId)
+  // r2-13 彻底版：摘掉本回合的中止登记，空闲时 abortMap 归零（此前每话题残留一个闭包）。
+  clearAbortControllersForTopic(topicId)
 }
 
 // ---------------------------------------------------------------------------

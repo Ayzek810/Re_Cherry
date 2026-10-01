@@ -17,6 +17,7 @@ import process from 'node:process'
 
 import { registerIpc } from './ipc'
 import { disposePdfExtractWorker, installPdfWorkerExtractor } from './services/knowledge/pdfExtractBridge'
+import { disposeOcrWorker } from './services/preprocess/localPaddle/localOcr'
 import { analyticsService } from './services/AnalyticsService'
 import { appMenuService } from './services/AppMenuService'
 import { configManager } from './services/ConfigManager'
@@ -111,18 +112,17 @@ app.on('web-contents-created', (_, webContents) => {
   })
 })
 
-// in production mode, handle uncaught exception and unhandled rejection globally
-if (!isDev) {
-  // handle uncaught exception
-  process.on('uncaughtException', (error) => {
-    logger.error('Uncaught Exception:', error)
-  })
+// v1 二轮审查 m2-18：这两个兜底此前被 `if (!isDev)` 门在**生产**之外——注释说
+// "in production mode"，但 dev 才是最需要"异常不要静默死掉"的环境（dev 期间主进程
+// 崩溃只留一行无归属堆栈，甚至被 Electron 默认行为直接终止，日志里完全没有取证通道）。
+// 现在无条件安装，两条 handler 都只记日志（不改变进程终止语义）。
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error)
+})
 
-  // handle unhandled rejection
-  process.on('unhandledRejection', (reason, promise) => {
-    logger.error(`Unhandled Rejection at: ${promise} reason: ${reason}`)
-  })
-}
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error(`Unhandled Rejection at: ${promise} reason: ${reason}`)
+})
 
 // Check for single instance lock
 if (!app.requestSingleInstanceLock()) {
@@ -204,8 +204,21 @@ if (!app.requestSingleInstanceLock()) {
       logger.error('Failed to init power monitor service', error instanceof Error ? error : new Error(String(error)))
     }
 
-    nodeTraceService.init()
-    analyticsService.init()
+    // v1 二轮审查 m2-19：这两行是本文件里仅有的、绕过 §6.8「每个可选初始化器包
+    // log-only try/catch」的裸调用。`nodeTraceService.init()` 构造 CacheBatchSpanProcessor
+    // 并注册全局 tracer；`analyticsService.init()` 走 configManager 读取——任一抛出都会
+    // 让本 `whenReady().then()` 的整条后续链（activate 分支、replaceDevtoolsFont、
+    // setupAppImageDeepLink、dev 扩展安装）全部跳过，正是 171-175 行注释所述那次事故形态。
+    try {
+      nodeTraceService.init()
+    } catch (error) {
+      logger.error('Failed to init node trace service', error instanceof Error ? error : new Error(String(error)))
+    }
+    try {
+      analyticsService.init()
+    } catch (error) {
+      logger.error('Failed to init analytics service', error instanceof Error ? error : new Error(String(error)))
+    }
 
     app.on('activate', function () {
       const mainWindow = windowService.getMainWindow()
@@ -295,6 +308,13 @@ if (!app.requestSingleInstanceLock()) {
     }
     try {
       disposePdfExtractWorker()
+    } catch {
+      /* 未启动 */
+    }
+    // v1 二轮审查 m2-03：常驻 OCR worker（onnxruntime + PaddleOCR 模型，数百 MB）此前漏在
+    // 退出路径外——空闲 5 分钟才自退，解析后很快退出即残留子进程。与 pdf worker 同形处理。
+    try {
+      disposeOcrWorker()
     } catch {
       /* 未启动 */
     }

@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { LoadingIcon } from '@renderer/components/Icons'
 import useScrollPosition from '@renderer/hooks/useScrollPosition'
 import type { Topic } from '@renderer/types'
@@ -8,11 +9,14 @@ import {
   type KeywordMatchMode,
   splitKeywordsToTerms
 } from '@renderer/utils/keywordSearch'
-import { List, Segmented, Spin, Typography } from 'antd'
+import { retryKernelQuery } from '@renderer/utils/topicBranch'
+import { Button, List, Segmented, Spin, Typography } from 'antd'
 import type { FC } from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
+
+const logger = loggerService.withContext('SearchResults')
 
 const { Text, Title } = Typography
 
@@ -22,6 +26,9 @@ type SearchResult = {
   content: string
   snippet: string
 }
+
+/** 内核原始命中：摘要按匹配模式在客户端现算，故原始文本要留在 state 里。 */
+type KernelHitResult = Omit<SearchResult, 'snippet'>
 
 interface Props extends React.HTMLAttributes<HTMLDivElement> {
   keywords: string
@@ -190,58 +197,99 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
   const [sortOrder, setSortOrder] = useState<ResultSortOrder>('newest')
   const [searchTerms, setSearchTerms] = useState<string[]>(splitKeywordsToTerms(keywords))
 
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [rawResults, setRawResults] = useState<KernelHitResult[]>([])
   const [searchStats, setSearchStats] = useState({ count: 0, time: 0 })
   const [isLoading, setIsLoading] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  // 乱序守卫：只接受最后一次请求的结果（上一次检索若后到，不得覆盖新结果）。
+  const requestIdRef = useRef(0)
+
+  // 检索入参签名：`t(k)` 返回值可能每次渲染都是新数组，直接当依赖会让 effect 每渲染重跑。
+  const searchTermsKey = searchTerms.join('\u0000')
 
   const onSearch = useCallback(async () => {
-    setSearchResults([])
+    const requestId = ++requestIdRef.current
+    setRawResults([])
     setIsLoading(true)
+    setSearchError(null)
 
     if (keywords.length === 0) {
-      setSearchStats({ count: 0, time: 0 })
-      setSearchTerms([])
-      setIsLoading(false)
+      if (requestId === requestIdRef.current) {
+        setSearchStats({ count: 0, time: 0 })
+        setSearchTerms([])
+        setRawResults([])
+        setIsLoading(false)
+      }
       return
     }
 
     const startTime = performance.now()
     const newSearchTerms = splitKeywordsToTerms(keywords)
 
-    // dsh 内核替换：搜索走内核会话（SQLite 权威数据源，旧 Dexie 数据不参与）
-    const { hits } = await window.api.dshSearchMessages(newSearchTerms)
-
-    const results: SearchResult[] = hits.map((hit) => {
-      const message = {
-        id: `kernel-${hit.topicId}-${hit.seq}`,
-        topicId: hit.topicId,
-        role: hit.role,
-        assistantId: 'kernel',
-        createdAt: new Date(hit.createdAt).toISOString(),
-        status: 'success',
-        blocks: []
-      } as Message
-      const topic = { id: hit.topicId, name: hit.topicName } as Topic
-      return {
-        message,
-        topic,
-        content: hit.text,
-        snippet: buildSearchSnippet(hit.text, newSearchTerms, matchMode)
+    try {
+      // 内核查询三值契约（CLAUDE.md §6.5）：handler 要等 initTopics 之后才注册，启动窗口内的
+      // "No handler registered" 是预期内的瞬时失败。`undefined` = 本次没问到（可重试）；
+      // 任何其它值（含 hits 为空数组）都是确定性答案，立即返回；`null` = 全部尝试都没问到。
+      const answer = await retryKernelQuery(async () => {
+        try {
+          return await window.api.dshSearchMessages(newSearchTerms)
+        } catch (error) {
+          logger.warn(
+            '[SearchResults] kernel search did not answer',
+            error instanceof Error ? error : new Error(String(error))
+          )
+          return undefined
+        }
+      })
+      if (answer === null) {
+        throw new Error('kernel search: no answer within the boot window')
       }
-    })
+      if (requestId !== requestIdRef.current) return
+      const { hits } = answer
+      const results: KernelHitResult[] = hits.map((hit) => ({
+        message: {
+          id: `kernel-${hit.topicId}-${hit.seq}`,
+          topicId: hit.topicId,
+          role: hit.role,
+          assistantId: 'kernel',
+          createdAt: new Date(hit.createdAt).toISOString(),
+          status: 'success',
+          blocks: []
+        } as Message,
+        topic: { id: hit.topicId, name: hit.topicName } as Topic,
+        content: hit.text
+      }))
 
-    const endTime = performance.now()
-    setSearchResults(results)
-    setSearchStats({
-      count: results.length,
-      time: (endTime - startTime) / 1000
-    })
-    setSearchTerms(newSearchTerms)
-    setIsLoading(false)
-  }, [keywords, matchMode])
+      const endTime = performance.now()
+      setRawResults(results)
+      setSearchStats({
+        count: results.length,
+        time: (endTime - startTime) / 1000
+      })
+      setSearchTerms(newSearchTerms)
+    } catch (error) {
+      // 失败不得伪装成"没有结果"，也不得把面板留在转圈 + 全透明的状态（二轮审查 f2-51）。
+      logger.error('Failed to search kernel messages', error as Error)
+      if (requestId !== requestIdRef.current) return
+      setRawResults([])
+      setSearchStats({ count: 0, time: 0 })
+      setSearchError(error instanceof Error ? error.message : String(error))
+      window.toast.error(t('history.search.failed'))
+    } finally {
+      if (requestId === requestIdRef.current) setIsLoading(false)
+    }
+    // `searchTermsKey` 是 `searchTerms` 的标量签名（join 结果）。它不参与函数体，但**必须**留在依赖里：
+    // 检索入参 = `searchTerms`，没有这层签名遮掩，每次渲染的新数组引用都会让下面那个 `useEffect` 重跑
+    // （= 每个无关渲染都重发一次内核检索）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keywords, searchTermsKey, t])
 
+  // 摘要/高亮只依赖匹配模式：切换"整词/包含"是纯本地重算，不再重发一次内核检索（f2-59）。
   const sortedSearchResults = useMemo(() => {
-    const results = [...searchResults]
+    const results: SearchResult[] = rawResults.map((hit) => ({
+      ...hit,
+      snippet: buildSearchSnippet(hit.content, searchTerms, matchMode)
+    }))
     results.sort((a, b) => {
       const timeA = Date.parse(a.message.createdAt) || 0
       const timeB = Date.parse(b.message.createdAt) || 0
@@ -251,7 +299,7 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
       return a.message.id.localeCompare(b.message.id)
     })
     return results
-  }, [searchResults, sortOrder])
+  }, [rawResults, searchTerms, matchMode, sortOrder])
 
   const highlightText = (text: string) => {
     // Escape HTML entities to prevent XSS from LLM response content
@@ -312,8 +360,16 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
         </SearchToolbar>
         {sortedSearchResults.length > 0 && (
           <SearchStats>
-            Found {searchStats.count} results in {searchStats.time.toFixed(3)} seconds
+            {t('history.search.stats', { count: searchStats.count, time: searchStats.time.toFixed(3) })}
           </SearchStats>
+        )}
+        {searchError !== null && (
+          <SearchErrorState data-testid="history-search-error" title={searchError}>
+            <span>{t('history.search.failed')}</span>
+            <Button size="small" onClick={() => void onSearch()}>
+              {t('common.retry')}
+            </Button>
+          </SearchErrorState>
         )}
         <List
           itemLayout="vertical"
@@ -358,6 +414,16 @@ const Container = styled.div`
 const SearchStats = styled.div`
   font-size: 13px;
   color: var(--color-text-3);
+`
+
+/** 检索失败态：与"没有结果"显式分离，并给出重试入口（二轮审查 f2-51）。 */
+const SearchErrorState = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--color-error);
 `
 
 const SearchToolbar = styled.div`

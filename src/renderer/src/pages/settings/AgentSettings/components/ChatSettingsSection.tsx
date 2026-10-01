@@ -72,8 +72,56 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
 
   customParametersRef.current = customParameters
 
+  /**
+   * 延迟写入的采样参数必须能在卸载 / 重置前落库（v1 二轮审查 s2-02）。
+   *
+   * 旧实现把写入挂在 500ms/1000ms 的 `setTimeoutTimer` 上，而 `useTimer` 在卸载时
+   * `clearAllTimers()`：改完参数立刻关弹窗或切 tab，`setTemperature` 已经跑过、界面
+   * 看上去改好了，但写入从未发生；「重置」也不会清挂起的定时器，于是旧值在重置后
+   * 被反写回去。这里给每个字段留一份最新值 ref：卸载时 flush，重置时连定时器一起清空。
+   */
+  const pendingRef = useRef<{
+    temperature?: number
+    topP?: number
+    contextCount?: number
+    maxTokens?: number
+    maxToolCalls?: number
+  }>({})
+
+  /** 排程一次延迟写入：ref 先记最新值，回调触发后清标记。 */
+  const scheduleWrite = <K extends keyof typeof pendingRef.current>(
+    key: K,
+    value: NonNullable<(typeof pendingRef.current)[K]>,
+    delay: number
+  ) => {
+    pendingRef.current[key] = value
+    setTimeoutTimer(
+      `${key}_onChange`,
+      () => {
+        pendingRef.current[key] = undefined
+        updateAssistantSettings({ [key]: value })
+      },
+      delay
+    )
+  }
+
+  /** 把还没落库的挂起值一次性写入（卸载时调用）。 */
+  const flushPendingWrites = () => {
+    const pending = pendingRef.current
+    pendingRef.current = {}
+    const flush: Partial<AssistantSettings> = {}
+    if (pending.temperature !== undefined) flush.temperature = pending.temperature
+    if (pending.topP !== undefined) flush.topP = pending.topP
+    if (pending.contextCount !== undefined) flush.contextCount = pending.contextCount
+    if (pending.maxTokens !== undefined) flush.maxTokens = pending.maxTokens
+    if (pending.maxToolCalls !== undefined) flush.maxToolCalls = pending.maxToolCalls
+    if (Object.keys(flush).length > 0) {
+      updateAssistantSettings(flush)
+    }
+  }
+
   const { t } = useTranslation()
-  const { setTimeoutTimer } = useTimer()
+  const { setTimeoutTimer, clearAllTimeoutTimers } = useTimer()
 
   const onTemperatureChange = (value) => {
     if (!isNaN(value as number)) {
@@ -207,6 +255,9 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
   }
 
   const onReset = () => {
+    // 先清掉挂起的延迟写入，否则重置后它们会把刚重置的值再写回去（s2-02）。
+    clearAllTimeoutTimers()
+    pendingRef.current = {}
     setTemperature(DEFAULT_ASSISTANT_SETTINGS.temperature)
     setContextCount(DEFAULT_ASSISTANT_SETTINGS.contextCount)
     setMaxTokens(DEFAULT_ASSISTANT_SETTINGS.maxTokens)
@@ -217,7 +268,10 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
   }
 
   useEffect(() => {
-    return () => updateAssistantSettings({ customParameters: customParametersRef.current })
+    return () => {
+      flushPendingWrites()
+      updateAssistantSettings({ customParameters: customParametersRef.current })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -267,7 +321,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
               onChange={(value) => {
                 if (!isNull(value)) {
                   setTemperature(value)
-                  setTimeoutTimer('temperature_onChange', () => updateAssistantSettings({ temperature: value }), 500)
+                  scheduleWrite('temperature', value, 500)
                 }
               }}
               style={{ width: '100%' }}
@@ -314,7 +368,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
               onChange={(value) => {
                 if (!isNull(value)) {
                   setTopP(value)
-                  setTimeoutTimer('topP_onChange', () => updateAssistantSettings({ topP: value }), 500)
+                  scheduleWrite('topP', value, 500)
                 }
               }}
               style={{ width: '100%' }}
@@ -343,7 +397,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
             onChange={(value) => {
               if (!isNull(value)) {
                 setContextCount(value)
-                setTimeoutTimer('contextCount_onChange', () => updateAssistantSettings({ contextCount: value }), 500)
+                scheduleWrite('contextCount', value, 500)
               }
             }}
             formatter={(value) => (value === MAX_CONTEXT_COUNT ? t('chat.settings.max') : (value ?? ''))}
@@ -411,7 +465,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
               onChange={(value) => {
                 if (!isNull(value)) {
                   setMaxTokens(value)
-                  setTimeoutTimer('maxTokens_onChange', () => updateAssistantSettings({ maxTokens: value }), 1000)
+                  scheduleWrite('maxTokens', value, 1000)
                 }
               }}
               style={{ width: '100%' }}
@@ -470,7 +524,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
               onChange={(value) => {
                 if (!isNull(value)) {
                   setMaxToolCalls(value)
-                  setTimeoutTimer('maxToolCalls_onChange', () => updateAssistantSettings({ maxToolCalls: value }), 500)
+                  scheduleWrite('maxToolCalls', value, 500)
                 }
               }}
               style={{ width: '100%' }}

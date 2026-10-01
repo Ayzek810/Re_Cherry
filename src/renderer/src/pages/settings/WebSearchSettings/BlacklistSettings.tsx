@@ -11,10 +11,11 @@ import { Alert, Button, Table } from 'antd'
 import TextArea from 'antd/es/input/TextArea'
 import { t } from 'i18next'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 import AddSubscribePopup from './AddSubscribePopup'
+import { mergeSubscribeSources, parseSelectedSubscribeSources } from './subscribeSourceUpdate'
 
 type TableRowSelection<T extends object = object> = TableProps<T>['rowSelection']
 interface DataType {
@@ -53,6 +54,14 @@ const BlacklistSettings: FC = () => {
   const { setTimeoutTimer } = useTimer()
 
   const dispatch = useAppDispatch()
+
+  /** 卸载守卫：解析是网络往返，卸载后不再写状态（s2-01/s2-20）。 */
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     setDataSource(
@@ -116,66 +125,82 @@ const BlacklistSettings: FC = () => {
     onChange: onSelectChange
   }
   async function updateSubscribe() {
-    setSubscribeChecking(true)
+    // 选中集在进入异步前定死：解析期间 dataSource/选中键可能变化。
+    const selectedSources = dataSource.filter((item) => selectedRowKeys.includes(item.key))
 
-    try {
-      // 获取选中的订阅源
-      const selectedSources = dataSource.filter((item) => selectedRowKeys.includes(item.key))
-
-      // 用于存储所有成功解析的订阅源数据
-      const updatedSources: {
-        key: number
-        url: string
-        name: string
-        blacklist: string[]
-      }[] = []
-
-      // 为每个选中的订阅源获取并解析内容
-      for (const source of selectedSources) {
-        try {
-          // 获取并解析订阅源内容
-          const blacklist = await parseSubscribeContent(source.url)
-
-          if (blacklist.length > 0) {
-            updatedSources.push({
-              key: Number(source.key),
-              url: source.url,
-              name: source.name,
-              blacklist
-            })
-          }
-        } catch (error) {
-          logger.error(`Error updating subscribe source ${source.url}:`, error as Error)
-          // 显示具体源更新失败的消息
-          window.toast.warning({
-            title: t('settings.tool.websearch.subscribe_update_failed', { url: source.url }),
-            timeout: 3000
-          })
-        }
-      }
-
-      if (updatedSources.length > 0) {
-        // 更新 Redux store
-        setSubscribeSources(updatedSources)
-        setSubscribeValid(true)
-        // 显示成功消息
-        window.toast.success({
-          title: t('settings.tool.websearch.subscribe_update_success'),
-          timeout: 2000
-        })
-        setTimeoutTimer('updateSubscribe', () => setSubscribeValid(false), 3000)
-      } else {
-        setSubscribeValid(false)
-        throw new Error('No valid sources updated')
-      }
-    } catch (error) {
-      logger.error('Error updating subscribes:', error as Error)
+    if (selectedSources.length === 0) {
       window.toast.error({
         title: t('settings.tool.websearch.subscribe_update_failed'),
         timeout: 2000
       })
+      return
     }
-    setSubscribeChecking(false)
+
+    setSubscribeChecking(true)
+
+    try {
+      const outcome = await parseSelectedSubscribeSources(selectedSources, parseSubscribeContent)
+
+      if (!isMountedRef.current) return
+
+      // 逐条失败只报警，不参与合并；整批失败必须在下面走失败态，不能弹成功。
+      for (const failure of outcome.failed) {
+        logger.error(`Error updating subscribe source ${failure.url}:`, failure.error as Error)
+        window.toast.warning({
+          title: t('settings.tool.websearch.subscribe_update_failed_for_url', {
+            url: failure.url,
+            defaultValue: 'Failed to update subscription source: {{url}}'
+          }),
+          timeout: 3000
+        })
+      }
+
+      if (outcome.updated.length === 0) {
+        setSubscribeValid(false)
+        window.toast.error({
+          title: t('settings.tool.websearch.subscribe_update_failed'),
+          timeout: 2000
+        })
+        return
+      }
+
+      // 按 key 合并：未选中的订阅源与其已解析黑名单必须原样保留。
+      // 旧实现整片替换为 outcome.updated，未选中源连同 blacklist 一起消失（s2-01）。
+      const { sources, updatedCount } = mergeSubscribeSources(websearch.subscribeSources ?? [], outcome.updated)
+      setSubscribeSources(sources)
+      setSubscribeValid(true)
+
+      if (outcome.failed.length > 0) {
+        window.toast.warning({
+          title: t('settings.tool.websearch.subscribe_update_partial', {
+            count: updatedCount,
+            failed: outcome.failed.length,
+            defaultValue: '{{count}} subscription source(s) updated, {{failed}} failed'
+          }),
+          timeout: 3000
+        })
+      } else {
+        window.toast.success({
+          title: t('settings.tool.websearch.subscribe_update_success_count', {
+            count: updatedCount,
+            defaultValue: '{{count}} subscription source(s) updated'
+          }),
+          timeout: 2000
+        })
+      }
+      setTimeoutTimer('updateSubscribe', () => setSubscribeValid(false), 3000)
+    } catch (error) {
+      logger.error('Error updating subscribes:', error as Error)
+      setSubscribeValid(false)
+      window.toast.error({
+        title: t('settings.tool.websearch.subscribe_update_failed'),
+        timeout: 2000
+      })
+    } finally {
+      if (isMountedRef.current) {
+        setSubscribeChecking(false)
+      }
+    }
   }
 
   // 修改 handleAddSubscribe 函数

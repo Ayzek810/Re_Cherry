@@ -1075,6 +1075,7 @@
       "message": "Locate the message"
     },
     "search": {
+      "failed": "Failed to search messages. Retry.",
       "match": {
         "substring": "Contains",
         "whole_word": "Whole word"
@@ -1085,6 +1086,7 @@
         "newest": "Newest first",
         "oldest": "Oldest first"
       },
+      "stats": "Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "No topics found, press Enter to search all messages"
       }
@@ -1135,6 +1137,17 @@
       "unsupported_format": "Unsupported file format"
     },
     "title": "Import External Conversations"
+  },
+  "kernel": {
+    "topicDelete": {
+      "purgeFailed": "The topic is gone from the list, but the session data is still on disk. Delete it again."
+    },
+    "topicDestroyTurns": {
+      "purgeFailed": "The messages are deleted, but some session data is still on disk. Delete again."
+    },
+    "webFetch": {
+      "cancelled": "The fetch was cancelled. No page was retrieved."
+    }
   },
   "kernelChat": {
     "emptyResponse": "The model finished this turn but returned no content. Retry or switch models.",
@@ -1203,8 +1216,12 @@
     "name_required": "Knowledge Base Name is required",
     "notes": "Notes",
     "provider_not_found": "Provider not found",
+    "remove_failed": "Delete failed. The entry was restored.",
+    "remove_file_cleanup_failed": "The index entry was deleted, but local files were not cleaned up.",
     "rename": "Rename",
     "search": "Search knowledge base",
+    "search_failed": "Knowledge base search failed. Retry.",
+    "search_no_results": "No matching content found",
     "search_placeholder": "Enter text to search",
     "settings": {
       "title": "Knowledge Base Settings"
@@ -1314,6 +1331,7 @@
     },
     "error": {
       "chunk_overlap_too_large": "Chunk overlap cannot be greater than chunk size",
+      "citation_fetch_failed": "Failed to load the page summary. Open the citation to view the source.",
       "copy": "Copy failed",
       "dimension_too_large": "Content size is too large",
       "enter": {
@@ -1666,8 +1684,11 @@
     "characters": "Characters",
     "collapse": "Collapse",
     "copyContent": "Copy Content",
+    "create_folder_failed": "Failed to create folder",
+    "create_note_failed": "Failed to create note",
     "crossPlatformRestoreWarning": "Cross-platform configuration restored, but notes directory is empty. Please copy your note files to: {{path}}",
     "delete": "delete",
+    "delete_failed": "Delete failed",
     "delete_folder_confirm": "Are you sure you want to delete the folder \"{{name}}\" and all of its contents?",
     "delete_note_confirm": "Are you sure you want to delete the note \"{{name}}\"?",
     "drop_markdown_hint": "Drop .md files or folders here to import",
@@ -1678,6 +1699,7 @@
     "export_knowledge": "Export notes to knowledge base",
     "export_success": "Successfully exported to the knowledge base",
     "export_to_word_failed": "Failed to export to Word",
+    "move_failed": "Move failed",
     "new_folder": "New Folder",
     "new_note": "Create a new note",
     "no_content_to_copy": "No content to copy",
@@ -1686,13 +1708,18 @@
     "no_note_selected": "Please select a note first",
     "no_valid_files": "No valid file was uploaded",
     "open_outside": "Open from external",
+    "refresh_failed_stale": "The list did not refresh. It may be out of date.",
     "rename": "Rename",
+    "rename_failed": "Rename failed",
+    "rename_name_exists": "An item with this name already exists: {{name}}",
     "save": "Save to Notes",
+    "save_failed": "Failed to save the note",
     "search": {
       "both": "Name+Content",
       "content": "Content",
       "found_results": "Found {{count}} results (Name: {{nameCount}}, Content: {{contentCount}})",
       "more_matches": "more matches",
+      "no_results": "No matching content",
       "searching": "Searching...",
       "show_less": "Show less"
     },
@@ -1861,6 +1888,8 @@
     "generic_params_hint": "This model declares no parameter set; the options below are generic",
     "guidance_scale": "Guidance Scale",
     "guidance_scale_tip": "Classifier Free Guidance ({{min}}-{{max}}). How close you want the model to stick to your prompt when looking for a related image to show you",
+    "history_empty": "No painting history yet",
+    "history_load_failed": "Failed to load painting history",
     "image": {
       "size": "Image Size"
     },
@@ -2089,6 +2118,221 @@
       "validating": "Validating backup..."
     },
     "title": "Data Restore"
+  },
+  "richEditor": {
+    "action": {
+      "table": {
+        "deleteColumn": "Delete columns",
+        "deleteRow": "Delete rows",
+        "insertColumnAfter": "Insert After",
+        "insertColumnBefore": "Insert Before",
+        "insertRowAfter": "Insert Below",
+        "insertRowBefore": "Insert Above"
+      }
+    },
+    "commands": {
+      "blockMath": {
+        "description": "Insert mathematical formula",
+        "title": "Math Formula"
+      },
+      "blockquote": {
+        "description": "Capture a quote",
+        "title": "Quote"
+      },
+      "bold": {
+        "description": "Marked in bold",
+        "title": "Bold"
+      },
+      "bulletList": {
+        "description": "Create a simple bulleted list",
+        "title": "Bulleted list"
+      },
+      "calloutInfo": {
+        "description": "Add an info callout box",
+        "title": "Info Callout"
+      },
+      "calloutWarning": {
+        "description": "Add a warning callout box",
+        "title": "Warning Callout"
+      },
+      "code": {
+        "description": "Insert code snippet",
+        "title": "Code"
+      },
+      "codeBlock": {
+        "description": "Capture a code snippet",
+        "title": "Code"
+      },
+      "columns": {
+        "description": "Create column layout",
+        "title": "Columns"
+      },
+      "date": {
+        "description": "Insert current date",
+        "title": "Date"
+      },
+      "divider": {
+        "description": "Add a horizontal line",
+        "title": "Divider"
+      },
+      "hardBreak": {
+        "description": "Insert a line break",
+        "title": "Line Break"
+      },
+      "heading1": {
+        "description": "Big section heading",
+        "title": "Heading 1"
+      },
+      "heading2": {
+        "description": "Medium section heading",
+        "title": "Heading 2"
+      },
+      "heading3": {
+        "description": "Small section heading",
+        "title": "Heading 3"
+      },
+      "heading4": {
+        "description": "Smaller section heading",
+        "title": "Heading 4"
+      },
+      "heading5": {
+        "description": "Even smaller section heading",
+        "title": "Heading 5"
+      },
+      "heading6": {
+        "description": "Smallest section heading",
+        "title": "Heading 6"
+      },
+      "image": {
+        "description": "Insert an image",
+        "title": "Image"
+      },
+      "inlineCode": {
+        "description": "Add inline code",
+        "title": "Inline Code"
+      },
+      "inlineMath": {
+        "description": "Insert inline mathematical formulas",
+        "title": "Inline Math"
+      },
+      "italic": {
+        "description": "Marked as italic",
+        "title": "Italic"
+      },
+      "link": {
+        "description": "Add a link",
+        "title": "Link"
+      },
+      "noCommandsFound": "No commands found",
+      "orderedList": {
+        "description": "Create a list with numbering",
+        "title": "Numbered list"
+      },
+      "paragraph": {
+        "description": "Start writing with plain text",
+        "title": "Text"
+      },
+      "redo": {
+        "description": "Redo the last action",
+        "title": "Redo"
+      },
+      "strike": {
+        "description": "Mark as a delete line",
+        "title": "Delete line"
+      },
+      "table": {
+        "description": "Insert a table",
+        "title": "Table"
+      },
+      "taskList": {
+        "description": "Create a checklist",
+        "title": "Task List"
+      },
+      "underline": {
+        "description": "Mark as underlined",
+        "title": "Underline"
+      },
+      "undo": {
+        "description": "Undo the last action",
+        "title": "Undo"
+      }
+    },
+    "dragHandle": "Drag to move",
+    "frontMatter": {
+      "addProperty": "Add a property",
+      "addTag": "Add tag",
+      "changeToBoolean": "Checkbox",
+      "changeToDate": "Date",
+      "changeToNumber": "Number",
+      "changeToTags": "Tags",
+      "changeToText": "Text",
+      "changeType": "Change type",
+      "deleteProperty": "Delete property",
+      "editValue": "Edit value",
+      "empty": "Empty",
+      "moreActions": "More actions",
+      "propertyName": "Property name"
+    },
+    "image": {
+      "placeholder": "Add a picture"
+    },
+    "imageUploader": {
+      "embedImage": "Embed image",
+      "embedLink": "Embed link",
+      "embedSuccess": "Image embedded successfully",
+      "invalidType": "Please select an image file",
+      "invalidUrl": "Invalid image URL",
+      "processing": "Processing image...",
+      "title": "Add an image",
+      "tooLarge": "Image size cannot exceed 10MB",
+      "upload": "Upload",
+      "uploadError": "Image upload failed",
+      "uploadFile": "Upload file",
+      "uploadHint": "Supports JPG, PNG, GIF and other formats, max 10MB",
+      "uploadSuccess": "Image uploaded successfully",
+      "uploadText": "Click or drag image here to upload",
+      "uploading": "Uploading image",
+      "urlPlaceholder": "Paste image link",
+      "urlRequired": "Please enter image URL"
+    },
+    "link": {
+      "remove": "Remove link",
+      "text": "Link Title",
+      "textPlaceholder": "Please enter the link title",
+      "url": "Link URL"
+    },
+    "math": {
+      "placeholder": "Enter LaTeX formula"
+    },
+    "placeholder": "Write '/' for commands",
+    "plusButton": "Click to add below",
+    "toolbar": {
+      "blockMath": "Block Math",
+      "blockquote": "Quote",
+      "bold": "Bold",
+      "bulletList": "Bullet List",
+      "clearMarks": "Clear Formatting",
+      "code": "Inline Code",
+      "codeBlock": "Code Block",
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3",
+      "heading4": "Heading 4",
+      "heading5": "Heading 5",
+      "heading6": "Heading 6",
+      "image": "Image",
+      "inlineMath": "Inline Equation",
+      "italic": "Italic",
+      "link": "Link",
+      "orderedList": "Ordered List",
+      "paragraph": "Paragraph",
+      "redo": "Redo",
+      "strike": "Strikethrough",
+      "table": "Table",
+      "taskList": "Task List",
+      "underline": "Underline",
+      "undo": "Undo"
+    }
   },
   "settings": {
     "about": {
@@ -3545,7 +3789,10 @@
         },
         "subscribe_update": "Update",
         "subscribe_update_failed": "Subscription source update failed",
+        "subscribe_update_failed_for_url": "Failed to update subscription source: {{url}}",
+        "subscribe_update_partial": "{{count}} subscription source(s) updated, {{failed}} failed",
         "subscribe_update_success": "Subscription source updated successfully",
+        "subscribe_update_success_count": "{{count}} subscription source(s) updated",
         "subscribe_url": "Subscription Url",
         "title": "Web Search",
         "url_invalid": "Entered an invalid URL",
@@ -3572,6 +3819,7 @@
       "daily": "Daily",
       "empty": "No usage records in this range",
       "input_tokens": "Input Tokens",
+      "load_failed": "Failed to read local usage records",
       "output_tokens": "Output Tokens",
       "range": {
         "30d": "Last 30 days",

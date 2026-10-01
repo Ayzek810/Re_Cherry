@@ -16,6 +16,7 @@ import {
   listRootTopics,
   recallLastViewedBranch
 } from '@renderer/utils/topicBranch'
+import { t as translate } from 'i18next'
 import { find } from 'lodash'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -230,9 +231,15 @@ export const TopicManager = {
   async removeTopic(id: string): Promise<boolean> {
     await TopicManager.clearTopicMessages(id)
     try {
-      await window.api.dshTopicDelete(id)
+      const result = (await window.api.dshTopicDelete(id)) as { ok?: boolean; purged?: boolean } | undefined
       // 成员集合变了：下一次查询重新问内核（否则对账会把刚删的行又当成"内核还在"）
       invalidateKernelRootTopics()
+      // 注册表删了但磁盘会话没清掉 = 只成功一半。内核侧已把 purge 失败做成 `purged:false`
+      // 的显式信号（v1 二轮 k2-05/k2-09：不可知状态不得静默），这里必须让用户看见。
+      if (result?.purged === false) {
+        // 该函数在 TopicManager 对象里（非组件），拿不到 hook 的 t → 用 i18next 全局 t。
+        window.toast?.warning(translate('kernel.topicDelete.purgeFailed'))
+      }
       return true
     } catch (error) {
       logger.error(`TopicManager: failed to delete kernel session for topic ${id}`, error as Error)

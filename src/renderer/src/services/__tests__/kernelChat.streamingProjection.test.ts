@@ -149,8 +149,45 @@ describe('kernelChat 直播投影（v0.4.6-1 思考计时冻结 + 正文流式�
     await send
 
     const thinking = thinkingBlockOf(STUB_ID + '-abort')
-    console.log('DBG abort thinking:', JSON.stringify({ status: thinking?.status, ms: thinking?.thinking_millsec }))
     expect(thinking?.status).toBe(MessageBlockStatus.PAUSED)
     expect(thinking?.thinking_millsec ?? 0).toBeGreaterThan(0)
+  })
+
+  it('取证钩子（v1）：思考期不算停顿；任意事件断流超阈值才告警', async () => {
+    initKernelBridge()
+    const topic = TOPIC + '-stall'
+    const send = sendToKernel(topic, 'hi', STUB_ID + '-stall', 'stub-user')
+    await Promise.resolve()
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    let clock = 0
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    const stallWarns = (): string[] =>
+      warnSpy.mock.calls
+        .flat()
+        .filter((arg): arg is string => typeof arg === 'string' && arg.includes('no stream activity'))
+
+    try {
+      emit(topic, 2, 'turn/start', { turn: 1 })
+      // 长思考：3.9s 内只有 reasoning delta、没有正文（旧钩子会误报为"正文流式停顿"）
+      clock = 100
+      chunk(topic, 3, 'reasoning-delta', '长思考')
+      clock = 4000
+      chunk(topic, 4, 'text-delta', '正文')
+      await flushFrames()
+      expect(stallWarns()).toHaveLength(0)
+
+      // 真断流：9s 内内核一个事件都没有 → 恢复时告警
+      clock = 13000
+      chunk(topic, 5, 'text-delta', '恢复')
+      await flushFrames()
+      expect(stallWarns().length).toBeGreaterThan(0)
+
+      emit(topic, 6, 'turn/end', { reason: { kind: 'completed' } })
+      await send
+    } finally {
+      nowSpy.mockRestore()
+      warnSpy.mockRestore()
+    }
   })
 })

@@ -118,7 +118,8 @@ const persistedReducer = persistReducer<ReturnType<typeof rootReducer>>(
   {
     key: 'cherry-studio',
     storage,
-    version: 228,
+    // 与 store/migrate.ts 的最高键保持一致（'229' = 侧栏图标对账 + settings.pinnedTabs 回填）
+    version: 229,
     blacklist: ['runtime', 'messages', 'messageBlocks', 'tabs', 'toolPermissions', 'userQuestions', 'followupQueue'],
     transforms: [stripProviderApiKeys],
     migrate
@@ -156,10 +157,31 @@ const store = configureStore({
 export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
 
+/**
+ * 次窗口角色判定（v1 二轮 r2-03）：小窗（`miniWindow.html`）与 trace 窗各自是独立 JS 上下文
+ * 与独立 Redux store，但它们读的是同一份 `persist:cherry-studio` 快照。启动回填只应由主窗口做：
+ * 小窗侧已 `persistor.pause()` + 只收不发（见 `windows/mini/miniWindowStoreRole.ts`），这里把
+ * `backfillProviderKeysFromVault`（会 `dispatch(updateProviders)`）与 `initializeNotesPath`
+ * 也按角色短路——否则小窗会用它的启动快照覆盖主窗口较新的状态。
+ *
+ * 未同步切片清单（`storeSyncService.syncList` 只有 `assistants/` `settings/` `llm/` `note/`）：
+ * `mcp` · `knowledge` · `websearch` · `shortcuts` · `minapps` · `preprocess` · `skills` ·
+ * `toolPermissions` · `userQuestions` —— 次窗口里这些切片恒为启动快照，**永远不要从次窗口回写**。
+ */
+function isSecondaryWindowRole(): boolean {
+  if (typeof window === 'undefined') return false
+  const { pathname, hash } = window.location
+  return pathname.includes('miniWindow') || pathname.includes('traceWindow') || hash.includes('miniWindow')
+}
+
 export const persistor = persistStore(store, undefined, () => {
   // v0.2.4-1：原 ReduxStoreReady invoke 已删除（main 侧 handler 随 ReduxService 一并移除）
   // v0.2.4 K4：rehydrate 完成后从 main 加密存储回填 provider key（本地持久层已不再落明文）
   void recordRestoredTopicIds()
+  if (isSecondaryWindowRole()) {
+    logger.info('Redux store ready (secondary window: startup backfill skipped)')
+    return
+  }
   void backfillProviderKeysFromVault()
   // v0.3.3-2 笔记：rehydrate 后若笔记目录为空，用主进程 App_Info 的 notesPath 补上（V1 同形）。
   // 失败只记日志：笔记页自己有"未配置目录"的兜底提示，不因这一条挡住启动。

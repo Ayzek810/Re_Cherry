@@ -102,8 +102,12 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
         setAvailableServers(servers)
 
         // Save to database
-        const dbKey = `mcp:provider:${provider.key}:servers`
-        await db.settings.put({ id: dbKey, value: servers })
+        // 不写空数组：否则一次「成功但没有服务」的同步会把上一次拉到的缓存清成 []，
+        // 面板与缓存同时丢数据（v1 二轮审查 s2-05）。
+        if (servers.length > 0) {
+          const dbKey = `mcp:provider:${provider.key}:servers`
+          await db.settings.put({ id: dbKey, value: servers })
+        }
 
         window.toast.success(t('settings.mcp.fetch.success', 'Successfully fetched MCP servers'))
       } else {

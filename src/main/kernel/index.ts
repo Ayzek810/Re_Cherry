@@ -548,8 +548,15 @@ function registerKernelIpc(): void {
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicDelete, async (_event, id: string) => {
-    await topicTree(requireKernel()).delete(id)
-    return { ok: true }
+    // `ok` = 注册表行已删（话题从 UI 消失）；`purged` = 磁盘上的会话数据也清掉了。
+    // 旧写法无条件回 `{ ok: true }`，把"物理清盘失败"（k2-09）伪装成完全成功。
+    const purged = await topicTree(requireKernel()).delete(id)
+    if (!purged) {
+      logger.error(
+        `kernel: topic "${id}" delete reported a physical purge failure — the persisted session is still on disk`
+      )
+    }
+    return { ok: true, purged }
   })
 
   ipcMain.handle(IpcChannel.Dsh_TopicDestroyTurns, async (_event, id: string, anchorUserSeqs: number[]) => {

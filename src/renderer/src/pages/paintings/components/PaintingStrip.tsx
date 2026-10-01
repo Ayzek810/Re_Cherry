@@ -20,8 +20,13 @@ interface PaintingStripProps {
   /** Id of the painting with an in-flight generation, or undefined when idle. */
   runningPaintingId?: string
   items: PaintingData[]
+  isLoading: boolean
   hasMore: boolean
+  /** 历史读取失败原因（null = 没有失败）。见 usePaintingHistory 的失败语义。 */
+  error: Error | null
   loadMore: () => void
+  /** 清错重跑首页（错误态里的"重试"）。 */
+  retry: () => void
   onDeletePainting: (painting: PaintingData) => void
   onSelectPainting: (painting: PaintingData) => void
   onAddPainting: () => void
@@ -94,8 +99,11 @@ const PaintingStrip: FC<PaintingStripProps> = ({
   selectedPaintingId,
   runningPaintingId,
   items,
+  isLoading,
   hasMore,
+  error,
   loadMore,
+  retry,
   onDeletePainting,
   onSelectPainting,
   onAddPainting
@@ -112,10 +120,12 @@ const PaintingStrip: FC<PaintingStripProps> = ({
 
   useEffect(() => {
     const strip = stripRef.current
+    // 错误态不分页补页：失败时 hasMore 已置 false，这里再显式短路，避免错误态被反复重试。
+    if (error) return
     if (hasMore && strip && strip.scrollHeight <= strip.clientHeight) {
       loadMore()
     }
-  }, [hasMore, items.length, loadMore])
+  }, [error, hasMore, items.length, loadMore])
 
   return (
     <>
@@ -150,7 +160,39 @@ const PaintingStrip: FC<PaintingStripProps> = ({
             deleteLabel={t('paintings.button.delete.image.label')}
           />
         ))}
-        {hasMore && <Loader2 className="mx-auto size-4 shrink-0 animate-spin text-foreground-tertiary" aria-hidden />}
+        {/* 三态（二轮审查 f2-15）：失败不得与"没有历史"同形，也不得让 hasMore 停在 true 转圈。 */}
+        {error ? (
+          <div
+            data-testid="painting-history-error"
+            className="flex w-full shrink-0 flex-col items-center gap-1 px-1 py-2 text-center">
+            <span className="text-[10px] text-destructive leading-4">{t('paintings.history_load_failed')}</span>
+            <button
+              type="button"
+              className="rounded-md border border-border-subtle px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-secondary-hover hover:text-foreground"
+              onClick={retry}>
+              {t('common.retry')}
+            </button>
+          </div>
+        ) : isLoading && items.length === 0 ? (
+          // 首帧骨架（§9 Rendering：每个状态都要有骨架或占位）。只画纯色占位，不启用
+          // PaintingSkeletonSurface 的逐格动画——缩略条里放三份 ResizeObserver + 动画循环不值当。
+          <div className="flex w-full shrink-0 flex-col gap-2" data-testid="painting-history-skeleton">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <span
+                key={index}
+                aria-hidden
+                className={`${paintingClasses.historyItem} animate-pulse overflow-hidden bg-muted/60`}
+              />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <span className="px-1 py-2 text-center text-[10px] text-foreground-tertiary leading-4">
+            {t('paintings.history_empty')}
+          </span>
+        ) : null}
+        {hasMore && !error && (
+          <Loader2 className="mx-auto size-4 shrink-0 animate-spin text-foreground-tertiary" aria-hidden />
+        )}
       </div>
 
       <style>{`

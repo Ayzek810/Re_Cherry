@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+// 单个可换实现的 parse/turndown mock：空正文用例需要让解析链返回空内容
+// （`vi.mocked(Readability).mockImplementationOnce` 对类 mock 的构造返回值不生效）。
+const parseMock = vi.hoisted(() => vi.fn())
+const turndownMock = vi.hoisted(() => vi.fn())
+
 // Mock 外部依赖
 vi.mock('turndown', () => ({
   default: vi.fn(() => ({
-    turndown: vi.fn(() => '# Test content')
+    turndown: turndownMock
   }))
 }))
 vi.mock('@mozilla/readability', () => ({
   Readability: vi.fn(() => ({
-    parse: vi.fn(() => ({
-      title: 'Test Article',
-      content: '<p>Test content</p>',
-      textContent: 'Test content'
-    }))
+    parse: parseMock
   }))
 }))
 vi.mock('@reduxjs/toolkit', () => ({
@@ -54,6 +55,14 @@ describe('fetch', () => {
 
     // 清理 mock 调用历史
     vi.clearAllMocks()
+
+    // 默认解析结果（用例可用 mockReturnValueOnce 覆盖）
+    parseMock.mockReturnValue({
+      title: 'Test Article',
+      content: '<p>Test content</p>',
+      textContent: 'Test content'
+    })
+    turndownMock.mockReturnValue('# Test content')
   })
 
   describe('fetchWebContent', () => {
@@ -81,19 +90,29 @@ describe('fetch', () => {
       expect(window.api.searchService.openUrlInSearchWindow).toHaveBeenCalled()
     })
 
-    it('should handle errors gracefully', async () => {
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
+    // r2-75：非取消的失败必须 reject —— 此前它返回 content='No content found' 的"成功"结果，
+    // 让引用卡把抓取失败渲染成"页面没有正文"。
+    it('rejects instead of faking a no-content success (r2-75)', async () => {
       // 无效 URL
-      const invalidResult = await fetchWebContent('not-a-url')
-      expect(invalidResult.content).toBe('No content found')
+      await expect(fetchWebContent('not-a-url')).rejects.toThrow('Invalid URL format')
 
       // 网络错误
       vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'))
-      const networkResult = await fetchWebContent('https://example.com')
-      expect(networkResult.content).toBe('No content found')
+      await expect(fetchWebContent('https://example.com')).rejects.toThrow('Network error')
 
-      consoleSpy.mockRestore()
+      // HTTP 失败（403 等反爬是引用卡摘要抓取的常态，但仍然是失败）
+      vi.mocked(global.fetch).mockResolvedValueOnce(createMockResponse({ ok: false, status: 403 }))
+      await expect(fetchWebContent('https://example.com')).rejects.toThrow('HTTP error: 403')
+    })
+
+    it('still reports an empty page body as noContent (fetch succeeded)', async () => {
+      parseMock.mockReturnValueOnce({ title: 'Empty', content: '', textContent: '' })
+      turndownMock.mockReturnValueOnce('')
+      vi.mocked(global.fetch).mockResolvedValueOnce(createMockResponse())
+
+      const result = await fetchWebContent('https://example.com')
+
+      expect(result.content).toBe('No content found')
     })
 
     it('should rethrow abort errors', async () => {
@@ -167,19 +186,13 @@ describe('fetch', () => {
       expect(results[1].content).toBe('# Test content')
     })
 
-    it('should handle partial failures gracefully', async () => {
+    // r2-75：批量抓取不再把单条失败折成成功的 "No content found" 结果；失败向上抛。
+    it('rejects when a URL fails instead of disguising it as no content (r2-75)', async () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(createMockResponse())
         .mockRejectedValueOnce(new Error('Network error'))
 
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const results = await fetchWebContents(['https://success.com', 'https://fail.com'])
-
-      expect(results).toHaveLength(2)
-      expect(results[0].content).toBe('# Test content')
-      expect(results[1].content).toBe('No content found')
-
-      consoleSpy.mockRestore()
+      await expect(fetchWebContents(['https://success.com', 'https://fail.com'])).rejects.toThrow('Network error')
     })
   })
 

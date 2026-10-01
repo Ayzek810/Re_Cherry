@@ -38,11 +38,30 @@ const logger = loggerService.withContext('KernelLegacyMigration')
 const LEGACY_IGNORABLE_EVENT_TYPES = ['cherry/work-mode'] as const
 
 /**
+ * 迁移结果**三值**（v0.4.x 二轮审查 k2-10）：
+ *
+ * | 取值 | 含义 |
+ * |---|---|
+ * | `'migrated'` | 迁移跑完（含"确实无需迁移"，`changed === 0`） |
+ * | `'not-needed'` | 库/表尚未建立：此刻没有可迁移的行，非失败 |
+ * | `'failed'` | **写不进去**：库不可知，调用方不得据此做破坏性动作 |
+ *
+ * 为什么不能只用行数：`0` 同时兼指"无需迁移"与"迁移失败"，调用方无法据此把
+ * "库里存在但读不出来"的会话排除在孤儿清扫之外（架构规则 #6）。
+ */
+export type LegacyIgnorableMigrationOutcome = 'migrated' | 'not-needed' | 'failed'
+
+/** `sessions` 表尚未建立：全新库，不是失败（后一次启动会重跑迁移）。 */
+function isMissingSchema(error: unknown): boolean {
+  return error instanceof Error && /no such table/i.test(error.message)
+}
+
+/**
  * 给历史事件补上 `ignorable` 标记，使旧会话重新可读。
  *
- * @returns 实际更新的行数（0 表示无需迁移或迁移失败）
+ * @returns {@link LegacyIgnorableMigrationOutcome}；`'failed'` 时旧会话保持不可读。
  */
-export async function migrateLegacyIgnorableEvents(): Promise<number> {
+export async function migrateLegacyIgnorableEvents(): Promise<LegacyIgnorableMigrationOutcome> {
   try {
     const { DatabaseSync } = await import('node:sqlite')
     const db = new DatabaseSync(join(app.getPath('userData'), 'kernel', 'sessions.db'))
@@ -60,16 +79,21 @@ export async function migrateLegacyIgnorableEvents(): Promise<number> {
             'these logs were previously unreadable (SessionFormatUnsupportedError)'
         )
       }
-      return changed
+      return 'migrated'
     } finally {
       db.close()
     }
   } catch (error) {
+    if (isMissingSchema(error)) {
+      logger.info('kernel: legacy ignorable migration skipped (session tables do not exist yet)')
+      return 'not-needed'
+    }
     // 迁移失败不得影响启动：旧会话继续不可读，但新会话一切照常。
-    logger.warn(
+    // 关键是**如实返回 'failed'**：调用方据此禁止本轮破坏性清扫（见 topics.ts shouldSweepOrphans）。
+    logger.error(
       'kernel: legacy ignorable migration failed (old sessions may stay unreadable)',
       error instanceof Error ? error : new Error(String(error))
     )
-    return 0
+    return 'failed'
   }
 }

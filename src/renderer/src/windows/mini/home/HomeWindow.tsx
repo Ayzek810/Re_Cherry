@@ -321,11 +321,6 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     return () => window.removeEventListener('paste', onPaste)
   }, [handlePasteImage])
 
-  const handleError = (error: Error) => {
-    setIsLoading(false)
-    setError(error.message)
-  }
-
   const handleSendMessage = useCallback(
     async (prompt?: string) => {
       if (isEmpty(userContent) || !currentTopic.current) {
@@ -334,6 +329,127 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
 
       const topicId = currentTopic.current.id
       cancelledRef.current = false
+
+      // r2-02：终态收敛的句柄（消息 id / 回复块 id / rAF / 收尾函数）**声明在 try 之外**。
+      // 「未配置快捷助手模型」这条最常见的失败发生在助手消息已落库（PENDING）、已 setIsLoading(true)
+      // 之后；旧实现把 finishError 关在 try 内，catch 只走 handleError → store 里留下一条永为
+      // PENDING 的助手消息，聊天区无限转圈（失败看起来像"还在生成"）。句柄外移后，任何 throw
+      // （含 replyBlock 尚未建立的早期 throw）都能把消息/块落 ERROR 并停掉加载动画。
+      let assistantMessageId: string | null = null
+      let replyBlockId: string | null = null
+      let streamedText = ''
+      let rafId = 0
+      // 思考（reasoning）流：懒建思考块并合入消息块列表，结束后置 SUCCESS
+      let thinkingText = ''
+      let thinkingBlockId: string | undefined
+      let thinkingRafId = 0
+      let terminalHandled = false
+
+      const flushText = () => {
+        if (replyBlockId !== null) {
+          store.dispatch(updateOneBlock({ id: replyBlockId, changes: { content: streamedText } }))
+        }
+      }
+      const flushThinking = () => {
+        if (thinkingBlockId !== undefined) {
+          store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { content: thinkingText } }))
+        }
+      }
+      const stopLoading = () => {
+        setIsLoading(false)
+        setIsOutputted(true)
+        currentAskId.current = ''
+      }
+      const finalizeThinking = () => {
+        if (thinkingRafId !== 0) {
+          cancelAnimationFrame(thinkingRafId)
+          thinkingRafId = 0
+        }
+        if (thinkingBlockId !== undefined) {
+          flushThinking()
+          store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
+        }
+      }
+      const cancelThinking = () => {
+        if (thinkingRafId !== 0) {
+          cancelAnimationFrame(thinkingRafId)
+          thinkingRafId = 0
+        }
+        if (thinkingBlockId !== undefined) {
+          store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
+        }
+      }
+      const ensureThinkingBlock = () => {
+        if (thinkingBlockId !== undefined) return thinkingBlockId
+        if (assistantMessageId === null || replyBlockId === null) return thinkingBlockId
+        const block = createThinkingBlock(assistantMessageId, '', { status: MessageBlockStatus.STREAMING })
+        thinkingBlockId = block.id
+        store.dispatch(upsertManyBlocks([block]))
+        store.dispatch(
+          newMessagesActions.updateMessage({
+            topicId,
+            messageId: assistantMessageId,
+            updates: { blocks: [block.id, replyBlockId] }
+          })
+        )
+        return block.id
+      }
+
+      // 收尾（幂等，v0.3.3-1）：本轮的终态**只处理一次**——事件先到就用事件的结论，事件没到就由
+      // Promise 落地兜底。看到的现象是"正文已输出完、消息仍 processing、块仍 streaming、"按 ESC
+      // 暂停"一直挂着"：终态事件与 invoke 回复走两条通道会赛跑，末条 done 有概率输掉（见 preload
+      // `dshStreamComplete` 的宽限期修复）。以"通道结束 = 本轮结束"为准收尾，UI 就一定能停下来。
+      const finishSuccess = () => {
+        if (terminalHandled) return
+        terminalHandled = true
+        if (rafId !== 0) {
+          cancelAnimationFrame(rafId)
+          rafId = 0
+        }
+        flushText()
+        finalizeThinking()
+        if (replyBlockId !== null) {
+          store.dispatch(
+            updateOneBlock({
+              id: replyBlockId,
+              changes: { content: streamedText, status: MessageBlockStatus.SUCCESS }
+            })
+          )
+        }
+        if (assistantMessageId !== null) {
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId: assistantMessageId,
+              updates: { status: AssistantMessageStatus.SUCCESS }
+            })
+          )
+        }
+        stopLoading()
+      }
+      const finishError = (message?: string) => {
+        if (terminalHandled) return
+        terminalHandled = true
+        if (rafId !== 0) {
+          cancelAnimationFrame(rafId)
+          rafId = 0
+        }
+        cancelThinking()
+        if (replyBlockId !== null) {
+          store.dispatch(updateOneBlock({ id: replyBlockId, changes: { status: MessageBlockStatus.ERROR } }))
+        }
+        if (assistantMessageId !== null) {
+          store.dispatch(
+            newMessagesActions.updateMessage({
+              topicId,
+              messageId: assistantMessageId,
+              updates: { status: AssistantMessageStatus.ERROR }
+            })
+          )
+        }
+        stopLoading()
+        if (message) setError(message)
+      }
 
       try {
         const { message: userMessage, blocks } = getUserMessage({
@@ -369,6 +485,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         })
         assistantMessage.askId = userMessage.id
         currentAskId.current = userMessage.id
+        assistantMessageId = assistantMessage.id
 
         store.dispatch(newMessagesActions.addMessage({ topicId, message: assistantMessage }))
 
@@ -398,6 +515,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         // 流式回复块
         const replyBlock = createMainTextBlock(assistantMessage.id, '', { status: MessageBlockStatus.STREAMING })
         store.dispatch(upsertManyBlocks([replyBlock]))
+        replyBlockId = replyBlock.id
         store.dispatch(
           newMessagesActions.updateMessage({
             topicId,
@@ -406,111 +524,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           })
         )
 
-        // rAF 合并文本增量，避免高频 delta 刷爆渲染
-        let streamedText = ''
-        let rafId = 0
-        const flushText = () => {
-          store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { content: streamedText } }))
-        }
-
-        // 思考（reasoning）流：懒建思考块并合入消息块列表，结束后置 SUCCESS
-        let thinkingText = ''
-        let thinkingBlockId: string | undefined
-        let thinkingRafId = 0
-        const flushThinking = () => {
-          if (thinkingBlockId !== undefined) {
-            store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { content: thinkingText } }))
-          }
-        }
-        const ensureThinkingBlock = () => {
-          if (thinkingBlockId !== undefined) return thinkingBlockId
-          const block = createThinkingBlock(assistantMessage.id, '', { status: MessageBlockStatus.STREAMING })
-          thinkingBlockId = block.id
-          store.dispatch(upsertManyBlocks([block]))
-          store.dispatch(
-            newMessagesActions.updateMessage({
-              topicId,
-              messageId: assistantMessage.id,
-              updates: { blocks: [block.id, replyBlock.id] }
-            })
-          )
-          return block.id
-        }
-        const finalizeThinking = () => {
-          if (thinkingRafId !== 0) {
-            cancelAnimationFrame(thinkingRafId)
-            thinkingRafId = 0
-          }
-          if (thinkingBlockId !== undefined) {
-            flushThinking()
-            store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
-          }
-        }
-        const cancelThinking = () => {
-          if (thinkingRafId !== 0) {
-            cancelAnimationFrame(thinkingRafId)
-            thinkingRafId = 0
-          }
-          if (thinkingBlockId !== undefined) {
-            store.dispatch(updateOneBlock({ id: thinkingBlockId, changes: { status: MessageBlockStatus.SUCCESS } }))
-          }
-        }
-
         const reasoningEffort = kernelReasoningLevelFor(model, quickAssistantReasoningEffort)
-
-        // 收尾（幂等，v0.3.3-1）：本轮的终态**只处理一次**——事件先到就用事件的结论，事件没到就由
-        // Promise 落地兜底。看到的现象是"正文已输出完、消息仍 processing、块仍 streaming、"按 ESC
-        // 暂停"一直挂着"：终态事件与 invoke 回复走两条通道会赛跑，末条 done 有概率输掉（见 preload
-        // `dshStreamComplete` 的宽限期修复）。以"通道结束 = 本轮结束"为准收尾，UI 就一定能停下来。
-        let terminalHandled = false
-        const stopLoading = () => {
-          setIsLoading(false)
-          setIsOutputted(true)
-          currentAskId.current = ''
-        }
-        const finishSuccess = () => {
-          if (terminalHandled) return
-          terminalHandled = true
-          if (rafId !== 0) {
-            cancelAnimationFrame(rafId)
-            rafId = 0
-          }
-          flushText()
-          finalizeThinking()
-          store.dispatch(
-            updateOneBlock({
-              id: replyBlock.id,
-              changes: { content: streamedText, status: MessageBlockStatus.SUCCESS }
-            })
-          )
-          store.dispatch(
-            newMessagesActions.updateMessage({
-              topicId,
-              messageId: assistantMessage.id,
-              updates: { status: AssistantMessageStatus.SUCCESS }
-            })
-          )
-          stopLoading()
-        }
-        const finishError = (message?: string) => {
-          if (terminalHandled) return
-          terminalHandled = true
-          if (rafId !== 0) {
-            cancelAnimationFrame(rafId)
-            rafId = 0
-          }
-          cancelThinking()
-          store.dispatch(updateOneBlock({ id: replyBlock.id, changes: { status: MessageBlockStatus.ERROR } }))
-          store.dispatch(
-            newMessagesActions.updateMessage({
-              topicId,
-              messageId: assistantMessage.id,
-              updates: { status: AssistantMessageStatus.ERROR }
-            })
-          )
-          stopLoading()
-          if (message) setError(message)
-        }
 
         await lightStream(
           assistantMessage.id,
@@ -570,7 +584,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         if (cancelledRef.current) {
           return
         }
-        handleError(err instanceof Error ? err : new Error('An error occurred'))
+        // r2-02：catch 也必须收敛终态（助手消息/回复块落 ERROR + 停加载动画），
+        // 而不是只 setIsLoading(false)/setError —— 后者会留下永为 PENDING 的消息与无限转圈。
+        finishError(err instanceof Error ? err.message : 'An error occurred')
         logger.error('Quick assistant error:', err as Error)
       }
     },

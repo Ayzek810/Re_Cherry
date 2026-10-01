@@ -30,6 +30,10 @@ const SERVICE_CONFIG = {
   // Worker 初始化配置
   WORKER: {
     MAX_INIT_RETRY: 2, // 最大初始化重试次数
+    /** 空闲回收窗口（p2-12）：无 pending 请求且无新请求达该时长 ⇒ terminate worker。
+     *  只有代码块高亮会创建 worker；用户看完代码块后它不该常驻到窗口关闭。
+     *  重建成本由 MAX_INIT_RETRY + 惰性 init 承担（下次高亮自动重建）。 */
+    IDLE_TERMINATE_MS: 60_000,
     REQUEST_TIMEOUT: {
       INIT: 5000, // 初始化操作超时时间（毫秒）
       HIGHLIGHT: 30000, // 高亮操作超时时间（毫秒）
@@ -94,6 +98,13 @@ class ShikiStreamService {
     }
   >()
   private requestId = 0
+  /** 空闲回收定时器（p2-12）。null = 未排程。 */
+  private workerIdleTimer: ReturnType<typeof setTimeout> | null = null
+  /** 重建 worker 时重放的初始化表（与 initWorker 入参一致；worker 侧自建 highlighter——
+   *  highlighter 对象经 postMessage 不可结构化克隆，且 worker 的代价面是 `import('shiki')`
+   *  的语言/主题加载，不是这份字符串表）。 */
+  private workerLanguages: readonly string[] = DEFAULT_LANGUAGES
+  private workerThemes: readonly string[] = DEFAULT_THEMES
 
   // 降级策略相关变量，用于记录调用 worker 失败过的 callerId
   private workerDegradationCache = new LRUCache<string, boolean>({
@@ -158,16 +169,18 @@ class ShikiStreamService {
           }
         }
 
-        // 初始化 worker
+        // 初始化 worker（语言/主题表随实例保留，空闲回收后重建时原样重放）。
         await this.sendWorkerMessage({
           type: 'init',
-          languages: DEFAULT_LANGUAGES,
-          themes: DEFAULT_THEMES
+          languages: [...this.workerLanguages],
+          themes: [...this.workerThemes]
         })
         this.workerInitRetryCount = 0
+        // p2-12：创建后即排空闲回收（worker 生命周期 = 最后一次高亮 + IDLE_TERMINATE_MS）
+        this.scheduleWorkerIdleTerminate()
       } catch (error) {
-        this.worker?.terminate()
-        this.worker = null
+        // 初始化失败：与空闲回收同路径收尾（terminate + 清 pending），再记一次重试
+        this.terminateWorker()
         this.workerInitRetryCount++
         throw error
       } finally {
@@ -179,7 +192,62 @@ class ShikiStreamService {
   }
 
   /**
+   * 排程 worker 空闲回收（p2-12）。
+   *
+   * 语义：只在"无 pending 请求"时计时。任意请求入队即取消计时（`cancelWorkerIdleTerminate`），
+   * 请求结算后（队列排空时）再排；到期若仍无 pending ⇒ `terminateWorker()`。高亮器引用
+   * （`highlighter`）与 tokenizer/code 缓存都保留：回收的只是 worker 线程，下次高亮按
+   * `initWorker` 惰性重建（worker 侧重放同一语言/主题表）。
+   */
+  private scheduleWorkerIdleTerminate(): void {
+    this.cancelWorkerIdleTerminate()
+    if (!this.worker) return
+    this.workerIdleTimer = setTimeout(() => {
+      this.workerIdleTimer = null
+      if (this.pendingRequests.size > 0) {
+        // 仍有在途请求：它们的结算路径会重新排程
+        return
+      }
+      logger.debug('ShikiStream idle worker terminated')
+      this.terminateWorker()
+    }, SERVICE_CONFIG.WORKER.IDLE_TERMINATE_MS)
+  }
+
+  private cancelWorkerIdleTerminate(): void {
+    if (this.workerIdleTimer !== null) {
+      clearTimeout(this.workerIdleTimer)
+      this.workerIdleTimer = null
+    }
+  }
+
+  /**
+   * 终结 worker 并结算其剩余请求（p2-12 / p2-13）。
+   * terminate 后不会有任何回包，未结算的 Promise 必须显式 reject——否则调用方永久悬挂。
+   */
+  private terminateWorker(): void {
+    this.cancelWorkerIdleTerminate()
+    const worker = this.worker
+    this.worker = null
+    this.workerInitPromise = null
+    for (const pending of this.pendingRequests.values()) {
+      pending.reject(new Error('ShikiStream worker terminated'))
+    }
+    this.pendingRequests.clear()
+    this.requestId = 0
+    try {
+      worker?.terminate()
+    } catch (error) {
+      logger.warn('Failed to terminate shiki stream worker:', error as Error)
+    }
+  }
+
+  /**
    * 向 Worker 发送消息并等待回复
+   *
+   * p2-13：结算只走 `settle`（一次结算 ⇒ clearTimeout + 从 pendingRequests 摘除）。
+   * `postMessage` 抛错时此前调**原始 reject**：绕过 settled 门禁、不清定时器、不删条目，
+   * 于是 postMessage 持续抛错时每个 delta 都留下一个存活到超时的条目 + 定时器，并在超时
+   * 时二次触发降级标记。现统一走 settle。
    */
   private sendWorkerMessage(message: any): Promise<any> {
     if (!this.worker) {
@@ -187,65 +255,71 @@ class ShikiStreamService {
     }
 
     const id = this.requestId++
-    let timerId: ReturnType<typeof setTimeout>
+    // 请求在途期间不回收 worker
+    this.cancelWorkerIdleTerminate()
+
     let settled = false
+    // Promise executor 同步执行 ⇒ resolve/reject 在首次 settle 前一定已赋值。
+    // 定时器句柄放在对象里（而不是 `let` 绑定）：`settle` 需要在定义处就能引用它，
+    // 而绑定的唯一一次赋值在下方。
+    let resolveRef!: (value: any) => void
+    let rejectRef!: (reason?: any) => void
+    const timer: { id?: ReturnType<typeof setTimeout> } = {}
+
+    /** 一次结算：清定时器 + 摘条目 + 队列排空后再排空闲回收。 */
+    const settle = (kind: 'resolve' | 'reject', value: unknown): void => {
+      if (settled) return
+      settled = true
+      if (timer.id !== undefined) clearTimeout(timer.id)
+      this.pendingRequests.delete(id)
+      // 队列排空才重新计时（高频 delta 下不反复重建定时器）
+      if (this.pendingRequests.size === 0) this.scheduleWorkerIdleTerminate()
+      if (kind === 'resolve') {
+        resolveRef(value)
+      } else {
+        rejectRef(value)
+      }
+    }
 
     const promise = new Promise((resolve, reject) => {
-      const safeResolve = (value: any) => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timerId)
-          this.pendingRequests.delete(id)
-          resolve(value)
-        }
-      }
-
-      const safeReject = (reason?: any) => {
-        if (!settled) {
-          settled = true
-          clearTimeout(timerId)
-          this.pendingRequests.delete(id)
-          reject(reason)
-        }
-      }
-
-      this.pendingRequests.set(id, { resolve: safeResolve, reject: safeReject })
-
-      // 根据操作类型设置不同的超时时间
-      const getTimeoutForMessageType = (type: string): number => {
-        switch (type) {
-          case 'init':
-            return SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT
-          case 'highlight':
-            return SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.HIGHLIGHT
-          case 'cleanup':
-          case 'dispose':
-          default:
-            return SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.DEFAULT
-        }
-      }
-
-      const timeout = getTimeoutForMessageType(message.type)
-
-      // 设置超时处理
-      timerId = setTimeout(() => {
-        // 如果是高亮操作超时，说明代码块太长，记录callerId以便降级
-        if (message.type === 'highlight' && message.callerId) {
-          this.workerDegradationCache.set(message.callerId, true)
-          safeReject(new Error(`Worker ${message.type} request timeout for callerId ${message.callerId}`))
-        } else {
-          safeReject(new Error(`Worker ${message.type} request timeout`))
-        }
-      }, timeout)
+      resolveRef = resolve
+      rejectRef = reject
     })
+
+    this.pendingRequests.set(id, {
+      resolve: (value: unknown) => settle('resolve', value),
+      reject: (reason?: unknown) => settle('reject', reason)
+    })
+
+    // 根据操作类型设置不同的超时时间
+    const getTimeoutForMessageType = (type: string): number => {
+      switch (type) {
+        case 'init':
+          return SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT
+        case 'highlight':
+          return SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.HIGHLIGHT
+        case 'cleanup':
+        case 'dispose':
+        default:
+          return SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.DEFAULT
+      }
+    }
+
+    // 设置超时处理
+    timer.id = setTimeout(() => {
+      // 如果是高亮操作超时，说明代码块太长，记录callerId以便降级
+      if (message.type === 'highlight' && message.callerId) {
+        this.workerDegradationCache.set(message.callerId, true)
+        settle('reject', new Error(`Worker ${message.type} request timeout for callerId ${message.callerId}`))
+      } else {
+        settle('reject', new Error(`Worker ${message.type} request timeout`))
+      }
+    }, getTimeoutForMessageType(message.type))
 
     try {
       this.worker.postMessage({ id, ...message })
     } catch (error) {
-      const pendingRequest = this.pendingRequests.get(id)
-      if (pendingRequest) {
-        pendingRequest.reject(error instanceof Error ? error : new Error(String(error)))
-      }
+      settle('reject', error instanceof Error ? error : new Error(String(error)))
     }
 
     return promise
@@ -528,8 +602,15 @@ class ShikiStreamService {
       this.sendWorkerMessage({ type: 'dispose' }).catch((error) => {
         logger.warn('Failed to dispose worker:', error as Error)
       })
-      this.worker.terminate()
-      this.worker = null
+      // p2-13：terminate 前先结算剩余 pending（terminate 后不会有任何回包，
+      // 否则调用方的 Promise 永不 settle）
+      this.terminateWorker()
+    } else {
+      this.cancelWorkerIdleTerminate()
+      // 无 worker 也可能有残余条目（worker 半死时入队的请求）：同样结算，不留悬挂 Promise
+      for (const pending of this.pendingRequests.values()) {
+        pending.reject(new Error('ShikiStream worker disposed'))
+      }
       this.pendingRequests.clear()
       this.requestId = 0
     }

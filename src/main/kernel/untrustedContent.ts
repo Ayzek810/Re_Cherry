@@ -17,3 +17,15 @@ export function stripInvisibleCharacters(text: string): string {
 export function defangSystemReminderTags(text: string): string {
   return text.replace(/<(\/?\s*system-reminder\b[^>]*)>/gi, '&lt;$1>')
 }
+
+/**
+ * 不可信文本进受信边界的**唯一**入口：先归一，再拆解真标签。
+ *
+ * 为什么必须两步（v1 二轮审查 k2-08）：`sanitizeUntrustedText` 会把全角
+ * `＜/system-reminder＞` 归一成**真正的** `</system-reminder>`——只做这一步，等于把
+ * 攻击者的逃逸写法洗成有效标签，反而打开伪造系统提醒信封的路。两步合起来才封住。
+ * `untrustedContent.test.ts` 的用例示范的正是这个组合。
+ */
+export function hardenUntrustedText(text: string): string {
+  return defangSystemReminderTags(sanitizeUntrustedText(text))
+}

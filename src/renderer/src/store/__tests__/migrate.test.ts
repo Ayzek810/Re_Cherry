@@ -1,3 +1,4 @@
+import { DEFAULT_SIDEBAR_ICONS } from '@renderer/config/sidebar'
 import { describe, expect, it } from 'vitest'
 
 import migrate from '../migrate'
@@ -250,6 +251,86 @@ describe('store migrations', () => {
 
       expect(migrated.memory).toBeUndefined()
       expect(migrated.settings.enableQuickPanelTriggers).toBe(false)
+    })
+  })
+
+  describe('migration 229: sidebar icon reconciliation + pinnedTabs backfill (r2-11 / r2-50)', () => {
+    /**
+     * 老账号升级路径的忠实复现：'209'（旧白名单）砍到 3 项 → '217' 补 knowledge →
+     * '220' 补 translate/paintings → '222' 补 code。'notes' 只能由 '141' 补，而 '141' 排在
+     * '209' 之前，这批账号永远补不回来——这正是 '229' 要修的形态。
+     */
+    const legacyVisibleAfter209to222 = ['assistants', 'minapp', 'files', 'knowledge', 'translate', 'paintings', 'code']
+
+    it("restores the default sidebar icons an upgraded account lost ('notes')", async () => {
+      const state = {
+        settings: {
+          sidebarIcons: {
+            visible: [...legacyVisibleAfter209to222],
+            disabled: ['memory']
+          }
+        },
+        _persist: { version: 228, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 229)
+      const visible: string[] = migrated.settings.sidebarIcons.visible
+
+      expect(visible).toContain('notes')
+      expect(new Set(visible).size).toBe(visible.length)
+      // 新装默认表的每一项都在（升级路径收敛到与全新安装同一形态）
+      expect(DEFAULT_SIDEBAR_ICONS.every((icon) => visible.includes(icon))).toBe(true)
+    })
+
+    it('keeps icons the user hid hidden, and does not duplicate existing ones', async () => {
+      const state = {
+        settings: {
+          sidebarIcons: {
+            visible: ['assistants', 'minapp', 'files', 'knowledge', 'translate', 'paintings', 'code'],
+            disabled: ['notes']
+          }
+        },
+        _persist: { version: 228, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 229)
+
+      expect(migrated.settings.sidebarIcons.disabled).toEqual(['notes'])
+      expect(migrated.settings.sidebarIcons.visible).not.toContain('notes')
+    })
+
+    it('backfills missing pinnedTabs on persisted settings (old shape → [])', async () => {
+      const state = {
+        settings: { sidebarIcons: { visible: [...legacyVisibleAfter209to222], disabled: [] } },
+        _persist: { version: 228, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 229)
+
+      expect(migrated.settings.pinnedTabs).toEqual([])
+    })
+
+    it('preserves an existing pinnedTabs (user pin set survives upgrade)', async () => {
+      const pinned = [{ id: 'home', path: '/' }]
+      const state = {
+        settings: { pinnedTabs: pinned },
+        _persist: { version: 228, rehydrated: false }
+      }
+
+      const migrated: any = await migrate(state as any, 229)
+
+      expect(migrated.settings.pinnedTabs).toBe(pinned)
+    })
+
+    it('tolerates a missing or malformed settings slice', async () => {
+      const noSettings: any = await migrate({ _persist: { version: 228, rehydrated: false } } as any, 229)
+      const badIcons: any = await migrate(
+        { settings: { sidebarIcons: 'not-an-object' }, _persist: { version: 228, rehydrated: false } } as any,
+        229
+      )
+
+      expect(noSettings.settings).toBeUndefined()
+      expect(badIcons.settings.sidebarIcons).toBe('not-an-object')
     })
   })
 })

@@ -48,16 +48,21 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
   const [result, setResult] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [targetLanguage, setTargetLanguage] = useState<TranslateLangCode>('zh-cn')
-  const [isTranslating, setIsTranslating] = useState(false)
   /** V1 语义：源语言块显示"自动检测 (检测到的语言)"，检测不出则只显示"自动检测"。 */
   const [detectedLanguage, setDetectedLanguage] = useState<TranslateLangCode | null>(null)
 
   // 在途请求的 requestId：新请求/卸载使其作废，旧事件与旧终态一律丢弃
   const requestIdRef = useRef<string | null>(null)
 
-  const { reset: resetSmoothStream, addChunk: addSmoothChunk } = useSmoothStream({
-    onUpdate: setResult,
-    streamDone: !isTranslating
+  // r2-01：playout 句柄放进 ref，不放进 effect 依赖数组。
+  // 旧实现的死循环链条：`streamDone: !isTranslating` → `reset` 依赖 `streamDone`
+  // → 请求开始/结束翻转 `isTranslating` → `reset` 换 identity → 翻译 effect 因依赖变化重跑
+  // → cleanup abort 旧流 + 再发一次 lightStream……翻译永不收敛，模型费用无界。
+  // 终态不再由 `isTranslating` 推导，改由流自身的 `done`/`error`/通道结束显式 `update(text, true)`。
+  const smoothStream = useSmoothStream({ onUpdate: setResult })
+  const smoothStreamRef = useRef(smoothStream)
+  useEffect(() => {
+    smoothStreamRef.current = smoothStream
   })
 
   const languageLabel = (code: TranslateLangCode) => {
@@ -75,23 +80,23 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
   )
 
   useEffect(() => {
-    resetSmoothStream('')
-
-    const requestId = `mini-translate:${uuid()}`
-    requestIdRef.current = requestId
+    const { reset, update } = smoothStreamRef.current
+    reset('')
 
     const source = text.trim()
     // fork 缝：V1 的源语言块在检测后显示实际语言（`自动检测 (中文)`）；检测是本地 franc，零额外请求。
     setDetectedLanguage(detectLanguage(source))
     if (source.length === 0 || !translateModel) {
-      // 不发请求也不置错：中性空态由 error/未配模型提示分支承担
-      setIsTranslating(false)
+      // 不发请求也不置错：中性空态由 error/未配模型提示分支承担。
+      // 显式收敛 playout（`update('', true)`）：否则"队列空 + streamDone=false"会让 rAF 自旋。
+      update('', true)
       setError(source.length === 0 ? null : t('translate.error.not_configured'))
       return
     }
 
+    const requestId = `mini-translate:${uuid()}`
+    requestIdRef.current = requestId
     setError(null)
-    setIsTranslating(true)
     let accumulated = ''
 
     const run = async () => {
@@ -110,7 +115,9 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
             if (requestIdRef.current !== requestId) return
             if (event.type === 'delta') {
               accumulated += event.text
-              addSmoothChunk(event.text)
+              // 走 `update` 的累计文本契约（内部按前缀差量入队）；与 `addChunk` 混用会把
+              // 终态的整段累计再入队一次，译文重复。
+              update(accumulated, false)
             } else if (event.type === 'error') {
               setError(`${t('translate.error.failed')}: ${event.message}`)
             }
@@ -121,8 +128,10 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
         setError(`${t('translate.error.failed')}: ${err instanceof Error ? err.message : String(err)}`)
         logger.warn('mini translate failed', err as Error)
       } finally {
+        // 终态由「流结束」显式驱动：done / error / 通道断开三条路都收敛 playout，
+        // 先把已收到的字符吐完再停循环。旧代码这里翻转 isTranslating，正是自我重入的扳机。
         if (requestIdRef.current === requestId) {
-          setIsTranslating(false)
+          update(accumulated, true)
         }
       }
     }
@@ -136,9 +145,10 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
       void lightStreamAbort(requestId)
       requestIdRef.current = null
     }
-    // languageLabel 只依赖 i18n 与目标语言，随 targetLanguage 一并重算
+    // 依赖只剩三个真输入：文本 / 目标语言 / 模型 id。languageLabel 随 targetLanguage 一并重算，
+    // playout 句柄经 ref 持有（r2-01）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, targetLanguage, translateModel?.id, resetSmoothStream, addSmoothChunk])
+  }, [text, targetLanguage, translateModel?.id])
 
   useHotkeys('c', () => {
     if (!result) return

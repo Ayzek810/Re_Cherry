@@ -680,7 +680,9 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     ipcMain.handle(IpcChannel.Mcp_RemoveServer, (_, server) => mcpService.removeServer(asServer(server)))
     ipcMain.handle(IpcChannel.Mcp_CheckConnectivity, (_, server) => mcpService.checkConnectivity(asServer(server)))
     // MCP 运行时依赖探测（v1）：命令名 → 可执行绝对路径 | null。命令名由
-    // findCommandInShellEnv 内的白名单正则校验（注入面收在那一处），非法名返回 null。
+    // findCommandInShellEnv 内的白名单正则校验，非法名返回 null。
+    // 注（v1 二轮审查 m2-06）：真正 spawn 的通道（initTransport 的 server.command）
+    // 现在也过 normalizeMcpCommand 校验——注入面不只这一处。
     ipcMain.handle(IpcChannel.Mcp_CheckCommand, async (_, command: string) => {
       const { findCommandInShellEnv, getInheritedEnv } = await import('./services/mcp/commandResolution')
       return findCommandInShellEnv(command, getInheritedEnv())

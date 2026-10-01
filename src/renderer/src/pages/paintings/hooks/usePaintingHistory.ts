@@ -3,6 +3,10 @@
  * DataApi useInfiniteQuery → Dexie keyset 分页（orderBy('createdAt').reverse()
  * + where('createdAt').below(cursor)）；条目水合走 recordToPaintingData
  * （V2 recordsToPaintingDataList 语义，文件解析为 Dexie 内嵌直通）。
+ *
+ * 失败语义（二轮审查 f2-15）：读失败**不得**与"没有历史"同形，也不得让 `hasMore` 停在 true。
+ * 失败时 `hasMore` 置 false（否则缩略条的 `{hasMore && <Loader2/>}` 永远转圈）、`error` 置位，
+ * 由 `PaintingStrip` 渲染可重试的错误态；`retry()` 清错后重跑首页。
  */
 import { db } from '@renderer/databases'
 import { recordsToPaintingDataList } from '@renderer/pages/paintings/model/recordToPaintingData'
@@ -16,19 +20,38 @@ const PAGE_SIZE = 30
 
 export type PaintingStripEntry = PaintingData
 
-export function usePaintingHistory(): {
+export interface PaintingHistoryResult {
   items: PaintingStripEntry[]
   isLoading: boolean
   hasMore: boolean
+  /** 首页/续页读取失败的原因；null = 没有失败。 */
+  error: Error | null
   loadMore: () => void
   reload: () => void
-} {
+  /** 清掉错误态并重跑首页（错误态里的"重试"）。 */
+  retry: () => void
+}
+
+function toError(value: unknown): Error {
+  return value instanceof Error ? value : new Error(String(value))
+}
+
+export function usePaintingHistory(): PaintingHistoryResult {
   const [items, setItems] = useState<PaintingStripEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
   // keyset 游标：已载入最旧一行的 createdAt（reverse 后页尾）。
   const cursorRef = useRef<number | undefined>(undefined)
   const loadingRef = useRef(false)
+  // 卸载守卫：Dexie 查询在页面切走后回包时不再写状态。
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const loadPage = useCallback(async (reset: boolean) => {
     if (loadingRef.current) return
@@ -40,16 +63,23 @@ export function usePaintingHistory(): {
         query = db.paintings.where('createdAt').below(cursorRef.current).reverse()
       }
       const rows = await query.limit(PAGE_SIZE).toArray()
+      if (!mountedRef.current) return
       // recordsToPaintingDataList 是同步纯函数（Dexie 内嵌直通），不得 await
       const mapped = recordsToPaintingDataList(rows)
       cursorRef.current = rows.length > 0 ? rows[rows.length - 1].createdAt : cursorRef.current
       setItems((prev) => (reset ? mapped : [...prev, ...mapped]))
       setHasMore(rows.length === PAGE_SIZE)
-    } catch (error) {
-      logger.error('Failed to load painting history', error as Error)
+      setError(null)
+    } catch (caught) {
+      const failure = toError(caught)
+      logger.error('Failed to load painting history', failure)
+      if (!mountedRef.current) return
+      // 失败不得伪装成"没有历史"：置错误态，并停掉分页转圈（否则缩略条永久 spinner）。
+      setError(failure)
+      setHasMore(false)
     } finally {
       loadingRef.current = false
-      setIsLoading(false)
+      if (mountedRef.current) setIsLoading(false)
     }
   }, [])
 
@@ -62,9 +92,15 @@ export function usePaintingHistory(): {
     void loadPage(true)
   }, [loadPage])
 
+  const retry = useCallback(() => {
+    setError(null)
+    cursorRef.current = undefined
+    void loadPage(true)
+  }, [loadPage])
+
   useEffect(() => {
     void loadPage(true)
   }, [loadPage])
 
-  return { items, isLoading, hasMore, loadMore, reload }
+  return { items, isLoading, hasMore, error, loadMore, reload, retry }
 }

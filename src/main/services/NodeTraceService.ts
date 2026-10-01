@@ -2,9 +2,7 @@ import { loggerService } from '@logger'
 import { isDev } from '@main/constant'
 import { CacheBatchSpanProcessor, FunctionSpanExporter } from '@mcp-trace/trace-core'
 import { NodeTracer as MCPNodeTracer } from '@mcp-trace/trace-node/nodeTracer'
-import type { SpanContext } from '@opentelemetry/api'
-import { context, trace } from '@opentelemetry/api'
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow } from 'electron'
 import * as path from 'path'
 
 import { ConfigKeys, configManager } from './ConfigManager'
@@ -29,21 +27,6 @@ export class NodeTraceService {
       new CacheBatchSpanProcessor(exporter, spanCacheService)
     )
   }
-}
-
-const originalHandle = ipcMain.handle
-ipcMain.handle = (channel: string, handler: (...args: any[]) => Promise<any>) => {
-  return originalHandle.call(ipcMain, channel, async (event, ...args) => {
-    const carray = args && args.length > 0 ? args[args.length - 1] : {}
-    let ctx = context.active()
-    let newArgs = args
-    if (carray && typeof carray === 'object' && 'type' in carray && carray.type === 'trace') {
-      const span = trace.wrapSpanContext(carray.context as SpanContext)
-      ctx = trace.setSpan(context.active(), span)
-      newArgs = args.slice(0, args.length - 1)
-    }
-    return context.with(ctx, () => handler(event, ...newArgs))
-  })
 }
 
 export const nodeTraceService = new NodeTraceService()

@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { getRestoreProgressLabel } from '@renderer/i18n/label'
 import { restore } from '@renderer/services/BackupService'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -6,6 +7,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
+
+const logger = loggerService.withContext('RestorePopup')
 
 interface Props {
   resolve: (data: any) => void
@@ -20,6 +23,8 @@ interface ProgressData {
 const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
+  const [isRunning, setIsRunning] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -33,8 +38,20 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   }, [])
 
   const onOk = async () => {
-    await restore()
-    setOpen(false)
+    // 与 BackupPopup 同型：失败要可见、可关闭，不能把两个按钮一起禁死。
+    setFailed(null)
+    setIsRunning(true)
+    try {
+      await restore()
+      setOpen(false)
+    } catch (error) {
+      logger.error('Restore failed:', error as Error)
+      setProgressData(undefined)
+      setFailed((error as Error)?.message || t('common.save_failed'))
+      window.toast?.error(t('common.save_failed', 'Restore failed'))
+    } finally {
+      setIsRunning(false)
+    }
   }
 
   const onCancel = () => {
@@ -58,7 +75,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 
   RestorePopup.hide = onCancel
 
-  const isDisabled = progressData ? progressData.stage !== 'completed' : false
+  const isRunningLock = isRunning
 
   return (
     <Modal
@@ -68,12 +85,13 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       onCancel={onCancel}
       afterClose={onClose}
       okText={t('restore.confirm.button')}
-      okButtonProps={{ disabled: isDisabled }}
-      cancelButtonProps={{ disabled: isDisabled }}
+      okButtonProps={{ disabled: isRunningLock }}
+      cancelButtonProps={{ disabled: isRunningLock }}
       maskClosable={false}
       transitionName="animation-move-down"
       centered>
-      {!progressData && <div>{t('restore.content')}</div>}
+      {!progressData && !failed && <div>{t('restore.content')}</div>}
+      {failed && <div data-testid="restore-error">{failed}</div>}
       {progressData && (
         <div style={{ textAlign: 'center', padding: '20px 0' }}>
           <Progress percent={Math.floor(progressData.progress)} strokeColor="var(--color-primary)" />

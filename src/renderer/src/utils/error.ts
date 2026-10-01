@@ -351,6 +351,15 @@ export function serializeHealthCheckError(error: unknown): SerializedError {
   if (AISDKError.isInstance(error)) {
     return serializeError(error)
   }
+  // v1 二轮审查 s2-03：`safeToString` 对 Error 走 JSON.stringify，得到 "{}" —— 失败原因
+  // 在健康检查面板里对用户不可见。Error 取 name/message，其余仍走 safeToString。
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null
+    }
+  }
   return {
     name: null,
     message: safeToString(error),

@@ -40,28 +40,24 @@ class ApiGatewayService {
   private readonly internalRequestToken = uuidv4()
   /** Latest persistent desired state. Its only source is the `enabled` config. */
   private desiredEnabled = false
-  /**
-   * Count of active temporary run leases (see {@link acquireLease}). Transient consumers
-   * hold a lease instead of toggling `desiredEnabled`, so the effective running target
-   * is `desiredEnabled || leaseCount > 0`: a lease keeps the gateway up without persisting an
-   * "enabled" intent, and it never overrides a user who enables/disables the gateway mid-lease.
-   * fork 缝②：lease 计数保留形状，恒无消费者（瞬态消费者子系统未移植）。
-   */
-  private leaseCount = 0
   /** fork 缝：BaseService.isActivated 的单例等价物——字段即"服务器真的在监听"。 */
   private activated = false
   /**
-   * Converges the gateway's running state to the effective target (`desiredEnabled || leaseCount`).
-   * The reconciler is the SOLE caller of activate/deactivate (start/stop/restart and lease
-   * acquire/release route through it too), so transitions are never concurrent. It is
-   * level-triggered against the ACTUAL `activated` state, latest-wins (an opposing
-   * toggle landing mid-transition is honoured on the next pass), and a transition that throws
-   * for a still-current target is recorded — see {@link LatestReconciler.getLastError} — and
-   * not retried, so a persistent failure (e.g. port in use) can't spin the loop.
+   * Converges the gateway's running state to the desired target (`desiredEnabled`).
+   * The reconciler is the SOLE caller of activate/deactivate (start/stop/restart route through it
+   * too), so transitions are never concurrent. It is level-triggered against the ACTUAL
+   * `activated` state, latest-wins (an opposing toggle landing mid-transition is honoured on the
+   * next pass), and a transition that throws for a still-current target is recorded — see
+   * {@link LatestReconciler.getLastError} — and not retried, so a persistent failure (e.g. port in
+   * use, or a close that did not release the port) can't spin the loop.
+   *
+   * fork 缝②（v1 二轮审查 m2-04/m2-21 收窄）：V2 的临时租约计数（`leaseCount` +
+   * acquireLease/releaseLease）随瞬态消费者子系统裁掉——那几个方法全仓零调用，
+   * 却把 `|| leaseCount > 0` 编进了收敛目标与 `ApiGatewayStopOutcome` 的 `'deferred'` 态。
    */
   private readonly reconciler: LatestReconciler = createLatestReconciler<{ desired: boolean; actual: boolean }>({
     name: 'apiGateway',
-    getSnapshot: () => ({ desired: this.desiredEnabled || this.leaseCount > 0, actual: this.activated }),
+    getSnapshot: () => ({ desired: this.desiredEnabled, actual: this.activated }),
     isSettled: ({ desired, actual }) => desired === actual,
     apply: async ({ desired }) => {
       if (desired) {
@@ -118,9 +114,25 @@ class ApiGatewayService {
     }
   }
 
+  /**
+   * v1 二轮审查 m2-04：关闭失败必须抛，不能把 `activated` 抹成 false。
+   *
+   * 此前 `closeHttpServer` 永不 reject（超时也不再等），而这里无条件 `activated = false`
+   * 并 `publishRunningState(false)`——于是「开关是关的、端口是占的」，此后同端口 start()
+   * 撞 EADDRINUSE 而错误信息与网关无关。现在：
+   * - 关闭成功 → 照旧置 false 并广播；
+   * - 关闭失败 → 保留 `apiGateway` 句柄（下一次 stop 可重试）、广播仍为运行态、抛出可行动错误。
+   */
   private async onDeactivate(): Promise<void> {
     if (this.apiGateway) {
-      await this.apiGateway.stop()
+      const closed = await this.apiGateway.stop()
+      if (!closed) {
+        this.publishRunningState(true)
+        const { port } = this.getCurrentConfig()
+        throw new Error(
+          `API Gateway could not close its listener on port ${port}. The port may still be in use. Retry the stop, or restart the app.`
+        )
+      }
       this.apiGateway = null
     }
     this.publishRunningState(false)
@@ -195,12 +207,6 @@ class ApiGatewayService {
   async stop(): Promise<ApiGatewayStopOutcome> {
     await this.applyIntent(false)
     if (this.activated) {
-      if (this.leaseCount > 0) {
-        // A transient lease still holds the server open; the reconciler will stop it once the last
-        // lease releases. Persistent intent is cleared, so this is a success, not a failure.
-        logger.info('API Gateway persistent intent cleared; server stays up for active lease(s)')
-        return 'deferred'
-      }
       const error = this.failureError('Failed to stop API Gateway')
       logger.error('Failed to stop API Gateway:', error)
       throw error
@@ -210,11 +216,6 @@ class ApiGatewayService {
   }
 
   async restart(): Promise<void> {
-    if (this.leaseCount > 0) {
-      const error = new Error('API Gateway is busy: a temporary run is in progress. Retry once it finishes.')
-      logger.warn('Refusing API Gateway restart while a lease is active', error)
-      throw error
-    }
     // Re-create the server (e.g. to apply a new host/port) as a stop→start through the same single
     // reconciler. A re-bind is not an intent change, so the persisted preference is left alone.
     await this.converge(false)
@@ -249,39 +250,6 @@ class ApiGatewayService {
       logger.error('Failed to start API Gateway:', error)
       throw error
     }
-  }
-
-  /**
-   * Acquire a temporary run lease: keep the gateway running for a transient consumer without
-   * touching the persistent `enabled` state. Bumps the effective target (`|| leaseCount > 0`) and
-   * converges; throws if the gateway could not be brought up (rolling the lease back first). Every
-   * successful `acquireLease()` MUST be paired with a `releaseLease()` (in a `finally`).
-   *
-   * Unlike `start()`/`stop()`, this never rewrites `desiredEnabled`, so it cannot stop a
-   * user-enabled gateway on release, and a user disabling the gateway mid-lease cannot cut a
-   * running consumer off (the lease still pins the target true until released).
-   */
-  async acquireLease(): Promise<void> {
-    this.leaseCount += 1
-    this.reconciler.request()
-    await this.reconciler.flush()
-    if (!this.activated) {
-      this.leaseCount = Math.max(0, this.leaseCount - 1)
-      this.reconciler.request()
-      const error = this.failureError('Failed to start API Gateway for a temporary lease')
-      logger.error('Failed to acquire API Gateway lease:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Release a lease taken by {@link acquireLease}. Fire-and-forget convergence (matching the
-   * config-subscription path): once the last lease drops and `desiredEnabled` is false, the
-   * reconciler stops the gateway on its own.
-   */
-  releaseLease(): void {
-    this.leaseCount = Math.max(0, this.leaseCount - 1)
-    this.reconciler.request()
   }
 
   /** Surface the reconciler's most recent transition error to an IPC caller, or a generic fallback. */

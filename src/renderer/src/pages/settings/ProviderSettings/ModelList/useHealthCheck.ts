@@ -6,7 +6,7 @@ import { HealthStatus } from '@renderer/types/healthCheck'
 import { splitApiKeyString } from '@renderer/utils/api'
 import { summarizeHealthResults } from '@renderer/utils/healthCheck'
 import { isEmpty } from 'lodash'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import HealthCheckPopup from './HealthCheckPopup'
@@ -15,6 +15,14 @@ export const useHealthCheck = (provider: Provider, models: Model[]) => {
   const { t } = useTranslation()
   const [modelStatuses, setModelStatuses] = useState<ModelWithStatus[]>([])
   const [isChecking, setIsChecking] = useState(false)
+
+  /** 卸载守卫：健康检查是长跑网络请求，卸载后不再写状态（s2-03）。 */
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   const runHealthCheck = useCallback(async () => {
     const modelsToCheck = models.filter((model) => !isRerankModel(model))
@@ -79,10 +87,19 @@ export const useHealthCheck = (provider: Provider, models: Model[]) => {
       }
     )
 
-    window.toast.info({
-      timeout: 5000,
-      title: summarizeHealthResults(checkResults, provider.name)
-    })
+    if (!isMountedRef.current) {
+      return
+    }
+
+    // 「整批都没跑起来」必须走错误信号。修改前这里无条件用 info toast 播汇总，
+    // 整体失败会渲染成「0/N 通过」的成功态（s2-03）。
+    const hasAnySuccess = checkResults.some((r) => r.keyResults.some((kr) => kr.status === HealthStatus.SUCCESS))
+    const toastTitle = summarizeHealthResults(checkResults, provider.name)
+    if (hasAnySuccess) {
+      window.toast.info({ timeout: 5000, title: toastTitle })
+    } else {
+      window.toast.error({ timeout: 5000, title: toastTitle })
+    }
 
     setIsChecking(false)
   }, [models, provider, t])

@@ -370,6 +370,15 @@ const CodeViewer = ({
     }
   }, [virtualItems, debouncedHighlightLines])
 
+  // 卸载时取消在飞的防抖高亮：否则 300ms 后定时器仍会在已卸载的组件上
+  // setState，并让 useCodeHighlight 对已释放的 tokenizer 续跑。
+  useEffect(() => {
+    const pending = debouncedHighlightLines
+    return () => {
+      pending.cancel()
+    }
+  }, [debouncedHighlightLines])
+
   // Monitor selection changes, clear stale selection state, and auto-expand in collapsed state
   const handleSelectionChange = useMemo(
     () =>

@@ -7,6 +7,8 @@
  *   交付注记有记）；笔记内容按 fork KnowledgeNoteItem 形状直接存于条目 content；
  * - 嵌入引用只含 {providerId, modelId, dimensions}，密钥主进程自解析（fork 偏离上游）。
  */
+import { loggerService } from '@logger'
+import i18n from '@renderer/i18n'
 import FileManager from '@renderer/services/FileManager'
 import { getEmbeddingRef, knowledgeBaseApi } from '@renderer/services/knowledgeBaseApi'
 import type { RootState } from '@renderer/store'
@@ -35,6 +37,8 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { useAssistants } from './useAssistant'
 
+const logger = loggerService.withContext('useKnowledge')
+const t = i18n.t.bind(i18n)
 /** 创建一个新知识库条目（批次4：file/url/note 预置 processingStatus='pending'，进处理链）。 */
 const createKnowledgeItem = (
   type: KnowledgeItem['type'],
@@ -196,25 +200,59 @@ export const useKnowledge = (baseId: string) => {
     dispatch(updateItemAction({ baseId, item }))
   }
 
-  // 移除项目（批次4：向量条目按 uniqueIds 整批删 + redux 移除 + 文件清理）
-  const removeItem = async (item: KnowledgeItem) => {
+  /**
+   * 移除项目（批次4：向量条目按 uniqueIds 整批删 + redux 移除 + 文件清理）。
+   *
+   * 删除纪律（CLAUDE.md §9 / 二轮审查 f2-14）：**返回 `Promise<boolean>`**，乐观移除失败必须回滚并
+   * 给出用户可见信号。旧实现是纯乐观写：redux 行先消失，向量库 `remove` 或文件清理一旦 reject，行不会
+   * 恢复（刷新后条目仍不在列表里但向量还占着），而六个 onClick 调用点把 Promise 交给 React——失败只是
+   * 一条未处理的 rejection，磁盘与 UI 都没有任何信号。
+   *
+   * @returns true = 已删除；false = 失败（redux 已回滚，已弹 toast.error）。
+   */
+  const removeItem = async (item: KnowledgeItem): Promise<boolean> => {
+    // 回滚快照：整库行原样保存，失败时用 updateBase 精确还原（含数组位置与全部字段），
+    // 避免用 addItem 之类的"重建型"动作在 file/note/video 上丢掉位置或改错时间戳。
+    const baseSnapshot = base ? cloneDeep(base) : undefined
+
     dispatch(removeItemAction({ baseId, item }))
 
-    if (base && item?.uniqueIds && item.uniqueIds.length > 0) {
-      await knowledgeBaseApi.remove(baseId, item.uniqueIds)
-    } else if (base && item?.uniqueId) {
-      await knowledgeBaseApi.remove(baseId, [item.uniqueId])
+    const rollback = (message: string, error: unknown) => {
+      logger.error(`Failed to remove knowledge item ${item.id}: ${message}`, error as Error)
+      if (baseSnapshot) {
+        dispatch(updateBase(baseSnapshot))
+      }
+      window.toast.error(t('knowledge.remove_failed'))
+      return false
     }
 
-    if (isKnowledgeFileItem(item) && typeof item.content === 'object' && !Array.isArray(item.content)) {
-      const file = item.content
-      // name: eg. text.pdf
-      await FileManager.deleteFiles([file])
-    } else if (isKnowledgeVideoItem(item)) {
-      // video item has srt and video files
-      const files = item.content
-      await FileManager.deleteFiles(files)
+    try {
+      if (base && item?.uniqueIds && item.uniqueIds.length > 0) {
+        await knowledgeBaseApi.remove(baseId, item.uniqueIds)
+      } else if (base && item?.uniqueId) {
+        await knowledgeBaseApi.remove(baseId, [item.uniqueId])
+      }
+    } catch (error) {
+      return rollback('vector removal failed', error)
     }
+
+    try {
+      if (isKnowledgeFileItem(item) && typeof item.content === 'object' && !Array.isArray(item.content)) {
+        const file = item.content
+        // name: eg. text.pdf
+        await FileManager.deleteFiles([file])
+      } else if (isKnowledgeVideoItem(item)) {
+        // video item has srt and video files
+        await FileManager.deleteFiles(item.content)
+      }
+    } catch (error) {
+      // 本地文件清理失败不回滚索引行：文件已从 redux 与向量库摘除，行本身没有可还原的语义；
+      // 但失败不得静默——磁盘上会留下孤儿文件，必须让用户知道（§9「Never fail silently」）。
+      logger.error('Failed to clean up knowledge item files', error as Error)
+      window.toast.warning(t('knowledge.remove_file_cleanup_failed'))
+    }
+
+    return true
   }
 
   // 刷新项目（批次4：remove + 重新入队嵌入；处理中条目拒绝重刷）

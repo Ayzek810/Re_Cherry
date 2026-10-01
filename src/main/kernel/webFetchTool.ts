@@ -151,6 +151,7 @@ export function apply(ctx: Context): void {
         const rawOffset = typeof args.offset === 'number' && Number.isFinite(args.offset) ? args.offset : 0
         const topicId = exec.agent?.session?.id
         const entries: FetchedEntry[] = []
+        const failures: string[] = []
         for (const url of urls) {
           if (exec.signal.aborted) break
           try {
@@ -171,15 +172,22 @@ export function apply(ctx: Context): void {
             if (isAbortError(error)) throw error
             // 单页失败不整批报错：具名失败条目照常进列表（失败不伪装成空，但也不连坐）。
             logger.warn(`web_fetch: page failed "${url}"`, error as Error)
+            const reason = error instanceof Error ? error.message : String(error)
+            failures.push(`${url}: ${reason}`)
             entries.push({
               index: 0,
               title: url,
               url,
-              content: `Fetch failed: ${error instanceof Error ? error.message : String(error)}`,
+              content: `Fetch failed: ${reason}`,
               truncated: false,
               totalChars: 0
             })
           }
+        }
+        // 每一页都失败 ⇒ 这是失败，不是"空结果"（CLAUDE.md §9 第一条硬规则）。
+        // 旧写法把它们当普通条目返回，主句是"Fetched pages"，模型读到的是一次成功的取回。
+        if (failures.length === urls.length) {
+          throw new Error(`web_fetch: every page failed (${urls.length}): ${failures.join('; ')}`)
         }
         // 同轮全局 [n] 编号（web_search 同机制）：引用卡与正文编号连续同源。
         const offset = topicId === undefined ? 0 : webSearchService.bumpTurnResultOffset(topicId, entries.length)
@@ -188,7 +196,11 @@ export function apply(ctx: Context): void {
         })
         const text =
           entries.length === 0
-            ? 'No pages were fetched (empty request).'
+            ? // 两条空列表原因必须分开说：提前 break（:155）是**取消**，不是"空请求"。
+              // 旧文案 'No pages were fetched (empty request).' 在取消时是假话。
+              exec.signal.aborted
+              ? `Fetch cancelled before any page was retrieved (${urls.length} URL(s) were requested).`
+              : 'No pages were fetched (empty request).'
             : [
                 'Fetched pages (cited as [n]):',
                 ...entries.map((e) =>

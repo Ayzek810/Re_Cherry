@@ -50,6 +50,28 @@ interface ProgressData {
   total: number
 }
 
+/**
+ * v1 二轮审查 m2-14：WebDAV 两条路径此前绕开了本地侧的 `resolveAndValidatePath`，
+ * 直接把渲染层给的 `webdavConfig.fileName` 交给 `path.join(this.backupDir, filename)`
+ * 与 `webdavClient.putFileContents(filename, ...)`。`fileName = '../../../Documents/x.zip'`
+ * 可让写盘/读出落在 `backupDir` 之外（`restoreFromWebdav` 会**覆盖**目标路径）。
+ *
+ * 这里把远端文件名收敛成"bucket 内的相对路径"：非空、非绝对、不含 `..` 段、不含 NUL。
+ * 其余（分隔符）保留——允许 `sub/dir/file.zip` 这类远端子目录是合理用法，本地侧再用
+ * `resolveAndValidatePath` 兜住根目录。
+ */
+export function assertSafeRemoteBackupFileName(fileName: string): string {
+  const candidate = fileName.trim()
+  const reject = (reason: string): never => {
+    throw new Error(`Invalid WebDAV backup file name: ${reason}`)
+  }
+  if (candidate.length === 0) reject('it is empty')
+  if (candidate.includes('\0')) reject('it contains a NUL byte')
+  if (path.isAbsolute(candidate) || /^[a-zA-Z]:[\\/]/.test(candidate)) reject('it is an absolute path')
+  if (candidate.split(/[\\/]/).includes('..')) reject('it contains a parent-directory segment ("..")')
+  return candidate
+}
+
 class BackupManager {
   /**
    * 「重置数据」要一并清空的 userData 根条目（v0.3.1-2 补齐）。
@@ -76,7 +98,34 @@ class BackupManager {
   /**
    * Handle backup restoration on app startup
    * Called after window is created but before renderer is loaded
+   *
+   * 目录还原顺序（v1 二轮审查 m2-02 修复）：**先挪开旧目录 → 再放入新目录 → 成功后才删旧目录**。
+   * 旧实现是「先 remove(旧) 再 rename(新)」，而 Windows 上 `kernel/sessions.db` 可能仍被上一进程
+   * 或杀软持有——remove 成功、rename 失败时旧数据已删、`.restore` 又被 catch 清掉，用户两份都没有。
+   * 本实现任一步失败都把旧目录改回原名，并保留 `.restore` 供下次启动重试。
    */
+  private static async restoreDirectory(staged: string, dest: string): Promise<void> {
+    const aside = `${dest}.pre-restore-${Date.now()}`
+    const destExists = await fs.pathExists(dest)
+    if (destExists) {
+      // 失败即上抛：目标未动，.restore 仍在（下次启动重试）
+      await fs.rename(dest, aside)
+    }
+    try {
+      await fs.rename(staged, dest)
+    } catch (error) {
+      if (destExists) {
+        await fs.rename(aside, dest).catch((rollbackError) => {
+          logger.error(`[handleStartupRestore] failed to roll back ${dest}:`, rollbackError as Error)
+        })
+      }
+      throw error
+    }
+    if (destExists) {
+      await fs.remove(aside).catch(() => {})
+    }
+  }
+
   static async handleStartupRestore(): Promise<void> {
     const userDataPath = app.getPath('userData')
 
@@ -112,48 +161,42 @@ class BackupManager {
       // Restore IndexedDB
       if (hasIndexedDBRestore) {
         logger.info('[handleStartupRestore] Found IndexedDB.restore directories, completing restoration...')
-        await fs.remove(indexedDBDest).catch(() => {})
-        await fs.rename(indexedDBRestore, indexedDBDest)
+        await BackupManager.restoreDirectory(indexedDBRestore, indexedDBDest)
       }
 
       // Restore Local Storage
       if (hasLocalStorageRestore) {
         logger.info('[handleStartupRestore] Found Local Storage.restore directories, completing restoration...')
-        await fs.remove(localStorageDest).catch(() => {})
-        await fs.rename(localStorageRestore, localStorageDest)
+        await BackupManager.restoreDirectory(localStorageRestore, localStorageDest)
       }
 
       // Restore Data
       if (hasDataRestore) {
         logger.info('[handleStartupRestore] Found Local Data.restore directories, completing restoration...')
-        await fs.remove(dataDest).catch(() => {})
-        await fs.rename(dataRestore, dataDest)
+        await BackupManager.restoreDirectory(dataRestore, dataDest)
       }
 
       // Restore userData 根目录下的重置目标（内核数据 / provider key / 应用配置）
-      // 逐条独立处理：Windows 上 kernel/sessions.db 若仍被上一进程占着，remove 会失败——
-      // 那时只放弃这一条（并清掉它自己的标记），不能让外层 catch 把另外两条的标记一起清掉。
+      // 逐条独立处理：某一条失败（如 kernel/sessions.db 仍被占）不影响其余条目，
+      // 也不清掉失败条目的 `.restore`——保留它供下次启动重试（v1 m2-02）。
       for (const entry of pendingRootEntries) {
         try {
           logger.info(`[handleStartupRestore] Found ${entry.name}.restore, completing restoration...`)
-          await fs.remove(entry.dest).catch(() => {})
-          await fs.rename(entry.staged, entry.dest)
+          await BackupManager.restoreDirectory(entry.staged, entry.dest)
         } catch (error) {
-          logger.error(`[handleStartupRestore] Failed to reset ${entry.name}:`, error as Error)
-          await fs.remove(entry.staged).catch(() => {})
+          logger.error(
+            `[handleStartupRestore] Failed to reset ${entry.name}; kept ${entry.name}.restore for the next start:`,
+            error as Error
+          )
         }
       }
 
       logger.info('[handleStartupRestore] Restoration completed successfully')
     } catch (error) {
       logger.error('[handleStartupRestore] Failed to complete restoration:', error as Error)
-      // Clean up restore markers to avoid endless retry loop
-      await fs.remove(indexedDBRestore).catch(() => {})
-      await fs.remove(localStorageRestore).catch(() => {})
-      await fs.remove(dataRestore).catch(() => {})
-      for (const entry of pendingRootEntries) {
-        await fs.remove(entry.staged).catch(() => {})
-      }
+      // 有意不清 `.restore`（v1 m2-02）：还原失败时它们是用户数据的唯一副本，
+      // 保留让下次启动重试；清掉才会造成"原库已删、备份已清"的双失。
+      logger.warn('[handleStartupRestore] .restore directories were kept for a retry on the next start')
     }
   }
 
@@ -259,7 +302,9 @@ class BackupManager {
       onProgress({ stage: 'compressing', progress: 80, total: 100 })
 
       // Step 5: Create ZIP archive
-      const backupedFilePath = path.join(destinationPath, fileName)
+      // v1 二轮审查 m2-14：落点统一过 resolveAndValidatePath（本地/WebDAV 两套入口
+      // 此前口径不一致——本地还原侧已有校验，写盘侧没有）。
+      const backupedFilePath = resolveAndValidatePath(destinationPath, fileName)
       const output = fs.createWriteStream(backupedFilePath)
       const archive = archiver('zip', {
         zlib: { level: 1 }, // Use lowest compression level for speed (same as legacy backup)
@@ -355,7 +400,8 @@ class BackupManager {
       }
 
       // Create output file stream
-      const backupedFilePath = path.join(destinationPath, fileName)
+      // v1 二轮审查 m2-14：同 backupDirect，落点过 resolveAndValidatePath。
+      const backupedFilePath = resolveAndValidatePath(destinationPath, fileName)
       const output = fs.createWriteStream(backupedFilePath)
 
       // Create archiver instance, enable ZIP64 support
@@ -484,7 +530,9 @@ class BackupManager {
    * @returns Result from WebDAV upload operation
    */
   async backupToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || 'cherry-studio.backup.zip'
+    // v1 二轮审查 m2-14：远端文件名先过结构化断言（本地落盘侧再由 backup() 内的
+    // resolveAndValidatePath 兜住根目录），非法即明确报错而不是写到 backupDir 之外。
+    const filename = assertSafeRemoteBackupFileName(webdavConfig.fileName || 'cherry-studio.backup.zip')
     const backupedFilePath = await this.backup(_, filename, undefined, webdavConfig.skipBackupFile)
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
@@ -759,11 +807,13 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || 'cherry-studio.backup.zip'
+    // v1 二轮审查 m2-14：与 backupToWebdav 同一断言；本地落点再经 resolveAndValidatePath
+    // 钉在 backupDir 内（restoreFromWebdav 会覆盖目标路径，此前可被 `../..` 带出根目录）。
+    const filename = assertSafeRemoteBackupFileName(webdavConfig.fileName || 'cherry-studio.backup.zip')
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
       const retrievedFile = await webdavClient.getFileContents(filename)
-      const backupedFilePath = path.join(this.backupDir, filename)
+      const backupedFilePath = resolveAndValidatePath(this.backupDir, filename)
 
       if (!fs.existsSync(this.backupDir)) {
         fs.mkdirSync(this.backupDir, { recursive: true })

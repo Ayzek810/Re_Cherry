@@ -138,7 +138,7 @@ const KnowledgeSitemaps: FC<KnowledgeContentProps> = ({ selectedBase }) => {
                     <Button
                       type="text"
                       danger
-                      onClick={() => removeItem(item)}
+                      onClick={() => void removeItem(item)}
                       icon={<DeleteIcon size={14} className="lucide-custom" />}
                     />
                   </FlexAlignCenter>
