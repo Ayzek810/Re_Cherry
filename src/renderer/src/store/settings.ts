@@ -179,7 +179,7 @@ export interface SettingsState {
   minappsOpenLinkExternal: boolean
   /** Mini app region filter: 'auto' (detect from IP), 'CN', or 'Global' */
   minAppRegion: MinAppRegionFilter
-  /** 编码助手（v0.3.4-1 批次4a）：V2 preference `feature.code_cli.configs` 的 fork redux 对位。 */
+  /** 编码助手：V2 preference `feature.code_cli.configs` 的 fork redux 对位。 */
   codeCliConfigs: CodeCliConfigs
   // 隐私设置
   privacyPolicyVersion?: string
@@ -187,7 +187,7 @@ export interface SettingsState {
   enableSpellCheck: boolean
   spellCheckLanguages: string[]
   enableQuickPanelTriggers: boolean
-  /** 翻译页偏好（v0.4.7 回补 V2 偏好项；migrate 226 回填）。 */
+  /** 翻译页偏好（回补 V2 偏好项；migrate 226 回填）。 */
   translateAutoCopy: boolean
   translateCustomPrompt: string
   translateCustomLanguages: CustomTranslateLanguage[]
@@ -368,10 +368,10 @@ export const initialState: SettingsState = {
   showOpenedMinappsInSidebar: true,
   minappsOpenLinkExternal: false,
   minAppRegion: 'auto',
-  // 编码助手（v0.3.4-1 批次4a）：持久化缝见 codeCliConfigs 注释。
+  // 编码助手：持久化缝见 codeCliConfigs 注释。
   codeCliConfigs: {},
   privacyPolicyVersion: LATEST_PRIVACY_POLICY_VERSION,
-  // v0.3.1-2：默认关闭数据收集（上游默认 true，会向 cherry-studio 通道上报）。
+  // 默认关闭数据收集（上游默认 true，会向 cherry-studio 通道上报）。
   enableDataCollection: false,
   enableSpellCheck: false,
   spellCheckLanguages: [],
@@ -684,7 +684,7 @@ const settingsSlice = createSlice({
       state.readClipboardAtStartup = action.payload
     },
     /**
-     * 固定标签页的持久化集合（v0.3.3-1）：`tabs` 切片在 persist `blacklist` 里（fork 的标签页本就
+     * 固定标签页的持久化集合：`tabs` 切片在 persist `blacklist` 里（fork 的标签页本就
      * 只在会话内），故固定的**跨重启**保留落在已持久化的 settings 上；启动时由
      * `TabsService.restorePinnedTabs()` 补回 tabs 切片。
      */
@@ -775,7 +775,7 @@ const settingsSlice = createSlice({
     setMinAppRegion: (state, action: PayloadAction<MinAppRegionFilter>) => {
       state.minAppRegion = action.payload
     },
-    // 编码助手（v0.3.4-1 批次4a）：V2 usePreference 写路径的 redux 对位（整值替换，
+    // 编码助手：V2 usePreference 写路径的 redux 对位（整值替换，
     // 写队列串行化在 useCodeCli 内保持）。
     setCodeCliConfigs: (state, action: PayloadAction<CodeCliConfigs>) => {
       state.codeCliConfigs = action.payload

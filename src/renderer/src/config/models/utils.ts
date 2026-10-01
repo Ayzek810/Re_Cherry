@@ -18,7 +18,7 @@ import {
 import { isQwenMTModel } from './qwen'
 import { isClaude45ReasoningModel } from './reasoning'
 import { isGenerateImageModel, isVisionModel } from './vision'
-// r2-110：本文件原先 export 了 `NOT_SUPPORTED_REGEX`（只被下面的 `isSupportedModel` 使用，
+// 本文件原先 export 了 `NOT_SUPPORTED_REGEX`（只被下面的 `isSupportedModel` 使用，
 // 而 `isSupportedModel` 自身只有测试引用），属"看起来是公共 API、实际无外部调用"的导出面。
 // 正则本体保留（`isSupportedModel` 仍在用），只是不再对外导出。
 const NOT_SUPPORTED_REGEX = /(?:^tts|whisper|speech)/i
@@ -42,7 +42,7 @@ export function isSupportFlexServiceTierModel(model: Model): boolean {
   )
 }
 
-// r2-110：`isSupportedFlexServiceTier` 是上面函数的纯转调别名，唯一消费者是测试
+// `isSupportedFlexServiceTier` 是上面函数的纯转调别名，唯一消费者是测试
 //（生产用的是 `isSupportFlexServiceTierModel`，见 `components/ServiceTierSetting`）。
 // 别名已删除，测试直接指向真身。
 
@@ -56,13 +56,13 @@ export function isSupportedModel(model: OpenAI.Models.Model): boolean {
   return !NOT_SUPPORTED_REGEX.test(modelId)
 }
 
-/** 采样参数名（r2-103：temperature 与 top_p 的门控判据逐字相同，只差注释，故只留一份实现）。 */
+/** 采样参数名（temperature 与 top_p 的门控判据逐字相同，只差注释，故只留一份实现）。 */
 export type SamplingParam = 'temperature' | 'top_p'
 
 /**
  * Check if the model supports a sampling parameter.
  *
- * r2-103：`isSupportTemperatureModel` / `isSupportTopPModel` 原本是两份逐行相同的五段判断
+ * `isSupportTemperatureModel` / `isSupportTopPModel` 原本是两份逐行相同的五段判断
  * （仅注释不同），现收敛为一份实现；两个旧名字保留为薄包装，既有消费方与测试不变。
  * `param` 今天**不**参与判断（两个参数的门控完全相同），保留在签名里是为了将来分化时
  * 只有一处需要分支。
@@ -103,7 +103,7 @@ export function isSupportSamplingParam(
     return false
   }
 
-  // Kimi K2.5 / K2.6 don't support custom temperature (top_p is fixed at 0.95)
+  // Kimi .5 / .6 don't support custom temperature (top_p is fixed at 0.95)
   if (isKimi25OrNewerModel(model)) {
     return false
   }
@@ -164,8 +164,8 @@ export function isKimi25OrNewerModel(model: Model | undefined | null): boolean {
     return false
   }
   const modelId = getLowerBaseModelName(model.id)
-  // Match Kimi K2.5+ (K2.5, K2.6, ..., K2.99) and K3+ (K3, K3.x, K4, ...).
-  // Older K2 variants (kimi-k2, kimi-k2-thinking, kimi-k2-0711-preview, ...) are excluded.
+  // Match Kimi .5+ (.5, .6, ..., .99) and + (, .x, , ...).
+  // Older variants (kimi-k2, kimi-k2-thinking, kimi-k2-0711-preview, ...) are excluded.
   return /kimi-k(?:2\.[5-9]\d*|[3-9]\d*)/.test(modelId)
 }
 
@@ -311,12 +311,12 @@ export const isGrokModel = (model: Model) => {
   return modelId.includes('grok')
 }
 
-// r2-110：`ZHIPU_RESULT_TOKENS`（`<|begin_of_box|>` / `<|end_of_box|>`）经全仓两法确认零引用
+// `ZHIPU_RESULT_TOKENS`（`<|begin_of_box|>` / `<|end_of_box|>`）经全仓两法确认零引用
 //（符号名 + 字面量 `begin_of_box` 均只命中定义行），原注释声称"zhipu 视觉推理模型用这组
-// special token 标记推理结果"与实际不符 —— 没有任何代码读取它们。按 §5.1 删除；
+// special token 标记推理结果"与实际不符 —— 没有任何代码读取它们。按 删除；
 // 若将来真要接入解析点，应在消费处定义并补用例。
 //
-// r2-110：`agentModelFilter` 曾是 `isChatCandidateModel` 的纯别名，约十处生产代码直接调用
+// `agentModelFilter` 曾是 `isChatCandidateModel` 的纯别名，约十处生产代码直接调用
 // `isChatCandidateModel`，别名本身只有测试引用（两法确认：符号名 + 别名文件搜索）。别名已删除，
 // 测试直接指向真身。
 
@@ -328,7 +328,7 @@ export const isMaxTemperatureOneModel = (model: Model): boolean => {
 }
 
 // major version, including current 3.x aliases.
-// r2-104：判据本体已迁到 `@shared/utils/model` 的 `isGemini3ModelId`（生产在用的一份，
+// 判据本体已迁到 `@shared/utils/model` 的 `isGemini3ModelId`（生产在用的一份，
 // 由 `src/main/features/apiGateway/.../AnthropicMessageConverter.ts:295` 消费）。
 // 渲染侧这份现在**逐字委托**它，不再各写一份；`gemini-flash-latest` / `gemini-pro-latest`
 // 别名判定在 shared 里同样存在（`packages/shared/utils/model.ts:234-237`）。
@@ -409,7 +409,7 @@ export const isGemini31ProModel = (model: Model | undefined | null): boolean => 
     return true
   }
   // Check for gemini-3.1-pro with optional suffixes, excluding image variants
-  // r2-84：`.` 必须转义——未转义时 `gemini-3x1-pro` / `gemini-3-1-pro` 也会命中
+  // `.` 必须转义——未转义时 `gemini-3x1-pro` / `gemini-3-1-pro` 也会命中
   // （同文件 `isGemini31FlashLiteModel` 已写作 `gemini-3\.1-flash-lite`）。
   return /gemini-3\.1-pro(?!-image)(?:-[\w-]+)*$/i.test(modelId)
 }

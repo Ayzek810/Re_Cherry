@@ -160,7 +160,7 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
         }
         return ''
       }
-      // r2-75：抓取失败会 reject（不再返回 'No content found' 的假成功），
+      // 抓取失败会 reject（不再返回 'No content found' 的假成功），
       // 由 useQuery 落 isError，下面渲染可见的失败态而不是空正文。
       const res = await fetchWebContent(citation.url, 'markdown')
       return cleanMarkdown(res.content)

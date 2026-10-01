@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/clear.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/clear.ts（2026-09-24）。
 // 缝点一处：V2 `ipcApi.request('code_cli.write_config', …)` → fork `window.api.codeCli.writeConfig`
 //（直连通道；返回 {success, message?} 形状与 V2 operationResult 一致，收窄见缝注）。
 

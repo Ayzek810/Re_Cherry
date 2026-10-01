@@ -20,7 +20,7 @@ export interface PaintingSizeInfo {
  * the skeleton (ratio) read the same effective value, so they share this one hook
  * instead of each re-running the derivation.
  *
- * v0.3.3 批次6：`support` 由调用方（页面/hook 层）从 fork 目录解析后传入——
+ * `support` 由调用方（页面/hook 层）从 fork 目录解析后传入——
  * fork 无 V2 的 `useImageGenerationSupport`（DataApi）查询层。
  */
 export function usePaintingSizeInfo(

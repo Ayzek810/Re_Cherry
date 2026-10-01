@@ -10,9 +10,9 @@ import { fetchSerpPage, fetchWebContent, isAbortError, noContent } from './webFe
 const logger = loggerService.withContext('LocalSearchProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 LocalSearchProvider.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 LocalSearchProvider.ts）：
  * - 渲染层 searchService 桥的 openUrlInSearchWindow → webFetch.fetchSerpPage
- *   （v0.3.2 真机事故改为三级回退链：隐藏窗口 → net.fetch → Node 直连；上游单级
+ * （真机事故改为三级回退链：隐藏窗口 → net.fetch → Node 直连；上游单级
  *   窗口路径在 Chromium 网络服务失效的机器上整体死路，详见 webFetch 注释）；
  *   closeSearchWindow 为 fork SearchService 补齐的方法（按 uid 泄漏窗口修复）。
  * - parseValidUrls 的 DOM 解析查询 → @shared/utils/searchResultParser（子类只声明

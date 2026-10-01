@@ -1,5 +1,5 @@
 /**
- * c2-37 行为测试：图片 object URL 必须被 revoke。
+ * 图片 object URL 必须被 revoke。
  *
  * 原状：`compressImage` 与 `getImageInfo` 都 `URL.createObjectURL(file)` 却从不 revoke，
  * blob URL 注册表把每张处理过的图片字节留在内存里直到文档卸载；而 `compressImage` 对每张
@@ -34,7 +34,7 @@ const installImage = (behaviour: 'load' | 'error') => {
   }
 }
 
-describe('imageUtils object URL lifecycle (c2-37)', () => {
+describe('imageUtils object URL lifecycle', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })

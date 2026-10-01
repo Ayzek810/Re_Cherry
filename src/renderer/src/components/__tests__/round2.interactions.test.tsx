@@ -1,9 +1,9 @@
 /**
- * c2-46 / c2-42 行为测试：两处交互契约。
+ * 两处交互契约。
  *
- * c2-46：`ConfirmDialog` 用一个只比对话框低一层的全屏透明遮罩承担「点击外部取消」——
+ * `ConfirmDialog` 用一个只比对话框低一层的全屏透明遮罩承担「点击外部取消」——
  *        对话框可见期间页面上任何其他交互都会先命中遮罩并直接触发 `onCancel`。
- * c2-42：`EditableNumber` 非编辑态只是 `opacity: 0`（仍可 Tab 聚焦、仍接收键盘输入）；
+ * `EditableNumber` 非编辑态只是 `opacity: 0`（仍可 Tab 聚焦、仍接收键盘输入）；
  *        Enter 手动调 `handleBlur()` 之后真实 blur 会再通知一次 `onBlur`。
  */
 import { fireEvent, render } from '@testing-library/react'
@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import ConfirmDialog from '../ConfirmDialog'
 import EditableNumber from '../EditableNumber'
 
-describe('ConfirmDialog outside-click (c2-46)', () => {
+describe('ConfirmDialog outside-click', () => {
   it('does not render a full-screen overlay that swallows other interactions', () => {
     render(<ConfirmDialog x={10} y={10} message="delete?" onConfirm={vi.fn()} onCancel={vi.fn()} />)
 
@@ -43,7 +43,7 @@ describe('ConfirmDialog outside-click (c2-46)', () => {
   })
 })
 
-describe('EditableNumber interaction contract (c2-42)', () => {
+describe('EditableNumber interaction contract', () => {
   const numberInput = () => document.querySelector('input') as HTMLInputElement
 
   it('takes the hidden input out of the tab order and out of view', () => {

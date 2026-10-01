@@ -67,7 +67,7 @@ const TAG_COLORS = {
 type ContentStats = MessageContentStats | TopicContentStats
 
 /**
- * c2-41：保存路径的错误分类不再依赖人类可读英文子串（`error.message.includes('not properly configured')`）。
+ * 保存路径的错误分类不再依赖人类可读英文子串（`error.message.includes('not properly configured')`）。
  * 抛错侧带稳定的错误码，渲染侧用显式 Record 映射到 i18n 键。
  */
 type SaveErrorCode = 'base-not-configured' | 'note-read-failed' | 'note-empty'
@@ -123,7 +123,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const [selectedTypes, setSelectedTypes] = useState<ContentType[]>([])
   const [hasInitialized, setHasInitialized] = useState(false)
   const [contentStats, setContentStats] = useState<ContentStats | null>(null)
-  // c2-12：分析失败与「确实没有可保存内容」必须可区分。
+  // 分析失败与「确实没有可保存内容」必须可区分。
   const [analysisError, setAnalysisError] = useState(false)
   const [analysisAttempt, setAnalysisAttempt] = useState(0)
   const { bases } = useKnowledgeBases()
@@ -149,7 +149,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
         setContentStats(stats)
       } catch (error) {
         logger.error('analyze content failed:', error as Error)
-        // 家规「A failure must never look like an empty result」：这里**不**写全零统计——
+        // 这里**不**写全零统计——
         // 全零会让 UI 走「此消息没有可保存的内容」空态，把一个失败渲染成与事实相反的结论。
         // 保持 contentStats 为 null，只置错误态，由 UI 给出可见的错误 + 重试。
         setAnalysisError(true)
@@ -240,7 +240,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       return { type: 'loading', message: t('chat.save.topic.knowledge.loading') }
     }
 
-    // c2-12：分析失败走独立的错误态（含重试），不再落到下面的「无内容」空态。
+    // 分析失败走独立的错误态（含重试），不再落到下面的「无内容」空态。
     if (analysisError) {
       return { type: 'error', message: t('error.unknown') }
     }
@@ -328,7 +328,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
     } catch (error) {
       logger.error('save failed:', error as Error)
 
-      // c2-41：错误分类走错误码，不再用英文子串匹配决策文案分支。
+      // 错误分类走错误码，不再用英文子串匹配决策文案分支。
       const errorMessage =
         error instanceof SaveToKnowledgeError
           ? t(SAVE_ERROR_KEY[error.code])
@@ -391,7 +391,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
                   tabIndex={0}
                   onClick={() => handleContentTypeToggle(option.type)}
                   onKeyDown={(event) => {
-                    // c2-24：内容类型行原本只有 onClick，键盘用户无法勾选，而「保存」的可用性
+                    // 内容类型行原本只有 onClick，键盘用户无法勾选，而「保存」的可用性
                     // 由这些选择决定 —— 键盘用户会卡在一个永远禁用保存、且没有说明原因的弹窗里。
                     if (event.key !== 'Enter' && event.key !== ' ') return
                     event.preventDefault()
@@ -537,7 +537,7 @@ const ContentTypeItem = styled(Flex)`
     border-color: var(--color-primary);
   }
 
-  /* c2-24：键盘路径必须有可见焦点。 */
+  /* 键盘路径必须有可见焦点。 */
   &:focus-visible {
     border-color: var(--color-primary);
     outline: 2px solid var(--color-primary);

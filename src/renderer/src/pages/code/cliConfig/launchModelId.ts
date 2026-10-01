@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/launchModelId.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/launchModelId.ts（2026-09-24）。
 // 缝点三处（import 对号，函数体逐字）：
 // ① i18n 缝：V2 `@renderer/i18n/resolver` → fork `@renderer/i18n`（fork 无 resolver 入口）。
 // ② logger 缝：V2 `@renderer/services/LoggerService` → fork `@logger`。

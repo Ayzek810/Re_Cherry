@@ -26,7 +26,7 @@ const PlaceholderBlock: React.FC<PlaceholderBlockProps> = ({ icon, message, onCl
   }
 
   return (
-    // c2-42③：原来是裸可点 div（无 role/tabIndex/aria-label/键盘处理），
+    // 原来是裸可点 div（无 role/tabIndex/aria-label/键盘处理），
     // 「插入图片 / 插入公式」在键盘路径上完全不可达。改成真正的 button。
     <button
       type="button"

@@ -1,8 +1,8 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/types.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/types.ts（2026-09-24）。
 // fork 缝：VersionStatus 的 applicationStatus/operation 面按 fork BinaryManager 快照子集收窄——
 // V2 为 BinaryApplication/BinaryOperation 对象（src/shared/types/binary.ts，fork 不建该
 // shared 文件，fork 快照 application 为扁平状态串且无 operation 广播面）。
-// 批次4b 回挂：CodeToolMeta 按 V2 原文补齐（icon 面 = components/CliIcon 的 IconComponent 替身）。
+// 回挂：CodeToolMeta 按 V2 原文补齐（icon 面 = components/CliIcon 的 IconComponent 替身）。
 
 import type { CodeCli } from '@shared/types/codeCli'
 import type { InstallProgressPayload } from '@shared/types/installProgress'
@@ -26,7 +26,7 @@ export interface VersionStatus {
   latest?: string
   canUpgrade: boolean
   /**
-   * v0.4.5-1（O7）：主进程记录的上次安装/升级失败原因。版本卡的失败行据此持久显示
+   * （）：主进程记录的上次安装/升级失败原因。版本卡的失败行据此持久显示
    * （刷新/重启后仍在）——此前失败原因只活在一次 toast 里。
    */
   lastFailure?: string

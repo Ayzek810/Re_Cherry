@@ -1,10 +1,9 @@
 /**
- * 二轮审查 f2-51：`Dsh_SearchMessages` 是渲染层唯一一个既无 boot 窗口重试、也无 catch 的内核查询。
+ * `Dsh_SearchMessages` 是渲染层唯一一个既无 boot 窗口重试、也无 catch 的内核查询。
  *
  * 缺陷形态：`const { hits } = await window.api.dshSearchMessages(...)` 直调，`setIsLoading(false)`
  * 只在成功路径执行。主进程 handler 要等 `initTopics()` 之后才注册，启动窗口内会以
- * "No handler registered" 拒绝（CLAUDE.md §6.5：每个内核查询都要容忍 boot 窗口，用
- * `retryKernelQuery`）。失败后果比"空结果"更糟：`Spin spinning` 永久转圈，而结果 `List` 被
+ * "No handler registered" 拒绝。失败后果比"空结果"更糟：`Spin spinning` 永久转圈，而结果 `List` 被
  * `opacity: 0`（`isLoading ? 0 : 1`）永久置为全透明 → 面板同时"转圈 + 看不见"。
  *
  * 行为级断言：
@@ -55,7 +54,7 @@ function hit(seq: number) {
   }
 }
 
-describe('SearchResults 内核检索的失败语义（f2-51）', () => {
+describe('SearchResults 内核检索的失败语义', () => {
   beforeEach(() => {
     dshSearchMessages.mockReset()
     toastError.mockReset()

@@ -1,5 +1,5 @@
 // fork 移植自 cherry-studio v2 src/shared/data/preference/preferenceTypes.ts L326-372
-//（2026-09-24，v0.3.4-1 批次4a）。字段名逐字；差异仅两处，均已标 `// fork 缝`：
+//（2026-09-24）。字段名逐字；差异仅两处，均已标 `// fork 缝`：
 // ① CodeCliId 在 V2 是 CODE_CLI_IDS 字面量联合，fork 按 CodeCli enum 收窄（两工具）。
 // ② UniqueModelId 来自 fork @shared/types/uniqueModelId（V2 为 @shared/data/types/model）。
 

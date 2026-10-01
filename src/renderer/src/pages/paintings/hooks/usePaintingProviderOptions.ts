@@ -1,5 +1,5 @@
 /**
- * provider 下拉选项 hook（v0.3.3 批次4，V2 usePaintingProviderOptions 重写 ~30 行）：
+ * provider 下拉选项 hook（V2 usePaintingProviderOptions 重写 ~30 行）：
  * redux providers → paintingModelSelection.selectImageGenerationModels 过滤
  * → antd Select options。V2 的 OVMS 状态门在 fork 无此概念（跳过）。
  */

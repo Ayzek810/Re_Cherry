@@ -41,7 +41,7 @@ export interface GatewayStreamOverrides {
   temperature?: number
   maxTokens?: number
   stop?: string[]
-  /** 思考档位（KERNEL_REASONING_LEVELS 词表；批次3b 无推导源，恒 undefined）。 */
+  /** 思考档位（KERNEL_REASONING_LEVELS 词表；无推导源，恒 undefined）。 */
   reasoningEffort?: string
   /** OpenAI function tools（proxyStream 已解析出的 converters ToolSet）。 */
   tools?: ToolSet

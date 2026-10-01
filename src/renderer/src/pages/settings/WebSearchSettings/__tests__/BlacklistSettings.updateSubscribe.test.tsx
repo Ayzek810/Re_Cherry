@@ -19,7 +19,7 @@ beforeAll(() => {
 })
 
 /**
- * 「更新选中订阅源」的整条链路（v1 二轮审查 s2-01）。
+ * 「更新选中订阅源」的整条链路。
  *
  * 修改前的契约：把 subscribeSources **整片替换**为本次解析成功的条目，未选中的订阅源
  * 连同它们已解析的 blacklist 一起消失，且照旧弹成功 toast。
@@ -107,7 +107,7 @@ const rowCheckboxes = () =>
 const clickUpdate = () => fireEvent.click(screen.getByRole('button', { name: /^(Update|立即更新)$/ }))
 
 describe('更新选中订阅源', () => {
-  it('只更新选中源的 blacklist，未选中源与其规则原样保留（s2-01 整片替换回归）', async () => {
+  it('只更新选中源的 blacklist，未选中源与其规则原样保留（整片替换回归）', async () => {
     const sources = [source(0, 'A', ['old-a']), source(1, 'B', ['keep-b']), source(2, 'C', ['keep-c'])]
     const parsed = ['new-a']
     parseSubscribeContentMock.mockImplementation(() => Promise.resolve(parsed))

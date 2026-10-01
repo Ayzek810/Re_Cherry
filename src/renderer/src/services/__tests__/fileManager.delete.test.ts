@@ -2,7 +2,7 @@ import type { FileMetadata } from '@renderer/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 删除纪律（二轮审查 r2-45，CLAUDE.md §9）：
+ * 删除纪律：
  *   · `deleteFile` 返回 `Promise<boolean>`（旧签名 `Promise<void>` 让调用方结构上无法回滚）；
  *   · `deleteFiles` 返回 `{succeeded, failed}` 并把 "N 成功 / M 失败" 作为**真实信号**上报
  *     （旧实现只写一条日志）。
@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.stubGlobal('window', { ...globalThis.window, api: { file: { delete: fileDelete } }, toast: { error: toastError } })
 })
 
-describe('FileManager.deleteFile（r2-45）', () => {
+describe('FileManager.deleteFile', () => {
   it('成功 → true，并删掉盘上字节', async () => {
     filesGet.mockResolvedValue(file('f1'))
 
@@ -85,7 +85,7 @@ describe('FileManager.deleteFile（r2-45）', () => {
   })
 })
 
-describe('FileManager.deleteFiles（r2-45）', () => {
+describe('FileManager.deleteFiles', () => {
   it('部分失败 → 返回真实计数并弹可见信号', async () => {
     filesGet.mockImplementation((id: string) => Promise.resolve(file(id)))
     fileDelete.mockImplementation((name: string) =>

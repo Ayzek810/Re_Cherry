@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useHealthCheck } from '../useHealthCheck'
 
 /**
- * 健康检查的失败信号（v1 二轮审查 s2-03）。
+ * 健康检查的失败信号。
  *
  * 修改前这里无条件用 `toast.info` 播 `summarizeHealthResults` 的汇总：整批失败时汇总
  * 文本是「0 个模型通过健康检测」，也就是把一次整体失败渲染成成功态。现在没有任何成功

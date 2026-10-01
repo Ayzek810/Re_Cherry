@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { BaseSettingsPopup } from '../BaseSettingsPopup'
 
 describe('BaseSettingsPopup 的「确认」键与取消之别', () => {
-  it('渲染确认键，点击后以 confirmed=true 关闭（v0.3.1-2：此前 footer 为 null，只能靠 X 关闭）', async () => {
+  it('渲染确认键，点击后以 confirmed=true 关闭（此前 footer 为 null，只能靠 X 关闭）', async () => {
     const onClose = vi.fn()
 
     render(

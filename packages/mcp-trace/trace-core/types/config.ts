@@ -24,7 +24,7 @@ export interface TelemetryConfig {
 
 /**
  * Adapter configuration. There is no per-span attribute budget here: the one cap
- * that exists lives in `core/traceMethod.ts` (k2-15). A field nothing reads only
+ * that exists lives in `core/traceMethod.ts` . A field nothing reads only
  * made the cap look configurable.
  */
 export type TraceConfig = TelemetryConfig

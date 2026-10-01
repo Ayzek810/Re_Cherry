@@ -82,7 +82,7 @@ const NotesPage: FC = () => {
   const lastFilePathRef = useRef<string | undefined>(undefined)
   const isRenamingRef = useRef(false)
   const isCreatingNoteRef = useRef(false)
-  // f2-38：树装载的单调序号——只有最后一次请求的结果可以写回 notesTree。
+  // 树装载的单调序号——只有最后一次请求的结果可以写回 notesTree。
   const refreshSequenceRef = useRef(0)
   const pendingScrollRef = useRef<{ lineNumber: number; lineContent?: string } | null>(null)
 
@@ -143,10 +143,10 @@ const NotesPage: FC = () => {
   /**
    * 刷新笔记树。
    *
-   * 失败语义（二轮审查 f2-33 第 6 条写路径）：读失败**不得**静默——否则用户看到的是"刚建的笔记
+   * 失败语义（第 6 条写路径）：读失败**不得**静默——否则用户看到的是"刚建的笔记
    * 不在列表里"这种与数据丢失同形的画面。这里保留旧树（stale-while-error），只补一条可见信号。
    *
-   * 乱序语义（二轮审查 f2-38）：本函数被文件 watcher 与每个写操作后调用，是可并发触发的**整体替换**。
+   * 乱序语义：本函数被文件 watcher 与每个写操作后调用，是可并发触发的**整体替换**。
    * 先发起的读若后返回（大目录 readdir + IPC 抖动），会把旧快照装回去——刚建的笔记从列表消失、
    * 已删的笔记复现，且下面那条"activeFilePath 不在树里就清空"的效应会误判用户在编辑的笔记
    * 已被删除。故只接受**最后一次**请求的结果（序号守卫），与 `useCurrentCliConfigConnection`
@@ -210,7 +210,7 @@ const NotesPage: FC = () => {
         // 保存后立即刷新缓存，确保下次读取时获取最新内容
         invalidateFileContent(targetPath)
       } catch (error) {
-        // 防抖保存是 fire-and-forget 写：§9 要求它也必须有用户可见信号，否则用户以为已经保存。
+        // 防抖保存是 fire-and-forget 写：要求它也必须有用户可见信号，否则用户以为已经保存。
         logger.error('Failed to save note:', error as Error)
         window.toast.error(t('notes.save_failed'))
       }
@@ -515,7 +515,7 @@ const NotesPage: FC = () => {
         updateExpandedPaths((prev) => addUniquePath(prev, normalizePathValue(targetPath)))
         await refreshTree()
       } catch (error) {
-        // §9：写路径失败必须可见——旧实现只落 logger.error，用户看到的是"点了没反应"。
+        // 写路径失败必须可见——旧实现只落 logger.error，用户看到的是"点了没反应"。
         logger.error('Failed to create folder:', error as Error)
         window.toast.error(t('notes.create_folder_failed'))
       }
@@ -614,7 +614,7 @@ const NotesPage: FC = () => {
         const nodeToDelete = findNode(notesTree, nodeId)
         if (!nodeToDelete) return
 
-        // delNode 返回 Promise<boolean>（§9 删除纪律）：false 不是"已删除"的同一件事。
+        // delNode 返回 Promise<boolean>（删除纪律）：false 不是"已删除"的同一件事。
         // 本路径没有乐观行可回滚，`refreshTree` 把树对齐到真实状态即是恢复动作；
         // 但失败仍必须有用户可见信号——否则用户看到的是"点了没反应"。
         const deleted = await delNode(nodeToDelete)
@@ -667,7 +667,7 @@ const NotesPage: FC = () => {
         const renamed = await renameEntry(node, newName)
 
         if (!renamed.ok) {
-          // 重名是**业务结果**而非异常（f2-33）：明确告诉用户撞了哪个名字，并保持编辑器可重试。
+          // 重名是**业务结果**而非异常：明确告诉用户撞了哪个名字，并保持编辑器可重试。
           window.toast.warning(t('notes.rename_name_exists', { name: renamed.safeName }))
           return
         }

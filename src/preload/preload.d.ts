@@ -1,7 +1,7 @@
 import type { WindowApiType } from './index'
 
 /**
- * `window.electron` 不再是 `@electron-toolkit/preload` 的整个 `ElectronAPI`（k2-06）：
+ * `window.electron` 不再是 `@electron-toolkit/preload` 的整个 `ElectronAPI`：
  * 只留白名单化的 `ipcRenderer.invoke/send` 与最小 `process`（`platform` + 三个日志键）。
  * 渲染层的主通路是 `window.api`；`window.electron` 只服务少数未迁到 `api` 的调用点。
  */

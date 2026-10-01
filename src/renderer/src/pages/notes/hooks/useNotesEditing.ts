@@ -32,7 +32,7 @@ export const useNotesEditing = ({ onRenameNode }: UseNotesEditingProps) => {
   })
 
   /**
-   * f2-36：`useInPlaceEdit` 每次渲染都返回新对象，若把它放进 `handleStartEdit` 的依赖数组，
+   * `useInPlaceEdit` 每次渲染都返回新对象，若把它放进 `handleStartEdit` 的依赖数组，
    * `handleStartEdit` 就每渲染换引用 → `useNotesMenu.getMenuItems` → `NotesActionsContext`
    * 一路跟着换 → `memo` 的 TreeNode 全量重渲染。方法本身逐次取最新即可，引用固定。
    */

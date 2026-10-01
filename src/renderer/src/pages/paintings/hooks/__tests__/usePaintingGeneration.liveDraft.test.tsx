@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-16：生成完成时用「提交瞬间的快照」整体覆盖当前草稿。
+ * 生成完成时用「提交瞬间的快照」整体覆盖当前草稿。
  *
  * 缺陷形态：成功路径 `applyIfVisible({ ...targetPainting, files: generatedFiles })`，
  * `targetPainting` 是 `generate()` 入口处的闭包快照；而生成期间输入框、模型选择器、参数
@@ -99,7 +99,7 @@ const EDITED_WHILE_RUNNING: PaintingData = {
   params: { size: '512x512' }
 }
 
-describe('usePaintingGeneration 生成完成只并 files（f2-16）', () => {
+describe('usePaintingGeneration 生成完成只并 files', () => {
   it('完成时保留生成期间的编辑，只并入新文件', async () => {
     let resolveGenerate: (value: unknown) => void = () => {}
     paintingGenerate.mockImplementationOnce(

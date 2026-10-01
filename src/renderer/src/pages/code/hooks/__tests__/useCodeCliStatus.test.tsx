@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-43：`useCodeCliStatus` 四个同形 hook 的自持渲染环。
+ * `useCodeCliStatus` 四个同形 hook 的自持渲染环。
  *
  * 缺陷形态：effect 的依赖数组里放着调用方每次渲染都会新建的箭头函数（`getStatus` / `onStatus`），
  * 于是 effect 每次渲染都重跑——重新发一次 `getStatus()` IPC 并重新订阅；而 IPC 回来的对象引用必然与
@@ -40,7 +40,7 @@ function installCodeCliApi(bridge: ReturnType<typeof makeStatusBridge>) {
   }
 }
 
-describe('useCodeCliStatus（f2-43：自持渲染环）', () => {
+describe('useCodeCliStatus（自持渲染环）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

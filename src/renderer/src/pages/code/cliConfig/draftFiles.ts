@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/draftFiles.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/draftFiles.ts（2026-09-24）。
 // 逐字（hermes 依赖闭包内全量保留；TOML/JSON 臂的 parseFn 依赖随 file.ts 的依赖缝说明）。
 
 import { CLI_CONFIG_FILE_SPECS } from '@shared/utils/cliConfig'

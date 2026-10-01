@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/draftUpdater.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/draftUpdater.ts（2026-09-24）。
 // 逐字（hermes 依赖闭包内全量保留）。
 
 import { getAdapter, sanitizeCliConfigBlob } from './adapters'

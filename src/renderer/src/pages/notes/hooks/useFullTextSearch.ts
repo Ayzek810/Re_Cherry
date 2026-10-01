@@ -23,10 +23,10 @@ export interface UseFullTextSearchReturn {
   }
   error: Error | null
   /**
-   * 逐文件失败数（`searchAllFiles` 的 failures 汇总，r2-05 起服务层显式给出）。
+   * 逐文件失败数（`searchAllFiles` 的 failures 汇总， 起服务层显式给出）。
    *
    * 全库检索的"部分失败"必须可见：整棵树读失败时结果集是空的，若只有 `error` 一个信号，
-   * 用户看到的就是"搜到 0 条"（§9 failure must never look like an empty result）。
+   * 用户看到的就是"搜到 0 条"（failure must never look like an empty result）。
    */
   failedFiles: number
   /** 第一条失败的原因，供状态条的 `title` 展示（无失败时为 null）。 */
@@ -35,7 +35,7 @@ export interface UseFullTextSearchReturn {
    * 已产出 `results` / `stats` 的关键词（`null` = 尚无结果）。
    *
    * 消费方要靠它区分"这次关键词搜到了 0 条"与"这次关键词还没搜完"——`stats.total === 0`
-   * 单独无法表达后者（防抖窗口内它仍是上一个关键词的值），二轮审查 f2-35 的
+   * 单独无法表达后者（防抖窗口内它仍是上一个关键词的值）， 的
    * 空结果占位必须落在真答案上，不能落在旧答案上。
    */
   searchedKeyword: string | null

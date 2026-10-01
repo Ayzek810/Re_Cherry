@@ -15,7 +15,7 @@ interface Props {
 const ConfirmDialog: FC<Props> = ({ x, y, message, onConfirm, onCancel }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  // c2-46：原实现用一个只比对话框低一层的全屏透明遮罩承担「点击外部取消」。
+  // 原实现用一个只比对话框低一层的全屏透明遮罩承担「点击外部取消」。
   // 对话框可见期间，页面上任何其他交互都会先命中遮罩并直接触发 `onCancel` ——
   // 用户想点别的按钮会先「取消」再穿透。改为在 document 上听 mousedown，
   // 只在指针确实落在对话框之外时取消。

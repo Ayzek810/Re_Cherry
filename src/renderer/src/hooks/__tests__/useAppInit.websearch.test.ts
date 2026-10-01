@@ -1,5 +1,5 @@
 /**
- * r2-33：`useAppInit` 的 websearch → 内核投影只由**载荷真正读取的字段**决定。
+ * `useAppInit` 的 websearch → 内核投影只由**载荷真正读取的字段**决定。
  *
  * 此前 effect 依赖整个 `state.websearch` 切片对象（Redux 每次 websearch action 都产出新引用），
  * 于是拨动任意无关开关（defaultProvider/overwrite/providerConfig…，mini 窗口广播也算）都会把
@@ -47,7 +47,7 @@ const build = (state: WebSearchState, language = 'zh-CN') =>
     language
   })
 
-describe('buildKernelWebSearchConfig（r2-33）', () => {
+describe('buildKernelWebSearchConfig', () => {
   it('投影包含全部消费字段（收窄 selector 不改变载荷形状）', () => {
     const config = build(baseState())
     expect(config.providers).toEqual([

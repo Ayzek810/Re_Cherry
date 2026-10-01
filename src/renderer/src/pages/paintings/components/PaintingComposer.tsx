@@ -138,11 +138,11 @@ const PaintingParamsButton: FC<{
   painting: PaintingData
   onConfigChange: (updates: Partial<PaintingData>) => void
   onGenerateRandomSeed?: (key: string) => void
-  /** fork 缝（v0.3.3-7）：工具栏放不下时进图标态（V2 同源）——只留齿轮，参数摘要是按钮的 aria-label。 */
+  /** fork 缝：工具栏放不下时进图标态（V2 同源）——只留齿轮，参数摘要是按钮的 aria-label。 */
   iconOnly?: boolean
 }> = ({ painting, onConfigChange, onGenerateRandomSeed, iconOnly }) => {
   const { t } = useTranslation()
-  // fork 缝（v0.3.3 批次6 / v0.3.3-9）：support 从 fork 目录按 (providerId, model) 解析，
+  // fork 缝：support 从 fork 目录按 (providerId, model) 解析，
   // 字段面因此随模型能力变化（V2 是 useImageGenerationSupport 查询，同语义）。目录未收录时
   // 用**通用兜底字段面**——V2 里"没字段就整块隐藏"可行是因为它的模型表就是 registry 表，
   // fork 的绘画页按模型能力列模型（含用户自建 provider），隐藏等于把参数入口整块删掉。

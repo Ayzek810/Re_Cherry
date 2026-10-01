@@ -33,7 +33,7 @@ const KnowledgeContent: FC<KnowledgeContentProps> = ({ selectedBase }) => {
   const [activeKey, setActiveKey] = useState('files')
   // 进度/预处理态的两个 map 保持"空 = 未知"：四条曾经的进度通道
   //（`file-preprocess-finished` / `file-preprocess-progress` / `file-ocr-progress` /
-  // `directory-processing-percent`）在主进程**零发送点**，监听永远不会触发（k2-07）。
+  // `directory-processing-percent`）在主进程**零发送点**，监听永远不会触发。
   // 与其留一条永久静默的订阅，不如让能力面为空——子组件对 `undefined` 的处置本来就是
   // 回落到条目自身的 `isPreprocessed` / `getProcessingStatus`（KnowledgeFiles.tsx:214-215）。
   const [progressMap] = useState<Map<string, number>>(new Map())

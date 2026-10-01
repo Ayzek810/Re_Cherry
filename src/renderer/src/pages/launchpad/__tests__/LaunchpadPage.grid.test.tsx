@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-62：启动台入口卡片已增至 7 个，但网格仍写死 6 列。
+ * 启动台入口卡片已增至 7 个，但网格仍写死 6 列。
  *
  * 行为级断言：网格的列定义必须与入口数量的变化解耦（不再写死 `repeat(6, 1fr)`），
  * 并且 7 个入口全部渲染出来（不是被列数限制掉）。
@@ -35,7 +35,7 @@ function gridElement(): HTMLElement {
   return gridElements()[0]
 }
 
-describe('LaunchpadPage 网格列定义（f2-62）', () => {
+describe('LaunchpadPage 网格列定义', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     minappsMock.pinned = []

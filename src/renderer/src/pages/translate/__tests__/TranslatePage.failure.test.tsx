@@ -1,12 +1,12 @@
 /**
- * 二轮审查 f2-24 / f2-32：翻译页的两条失败语义。
+ * 翻译页的两条失败语义。
  *
- * f2-24 缺陷形态：`loadHistory` 的 catch 只 `logger.warn`，抽屉消费侧是
+ * 缺陷形态：`loadHistory` 的 catch 只 `logger.warn`，抽屉消费侧是
  * `items.length === 0 ? <Empty description={t('translate.history_empty')} /> : …`——Dexie 打不开/
  * 表结构不符时用户看到官方的"暂无翻译记录"空态，会以为真的没有记录（本地历史是唯一副本），
- * 进而重复翻译或误判数据丢失。§9「A failure must never look like an empty result」。
+ * 进而重复翻译或误判数据丢失。「A failure must never look like an empty result」。
  *
- * f2-32 缺陷形态：卸载守卫（`cancelledRef`）只覆盖事件回调与成功/失败分支，漏掉 `finally`——
+ * 缺陷形态：卸载守卫（`cancelledRef`）只覆盖事件回调与成功/失败分支，漏掉 `finally`——
  * 翻译进行中切走路由（懒加载页面，卸载很常见）后，流结束仍在已卸载组件上 `setTranslating(false)`。
  *
  * 行为级断言：① 历史读取失败 → 抽屉渲染错误态 + 重试按钮，且**不**渲染 `history_empty` 空态；
@@ -53,7 +53,7 @@ function renderPage() {
   )
 }
 
-describe('TranslatePage 失败语义（f2-24 / f2-32）', () => {
+describe('TranslatePage 失败语义', () => {
   beforeEach(() => {
     toArray.mockReset()
     lightStream.mockReset()
@@ -69,7 +69,7 @@ describe('TranslatePage 失败语义（f2-24 / f2-32）', () => {
     }
   })
 
-  it('历史读取失败渲染错误态 + 重试，而不是"暂无翻译记录"（f2-24）', async () => {
+  it('历史读取失败渲染错误态 + 重试，而不是"暂无翻译记录"', async () => {
     toArray.mockRejectedValueOnce(new Error('IndexedDB open failed'))
 
     const { container } = renderPage()
@@ -103,7 +103,7 @@ describe('TranslatePage 失败语义（f2-24 / f2-32）', () => {
     expect(screen.getAllByText('No translation records').length).toBeGreaterThan(0)
   })
 
-  it('卸载后流结束不再写状态（f2-32）', async () => {
+  it('卸载后流结束不再写状态', async () => {
     toArray.mockResolvedValue([])
     let releaseStream: () => void = () => {}
     lightStream.mockImplementationOnce(

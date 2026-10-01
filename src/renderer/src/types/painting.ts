@@ -1,5 +1,5 @@
 /**
- * 绘画页类型（v0.3.3 批次4）：生成历史行（Dexie paintings 表）与生成参数。
+ * 绘画页类型：生成历史行（Dexie paintings 表）与生成参数。
  * 形状对齐 V2 PaintingSchema 收窄版；图片字节落 FileStorage（saveBase64Image），
  * 本表只存 FileMetadata 引用。
  */
@@ -8,7 +8,7 @@ import type { FileMetadata } from './index'
 /**
  * 绘画生成参数（表单态；提交时映射为 `LightImageGenerateCall`）。
  *
- * v0.3.3 批次6：键名统一到 V2 canonical（`size`/`numImages`）。旧行里的
+ * 键名统一到 V2 canonical（`size`/`numImages`）。旧行里的
  * `imageSize`/`batchSize` 由 `canonicalGenerate.withLegacyAliases` 读时兼容，
  * 故两者在此仍标为可选（不删字段——Dexie 里真有带旧键的历史行）。
  */
@@ -17,9 +17,9 @@ export interface PaintingParams {
   negativePrompt?: string
   size?: string
   numImages?: number
-  /** @deprecated v0.3.3 批次6 前的旧键；读时经 withLegacyAliases 映射为 `size`。 */
+  /** @deprecated 前的旧键；读时经 withLegacyAliases 映射为 `size`。 */
   imageSize?: string
-  /** @deprecated v0.3.3 批次6 前的旧键；读时经 withLegacyAliases 映射为 `numImages`。 */
+  /** @deprecated 前的旧键；读时经 withLegacyAliases 映射为 `numImages`。 */
   batchSize?: number
   seed?: string
   numInferenceSteps?: number

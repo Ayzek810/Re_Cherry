@@ -1,7 +1,7 @@
 /**
- * v0.3.2 自 CS_V1 移植（MCP 服务器读写 hooks）。
+ * 自 CS_V1 移植（MCP 服务器读写 hooks）。
  * fork 改动点：去掉 V1 的两个模块级主进程监听（Mcp_ServersChanged / Mcp_AddServer）——
- * 服务器进程管理与主进程同步属批次3 接线；本切片当前即唯一真相源。
+ * 服务器进程管理与主进程同步属 接线；本切片当前即唯一真相源。
  */
 import { createSelector } from '@reduxjs/toolkit'
 import { useAppDispatch, useAppSelector } from '@renderer/store'

@@ -84,11 +84,11 @@ export const messageBlocksSlice = createSlice({
     // 注意：如果只想更新现有块，也可以使用 `updateOne`
     updateOneBlock: messageBlocksAdapter.updateOne, // 期望 { id: EntityId, changes: Partial<MessageBlock> }
     /**
-     * 流式内容的**增量**写入口（v1 二轮性能审计 p2-11）。
+     * 流式内容的**增量**写入口。
      *
      * 此前流式期每帧 `updateOneBlock({ content: <累积全文> })`：每帧把整条消息字符串放进
      * action 与 state（旧值在 GC 前并存 N 份引用），每帧拷贝量 O(全文)，叠加"每帧全量正文 →
-     * ReactMarkdown 全量重解析"（p2-09）构成 E1 的线性劣化链。改为只搬运本次新增的 delta：
+     * ReactMarkdown 全量重解析"构成 E1 的线性劣化链。改为只搬运本次新增的 delta：
      * immer draft 上 `content += chunk`，每帧 O(delta)；store 里的最终内容仍是同一份 delta
      * 序列逐字拼出的全文（与逐帧渲染一致，不引入"第二真源"）。
      *
@@ -156,7 +156,7 @@ function buildKnowledgeFileIndex(bases: KnowledgeBase[]): Map<string, { title: s
 }
 
 /**
- * r2-51：把 `new URL(url).hostname` 与其失败回落收敛成一个 helper。
+ * 把 `new URL(url).hostname` 与其失败回落收敛成一个 helper。
  * 相对路径 / 畸形串（如 `'not a url'`、`'/relative/path'`）会抛 `TypeError`；裸 `new URL`
  * 会让整个引用 selector 抛错，引用药丸（citations）整块不渲染。失败回落成原始 url 字符串。
  */
@@ -304,7 +304,7 @@ export const formatCitationsFromBlock = (
           (block.response?.results as AISDKWebSearchResult[])?.map((result, index) => ({
             number: index + 1,
             url: result.url,
-            // r2-51：此前这里是裸 `new URL(result.url).hostname`（同函数四条兄弟分支都包了 try/catch），
+            // 此前这里是裸 `new URL(result.url).hostname`（同函数四条兄弟分支都包了 try/catch），
             // 相对路径/畸形 url 会抛错并带走整个引用 selector。
             title: result.title || hostnameOf(result.url),
             showFavicon: true,

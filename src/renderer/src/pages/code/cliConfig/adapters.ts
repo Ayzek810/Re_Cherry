@@ -26,7 +26,7 @@ import type {
 } from './types'
 import { asRecord, normalizeUrl, stringValue } from './values'
 
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/adapters.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/adapters.ts（2026-09-24）。
 // fork 缝（裁剪面）：V2 1208 行的九 adapter 注册表收窄到 hermes——claude/codex/opencode/gemini/
 // qwen/kimi/pi/minimax 的 adapter 函数体、其专属 helper（providerNameFromKey/cherryProviderKeyFrom/
 // minimax*）、managedKeys/sanitize/ownLogin/claudeModels/permissionModes 的 import 面整块删除。

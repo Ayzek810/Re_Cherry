@@ -21,7 +21,7 @@ const EXT_TYPE_MAP = new Map<string, FileMetadata['type']>([
 const LEGACY_DOWNLOAD_SUFFIX = /\.bin$/i
 
 /**
- * 修复"下载落盘后缀被 Content-Type 叠加"造成的历史行（v0.3.3-2）。
+ * 修复"下载落盘后缀被 Content-Type 叠加"造成的历史行。
  *
  * 现场：`xxx_00001_.png` + `application/octet-stream`（→ `.bin`）曾落成 `xxx_00001_.png.bin`、
  * `ext = '.bin'`、`type = other` ⇒ 文件页「图片」分类里看不到这张 **AI 生成的图**（真机取证）。
@@ -131,7 +131,7 @@ class FileManager {
   /**
    * 删除一个文件行与它的盘上字节。
    *
-   * r2-45（§9 删除纪律）：返回 `Promise<boolean>`，调用方能区分成败并回滚乐观行。
+   * （删除纪律）：返回 `Promise<boolean>`，调用方能区分成败并回滚乐观行。
    * `false` 的两种来源——行不存在（无可删）与盘上删不掉（`window.api.file.delete` 抛错）。
    * 盘上删不掉时**不抛**：Dexie 行已删、文件列表已一致，抛出去会让 `Promise.allSettled`
    * 记成"整条删除失败"，反而不如实报告；这里记 warn 并返回 `false` 交给批量接口计数。
@@ -166,7 +166,7 @@ class FileManager {
   }
 
   /**
-   * 批量删除。§9 要求把 "N succeeded / M failed" 作为真实信号报出来，所以这里返回计数，
+   * 批量删除。要求把 "N succeeded / M failed" 作为真实信号报出来，所以这里返回计数，
    * 而不是只写一条日志（旧签名 `Promise<void>` 让调用方结构上无法上报）。
    */
   static async deleteFiles(files: FileMetadata[]): Promise<{ succeeded: number; failed: number }> {

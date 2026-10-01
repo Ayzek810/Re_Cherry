@@ -48,7 +48,7 @@ const Chat: FC<Props> = (props) => {
   const { topicPosition, messageStyle, messageNavigation } = useSettings()
   const { showTopics } = useShowTopics()
   // 多选态是本组件唯一需要的聊天上下文产物（容器类名 + 弹窗开关），直接窄订阅；
-  // 整个 useChatContext 只在 Messages/ChatContextProvider 里实例化一份（f2-02）。
+  // 整个 useChatContext 只在 Messages/ChatContextProvider 里实例化一份。
   const isMultiSelectMode = useAppSelector((state) => state.runtime.chat.isMultiSelectMode)
   const { isTopNavbar } = useNavbarPosition()
 
@@ -101,7 +101,7 @@ const Chat: FC<Props> = (props) => {
       const enabledWebSearch = isWebSearchModel(selectedModel)
       updateAssistant({
         model: selectedModel,
-        // r2-80：`undefined` = provider 还不知道（冷启动窗口）——只换模型，**不得**写回持久化开关。
+        // `undefined` = provider 还不知道（冷启动窗口）——只换模型，**不得**写回持久化开关。
         ...(enabledWebSearch === undefined ? {} : { enableWebSearch: enabledWebSearch && assistant.enableWebSearch })
       })
     }

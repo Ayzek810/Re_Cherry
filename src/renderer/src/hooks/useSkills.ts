@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次5（接线）：技能 hooks 接主进程 SkillService（磁盘 = 真相源）。
+ * （接线）：技能 hooks 接主进程 SkillService（磁盘 = 真相源）。
  *
  * fork 生效形态：上游 v1.9.11 = Claude Code SDK 文件系统发现（symlink 到 agent
  * 工作区），fork 无该工作区——内核 skill 工具 + 每轮登记（progressive disclosure，
@@ -61,10 +61,10 @@ export function useInstalledSkills(agentId?: string) {
   const { t } = useTranslation()
   // fork：切片是主进程扫描的投影（refresh 整体覆盖）；选择器实时反映。
   const skills = useAppSelector((state) => state.skills.installedSkills)
-  // r2-38：真实反映扫描过程/结果。此前两者硬编码为 `false`/`null`，主进程扫描失败时切片保持
-  // 原状（首次进入即空），页面只能渲染"未安装任何技能"——失败看起来像空结果（§9 违规）。
+  // 真实反映扫描过程/结果。此前两者硬编码为 `false`/`null`，主进程扫描失败时切片保持
+  // 原状（首次进入即空），页面只能渲染"未安装任何技能"——失败看起来像空结果（违规）。
   // 契约（W4-2）：`loading` 初值为 `true` ⇒ **调用方必须在挂载时触发一次 `refresh()`**。
-  // 技能页曾漏掉这一步，表现为首次进入永久转圈（r2-38 之前硬编码 `false` 把这个漏接线掩住了）。
+  // 技能页曾漏掉这一步，表现为首次进入永久转圈（之前硬编码 `false` 把这个漏接线掩住了）。
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const mountedRef = useRef(true)
@@ -157,7 +157,7 @@ export function useSkillSearch() {
     setError(null)
 
     try {
-      // r2-07：`searchSkills` 现返回判别式 `{ results, failed }`（失败的源不再被伪装成"成功但空"）。
+      // `searchSkills` 现返回判别式 `{ results, failed }`（失败的源不再被伪装成"成功但空"）。
       const { results: found, failed } = await searchSkills(query)
       if (requestId === abortRef.current) {
         setResults(found)

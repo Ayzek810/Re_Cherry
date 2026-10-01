@@ -29,8 +29,8 @@ const HtmlArtifactPopupContext = createContext<HtmlArtifactPopupContextValue | n
 const HtmlArtifactPopupOutlet = lazy(() => import('./HtmlArtifactsPopup'))
 
 /**
- * c2-40②：弹窗是 `lazy(() => import(...))` 且会连带拉入 CodeMirror。fallback 渲染 `null` 时，
- * 用户点「最大化」后 chunk 未就绪期间是一次显式点击换来零反馈 —— 家规点名的 silent invisibility。
+ * 弹窗是 `lazy(() => import(...))` 且会连带拉入 CodeMirror。fallback 渲染 `null` 时，
+ * 用户点「最大化」后 chunk 未就绪期间是一次显式点击换来零反馈。
  * 这里给一个真实的 Modal 外壳 + loading 占位。
  */
 function HtmlArtifactPopupFallback() {

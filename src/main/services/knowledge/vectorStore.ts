@@ -1,5 +1,5 @@
 /**
- * 知识库向量存储（批次4）：每库一个 LibSQL 单文件库（{userData}/Data/KnowledgeBase/<sanitize(id)>/vec.db）。
+ * 知识库向量存储：每库一个 LibSQL 单文件库（{userData}/Data/KnowledgeBase/<sanitize(id)>/vec.db）。
  *
  * fork 裁剪：不移植 embedjs 全家（@cherrystudio/embedjs + embedjs-libsql），用
  * @libsql/client 自建最小向量表；检索 = 全表扫描 + JS 余弦相似度（个人规模诚实
@@ -114,7 +114,7 @@ export class BaseVectorStore {
   }
 
   /**
-   * 按条目级标识读回全部 chunk（knowledge_read 工具，v0.4.6）：插回顺序 = 自增 id，
+   * 按条目级标识读回全部 chunk（knowledge_read 工具）：插回顺序 = 自增 id，
    * 同条目多文档（sitemap/directory）按文档批内相邻；调用方负责 overlap 去重与分页。
    */
   async readByUniqueId(uniqueId: string): Promise<Array<{ content: string; metadata: Record<string, unknown> }>> {

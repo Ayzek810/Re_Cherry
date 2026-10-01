@@ -14,8 +14,8 @@ const MAIN_LOG_LEVEL = LEVEL.WARN
 /**
  * IMPORTANT: How to use LoggerService
  * please refer to
- *   English: `docs/technical/how-to-use-logger-en.md`
- *   Chinese: `docs/technical/how-to-use-logger-zh.md`
+ * English:
+ * Chinese:
  */
 class LoggerService {
   private static instance: LoggerService

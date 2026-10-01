@@ -1,12 +1,12 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/constants/cliTools.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/constants/cliTools.ts（2026-09-24）。
 // fork 缝（裁剪面）：CLI_TOOL_PROVIDER_MAP 只留 DEEPSEEK_HARNESS 与 HERMES 两键（V2 十四键）；
-// CLI_TOOLS 再导出（V2 来自 @renderer/components/icons/CliIcon，UI 图表层）已随批次 4b 回挂
+// CLI_TOOLS 再导出（V2 来自 @renderer/components/icons/CliIcon，UI 图表层）已随 回挂
 //（→ ../components/CliIcon，工具集裁 2 项）；
 // GEMINI_AGGREGATOR_PROVIDERS / filterGeminiProviders / isGeminiProvider / resolveEndpointDialect
 // 随 Gemini 臂删除。谓词叶子（hasEndpoint 族）按 fork Provider 形状对号改写（见缝注），
 // dsh/hermes 谓词的组合逻辑逐字。PROVIDERLESS_CLI_TOOLS 空集（qoder/copilot 未移植）。
 
-// 批次4b：UI 图表层回挂（V2 为 `import { CLI_TOOLS } from '@renderer/components/icons/CliIcon'`
+// UI 图表层回挂（V2 为 `import { CLI_TOOLS } from '@renderer/components/icons/CliIcon'`
 // + 本文件 `export { CLI_TOOLS }`）。
 export { CLI_TOOLS } from '../components/CliIcon'
 
@@ -21,7 +21,7 @@ import type { Provider } from '../cliConfig/providerView'
  * working directory only — no provider config or model selection is offered.
  */
 // fork 缝：空集——V2 的 Qoder CLI / GitHub Copilot CLI 未移植；消费面
-// （useCodeCliPageViewProps/useLaunchDialogController，批次 4b）保持 `.has()` 调用形状。
+// （useCodeCliPageViewProps/useLaunchDialogController）保持 `.has()` 调用形状。
 export const PROVIDERLESS_CLI_TOOLS: ReadonlySet<CodeCli> = new Set([])
 
 // fork 缝：V2 谓词叶子读 `endpointConfigs?.[type]?.baseUrl`（provider 级多端点表）；fork
@@ -59,7 +59,7 @@ export const CLI_TOOL_PROVIDER_MAP: Record<CodeCli, (providers: Provider[]) => P
   // apiKey 非空；fork 无端点方言表（resolveEndpointDialect 未移植，协议/developer-role 修正由
   // 内核按 provider.type + compat 运行时决定）→ `(developerRole || hasAnthropic)` 臂不保留。
   //
-  // 二轮审查 f2-44：判据必须落在 **key 值** 上。`toCliProvider`（cliConfig/providerView.ts:124）
+  // 判据必须落在 **key 值** 上。`toCliProvider`（cliConfig/providerView.ts:124）
   // 投影出的 `apiKeys: [{ key: provider.apiKey ?? '', isEnabled: true }]` 里 `isEnabled` 是硬编码
   // true，未配 key 的服务商 key 是空串 ⇒ 只看 `isEnabled` 的谓词恒真，缝注声明的"无 key 的服务商
   // 不进列表"从未生效，用户会选中一个主进程必然拒绝的服务商
@@ -73,7 +73,7 @@ export const CLI_TOOL_PROVIDER_MAP: Record<CodeCli, (providers: Provider[]) => P
     ),
   // hermes 谓词逐字（叶子见上方 fork 缝）。
   [CodeCli.HERMES]: (providers) => providers.filter((p) => hasAnthropic(p) || hasOpenAILike(p)),
-  // v0.4.5：paper-agent 不吃 Cherry 供应商——模型供应商与检索密钥在它自己的 Web UI 系统
+  // paper-agent 不吃 Cherry 供应商——模型供应商与检索密钥在它自己的 Web UI 系统
   // 设置页里配（落 home/paper-agent/config/model.json），因此恒返回空集；页面对它不渲染
   // 供应商区（见 CodeCliContentPanel 的 paper-agent 分支）。
   [CodeCli.PAPER_AGENT]: () => []

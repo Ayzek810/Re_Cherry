@@ -43,7 +43,7 @@ const EditableNumber: FC<EditableNumberProps> = ({
   const [isEditing, setIsEditing] = useState(false)
   const [inputValue, setInputValue] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
-  // c2-42②：Enter 会手动 blur，紧随其后的真实 blur 事件仍会到达 handleBlur，
+  // Enter 会手动 blur，紧随其后的真实 blur 事件仍会到达 handleBlur，
   // 于是调用方的 onBlur 被通知两次（典型后果：重复提交）。用 ref 去重。
   const isEditingRef = useRef(false)
 
@@ -84,7 +84,7 @@ const EditableNumber: FC<EditableNumberProps> = ({
   return (
     <Container>
       <InputNumber
-        // c2-42①：非编辑态原来只是 `opacity: 0` —— 仍占布局、仍可被 Tab 聚焦、仍接收键盘输入
+        // 非编辑态原来只是 `opacity: 0` —— 仍占布局、仍可被 Tab 聚焦、仍接收键盘输入
         // （上层 DisplayText 只挡指针事件）。改用 `visibility: hidden` + tabIndex={-1}：
         // 视觉与交互都真正关闭。
         style={{ ...style, opacity: isEditing ? 1 : 0, visibility: isEditing ? 'visible' : 'hidden' }}

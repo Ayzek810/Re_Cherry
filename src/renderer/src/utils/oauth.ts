@@ -5,7 +5,7 @@ import i18n, { getLanguageCode } from '@renderer/i18n'
 const logger = loggerService.withContext('Utils:oauth')
 
 /**
- * 允许向本窗口 postMessage OAuth 结果的来源白名单（audit2 r2-95）。
+ * 允许向本窗口 postMessage OAuth 结果的来源白名单。
  *
  * 只登记本文件里 `window.open` 出去、且约定用 postMessage 回传密钥的授权页来源，
  * 全部由同一批授权 URL 推导而来：
@@ -49,7 +49,7 @@ const listenForOauthMessage = (handler: (data: any) => boolean | Promise<boolean
         }
       })
       .catch((error) => {
-        // handler 内的失败必须可见（家规 §9：绝不静默失败）。
+        // handler 内的失败必须可见。
         logger.warn('[oauth] message handler failed', error as Error)
       })
   }

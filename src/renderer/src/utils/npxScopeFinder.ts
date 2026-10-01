@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次1（UI）：内联移植的 npx-scope-finder@1.2.0（MIT, © MyPrototypeWhat）。
+ * （UI）：内联移植的 npx-scope-finder@1.2.0（MIT, © MyPrototypeWhat）。
  *
  * 上游 cherry-studio 通过 npm 依赖 `npx-scope-finder` 提供该实现；fork 未引入该依赖，
  * 且 MCPSettings 的 McpDescription / NpxSearch 两处消费它。故按其 dist 源码原样移植为

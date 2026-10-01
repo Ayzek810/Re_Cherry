@@ -25,7 +25,7 @@ const CUSTOM_MINI_APPS_FILE = 'custom-minapps.json'
  *
  * 为什么不当场弹 toast：本模块在渲染层启动期求值（`store/migrate.ts` 依赖它），此刻
  * `window.toast` 还没赋值——`TopView/index.tsx` 在**挂载 effect** 里才设置它。当场调用会
- * 静默 no-op，失败就只剩一条日志（家规 §9：失败必须有用户可见信号）。因此这里只记住事实，
+ * 静默 no-op，失败就只剩一条日志。因此这里只记住事实，
  * 由应用页（用户能看到自定义小应用的地方）在挂载时取走并展示，展示后清空以免重复打扰。
  */
 let pendingLoadErrorMessage: string | null = null
@@ -38,12 +38,12 @@ export const takeCustomMiniAppsLoadError = (): string | null => {
 }
 
 /**
- * 读自定义小应用的判别式结果（r2-79 的消费侧，跨区请求⑥）。
+ * 读自定义小应用的判别式结果（的消费侧）。
  *
  * 此前这里只有「数组」一种形状：读失败被折成空列表，于是两个相反的事实同形 ——
  * 「文件不存在」（全新安装的合法缺省，用户第一次添加小应用时**应当**创建文件）与
  * 「文件存在但读不出来」（不可判定状态，绝不允许被当成空的而覆盖写）。
- * 三值语义（家规 §9）：`ok` = 确定内容；`missing` = 确定的「不存在」（唯一可授权创建的事实）；
+ * 三值语义：`ok` = 确定内容；`missing` = 确定的「不存在」（唯一可授权创建的事实）；
  * `error` = 存在但读不出来（失败，必须可见）。
  */
 export type CustomMiniAppsRead =
@@ -119,7 +119,7 @@ const readCustomMiniApps = async (): Promise<CustomMiniAppsRead> => {
 
 // 加载自定义小应用（启动播种路径）。
 // `missing` 是合法缺省（返回空列表）；其余失败一律抛出——启动路径的调用方收到失败即空列表 +
-// 用户提示，**任何分支都不写盘**（家规不变式 6：不可判定的状态不得授权破坏性动作）。
+// 用户提示，**任何分支都不写盘**。
 const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
   const result = await readCustomMiniApps()
   if (result.status === 'ok') return result.apps
@@ -128,14 +128,14 @@ const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
 }
 
 /**
- * 用户显式动作下的自定义小应用**原子更新**（r2-79/⑥）。
+ * 用户显式动作下的自定义小应用**原子更新**。
  *
  * 主进程的读通道把「不存在」与「读不出来」分开了，这里据此给出两个相反的动作：
  * - `missing`（确定不存在）：从空列表开始，写文件即"首次创建"——这正是全新安装下
  *   用户第一次添加自定义小应用能成功的唯一路径（旧实现无论添加还是删除都会抛在
  *   `File_Read` 的通用错误上，然后弹一句"保存失败"）。
  * - `error`（存在但读不出来）：**抛出**。调用方的 catch 负责报错与不写盘，
- *   用户文件原样保留。失败绝不长得像空结果（家规 §9）。
+ *   用户文件原样保留。失败绝不长得像空结果。
  */
 const updateCustomMiniApps = async (mutate: (apps: MinAppType[]) => MinAppType[]): Promise<MinAppType[]> => {
   const result = await readCustomMiniApps()
@@ -150,7 +150,7 @@ const updateCustomMiniApps = async (mutate: (apps: MinAppType[]) => MinAppType[]
 }
 
 // 初始化默认小应用
-// v0.3.4：按用户裁决裁剪为 12 个保留项 + 3 个新增项（原 59 个内置项的其余 44 个移除）。
+// 按用户裁决裁剪为 12 个保留项 + 3 个新增项（原 59 个内置项的其余 44 个移除）。
 // 被移除应用的持久化残留由 migrate '221' 清理（防幽灵磁贴）。
 const ORIGIN_DEFAULT_MIN_APPS: MinAppType[] = [
   {
@@ -245,7 +245,7 @@ const ORIGIN_DEFAULT_MIN_APPS: MinAppType[] = [
     logo: DoubaoAppLogo,
     supportedRegions: ['CN']
   },
-  // ---- v0.3.4 新增（用户提供 URL 与图标）----
+  // ---- 新增（用户提供 URL 与图标）----
   {
     id: 'scnet',
     name: 'SCNET',
@@ -270,7 +270,7 @@ const ORIGIN_DEFAULT_MIN_APPS: MinAppType[] = [
 ]
 
 // All mini apps: built-in defaults + custom apps loaded from user config.
-// 启动播种（r2-79/⑥）：读不出来（文件存在但不可读 / IPC 失败）时降级为"只有内置应用"，
+// 启动播种：读不出来（文件存在但不可读 / IPC 失败）时降级为"只有内置应用"，
 // 但**不写盘**，并记一条 error 与用户可见提示——失败绝不静默，也绝不长得像"用户没有自定义应用"。
 let allMinApps = [...ORIGIN_DEFAULT_MIN_APPS]
 try {

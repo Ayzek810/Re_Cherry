@@ -1,5 +1,5 @@
 /**
- * r2-67 行为测试：`useNutstoreSSO` 的协议监听生命周期。
+ * `useNutstoreSSO` 的协议监听生命周期。
  *
  * 改动前：监听注册在 `new Promise` 里，只在收到回调的 `finally` 解绑。用户取消 SSO 或
  * 回调不来时监听器常驻、Promise 永远 pending；重复点击再叠一个监听；hook 卸载也不清理。
@@ -35,7 +35,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('useNutstoreSSO r2-67：监听与在途请求收敛', () => {
+describe('useNutstoreSSO ：监听与在途请求收敛', () => {
   it('整个生命周期只注册一个监听，卸载时解绑', () => {
     const { result, unmount } = renderHook(() => useNutstoreSSO())
 

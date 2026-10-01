@@ -171,7 +171,7 @@ const ModelList: React.FC<ModelListProps> = ({ providerId }) => {
             ))}
           </Flex>
         )}
-        {/* v1 二轮审查 s2-44：搜索无命中 / provider 无模型时此前是纯空白面板，
+        {/* ：搜索无命中 / provider 无模型时此前是纯空白面板，
             用户无法区分「没有匹配」与「还在加载 / 出错了」。 */}
         {!isLoading && (hasNoModels || isEmpty(displayedModelGroups)) && (
           <Empty

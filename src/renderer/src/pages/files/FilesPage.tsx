@@ -36,7 +36,7 @@ const logger = loggerService.withContext('FilesPage')
 
 const FilesPage: FC = () => {
   const { t } = useTranslation()
-  // v0.3.3-2：默认分类由 V1 的「文档」改为「全部」。真机反馈"文件页没把我上传的图片/文档/AI 出图纳入"
+  // 默认分类由 V1 的「文档」改为「全部」。真机反馈"文件页没把我上传的图片/文档/AI 出图纳入"
   // 有两层原因，这是第二层：出图与上传的图片都归在 image 分类，而打开页面停在 document（多数人没有文档）
   // ⇒ 第一眼是空页。分类本身没坏，默认值改掉即可（想回到 V1 口径只需把这里改回 'document'）。
   const [fileType, setFileType] = useState<FileType | 'all'>('all')
@@ -55,7 +55,7 @@ const FilesPage: FC = () => {
     return db.files.where('type').equals(fileType).sortBy('count').then(tempFilesSort)
   }, [fileType])
 
-  // f2-42：`useLiveQuery` 在首个结果到达前返回 `undefined`（= 加载中），与"查到了 0 行"是两件事。
+  // `useLiveQuery` 在首个结果到达前返回 `undefined`（= 加载中），与"查到了 0 行"是两件事。
   // 旧实现两者都落到 `Empty`，每次进文件页先闪一下"暂无数据"。读取异常不走这里
   //（dexie-react-hooks 会在渲染期 throw monitor.current.error），本条只针对"加载中"这一态。
   const isLoading = files === undefined
@@ -77,8 +77,8 @@ const FilesPage: FC = () => {
       return
     }
 
-    // f2-39：逐个删除并收全结果——旧实现用 `Promise.all`，第一个 reject 就整体抛出，
-    // 选中态既不清理也不报错；成功/失败也从不计数（§9 要求批量删除报告"N 成功 / M 失败"）。
+    // 逐个删除并收全结果——旧实现用 `Promise.all`，第一个 reject 就整体抛出，
+    // 选中态既不清理也不报错；成功/失败也从不计数（要求批量删除报告"N 成功 / M 失败"）。
     const { succeededIds, failures } = await runBatchDelete(
       validFiles.map((file) => file.id),
       (fileId) => handleDelete(fileId, t)
@@ -114,7 +114,7 @@ const FilesPage: FC = () => {
     }
   }
 
-  // f2-41：这里原来每行一条 `logger.debug('FileItem', file)`（第一个参数是 context 名而非消息）。
+  // 这里原来每行一条 `logger.debug('FileItem', file)`（第一个参数是 context 名而非消息）。
   // `dataSource` 没有 memo，每次渲染都会对全部文件跑一遍 map 并刷日志——纯脚手架语句，删除。
   const dataSource = sortedFiles?.map((file) => {
     return {
@@ -140,7 +140,7 @@ const FilesPage: FC = () => {
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
             onConfirm={() =>
-              // r2-45：handleDelete 现在会 throw。antd 的 ActionButton 在拒绝分支里 `Promise.reject(e)`，
+              // handleDelete 现在会 throw。antd 的 ActionButton 在拒绝分支里 `Promise.reject(e)`，
               // 无人接住即 unhandled rejection。用户可见信号由 handleDelete 给出，这里只留取证行。
               handleDelete(file.id, t).catch((error) => {
                 logger.warn(`Failed to delete file ${file.id}`, error as Error)

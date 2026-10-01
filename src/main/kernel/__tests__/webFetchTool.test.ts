@@ -15,7 +15,7 @@ vi.mock('@main/services/WebSearchService', () => ({
 import { parseUrls, slicePage } from '../webFetchTool'
 
 /**
- * web_fetch 机测（v0.4.6）：URL 解析/分页纯函数 + 真 defineTool 执行链（网络层与
+ * web_fetch 机测：URL 解析/分页纯函数 + 真 defineTool 执行链（网络层与
  * 编号服务走模块替身）。钉住的语义：
  *   - URL 清单去重/协议白名单/上限；分页截断 + nextOffset
  *   - execute：单页失败不整批报错（失败条目进列表）；[n] 编号接续 bumpTurnResultOffset

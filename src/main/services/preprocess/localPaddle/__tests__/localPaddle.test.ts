@@ -1,5 +1,5 @@
 /**
- * LocalPaddle 模型仓单元测试（v0.4.4 收编自 services/localModel 的 localModel.test.ts）：
+ * LocalPaddle 模型仓单元测试（收编自 services/localModel 的 localModel.test.ts）：
  * - modelAssets：双镜像直链形态 + fork 固定顺序（ModelScope 优先）+ minBytes/落盘名/权重健全性；
  * - modelStore.dictTextFromInferenceYml：字典构建的 ppu 兼容格式
  *   （前导空行 + 逐项换行 + 尾换行——ppu 按行 split 不 trim，index 0 = blank）；

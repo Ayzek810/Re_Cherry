@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import llm, { initialState, updateProvider } from '../llm'
 
 /**
- * r2-81：`store/llm.ts` 的 `initialState.providers` 曾直接别名 `SYSTEM_PROVIDERS_CONFIG` 的值
+ * `store/llm.ts` 的 `initialState.providers` 曾直接别名 `SYSTEM_PROVIDERS_CONFIG` 的值
  * （`Object.values(omit(...))` 是同一批模块对象）。迁移链会就地改写 provider
  * （`provider.type = 'openai-compatible'`、`provider.anthropicApiHost = …`），初始态共享引用
  * 就等于把模块默认表交给改写方，同会话内任何从 `initialState` 重建 llm 切片的路径都会拿到
@@ -26,7 +26,7 @@ const loadConfig = async () => {
   }
 }
 
-describe('llm slice — initialState 不与 config 默认表共享对象（r2-81）', () => {
+describe('llm slice — initialState 不与 config 默认表共享对象', () => {
   it('每个 provider 元素与其 models 数组都是副本（值相等、引用不同）', async () => {
     const { config, providers: systemProviders } = await loadConfig()
 

@@ -1,4 +1,4 @@
-// fork 缝（原创，v0.4.5）：Paper-Agent 受管 Web UI 生命周期。
+// fork 缝（原创）：Paper-Agent 受管 Web UI 生命周期。
 // 与 DeepSeekHarnessService/HermesDashboardService 同构（单例 + operationMutex + 状态广播 +
 // killSync 同步杀树），差别有三，都是源码型工具固有：
 // ① 启动物是受管 venv 解释器（不是 PATH 上的可执行物）：`python -m uvicorn main:app`；
@@ -54,7 +54,7 @@ class PaperAgentStartError extends Error {
   }
 }
 
-/** 受管布局（v0.4.5-1：取自 binaryManager/layout.ts 单点——本服务此前各自维护一份
+/** 受管布局（取自 binaryManager/layout.ts 单点——本服务此前各自维护一份
  * toolDir/venvPython/sourceTreeDir，与安装器、解析器三处并列，正是会漂移的那种清单）。 */
 function toolDir(): string {
   return managedToolDir(TOOL_NAME)
@@ -166,7 +166,7 @@ class PaperAgentService {
           return { success: false as const, reason: 'cancelled' as const, message: 'Paper-Agent startup was cancelled' }
         }
         // 幂等：已在运行 → 直接给当前 URL（不重启进程）。
-        // v0.4.5-1（O4）：这里总是重播一次状态——幂等成功不产生状态变化（也就不会自动广播），
+        // （）：这里总是重播一次状态——幂等成功不产生状态变化（也就不会自动广播），
         // 而渲染层可能错过过更早的更新。原写法先取 transitionBefore 再立刻比较，条件恒真
         // （复制自 stop() 的形状，那里跨 await 才有意义），是死条件而非判断。
         if (this.child && this.status === 'running' && this.url) {

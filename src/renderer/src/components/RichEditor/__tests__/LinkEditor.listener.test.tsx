@@ -1,5 +1,5 @@
 /**
- * c2-07 行为测试：LinkEditor 的全局 mousedown 不能在清理之后才注册。
+ * LinkEditor 的全局 mousedown 不能在清理之后才注册。
  *
  * 缺陷原状：监听器被 setTimeout(…, 100) 推迟注册，而 cleanup 是同步的。
  * 只要 visible 在 100ms 内变 false，cleanup 会在监听器尚不存在时执行，

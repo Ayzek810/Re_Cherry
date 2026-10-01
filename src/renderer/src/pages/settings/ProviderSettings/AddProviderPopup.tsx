@@ -70,7 +70,7 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
 
   const buttonDisabled = name.trim().length === 0
 
-  // v1 二轮审查 s2-36：编辑既有 provider 时，选图标 / 重置此前会**立即写 IndexedDB**，
+  // 编辑既有 provider 时，选图标 / 重置此前会**立即写 IndexedDB**，
   // 而 `onCancel` 只 resolve 空值、不回滚已写入的图片——用户点「取消」图标其实已经被换掉，
   // 并且 provider 列表的 providerLogos 与库里已不一致。现在编辑期只改本地 state，
   // 落库交给调用方在 `onOk` 之后按既有约定写（`ProviderList` 的 editMenu 已实现该写入）。
@@ -109,7 +109,7 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
               }
 
               // 上传的新图标同样只留在内存：`onOk` resolve 出去的 data URL 由调用方落库
-              //（编辑期写库会让「取消」变成假的，见 s2-36）。
+              //编辑期写库会让「取消」变成假的。
               const tempUrl = await new Promise<string>((resolve) => {
                 const reader = new FileReader()
                 reader.onload = () => resolve(reader.result as string)

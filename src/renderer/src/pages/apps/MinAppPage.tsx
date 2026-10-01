@@ -107,7 +107,7 @@ const MinAppPage: FC = () => {
     webviewRef.current = el
     const handleInPageNav = (e: any) => setCurrentUrl(e.url)
     el.addEventListener('did-navigate-in-page', handleInPageNav)
-    // 附着即从**新元素**同步一次地址（f2-54）：`currentUrl` 是 state，切 appId 后旧值还在，
+    // 附着即从**新元素**同步一次地址：`currentUrl` 是 state，切 appId 后旧值还在，
     // 而 `did-navigate-in-page` 只在 B 内部导航时才触发，首帧加载不触发 → 工具栏"在浏览器打开"
     // 会打开上一个应用的地址。读元素自己的 URL 是这里唯一的权威来源。
     try {
@@ -122,7 +122,7 @@ const MinAppPage: FC = () => {
     return true
   }, [app])
 
-  // 每应用状态随 appId 重置（f2-54）：本组件实例跨 appId 存活（路由 `/apps/:appId` 没有 key，
+  // 每应用状态随 appId 重置：本组件实例跨 appId 存活（路由 `/apps/:appId` 没有 key，
   // 标签页切换走 `navigate(tab.path)`），而 `isReady` / `currentUrl` 的初始化器只跑一次。
   // 不重置的话：B 的 LoadingMask 不显示（webview 就绪前那块区域静默留白），
   // `WebviewSearch` 还会拿到 `isWebviewReady=true`，把搜索动作打到尚未就绪的 B 上。
@@ -177,7 +177,7 @@ const MinAppPage: FC = () => {
       mounted = false
       unsubscribe()
     }
-    // `app.id` 而不是 `app`：切换 appId 时必须重新订阅新应用的加载事件（f2-54）。
+    // `app.id` 而不是 `app`：切换 appId 时必须重新订阅新应用的加载事件。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app?.id, isReady])
 

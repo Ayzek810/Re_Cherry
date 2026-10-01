@@ -1,5 +1,5 @@
 /**
- * 画板（v0.3.3 批次4，② 薄适配）：zoom/rotate/drag 工具条 + awaiting|pending|ready
+ * 画板（② 薄适配）：zoom/rotate/drag 工具条 + awaiting|pending|ready
  * 状态机原样；ImageViewer → antd Image（preview 画廊，fork 既有 ImageViewer 组件
  * 即 antd Image 封装）。lucide-react 图标 fork 可用。
  */
@@ -337,7 +337,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
   // wrapper (and the prompt bar stretched to it) wider than the rendered photo.
   // Measuring explicitly is what lets the prompt bar match the image's real edges.
   //
-  // fork 缝（v0.3.3-9）：V2 用 `<img onLoad>` 取自然尺寸（V2 的 ImageViewer 是**裸 `<img>`**，
+  // fork 缝：V2 用 `<img onLoad>` 取自然尺寸（V2 的 ImageViewer 是**裸 `<img>`**，
   // className/style/onLoad 都直接落在 img 上）。fork 的 ImageViewer 建在 antd Image 上，而
   // rc-image 只把 `COMMON_PROPS`（crossOrigin/decoding/draggable/loading/referrerPolicy/
   // sizes/srcSet/useMap/alt）交给 `<img>`，其余 props 落在**外层 div** 上——`onLoad` 永远不触发，
@@ -514,7 +514,7 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
 
   const promptBar = painting.prompt ? <ArtboardPromptBar prompt={painting.prompt} sizeLabel={sizeLabel} /> : undefined
 
-  // 二轮审查 f2-23：`generationError` 此前只写不读（全 paintings 目录无任何渲染者）。失败当刻的
+  // `generationError` 此前只写不读（全 paintings 目录无任何渲染者）。失败当刻的
   // modal/toast 是唯一信号；切走再回来（或后台完成）后用户看到的是**一块空占位、没有任何失败说明**，
   // 也无法看到错误详情。这里补一个失败/取消态：无图可显示且本轮以失败/取消收尾时给一行解释。
   const failedGeneration = painting.generationStatus === 'failed'
@@ -555,13 +555,13 @@ const Artboard: FC<ArtboardProps> = ({ painting, isLoading, imageCover }) => {
                   {promptBar}
                 </div>
               )}
-              {/* fork 缝（v0.3.3-9）：V2 只靠 `displayedImageBoxSize` 这个显式盒子，算不出来
+              {/* fork 缝：V2 只靠 `displayedImageBoxSize` 这个显式盒子，算不出来
                   （尺寸未量到、提示条比容器还高）时就退化成"上对齐填满 + 被 `overflow-hidden` 裁掉"。
                   这里再套一层**两个方向都确定**的图片区：列 `h-full w-full`（w-full 会被上面的
                   `style.width` 覆盖）+ 图片区 `min-h-0 flex-1`，于是 `max-h-full`/`max-w-full`/
                   `object-contain` 真正生效——"完整展示"成为 CSS 层的硬保证（两个方向都不会溢出），
                   显式盒子只负责把尺寸对齐到像素级（提示条宽度跟着它走）。
-                  另：`preview={false}` 让 ImageViewer 渲染**裸 `<img>`**（v0.3.3-10），
+                  另：`preview={false}` 让 ImageViewer 渲染**裸 `<img>`**，
                   上面这些 `max-*`/`object-contain` 才落在 `<img>` 而不是 antd 的包裹 div 上。 */}
               <div className="flex min-h-0 flex-1 items-center justify-center">
                 <ImageViewer

@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/file.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/file.ts（2026-09-24）。
 // 缝点三处，已标 `// fork 缝`：
 // ① ipc 缝：V2 `ipcApi.request('code_cli.read_config', …)` → fork `window.api.codeCli.readConfig`
 //   （直连通道，主进程 ipc.ts 白名单校验 target 后经 readCliConfigFiles 读盘）。

@@ -12,7 +12,7 @@ interface AssistantAvatarProps {
 }
 
 /**
- * 助手标识的统一渲染（单一路径，v0.3.1 功能一）：
+ * 助手标识的统一渲染（单一路径，功能一）：
  * 取值 `assistant.emoji`（库选 emoji 或 `img:` 图片引用）→ 名称首 emoji 兜底（EmojiIcon 内部再兜底 ⭐️）。
  * 左侧栏列表、话题页签、导航栏、设置弹窗标题、对话页"助手信息"挡共用本组件。
  */

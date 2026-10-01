@@ -12,7 +12,7 @@ interface UseDragResizeHandleOptions {
 }
 
 /**
- * 拉伸把手的全局 mousemove/mouseup 监听（f2-12）。
+ * 拉伸把手的全局 mousemove/mouseup 监听。
  *
  * 旧实现在 InputbarCore 内联创建这两个监听，且只在 `mouseup` 里清理：按住把手不松手时切换助手/话题
  * 或路由卸载 Inputbar，`mouseup` 不再落回原处理链 → 监听永久留在 `document` 上，并在每次鼠标移动时

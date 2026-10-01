@@ -87,7 +87,7 @@ vi.mock('@renderer/hooks/useAssistant', () => ({
   })
 }))
 
-// 聊天上下文改由 ChatContextProvider 下发（f2-02）：Message 与 MessageGroup 都从该模块读
+// 聊天上下文改由 ChatContextProvider 下发：Message 与 MessageGroup 都从该模块读
 vi.mock('../ChatContextProvider', () => ({
   useChatContextValue: () => mocks.useChatContext()
 }))
@@ -106,7 +106,7 @@ vi.mock('@renderer/hooks/useModel', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => ({
   useSettings: () => mocks.useSettings(),
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   useSetting: (key: string) => (mocks.useSettings() as Record<string, unknown>)[key]
 }))
 

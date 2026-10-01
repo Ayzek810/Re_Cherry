@@ -20,7 +20,7 @@ const logger = loggerService.withContext('WebSearchService')
 const DEFAULT_MAX_RESULTS = 5
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游
+ * 自 CS_V1 移植 + 适配点清单（源：上游
  * src/renderer/src/services/WebSearchService.ts）：
  * - 执行环境渲染层 → 主进程：Redux store（getWebSearchState）→ 配置注入制
  *   setConfig(KernelWebSearchConfig) 整体替换（Dsh_SyncWebSearch 推送）；渲染层 api 桥
@@ -32,7 +32,7 @@ const DEFAULT_MAX_RESULTS = 5
  *   上游 setWebSearchStatus 的 runtime phase 推送（default、fetch_complete、rag 系、
  *   cutoff）为渲染层 Redux UI 关切，主进程不移植。
  *
- * v0.4.3 重写（验收标准：设置页控制项实质性反映在网络搜索工具的控制中）：
+ * 重写（验收标准：设置页控制项实质性反映在网络搜索工具的控制中）：
  * - count 权威语义：设置页「搜索结果个数」(maxResults) 是单次搜索的唯一权威上限——
  *   缺省即设置值；模型显式传入的 count 钳制到 [1, 设置值]。此前工具侧硬编码 1..12
  *   钳制：用户设 3 时模型可传大 count 突破上限，设 100（配合压缩）时被 12 无声截断，
@@ -147,7 +147,7 @@ export class WebSearchService {
   }
 
   /**
-   * v0.4.3 count 权威语义：设置「搜索结果个数」是唯一权威上限。
+   * count 权威语义：设置「搜索结果个数」是唯一权威上限。
    * 缺省 = 设置值；显式请求钳制到 [1, 设置值]——设置值以下尊重调用方收窄，
    * 以上一律压回（用户设 3 不会被模型的 count=10 突破）.
    */
@@ -215,7 +215,7 @@ export class WebSearchService {
   }
 
   /**
-   * RAG 预抓全页（v0.4.3）：正文不足一个分块窗口（chunker DEFAULT_CHUNK_SIZE=1000
+   * RAG 预抓全页：正文不足一个分块窗口（chunker DEFAULT_CHUNK_SIZE=1000
    * 字符）的结果对 RAG 无块可选，先经 fetchWebContent（三级回退链，usingBrowser
    * 语义保持）补全正文。单条抓取失败保留原 snippet（fetchWebContent 把非取消失败
    * 兜底为 noContent）；取消信号原样上抛（中途停止不该伪装成压缩失败）。
@@ -264,7 +264,7 @@ export class WebSearchService {
         }
       }
       try {
-        // v0.4.3：先补全贫瘠正文（snippet 型 API 提供商），RAG 控制项才实质生效
+        // 先补全贫瘠正文（snippet 型 API 提供商），RAG 控制项才实质生效
         const enriched = await this.enrichForRag(results, provider, signal)
         const compressed = await compressWithRag([query], enriched, compression, signal)
         // 压缩摘要随响应上行：web_search 工具据此向用户报告压缩确实启用（before→after）

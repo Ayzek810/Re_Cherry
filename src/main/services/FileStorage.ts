@@ -564,12 +564,12 @@ class FileStorage {
   }
 
   /**
-   * r2-79/⑥：按 id 读文件仓成员，并把「文件不存在」与「存在但读不出来」**分开**回给渲染层。
+   * /⑥：按 id 读文件仓成员，并把「文件不存在」与「存在但读不出来」**分开**回给渲染层。
    *
    * 为什么需要这条通道：`File_Read` 对任何失败都抛同一个通用错误（`readFileCore` 把读错误
    * 统一包成 `Failed to read file: …`），调用方无法区分。渲染层因此在全新安装时既不能
    * 把「文件不存在」当成空列表去播种 `custom-minapps.json`，也不得把「读失败」误当
-   * 「不存在」而覆盖写用户文件（家规不变式 6：不可判定的状态不得授权破坏性动作）。
+   * 「不存在」而覆盖写用户文件。
    *
    * 判定用 `fs.existsSync`：它是文件系统对「该路径有没有目录项」的**终局答案**（存在但无
    * 读权限时仍报 true），符合「missing 必须是确定事实」的要求；其余任何失败一律落 `error`
@@ -736,7 +736,7 @@ class FileStorage {
   }
 
   /**
-   * v0.3.3-2：聊天页 `generate_image` 出图的**内容寻址落盘**。
+   * 聊天页 `generate_image` 出图的**内容寻址落盘**。
    *
    * 这批图原先只作为 IMAGE 块的元数据存在（不落盘、不进 `db.files`），文件页因此永远看不到它们；
    * 现在由渲染层按源串 sha256 给 id，主进程落到 `<id><ext>`。同一张图重复投影（回放/重开话题）
@@ -1611,7 +1611,7 @@ class FileStorage {
       }
 
       // 如果文件名没有后缀，根据Content-Type添加后缀
-      // v0.3.3-2：后缀解析收敛到 resolveDownloadedFileName——此前 `isUseContentType` 为真时无条件把
+      // 后缀解析收敛到 resolveDownloadedFileName——此前 `isUseContentType` 为真时无条件把
       // Content-Type 推出的后缀**追加**在文件名尾部，"xxx.png" + octet-stream 落成 "xxx.png.bin"、
       // ext=.bin ⇒ FILE_TYPE.OTHER，文件页「图片」里看不到 AI 生成的图（真机取证）。
       const contentType = isUseContentType || !filename.includes('.') ? response.headers.get('Content-Type') : null

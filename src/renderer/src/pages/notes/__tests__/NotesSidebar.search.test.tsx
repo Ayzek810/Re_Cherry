@@ -1,12 +1,12 @@
 /**
- * 二轮审查 f2-35 / f2-36：notes 侧栏的检索状态面与分片上下文稳定性。
+ * notes 侧栏的检索状态面与分片上下文稳定性。
  *
- * f2-35：`useFullTextSearch` 返回的 `error` 零消费、`searchStats.total === 0` 时只有一片空列表——
- * 整棵树读失败与"没有匹配"在界面上同形（§9「failure must never look like an empty result」；
+ * `useFullTextSearch` 返回的 `error` 零消费、`searchStats.total === 0` 时只有一片空列表——
+ * 整棵树读失败与"没有匹配"在界面上同形（「failure must never look like an empty result」；
  * 「Silent invisibility is the worst failure mode」）。现在补三条状态：失败（带重试）、
  * 0 命中占位、部分文件读取失败。
  *
- * f2-36：`inPlaceEdit` 由 `useInPlaceEdit` 每次渲染返回新对象、`NotesUIContext` 传的是内联字面量，
+ * `inPlaceEdit` 由 `useInPlaceEdit` 每次渲染返回新对象、`NotesUIContext` 传的是内联字面量，
  * 于是 `NotesEditingContext` / `NotesUIContext` 每渲染换引用 ⇒ `memo` 的 TreeNode 全量重渲染。
  *
  * 行为级断言：① 失败 → 错误条 + 重试（点击真的重发检索），且不渲染空态；
@@ -227,7 +227,7 @@ describe('NotesSidebar · 检索状态面与分片上下文', () => {
     resetSearchState()
   })
 
-  it('f2-35：整库检索失败 ⇒ 错误条 + 重试按钮，且不渲染 0 命中占位', () => {
+  it('整库检索失败 ⇒ 错误条 + 重试按钮，且不渲染 0 命中占位', () => {
     resetSearchState({ error: new Error('EACCES: permission denied') })
 
     render(<NotesSidebar {...sidebarProps} />)
@@ -241,7 +241,7 @@ describe('NotesSidebar · 检索状态面与分片上下文', () => {
     expect(harness.search).toHaveBeenCalledWith(notesTree, 'abc')
   })
 
-  it('f2-35：真 0 命中 ⇒ 显式占位（不是一片空列表）', () => {
+  it('真 0 命中 ⇒ 显式占位（不是一片空列表）', () => {
     resetSearchState({ searchedKeyword: 'abc' })
 
     render(<NotesSidebar {...sidebarProps} />)
@@ -251,7 +251,7 @@ describe('NotesSidebar · 检索状态面与分片上下文', () => {
     expect(screen.queryByTestId('notes-search-error')).toBeNull()
   })
 
-  it('f2-35：部分文件读取失败 ⇒ 结果之外单独给出"N 个文件读取失败"', () => {
+  it('部分文件读取失败 ⇒ 结果之外单独给出"N 个文件读取失败"', () => {
     resetSearchState({
       searchedKeyword: 'abc',
       stats: { total: 2, fileNameMatches: 2, contentMatches: 0, bothMatches: 0 },
@@ -269,7 +269,7 @@ describe('NotesSidebar · 检索状态面与分片上下文', () => {
     expect(screen.getByText('notes.search.found_results')).toBeInTheDocument()
   })
 
-  it('f2-36：与上下文无关的状态变化后，editing/actions/ui 三个上下文值引用不变', () => {
+  it('与上下文无关的状态变化后，editing/actions/ui 三个上下文值引用不变', () => {
     render(<NotesSidebar {...sidebarProps} />)
 
     const before = harness.records.at(-1)!

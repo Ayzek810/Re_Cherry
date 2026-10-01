@@ -100,7 +100,7 @@ export function useTranslationHydration(message: Message): void {
     return () => {
       cancelled = true
     }
-    // f2-11 / X4：依赖数组的引用会随每次 blockInstruction 更新而失效，改按内容键收口
+    // / ：依赖数组的引用会随每次 blockInstruction 更新而失效，改按内容键收口
   }, [dispatch, messageId, blockIdsKey])
 }
 

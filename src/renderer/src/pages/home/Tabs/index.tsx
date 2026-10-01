@@ -69,7 +69,7 @@ const HomeTabs: FC<Props> = ({
   /** 添加助手＝按「默认助手」这份只读模板呼出完整助手设置（五页）编辑**草稿**，
    *  点「确认」才落库新建并切过去；X / Esc / 点遮罩＝什么都不建。模板一个字都不动
    *  （用户裁决："默认助手应当是不可变的基本模板"）。要改模板请走设置 → 模型设置 → 默认助手。
-   *  v0.3.1-2：不再走预设挑选（预设链已整链移除）。 */
+   * 不再走预设挑选（预设链已整链移除）。 */
   const onCreateAssistant = async () => {
     const draft = await AssistantSettingsPopup.showDraft({ assistant: defaultAssistant })
     if (draft) {

@@ -28,7 +28,7 @@ const ImageBlock: React.FC<Props> = ({ block, isSingle = false }) => {
           ? [block.url]
           : []
 
-    // v0.3.3-2：块建出来了却没有可取地址 —— 此前渲染成空 Container，表现就是"图凭空消失"。
+    // 块建出来了却没有可取地址 —— 此前渲染成空 Container，表现就是"图凭空消失"。
     // 用户原话"就算不渲染也给我挂个啥占位符表示一下我发了个图"，统一给占位，绝不留白。
     if (images.length === 0) {
       return <Placeholder className="image-block-placeholder">{t('message.image.unavailable')}</Placeholder>

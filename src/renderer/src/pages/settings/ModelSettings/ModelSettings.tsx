@@ -57,7 +57,7 @@ const ModelSettings: FC<ModelSettingsProps> = ({
 
   const defaultQuickModel = useMemo(() => (hasModel(quickModel) ? getModelUniqId(quickModel) : undefined), [quickModel])
 
-  // 转述模型（v0.3.1 识图通道）：下拉只列视觉模型（嵌入/重排/文生图天然不通过 isVisionModel）。
+  // 转述模型（识图通道）：下拉只列视觉模型（嵌入/重排/文生图天然不通过 isVisionModel）。
   const describerModelValue = useMemo(
     () => (imageDescriberModel && hasModel(imageDescriberModel) ? getModelUniqId(imageDescriberModel) : undefined),
     [imageDescriberModel]

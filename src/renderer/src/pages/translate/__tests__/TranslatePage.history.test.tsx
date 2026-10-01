@@ -1,7 +1,7 @@
 /**
  * 翻译页历史回填契约测试。
  *
- * 行为级验证（§4.18）：V2 `pages/translate/TranslatePage.tsx:573-602` —— 点历史记录除了回填
+ * 行为级验证：V2 `pages/translate/TranslatePage.tsx:573-602` —— 点历史记录除了回填
  * 两个文本窗，还要恢复记录的 source/target 语言（fork 此前只回填文本，语言对停在当前选择）。
  * 观察窗 = 语言栏：把页面真传下去的 `source`/`target` 与回填回调暴露出来，并对回填回调喂
  * 一条带语言对的历史记录，断言语言栏状态随之改变（不 mock 页面自身逻辑）。

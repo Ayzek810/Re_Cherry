@@ -16,7 +16,7 @@ type SortType = 'createdAt' | 'updatedAt'
 type Props = {
   keywords: string
   /** 选中话题。名字不叫 `onClick`：`React.HTMLAttributes` 里已有一个鼠标事件版本的 `onClick`，
-   * 两者交叉成一个不可能满足的类型（父组件此前只能靠 `as any` 绕过）。（f2-58） */
+   * 两者交叉成一个不可能满足的类型（父组件此前只能靠 `as any` 绕过）。 */
   onTopicClick: (topic: Topic) => void
   onSearch: () => void
 } & React.HTMLAttributes<HTMLDivElement>
@@ -29,7 +29,7 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onTopicClick, onSearch, ...p
   // FIXME: db 中没有 topic.name 等信息，只能从 store 获取
   const topics = useSelector(selectAllTopics)
 
-  // 全量扫描只随输入/排序变化重算（f2-58）：本组件已 memo，但面板自身的任何重渲染
+  // 全量扫描只随输入/排序变化重算：本组件已 memo，但面板自身的任何重渲染
   // （消息加载、滚动容器变化）都不该再跑一次 filter + orderBy + groupBy + dayjs。
   const filteredTopics = useMemo(
     () => topics.filter((topic) => topic.name.toLowerCase().includes(keywords.toLowerCase())),
@@ -145,5 +145,5 @@ const TopicDate = styled.div`
   margin-left: 10px;
 `
 
-// memo（f2-58）：父组件 HistoryPage 每敲一个字符都会重渲染，本组件否则要跟着全量重排一次。
+// memo：父组件 HistoryPage 每敲一个字符都会重渲染，本组件否则要跟着全量重排一次。
 export default memo(TopicsHistory)

@@ -2,10 +2,10 @@ import type { Topic } from '@renderer/types'
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * `pruneTopics`（v0.3.0-2 目标 B）：以内核对账结果剪除渲染层陈旧行。
+ * `pruneTopics`：以内核对账结果剪除渲染层陈旧行。
  *
- * 验收口径（`report.md` §3.4）：
- * - B-4：被剪的行不再存在，且**同级/其他行的渲染层私有字段不受影响**（`pinned`/`prompt`/
+ * 验收口径：
+ * - ：被剪的行不再存在，且**同级/其他行的渲染层私有字段不受影响**（`pinned`/`prompt`/
  *   `lastViewedBranchId` 这类只归渲染层的字段不因为"对账"而被改写）；
  * - 血缘：剪一个根行时其 fork 后代一并消失（内核删除根时已递归清掉子会话）。
  */
@@ -53,7 +53,7 @@ describe('assistants/pruneTopics', () => {
     )
 
     expect(idsOf(next)).toEqual(['keep', 'keep-child'])
-    // 渲染层私有字段不被对账触碰（B-4）
+    // 渲染层私有字段不被对账触碰
     expect(next.assistants[0].topics[0]).toMatchObject({
       pinned: true,
       prompt: '话题提示词',

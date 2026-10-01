@@ -1,11 +1,11 @@
 /**
- * 二轮审查 f2-42：文件页首帧加载态被渲染成"空数据"。
+ * 文件页首帧加载态被渲染成"空数据"。
  *
  * `useLiveQuery` 在首个结果到达前返回 `undefined`（= 加载中），与"查到了 0 行"是两件事。
- * 旧实现两者都落到 `Empty`：每次进入文件页先闪一下"暂无数据"（§9「Show a skeleton or a
+ * 旧实现两者都落到 `Empty`：每次进入文件页先闪一下"暂无数据"（「Show a skeleton or a
  * placeholder for every state」）。
  *
- * 二轮审查 f2-41：`dataSource` 的 map 里每行一条 `logger.debug('FileItem', file)`——纯脚手架
+ * `dataSource` 的 map 里每行一条 `logger.debug('FileItem', file)`——纯脚手架
  * 语句，文件多时既刷屏又白做功。
  */
 import { loggerService } from '@logger'
@@ -88,7 +88,7 @@ describe('FilesPage · 首帧状态与渲染期日志', () => {
     }))
   })
 
-  it('f2-42：加载中画占位（不是 Empty），查到 0 行才画 Empty', () => {
+  it('加载中画占位（不是 Empty），查到 0 行才画 Empty', () => {
     useLiveQueryMock.mockReturnValue(undefined as never)
 
     const { rerender, container } = renderPage()
@@ -109,7 +109,7 @@ describe('FilesPage · 首帧状态与渲染期日志', () => {
     expect(container.querySelector('.ant-empty')).not.toBeNull()
   })
 
-  it('f2-42：有数据时渲染列表，既不画加载占位也不画 Empty', () => {
+  it('有数据时渲染列表，既不画加载占位也不画 Empty', () => {
     useLiveQueryMock.mockReturnValue([makeFile(1), makeFile(2)] as never)
 
     const { container } = renderPage()
@@ -119,7 +119,7 @@ describe('FilesPage · 首帧状态与渲染期日志', () => {
     expect(container.querySelector('.ant-empty')).toBeNull()
   })
 
-  it('f2-41：渲染路径里不再逐行打 debug 日志', () => {
+  it('渲染路径里不再逐行打 debug 日志', () => {
     const debug = vi.spyOn(loggerService, 'debug').mockImplementation(() => {})
     useLiveQueryMock.mockReturnValue([makeFile(1), makeFile(2), makeFile(3)] as never)
 

@@ -20,7 +20,7 @@ vi.mock('@renderer/hooks/useAvatar', () => ({ default: () => 'ab' }))
 
 vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { userName: 'User' }
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   return { useSettings: () => settings, useSetting: (key: string) => settings[key] }
 })
 vi.mock('@renderer/services/MessagesService', () => ({ getMessageModelId: (message: Message) => message.modelId }))

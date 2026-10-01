@@ -27,7 +27,7 @@ export function useNutstoreSSO() {
   }, [])
 
   /**
-   * 协议监听注册在 effect 中并在卸载时解绑（r2-67）。旧实现每次调用 `nutstoreSSOHandler`
+   * 协议监听注册在 effect 中并在卸载时解绑。旧实现每次调用 `nutstoreSSOHandler`
    * 都在 `new Promise` 内注册、且只在收到回调的 `finally` 解绑：用户取消 SSO 或回调不来时
    * 监听器常驻，重复点击叠加监听，Promise 永不 settle，hook 卸载也不清理。
    * 监听器现在跟随 hook 生命周期（整个生命周期只有一个），超时/取消只收敛"在途请求"。

@@ -1,5 +1,5 @@
 /**
- * 搜索结果 RAG 压缩（批次7，v0.3.2 验收反馈"尽早移植"）：上游
+ * 搜索结果 RAG 压缩（验收反馈"尽早移植"）：上游
  * WebSearchService.compressWithSearchBase + utils/websearch.ts（selectReferences /
  * consolidateReferencesByUrl）的主进程适配版。
  *
@@ -39,7 +39,7 @@ function dot(a: number[], b: number[]): number {
 }
 
 /**
- * 重排相（批次2 rerank 实装）：cosine 初筛序 → lightRerank 精排。候选规模 =
+ * 重排相（rerank 实装）：cosine 初筛序 → lightRerank 精排。候选规模 =
  * 全部去重块（重排端点按文档计费，块数即搜索结果量级，无需预截）。
  * 失败降级 cosine 序（如实记 warn，不静默吞）。
  */
@@ -118,7 +118,7 @@ export async function compressWithRag(
       return true
     })
 
-    // 4.5 重排相（批次2）：配置了 rerank 模型时 cosine 序 → 精排序（失败降级 cosine 序）
+    // 4.5 重排相：配置了 rerank 模型时 cosine 序 → 精排序（失败降级 cosine 序）
     const ranked = await rerankChunks(questions, unique, config.rerank, signal)
 
     // 5. 轮转选片（上游 selectReferences 同语义：按原始结果顺序轮询，每源均衡，

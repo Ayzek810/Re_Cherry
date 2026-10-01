@@ -1,10 +1,10 @@
 /**
- * 二轮审查 r2-79 / 跨区请求⑥ 行为契约：**「文件不存在」与「文件存在但读不出来」必须分开**。
+ * / 行为契约：**「文件不存在」与「文件存在但读不出来」必须分开**。
  *
  * 旧实现只有一个通用错误（主进程 `readFileCore` 把任何读失败包成 `Failed to read file: …`），
  * 渲染层一律按"文件不存在"处理，于是两个相反的事实同形：
  *  ① 全新安装（还没有 `custom-minapps.json`）永远播种不了 —— 用户第一次添加自定义小应用必失败；
- *  ② 一次瞬时读失败有被当成"用户没有小应用"而覆盖写的风险（家规不变式 6）。
+ *  ② 一次瞬时读失败有被当成"用户没有小应用"而覆盖写的风险。
  *
  * 观察窗 = IPC 边界：`window.api.file.readById` 的返回值就是主进程新通道的三值结果
  * （`@shared/types/fileRead` 的 `FileReadByIdResult`）。本文件替身这一层，逐条钉住语义。
@@ -28,7 +28,7 @@ vi.mock('@renderer/i18n', () => ({
   default: { t: (key: string) => key }
 }))
 
-describe('config/minapps 读自定义小应用（r2-79/⑥）', () => {
+describe('config/minapps 读自定义小应用', () => {
   beforeEach(() => {
     vi.resetModules()
     readByIdMock.mockReset()

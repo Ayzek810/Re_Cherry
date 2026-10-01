@@ -6,7 +6,7 @@
  * 不是通道本体（曾把工具绑死 LocalPaddle 被否决返工）；②"5 分钟上限我没反对
  * （只是您可以再放宽到 8 分钟，大书云解析也要点时间）"——被删的是文本截断上限
  * （200k，终局删除），时间预算保留并放宽到 8 分钟。知识库摄取路径显式传
- * Infinity（后台 FIFO 无预算，§7.16 裁决 ③ 未被撤回）。
+ * Infinity（后台 FIFO 无预算，裁决 ③ 未被撤回）。
  *
  * 云端五家（MinerU / Doc2x / Mistral / Open MinerU / PaddleOCR）自上游
  * cherry-studio v1.9.11 knowledge/preprocess 同名适配器移植：载体从
@@ -15,7 +15,7 @@
  * zip 解包用 fork 已有 node-stream-zip（BackupManager 同款），multipart 用
  * Node 全局 FormData/Blob，零新依赖。
  *
- * 本地/自带模型两条腿（v0.4.4 用户裁决：都是文档处理的子系统，不是独立系统）：
+ * 本地/自带模型两条腿（用户裁决：都是文档处理的子系统，不是独立系统）：
  * - local-paddle：本机 PP-OCRv6 推理（preprocess/localPaddle/，utility 子进程）；
  * - vision-model：本机光栅化 + 用户配置的视觉模型 OpenAI 兼容多模态 chat 逐页转写
  *  （preprocess/vision/）。两者都是「通道里的服务商条目」。
@@ -47,7 +47,7 @@ export interface PreprocessProviderConfig {
   apiKey?: string
   apiHost?: string
   model?: string
-  /** vision-model 条目（v0.4.4）：用户选定的视觉模型引用（provider + model 两个 id）。 */
+  /** vision-model 条目：用户选定的视觉模型引用（provider + model 两个 id）。 */
   visionModel?: { provider: string; model: string }
   /** vision-model 条目的页级并发数（1..40；缺省走主进程默认 8）。 */
   visionConcurrency?: number
@@ -191,7 +191,7 @@ export async function parsePdfWithProvider(
         )
       }
       case 'vision-model': {
-        // 未选模型在本条如实报错（不静默降级到别家；§7.18 裁决同款语义）。
+        // 未选模型在本条如实报错（不静默降级到别家；裁决同款语义）。
         const visionModel = config.visionModel
         if (visionModel === undefined || visionModel.provider.length === 0 || visionModel.model.length === 0) {
           throw new Error('vision model is not selected (设置 → 文档处理 → VisionModel → 选择模型)')

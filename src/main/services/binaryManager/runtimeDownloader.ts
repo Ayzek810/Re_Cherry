@@ -27,9 +27,9 @@ const execFileAsync = promisify(execFile)
 const EXTRACT_TIMEOUT_MS = 120_000
 
 // 顶部可调：真实存在的 node 发行版与 python-build-standalone tag/版本。
-// 批次5 真机事故修复：node dist 布局是 /dist/v{版本}/<文件名>（带 v 前缀的版本目录）——
+// 真机事故修复：node dist 布局是 /dist/v{版本}/<文件名>（带 v 前缀的版本目录）——
 // 原实现漏掉版本目录段，双源 404（真机日志：nodejs.org 与 npmmirror 均 404）。
-// v0.3.4-2 升版 24.9.0（社区桌面壳捆绑的同款版本）——三个理由：
+// 升版 24.9.0（社区桌面壳捆绑的同款版本）——三个理由：
 // ① dsh 0.1.5-rc.x 的 bin.js 入口守护 `if (import.meta.main)` 在 Node 22.12.0 下恒为
 //    undefined（实测：22.12 输出 undefined、24.19 输出 true）→ CLI 全体静默空转 exit 0
 //    （harness 372ms 退出、plugin add 无副作用，全由此起）；
@@ -45,7 +45,7 @@ export const PYTHON_VERSION = '3.12.7'
 /**
  * node dist 双源（版本目录段在调用处拼入——base 不含版本段）。
  *
- * v0.4.5-1（用户裁决 2026-09-29）：**npmmirror 提为第一顺位**。原顺序（官方在前）在墙内每次
+ * （用户裁决 2026-09-29）：**npmmirror 提为第一顺位**。原顺序（官方在前）在墙内每次
  * 都要先把官方源失败一遍才轮到镜像：python 那条本机实测官方源 `fetch failed` 花了 **29.6s**
  * 才认输（见下），node 官方源则只是略慢（919ms vs 镜像 681ms）。两台源都实测伺服同一份文件
  * （node：两边 total 均为 36 405 077 字节），所以顺序只影响"多久拿到"，不影响"拿到什么"。
@@ -108,14 +108,14 @@ function pythonArchiveName(): string {
 }
 
 // ---------------------------------------------------------------------------
-// 下载（v0.4.5-1：统一走 downloadFile 原语——流式落盘 + 空闲超时 + 断点续传 + 源内重试）
+// 下载（统一走 downloadFile 原语——流式落盘 + 空闲超时 + 断点续传 + 源内重试）
 // ---------------------------------------------------------------------------
 
 export interface RuntimeDownloadOptions {
   /** 字节进度（安装进度条的数据源）；缺省只写日志。 */
   onProgress?: (progress: DownloadProgress) => void
   /**
-   * 阶段切换（v0.4.5-1）：下载完成、开始解压时上报 `extract`。
+   * 阶段切换：下载完成、开始解压时上报 `extract`。
    * 为什么需要：解压 node 的上万文件 / CPython 的 tar 要几十秒，而下载比例此时停在 100%
    * ——不换阶段的话进度条会**冻在 100%**，看着像装完了其实没有（三家工具都有这个阶段）。
    */
@@ -172,7 +172,7 @@ async function extractZip(archivePath: string, destDir: string): Promise<void> {
 /**
  * 把解压产物归位到 targetDir：node 系档案带 `node-v{v}-*` 前缀层 → 内层目录整体
  * rename；python install_only 无包裹层 → 临时目录整体 rename。
- * v0.4.5-1：改走原子替换（atomicSwap）——旧运行时目录先留作备份，切换失败时放回去，
+ * 改走原子替换（atomicSwap）——旧运行时目录先留作备份，切换失败时放回去，
  * 不再"先删旧的再改名"（那形态下改名一失败，运行时目录就半删了）。
  */
 async function flattenIntoTarget(tempDir: string, targetDir: string, innerPrefix: string | undefined): Promise<void> {
@@ -288,8 +288,8 @@ export async function ensurePythonRuntime(options: RuntimeDownloadOptions = {}):
     options.onStep?.('extract')
     await extractTarGz(archivePath, tempDir)
     // install_only 布局：所有条目在顶层 `python/` 目录下（三平台同构，与 node 的
-    // node-v{v}-* 前缀层同类）——批次2 规格误写"无包裹层"，真机安装必败（真机事故，
-    // 见 v0.3.4_doc.md §3）；python.exe 实际位于 {temp}/python/python.exe。
+    // node-v{v}-* 前缀层同类）—— 规格误写"无包裹层"，真机安装必败（真机事故，
+    //）；python.exe 实际位于 {temp}/python/python.exe。
     await flattenIntoTarget(tempDir, dir, 'python')
     await fsp.writeFile(path.join(dir, RUNTIME_VERSION_MARKER), PYTHON_VERSION, 'utf-8')
     const missing = await firstMissing([pythonBin])

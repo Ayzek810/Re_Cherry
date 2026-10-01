@@ -13,7 +13,7 @@ import type { ProviderReasoningCompat, ThinkingFormat } from '@shared/types/reas
  * 背景：pi-ai 按内置名单自动识别网关（deepseek.com / openrouter / z.ai / together /
  * moonshot / nvidia / ant-ling / xai / cerebras / chutes / cloudflare 等，见其
  * detectCompat），名单外的网关（硅基流动、DashScope 兼容层、魔搭、各种中转）一律按
- * openai 格式直发 reasoning_effort——而 enable_thinking 家族模型（Qwen3 / Kimi K2.5+ /
+ * openai 格式直发 reasoning_effort——而 enable_thinking 家族模型（Qwen3 / Kimi .5+ /
  * DeepSeek 混合 / GLM）在这类聚合网关上的通用约定是 enable_thinking 布尔开关，
  * reasoning_effort 只在极少数模型上被认（硅基流动上仅 V4/V4-Flash/GLM-5.2 且只认
  * high/max）。不修正 = 档位静默失效 + "关"关不掉。
@@ -32,7 +32,7 @@ import type { ProviderReasoningCompat, ThinkingFormat } from '@shared/types/reas
  */
 
 /**
- * 思考协议格式与兼容覆盖由 `@shared/types/reasoning` 定义（r2-88 跨包上提）。
+ * 思考协议格式与兼容覆盖由 `@shared/types/reasoning` 定义（跨包上提）。
  *
  * 这是渲染进程构造、主进程消费的**跨进程契约**：两侧引用同一份声明，任一侧新增或改名
  * 都会在另一侧变成编译错误。此处原样转出，保持本模块既有的对外导出面不变。

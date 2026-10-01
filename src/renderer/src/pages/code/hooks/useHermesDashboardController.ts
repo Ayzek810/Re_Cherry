@@ -8,7 +8,7 @@ import { withDetail } from '../utils/errorDetail'
 import { useHermesDashboardStatus } from './useCodeCliStatus'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useHermesDashboardController.ts
-//（2026-09-24，v0.3.4-1 批次4a）。缝点四处，函数体逐字：
+//（2026-09-24）。缝点四处，函数体逐字：
 // ① 状态缝：useSharedCacheValue('feature.hermes_dashboard.status') → useHermesDashboardStatus()
 //   （useCodeCliStatus 订阅缝）。
 // ② 弹窗缝：openSmartMiniApp → openSmartMinapp（同 useDeepSeekHarnessController 缝①；id 用
@@ -38,7 +38,7 @@ const START_ERROR_KEYS: Record<HermesDashboardStartFailureReason, string> = {
   startup_failed: 'code.hermes_dashboard.error.startup_failed'
 }
 
-// 二轮审查 f2-48：此处原有逐字相同的 `ERROR_DETAIL_LIMIT` + `withDetail` 副本，绕开了
+// 此处原有逐字相同的 `ERROR_DETAIL_LIMIT` + `withDetail` 副本，绕开了
 // `../utils/errorDetail` 这个单点工具（同目录 usePaperAgentController / useToolUpdateCheck /
 // useBinaryActions 都已改用共享件）。截断长度与清洗规则的漂移风险由此消除。
 

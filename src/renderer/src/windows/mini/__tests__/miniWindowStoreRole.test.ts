@@ -1,5 +1,5 @@
 /**
- * r2-03 行为回归：小窗的 store 角色 —— 只读 + 只收。
+ * 小窗的 store 角色 —— 只读 + 只收。
  *
  * 驱动的是 `entryPoint.tsx` 调用的同一个函数 `configureMiniWindowStoreRole`，观察窗是
  * 「localStorage 里的 `persist:cherry-studio`」与「同步中间件发往其它窗口的广播」：
@@ -21,7 +21,7 @@ import { configureMiniWindowStoreRole } from '../miniWindowStoreRole'
 
 const PERSIST_KEY = 'persist:cherry-studio'
 
-describe('mini 窗口 store 角色（r2-03）', () => {
+describe('mini 窗口 store 角色', () => {
   it('应用角色后：持久化切片不再回写 localStorage，也不再向其它窗口广播', async () => {
     const onUpdate = vi.fn().mockResolvedValue(undefined)
     ;(window as unknown as { api: Record<string, unknown> }).api = {

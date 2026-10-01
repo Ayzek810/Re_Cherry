@@ -88,7 +88,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       centered: true,
       onOk: async () => {
         setDeleting(true)
-        // c2-18：批量删除必须报「N 成功 / M 失败」。原实现把串行 await 放在同一个 try 里，
+        // 批量删除必须报「N 成功 / M 失败」。原实现把串行 await 放在同一个 try 里，
         // 第 k 条失败即跳出：前 k-1 条已经真删了、后面的没删，却只弹一条通用错误，
         // 用户无法知道到底删掉了几个；`selectedRowKeys` 也只在全成功路径才清空。
         const requestedKeys = [...selectedRowKeys]

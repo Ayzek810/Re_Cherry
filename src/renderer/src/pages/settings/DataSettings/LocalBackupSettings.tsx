@@ -48,7 +48,7 @@ const LocalBackupSettings: React.FC = () => {
   const [appInfoFailed, setAppInfoFailed] = useState(false)
 
   useEffect(() => {
-    // v1 二轮审查 s2-34：此前无 catch。`appInfo!.appDataPath` 是个非空断言——「未知」在事件
+    // 此前无 catch。`appInfo!.appDataPath` 是个非空断言——「未知」在事件
     // 处理器里变成 TypeError，用户选的目录不落库且没有任何提示。
     void window.api
       .getAppInfo()
@@ -88,7 +88,7 @@ const LocalBackupSettings: React.FC = () => {
       return false
     }
 
-    // v1 二轮审查 s2-34：应用信息读不到时不能拿 `!` 断言去取值（TypeError），
+    // 应用信息读不到时不能拿 `!` 断言去取值（TypeError），
     // 也不该静默失败——如实拒绝并说明原因。
     if (!appInfo) {
       logger.warn('Cannot validate backup directory: application paths are unavailable')
@@ -180,7 +180,7 @@ const LocalBackupSettings: React.FC = () => {
   }
 
   const handleClearDirectory = () => {
-    // v1 二轮审查 s2-35：「清空」会同时丢掉输入框里未提交的草稿（`localBackupDir`）、
+    // 「清空」会同时丢掉输入框里未提交的草稿（`localBackupDir`）、
     // 清掉已保存的路径并把自动同步关掉——此前没有任何确认（同文件对更轻的复制数据操作
     // 反而有确认）。清空动作不可撤销，这里先问一次。
     window.modal.confirm({

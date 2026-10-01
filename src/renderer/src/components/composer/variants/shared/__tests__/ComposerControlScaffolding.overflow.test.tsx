@@ -1,7 +1,7 @@
 /**
  * 作曲条工具栏的溢出图标态契约测试。
  *
- * 行为级验证（§4.18）：V2 `variants/shared/ComposerControlScaffolding.tsx:53-54` 用
+ * 行为级验证：V2 `variants/shared/ComposerControlScaffolding.tsx:53-54` 用
  * `useOverflowIconOnly` 量宽度，溢出时把上下文控件切成图标态（`w-8 justify-center px-0` +
  * `sr-only` 文字）。fork 此前 `iconOnly` 恒 false —— 窄窗下工具栏控件被 `overflow-hidden` 裁掉（P1）。
  */

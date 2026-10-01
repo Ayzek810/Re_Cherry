@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next'
 import { ConfigSelectField } from './ConfigFieldPrimitives'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/tools/
-// DeepSeekHarnessConfigFields.tsx（2026-09-24，v0.3.4-1 批次4b）。逐字；import 面对号
+// DeepSeekHarnessConfigFields.tsx（2026-09-24）。逐字；import 面对号
 //（常量/守卫 ← @shared/types/codeCli fork 对口面）。同批移植其余六个工具的 ConfigFields
 //（claude/codex/gemini/kimi/opencode/qwen）不搬——对应工具未移植（见 toolFieldRenderer 缝注）。
 

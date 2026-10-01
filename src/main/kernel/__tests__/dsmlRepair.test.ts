@@ -22,7 +22,7 @@ describe('repairDsmlChunk', () => {
     const chunks = repaired as StreamChunk[]
     // 1 个正文 block-end + 每个调用 3 块（block-start / tool-call-delta / block-end）
     expect(chunks).toHaveLength(4)
-    // 正文块被剥离成空（可能残留换行——与 v0.3.0 补丁逐字一致的语义）
+    // 正文块被剥离成空（可能残留换行——与 补丁逐字一致的语义）
     expect(chunks[0]).toMatchObject({ type: 'block-end', index: 2, block: { type: 'text' } })
     const strippedText = (chunks[0] as { block: { text: string } }).block.text
     expect(strippedText).not.toContain('DSML')

@@ -96,7 +96,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Topics that can be selected (non-pinned; search-filtered when in search mode)
-  // v0.3.1：行集合由 Topics 从 Redux 数组单源派生后传入（filteredTopics 就是它）；
+  // 行集合由 Topics 从 Redux 数组单源派生后传入（filteredTopics 就是它）；
   // 组件不自问内核、不持快照——对账写 store 的结果自然反映到这里。
   const selectableTopics = useMemo(() => filteredTopics.filter((topic) => !topic.pinned), [filteredTopics])
 
@@ -145,7 +145,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
 
     const idsArray = Array.from(selectedIds)
 
-    // Delete DB records and files；`removeTopic` 返回**真实的内核删除结果**（v0.3.0-2 §6.9），
+    // Delete DB records and files；`removeTopic` 返回**真实的内核删除结果**，
     // 因此这里的"成功/失败"计数不再是假信号
     const results = await Promise.allSettled(
       idsArray.map(async (id) => {

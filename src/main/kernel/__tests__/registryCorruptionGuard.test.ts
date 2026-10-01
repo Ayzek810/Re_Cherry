@@ -22,7 +22,7 @@ import {
 } from './helpers/seedKernelState'
 
 /**
- * v0.3.0-4 问题 D：**损坏注册表不得导致启动清扫物理删库**（验D-1 ~ 验D-5）。
+ * **损坏注册表不得导致启动清扫物理删库**（~）。
  *
  * 故障链：`topics.json` 损坏 → `loadRegistry` 的 catch 把"读不出来"折叠成"空注册表" →
  * `sweepOrphanSessions` 取 `known = ∅` → 库里每个会话都被判孤儿 → `DELETE FROM events/sessions`。
@@ -68,8 +68,8 @@ afterEach(async () => {
   if (dir.length > 0) await rm(dir, { recursive: true, force: true })
 })
 
-describe('损坏注册表守卫（问题 D）', () => {
-  it('验D-1：注册表**缺失**（absent）+ 库里有会话 → 仍然清扫（既有孤儿语义不回归）', async () => {
+describe('损坏注册表守卫', () => {
+  it('注册表**缺失**（absent）+ 库里有会话 → 仍然清扫（既有孤儿语义不回归）', async () => {
     await seedKernelState({ dir, registry: 'absent', sessions: [{ id: 'sess-a', events: 3 }, { id: 'sess-b' }] })
     expect(await readSessionCounts(dir)).toEqual({ sessions: 2, events: 4 })
     await loadRegistry(dir)
@@ -79,7 +79,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(await readSessionCounts(dir)).toEqual({ sessions: 0, events: 0 })
   })
 
-  it('验D-2：注册表**读不出来**（failed）→ purge 次数为 0，且记 logger.error', async () => {
+  it('注册表**读不出来**（failed）→ purge 次数为 0，且记 logger.error', async () => {
     await seedKernelState({ dir, registry: 'corrupt', sessions: [{ id: 'sess-a', events: 3 }, { id: 'sess-b' }] })
     const purge = vi.fn(async () => true)
     await loadRegistry(dir)
@@ -94,7 +94,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(messages.some((message) => message.includes('could not be read'))).toBe(true)
   })
 
-  it('验D-3：注册表**解析成功**且有孤儿 → 仍然清扫，且只清孤儿（真实功能不受损）', async () => {
+  it('注册表**解析成功**且有孤儿 → 仍然清扫，且只清孤儿（真实功能不受损）', async () => {
     await seedKernelState({
       dir,
       registry: { topics: [{ id: 'sess-a', name: 'A', createdAt: 1, updatedAt: 2, provider: 'p', model: 'm' }] },
@@ -112,7 +112,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(counts.events).toBe(2) // A 的 2 条事件仍在，B 的 3 条被清
   })
 
-  it('验D-4：读不出来时**原文件字节不变**，且在任何覆盖之前已生成 `.corrupt-*` 备份（内容逐字节相同）', async () => {
+  it('读不出来时**原文件字节不变**，且在任何覆盖之前已生成 `.corrupt-*` 备份（内容逐字节相同）', async () => {
     await seedKernelState({ dir, registry: 'corrupt', sessions: [{ id: 'sess-a' }] })
     const before = await readRegistryBytes(dir)
 
@@ -124,7 +124,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(await readCorruptBackupBytes(dir, backups[0])).toEqual(before)
   })
 
-  it('验D-4 补：内容相同的第二次加载不再堆备份（每批损坏内容只留一份）', async () => {
+  it('补：内容相同的第二次加载不再堆备份（每批损坏内容只留一份）', async () => {
     await seedKernelState({ dir, registry: 'corrupt' })
 
     expect(await loadRegistry(dir)).toBe('failed')
@@ -133,7 +133,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(await listCorruptBackups(dir)).toHaveLength(1)
   })
 
-  it('验D-5：三态 × 行数的判定穷举（纯函数）', () => {
+  it('三态 × 行数的判定穷举（纯函数）', () => {
     expect(shouldSweepOrphans('failed', 0).sweep).toBe(false)
     expect(shouldSweepOrphans('failed', 3).sweep).toBe(false)
     expect(shouldSweepOrphans('absent', 0).sweep).toBe(true)
@@ -152,7 +152,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     for (const reason of reasons) expect(reason.length).toBeGreaterThan(20)
   })
 
-  it('验D-5 补（k2-10）：迁移失败是**独立**的否决项，与注册表三态正交', () => {
+  it('补：迁移失败是**独立**的否决项，与注册表三态正交', () => {
     // 三种注册表状态下都必须否决：迁移写不进去时"读不出来"的会话与孤儿无法区分。
     for (const outcome of ['failed', 'absent', 'loaded'] as const) {
       expect(shouldSweepOrphans(outcome, 0, 'failed').sweep).toBe(false)
@@ -180,11 +180,11 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(await listCorruptBackups(dir)).toHaveLength(1)
   })
 
-  it('验D-6（k2-10）：**遗留迁移失败** → 不清扫，含遗留事件的旧会话不被物理删除', async () => {
+  it('**遗留迁移失败** → 不清扫，含遗留事件的旧会话不被物理删除', async () => {
     // 故障链：注册表加载成功（'loaded'，库里两个会话都不在注册表里）+ 迁移**写不进去**
     // → 含遗留 `cherry/work-mode` 事件的旧会话读不出来（SessionFormatUnsupportedError），
     // 因此上面那个闸门（只看注册表）会放行清扫，把"读不出来"当成"孤儿"物理 DELETE。
-    // k2-10 的修法：迁移返回三值，'failed' 与注册表 'failed' 同样否决本轮清扫。
+    // 修法：迁移返回三值，'failed' 与注册表 'failed' 同样否决本轮清扫。
     await seedKernelState({ dir, registry: { topics: [] }, sessions: [{ id: 'legacy-a', events: 2 }] })
     expect(await readSessionCounts(dir)).toEqual({ sessions: 1, events: 2 })
     const purge = vi.fn(async () => true)
@@ -204,7 +204,7 @@ describe('损坏注册表守卫（问题 D）', () => {
     expect(messages.some((message) => message.includes('legacy ignorable-event migration failed'))).toBe(true)
   })
 
-  it('验D-6 补（k2-10）：迁移**成功**（确实无需迁移）→ 清扫照常执行，孤儿仍被清掉', async () => {
+  it('补：迁移**成功**（确实无需迁移）→ 清扫照常执行，孤儿仍被清掉', async () => {
     await seedKernelState({ dir, registry: { topics: [] }, sessions: [{ id: 'orphan-a', events: 2 }] })
     expect(await loadRegistry(dir)).toBe('loaded')
 

@@ -52,12 +52,12 @@ const Router: FC = () => {
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/translate" element={<TranslatePage />} />
           <Route path="/paintings" element={<PaintingPage />} />
-          {/* v0.3.3-2 笔记复活（V1 原样） */}
+          {/* 笔记复活（V1 原样） */}
           <Route path="/notes" element={<NotesPage />} />
-          {/* v0.3.4 小程序页面（V1 原样：列表页 + 详情壳） */}
+          {/* 小程序页面（V1 原样：列表页 + 详情壳） */}
           <Route path="/apps/:appId" element={<MinAppPage />} />
           <Route path="/apps" element={<MinAppsPage />} />
-          {/* v0.3.4-1 编码助手（Code Mate，V2 移植） */}
+          {/* 编码助手（Code Mate，V2 移植） */}
           <Route path="/code" element={<CodeCliPage />} />
         </Routes>
       </ErrorBoundary>

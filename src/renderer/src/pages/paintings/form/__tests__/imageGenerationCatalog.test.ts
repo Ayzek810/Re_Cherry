@@ -1,5 +1,5 @@
 /**
- * 目录解析 + 字段映射 + 参数校验机测（v0.3.3 批次6，V2 绘画参数来源移植）。
+ * 目录解析 + 字段映射 + 参数校验机测（V2 绘画参数来源移植）。
  *
  * 断言的是**契约**，不是实现快照：
  *   · 解析序 = V2 `getImageGenerationSupport`（provider override 优先于 creator 默认）；
@@ -225,7 +225,7 @@ describe('wire 映射表（canonical → vendor wire）', () => {
   })
 })
 
-describe('resolveImageGenerationSupport — 目录未收录时的通用兜底（fork 缝 v0.3.3-9）', () => {
+describe('resolveImageGenerationSupport — 目录未收录时的通用兜底（fork 缝）', () => {
   it('未收录的 (provider, model) 给通用字段面，而不是空（否则参数入口整块消失）', () => {
     for (const [provider, model] of [
       ['custom-openai', 'my-image-model'],
@@ -269,7 +269,7 @@ describe('resolveImageGenerationSupport — 目录未收录时的通用兜底（
     }
   })
 
-  it('doubao（火山 Ark）与自建 provider 走兜底而不是被误杀（v0.3.3-9 修正）', () => {
+  it('doubao（火山 Ark）与自建 provider 走兜底而不是被误杀（修正）', () => {
     // Ark 的图像接口就是 {base}/images/generations（base 带 /api/v3），此前被当"范围外"拒绝
     for (const provider of ['doubao', 'my-custom-endpoint', 'silicon']) {
       expect(isOffPlaneVendor(provider), provider).toBe(false)

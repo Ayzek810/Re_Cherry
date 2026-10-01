@@ -8,7 +8,7 @@
  * 机制：dsh 在 wire 上把纯文本路由的图片块降级为
  * "[image omitted because this model accepts text only; attachment sha256:xxxxxxxx]"
  * 占位文本——模型看到占位即知有图，抄其中的 8 位 sha 前缀调本工具取内容。
- * 图片的完整 ref 存在会话日志里（v0.3.1 识图通道：user/message 内容块），
+ * 图片的完整 ref 存在会话日志里（识图通道：user/message 内容块），
  * 是唯一真相源——本工具按前缀在日志内反查，不建任何并行登记表；
  * 历史任意轮的图都可被转述（占位文本在 wire 上随历史常驻，模型自然可指）。
  */

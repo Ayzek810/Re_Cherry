@@ -1,12 +1,12 @@
 // fork 移植自 cherry-studio v2 src/main/services/deepSeekHarness/DeepSeekHarnessService.ts
-// （2026-09-24，v0.3.4-1）。进程管理 / 就绪探测 / 配置事务调用 / 诊断卫生化逐字。
+// （2026-09-24）。进程管理 / 就绪探测 / 配置事务调用 / 诊断卫生化逐字。
 // 缝点（行内标注）：
 // ① V2 生命周期容器（BaseService/@Injectable/application.get）→ fork 单例 + 状态事件广播；
 // ② providerService/modelService → Dsh_SyncProviders 快照（providerSnapshot.ts，同
 //    setLightLlmProviderRoutes 先例）；apiKey 取快照明文（主进程内存，同内核信任边界）；
-// ③ BinaryManager → 批次1 的 PATH 探测（resolveBinary.ts，批次2 升级）；
+// ③ BinaryManager → 的 PATH 探测（resolveBinary.ts，升级）；
 // ④ application.getPath(...) → paths.ts 的 CodeMate 子树；
-// ⑤ gateway 分支经 gatewayRuntime.ts（批次3 接入 ApiGateway 后填充）。
+// ⑤ gateway 分支经 gatewayRuntime.ts（接入 ApiGateway 后填充）。
 
 import { type ChildProcess, execFileSync } from 'node:child_process'
 import fs from 'node:fs/promises'
@@ -58,8 +58,8 @@ const DIAGNOSTIC_LIMIT = 2000
 const GATEWAY_ROUTE = 'cherry-studio-codemate-gateway'
 const GATEWAY_CREDENTIAL_REF = 'CHERRY_STUDIO_CODEMATE_GATEWAY_API_KEY'
 const MANAGED_CREDENTIAL_ENV = /^CHERRY_STUDIO_CODEMATE_(?:[A-F0-9]{12}|GATEWAY)_API_KEY$/i
-// v0.3.4-2：registry 钉 npmmirror，harness 内 dshmarket 的 pnpm/npm 子进程继承。
-// v0.4.5-1：常量单点到 binaryManager/registry.ts（原为"与 BinaryManager 同值"的复制件，
+// registry 钉 npmmirror，harness 内 dshmarket 的 pnpm/npm 子进程继承。
+// 常量单点到 binaryManager/registry.ts（原为"与 BinaryManager 同值"的复制件，
 // 复制件正是会漂移的那种东西——一处改了另一处不改，市场抓包与版本解析就走两个源）。
 
 /** fork 缝②：KernelModelInput.input 是 string[]（内核已卫生化），此处收窄为投影形状。 */
@@ -103,7 +103,7 @@ class DeepSeekHarnessService {
     return { status: this.status, ...(this.url ? { url: this.url } : {}) }
   }
 
-  /** 批次5：before-quit 同步杀进程用（Windows 子进程不随父退出；异步 will-quit 跑不完）。 */
+  /** before-quit 同步杀进程用（Windows 子进程不随父退出；异步 will-quit 跑不完）。 */
   get runningPid(): number | undefined {
     return this.child?.pid ?? undefined
   }
@@ -197,7 +197,7 @@ class DeepSeekHarnessService {
           if (startupAbortController.signal.aborted) {
             throw new Error('DeepSeek Harness startup was cancelled')
           }
-          // v0.4.5-1：启动前对齐插件市场基线。dshmarket 不是官方包（只是 profile 里的一个
+          // 启动前对齐插件市场基线。dshmarket 不是官方包（只是 profile 里的一个
           // 普通依赖），核心升级后它不会跟着走——旧版市场与本代核心不兼容正是"插件市场
           // 不可用"的根因（真机反馈）。此处 Harness 已停，是唯一能安全替换共享树包的时机。
           await this.ensureMarketBundle()
@@ -232,7 +232,7 @@ class DeepSeekHarnessService {
           // runtime, so only its own startup verdict fails launch; record its version for reports.
           const aborted = startupAbortController.signal.aborted
           const dshVersion = !aborted && runtime ? await readDshVersion(runtime.path) : undefined
-          // v0.3.4-2：failure message 已含 waitForReady 捕获的子进程 stderr/stdout 尾巴
+          // failure message 已含 waitForReady 捕获的子进程 stderr/stdout 尾巴
           // ——不进日志的话真机排障只能看到一句 "failed to start"（本轮排障实证）。
           const failMessage = error instanceof Error ? error.message : 'Failed to start DeepSeek Harness'
           if (!aborted) {
@@ -267,7 +267,7 @@ class DeepSeekHarnessService {
   }
 
   /**
-   * v0.4.5-1：启动前的市场补装（dshmarket 只是 profile 里的普通依赖，核心升级它不会跟着走；
+   * 启动前的市场补装（dshmarket 只是 profile 里的普通依赖，核心升级它不会跟着走；
    * 缺失/不可读/链接残留/上次没修完时补一次）。
    *
    * 快路径是两三次文件读（未声明市场 / 已装且可读 → 直接返回）。需要补时装完会读回实际版本
@@ -309,11 +309,11 @@ class DeepSeekHarnessService {
     }
   }
 
-  // fork 缝③：V2 走 BinaryManager 快照；批次1 先 PATH 探测（批次2 升级为 portable 安装器）。
+  // fork 缝③：V2 走 BinaryManager 快照；先 PATH 探测（升级为 portable 安装器）。
   private async resolveRuntime(): Promise<DeepSeekHarnessRuntime> {
     const binary = await resolveBinary('dsh')
     if (!binary) throw new Error('DeepSeek Harness is not installed')
-    // 批次5 真机加固：PATH 命中 ≠ 可用——`--version` 探针失败的系统件（旧版缺 web 子命令、
+    // 真机加固：PATH 命中 ≠ 可用——`--version` 探针失败的系统件（旧版缺 web 子命令、
     // 损坏安装、同名异物）在启动前显式拒绝，不再放行到子进程退出后的英文哑弹。
     if (!binary.runnable) {
       throw new Error(
@@ -398,7 +398,7 @@ class DeepSeekHarnessService {
       DSH_HOME: deepSeekHarnessHome(),
       DSH_PERMISSION_MODE: permissionMode
     })
-    // v0.3.4-2：harness 内的 dshmarket 会自己装插件（pnpm/npm 子进程）——环境不钉住
+    // harness 内的 dshmarket 会自己装插件（pnpm/npm 子进程）——环境不钉住
     // 就是"指定位置外乱拉屎"：pnpm store 落全局、npm -g 落系统前缀。PATH 前置我们的
     // pnpm shim（installNpmTool 装进 tools/dsh/node_modules/.bin）+ 受管 node bin；
     // store/cache/registry 全钉 CodeMate 子树 → dshmarket 的 provisionPnpm 探测立即
@@ -424,7 +424,7 @@ class DeepSeekHarnessService {
     childEnv.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
     childEnv.npm_config_registry = NPM_REGISTRY_MIRROR
 
-    // v0.3.4-2 真机事故（25 个必需插件 failed to import）：0.1.7 的插件以裸名导入
+    // 真机事故（25 个必需插件 failed to import）：0.1.7 的插件以裸名导入
     // @deepseek-ai/* 宿主包——Node 从插件物理位置解析，安装树不在其回退链上。社区
     // 桌面壳的解法（harness-node-entry.mjs + host-module-fallback.mjs，MIT，原样搬运）：
     // node 先加载引导入口注册解析回退钩子（宿主包失败 → 以 dsh 安装树为父重试），再
@@ -520,7 +520,7 @@ function stripManagedCredentialEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 function readDshVersion(binaryPath: string): Promise<string | undefined> {
-  // 批次5：execFile → executeCommand（受管 dsh 是 node_modules/.bin/dsh.cmd，Windows 裸
+  // execFile → executeCommand（受管 dsh 是 node_modules/.bin/dsh.cmd，Windows 裸
   // spawn EINVAL——与 resolveBinary 探针同款事故；cross-spawn 处理 .cmd 转发）。
   // 失败语义不变：undefined（版本只作启动失败时的诊断注记）。
   return executeCommand(binaryPath, ['--version'], {
@@ -573,7 +573,7 @@ async function assertWebReady(url: string): Promise<void> {
   const readyUrl = new URL(url)
   const response = await fetch(readyUrl.toString(), { redirect: 'manual', signal: AbortSignal.timeout(5000) })
   await response.body?.cancel()
-  // v0.3.4-2 真机事故：0.1.5 校验 303→location==='/'（token 换取页）；0.1.7 的重定向目标
+  // 真机事故：0.1.5 校验 303→location==='/'（token 换取页）；0.1.7 的重定向目标
   // 变了 → 原精确匹配失败 → 活着的 harness 被我们误杀。就绪的事实是"HTTP 服务在响应"——
   // 放宽为 2xx/3xx 皆就绪，location 记日志供未来版本差异诊断。
   const location = response.headers.get('location')

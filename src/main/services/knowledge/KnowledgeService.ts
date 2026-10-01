@@ -1,5 +1,5 @@
 /**
- * 文档处理系统服务（批次4 建立为知识库摄取；v0.3.2 验收轮重构为同时服务聊天
+ * 文档处理系统服务（建立为知识库摄取；验收轮重构为同时服务聊天
  * 读文件）：fork MVP 自建（不移植 embedjs 全家，见 vectorStore/embeddings/
  * extractors/chunker 各文件头的裁剪说明）。
  *
@@ -8,7 +8,7 @@
  * 以及 read_document 的每轮登记与文本抽取（原 DocumentService 已删——聊天
  * 读文件与知识库摄取共用同一 extractors 文档处理引擎，双入口单引擎）。
  * 并发闸：条目处理进程内串行 FIFO（上游 workload≤80MB/并发≤30 的简化——个人
- * 规模够用，重负载留批次4+ 调整）；聊天读文件是交互路径，不进 FIFO。
+ * 规模够用，重负载留+ 调整）；聊天读文件是交互路径，不进 FIFO。
  *
  * IPC 薄转发约定（不变量1）：ipc.ts 的 KnowledgeBase_* 处理器只做参数校验 + 直调本服务；
  * 对话检索走内核 knowledge_search 工具（web_search 同构），执行时进程内直调本服务。
@@ -56,7 +56,7 @@ export interface KnowledgeTurnBase {
   documentCount?: number
   threshold?: number
   embedding: KnowledgeEmbeddingRef
-  /** 可选重排模型引用（批次2 rerank 实装；配置后检索命中再经 lightRerank 精排）。 */
+  /** 可选重排模型引用（rerank 实装；配置后检索命中再经 lightRerank 精排）。 */
   rerank?: { providerId: string; modelId: string }
 }
 
@@ -124,7 +124,7 @@ export class KnowledgeService {
   /** read_document 的每轮登记（topics.sendMessage 写入；工具执行时按 topicId 反查）。 */
   private readonly turnDocuments = new Map<string, TurnDocument[]>()
   /**
-   * v1 二轮审查 m2-08：每轮登记表的 key 是 topicId，而话题只增不减——长会话用户会
+   * 每轮登记表的 key 是 topicId，而话题只增不减——长会话用户会
    * 无限累积（每个 value 还持有绝对路径与知识库清单）。复刻 SpanCacheService 的做法：
    * Map 保持插入序，超限淘汰最早的 key（最老的回合早已完结，淘汰只影响历史回合的
    * 工具重放，该回合重放本就应重新登记）。
@@ -151,7 +151,7 @@ export class KnowledgeService {
   }
 
   /**
-   * 嵌入门（批次7 web_search RAG 压缩共用）：批量嵌入并返回与输入同序的归一化
+   * 嵌入门（web_search RAG 压缩共用）：批量嵌入并返回与输入同序的归一化
    * 向量。路由/密钥解析全部走本服务的 EmbeddingClient（provider 快照 + 密钥兜底
    * ProviderKeyStore），调用方（webSearch 压缩）不持密钥。
    */
@@ -315,7 +315,7 @@ export class KnowledgeService {
       await store.close()
       this.stores.delete(baseId)
     }
-    // v1 二轮审查 m2-09：此前丢弃了 `BaseVectorStore.open` 的返回值——新建的 LibSQL
+    // 此前丢弃了 `BaseVectorStore.open` 的返回值——新建的 LibSQL
     // 客户端无人引用、永不关闭，而下一次 addItem/search 因注册表里没有该 key 会**再开一个**，
     // 同一 vec.db 上并存两个句柄（Windows 上还会让后续 deleteBase 的 rm 撞占用）。
     this.stores.set(baseId, await BaseVectorStore.open(baseId, this.dataDir()))
@@ -487,7 +487,7 @@ export class KnowledgeService {
   }
 
   /**
-   * knowledge_read 工具执行（v0.4.6）：按条目级标识读回摄取文本（chunk 拼接 +
+   * knowledge_read 工具执行：按条目级标识读回摄取文本（chunk 拼接 +
    * overlap 去重由工具层做，本方法只负责围栏校验与存储读回）。baseId 必须在本轮
    * 登记清单内（执行侧防线，与 knowledge_search 同型）；未知 uniqueId 具名报错。
    */

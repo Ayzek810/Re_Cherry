@@ -1,8 +1,7 @@
 /**
- * 二轮审查 r2-05：笔记全文检索把「读文件失败」与「该文件没有匹配」返回成同一个 `null`，
+ * 笔记全文检索把「读文件失败」与「该文件没有匹配」返回成同一个 `null`，
  * `searchAllFiles` 只按 `contentResult` 是否为 null 判断命中，于是读失败（权限/路径失效/编码）
- * 被静默渲染成「无结果」——调用方 `useFullTextSearch` 的 `setError` 永不执行
- * （CLAUDE.md §9「A failure must never look like an empty result」）。
+ * 被静默渲染成「无结果」——调用方 `useFullTextSearch` 的 `setError` 永不执行。
  *
  * 行为级断言：
  *   ① 读失败的文件进 `failures`（带原因），零命中的文件不进；
@@ -10,7 +9,7 @@
  *   ③ 全部文件读失败时 `results` 为空但 `failures` 非空 —— 调用方据此得到「N 个文件读取失败」，
  *      不再是被伪装成空结果；
  *   ④ `searchFileContent` 自身返回判别式（matched / no-match / error）；
- *   ⑤ r2-53：正则转义走 `utils/keywordSearch` 的唯一实现（`a.b` 不得匹配 `axb`）。
+ * ⑤ ：正则转义走 `utils/keywordSearch` 的唯一实现（`a.b` 不得匹配 `axb`）。
  */
 import type { NotesTreeNode } from '@renderer/types/note'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,7 +30,7 @@ function file(id: string, externalPath: string): NotesTreeNode {
   }
 }
 
-describe('NotesSearchService 失败语义（r2-05 / r2-53）', () => {
+describe('NotesSearchService 失败语义', () => {
   beforeEach(() => {
     readExternal.mockReset()
     ;(window as unknown as { api: unknown }).api = { file: { readExternal } }
@@ -88,7 +87,7 @@ describe('NotesSearchService 失败语义（r2-05 / r2-53）', () => {
     expect(failed.kind === 'error' && failed.error.message).toBe('EACCES')
   })
 
-  it('r2-53：关键字按 utils/keywordSearch 的唯一实现转义（a.b 不匹配 axb）', async () => {
+  it('关键字按 utils/keywordSearch 的唯一实现转义（a.b 不匹配 axb）', async () => {
     readExternal.mockResolvedValue('axb and a.b both appear')
 
     const outcome = await searchAllFiles([file('a', '/notes/a.md')], 'a.b')

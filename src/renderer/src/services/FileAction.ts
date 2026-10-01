@@ -48,7 +48,7 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
     const file = await FileManager.getFile(fileId)
     if (!file) return
 
-    // r2-45：§9 删除纪律。`deleteFile` 返回布尔；这里把 `false` 转成 throw，有两个原因：
+    // 删除纪律。`deleteFile` 返回布尔；这里把 `false` 转成 throw，有两个原因：
     //   ① 页面侧的批量删除（`pages/files/batchDelete.ts` 的 `runBatchDelete`）按 **rejection**
     //      区分成败——若这里静默返回，盘上删失败的文件会被计入"N 成功"；
     //   ② 单条删除的 Popconfirm/module.confirm 调用点本来就靠异常冒泡。
@@ -98,7 +98,7 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
       window.modal.error({ content: t('files.delete.db_error'), centered: true })
     }
   } catch (error) {
-    // §9：每条失败路径都要有用户可见信号，且只在这里给一次。`deleteFile → false`、Dexie 读失败、
+    // 每条失败路径都要有用户可见信号，且只在这里给一次。`deleteFile → false`、Dexie 读失败、
     // IPC 断链都落到这个出口。`t` 由调用点传入正是为此；调用方只需接住 rejection，不再重复弹提示。
     logger.warn(`FileAction.handleDelete failed for ${fileId}`, error as Error)
     window.toast.error(t('files.delete.db_error'))
@@ -113,7 +113,7 @@ export async function handleRename(fileId: string) {
   const newName = await TextEditPopup.show({ text: file.origin_name })
   if (!newName) return
 
-  // r2-46：Dexie 写入是持久化操作，`void` 之后既无 await 也无 catch —— 写失败只能是
+  // Dexie 写入是持久化操作，`void` 之后既无 await 也无 catch —— 写失败只能是
   // unhandled rejection，而文件页已按新名渲染。这里 await + catch，落 warn 并弹可见错误。
   try {
     await FileManager.updateFile({ ...file, origin_name: newName })

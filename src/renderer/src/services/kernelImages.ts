@@ -5,7 +5,7 @@ import type { FileMetadata } from '@types'
 const logger = loggerService.withContext('KernelImages')
 
 /**
- * 渲染侧图片通道助手（v0.3.1 识图通道）。
+ * 渲染侧图片通道助手（识图通道）。
  *
  * 职责一（发送向）：把 Cherry 文件仓里的图片规范化成内核附件准入预算内的 base64 载荷。
  *   规范化在渲染进程做——这里有 canvas（EXIF 摆正 + 解码证明 + 重编码），主进程附件仓库
@@ -214,7 +214,7 @@ export async function generatedImageFileId(source: string): Promise<string> {
 }
 
 /**
- * 把**聊天页** `generate_image` 的出图登记进文件仓（v0.3.3-2，用户点名："聊天页的绘图同样没有被算进去"）。
+ * 把**聊天页** `generate_image` 的出图登记进文件仓（用户点名："聊天页的绘图同样没有被算进去"）。
  *
  * 背景：这批图原先只作为 IMAGE 块的元数据存在（会话日志里的 data URL / URL），**不落盘、不进
  * `db.files`** —— 于是文件页永远看不到它们；当初不落盘的理由是"回放重落盘会堆积重复文件"

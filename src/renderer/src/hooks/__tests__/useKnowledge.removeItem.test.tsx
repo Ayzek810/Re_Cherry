@@ -1,8 +1,7 @@
 /**
- * 二轮审查 f2-14：知识库条目删除是纯乐观写——失败不回滚、无 toast，六处调用点全部丢弃 Promise。
+ * 知识库条目删除是纯乐观写——失败不回滚、无 toast，六处调用点全部丢弃 Promise。
  *
- * 缺陷形态（CLAUDE.md §9「A deletion returns `Promise<boolean>`. Restore optimistic rows on failure and
- * show `toast.error`」）：`removeItem` 先 `dispatch(removeItemAction)` 摘掉 redux 行，随后裸
+ * 缺陷形态：`removeItem` 先 `dispatch(removeItemAction)` 摘掉 redux 行，随后裸
  * `await knowledgeBaseApi.remove(...)`；向量库删失败时行不会恢复（刷新后条目仍不在列表里但向量还占
  * 着），而 `onClick={() => removeItem(item)}` 把 Promise 交给 React——失败只是未处理的 rejection，
  * 磁盘与 UI 都没有任何信号。
@@ -77,7 +76,7 @@ function wrapperFor(store: ReturnType<typeof makeStore>) {
 
 const toast = { error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }
 
-describe('useKnowledge.removeItem（f2-14：乐观写必须可回滚 + 可见）', () => {
+describe('useKnowledge.removeItem（乐观写必须可回滚 + 可见）', () => {
   beforeEach(() => {
     remove.mockReset()
     deleteFiles.mockReset()
@@ -147,7 +146,7 @@ describe('useKnowledge.removeItem（f2-14：乐观写必须可回滚 + 可见）
 })
 
 /**
- * r2-10（整库一半）：`deleteKnowledgeBase` 旧实现返回 void、只乐观派发 `deleteBase`，
+ * （整库一半）：`deleteKnowledgeBase` 旧实现返回 void、只乐观派发 `deleteBase`，
  * 真实删除由 reducer 内的 fire-and-forget IPC 承担（失败只 warn）——失败时界面显示「删成功」，
  * 调用点也拿不到任何可判断的返回值。现在返回 `Promise<boolean>`，失败时 redux 一行都不动
  * 并弹 `toast.error`。
@@ -157,7 +156,7 @@ describe('useKnowledge.removeItem（f2-14：乐观写必须可回滚 + 可见）
  *   ② 真实删除失败 → false，库**仍在**（未做乐观删除，因此无需回滚），弹 toast.error；
  *   ③ 未知 baseId → false，且不发起删除。
  */
-describe('useKnowledgeBases.deleteKnowledgeBase（r2-10：整库删除必须可判成败 + 可见）', () => {
+describe('useKnowledgeBases.deleteKnowledgeBase（整库删除必须可判成败 + 可见）', () => {
   beforeEach(() => {
     deleteBase.mockReset()
     assistantsState.list = []

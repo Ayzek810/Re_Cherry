@@ -1,4 +1,4 @@
-/** v0.3.2 自 CS_V1 移植（文档预处理服务商配置；批次1 无切片，本次接真）。
+/** 自 CS_V1 移植（文档预处理服务商配置；无切片，本次接真）。
  * 形态照上游 store/preprocess：providers 数组（PreprocessProvider 含 apiKey/apiHost/model）
  * + defaultProvider（设置页受控下拉的选中态），随 rootReducer 持久化。
  * 密钥为明文落盘——与 websearch 切片同批先例（LLM 专属的 ProviderKeyStore 金库加固

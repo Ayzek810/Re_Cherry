@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/utils/binarySnapshot.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/utils/binarySnapshot.ts（2026-09-24）。
 // fork 缝：fork 无 semver 依赖、快照为 V2 子集（src/main/services/binaryManager/BinaryManager.ts
 // 抄形状注释：application 为扁平 'applied'|'broken'|'absent'，availability source 为
 // managed/system/none，version 随 managed）。接口名与语义面（installed/hasUpdate/
@@ -17,7 +17,7 @@ export interface BinaryToolSnapshot {
     | { source: 'system'; path: string }
     | { source: 'none' }
   /**
-   * v0.4.5-1（O7）：该工具最近一次安装/升级失败的原始原因，由主进程记录并随快照落盘。
+   * （）：该工具最近一次安装/升级失败的原始原因，由主进程记录并随快照落盘。
    * 版本卡的失败行据此持久显示——此前失败原因只活在一次 toast 里。
    */
   lastFailure?: string
@@ -58,7 +58,7 @@ export interface InterpretedBinarySnapshot {
   applicationVersion?: string
   /** An exactly-applied tool has a newer managed version available. */
   hasUpdate: boolean
-  /** v0.4.5-1（O7）：主进程记录的上次安装失败原因（无失败时 undefined）。 */
+  /** （）：主进程记录的上次安装失败原因（无失败时 undefined）。 */
   lastFailure?: string
   /** v1（W4-4）：主进程正在进行中的操作（无操作时 undefined）。 */
   operation?: BinaryToolSnapshot['operation']

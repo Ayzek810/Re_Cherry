@@ -7,7 +7,7 @@ import assistants, { addAssistant, addTopic, updateTopic, updateTopicName } from
 
 /**
  * 话题命名落名的**免 bump 专属 action**钉（对话树数字连跳的根治位）。
- * 历史上写名方是 dsh session/title 事件（v0.3.1 定本 action，v0.3.1 拆标题
+ * 历史上写名方是 dsh session/title 事件（定本 action，拆标题
  * 服务后改由 services/topicNaming.ts 自动命名调用，规则不变）：
  *
  * 名字此前走通用 updateTopic → updatedAt 必 bump → updatedAt 在
@@ -80,7 +80,7 @@ describe('updateTopicName（标题落地免 bump）', () => {
     const holders = next.assistants.flatMap((assistant) =>
       (assistant.topics ?? []).filter((row) => row.id === 'root-1')
     )
-    expect(holders).toHaveLength(2) // A 正主 + B 污染副本，全部写入（v0.3.0-5 语义保持）
+    expect(holders).toHaveLength(2) // A 正主 + B 污染副本，全部写入（语义保持）
     for (const row of holders) expect(row.name).toBe('内核起的标题')
 
     const bCopy = holders.find((row) => row.assistantId === 'assistant-b')

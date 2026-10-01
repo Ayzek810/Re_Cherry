@@ -1,9 +1,9 @@
 /**
- * 绘画页会话上下文（v0.3.3 批次4，② 薄适配，V2 paintingGenerationParams 的
+ * 绘画页会话上下文（② 薄适配，V2 paintingGenerationParams 的
  * cache 投影改为 feature 内 React Context）：currentPainting 草稿 + patch/set
  * 动作 + 生成状态镜像（generatingById，瞬态不持久化——V2
  * cacheService.set(`painting.generation.${id}`) 的本地等价）。Provider 由页面挂。
- * v0.3.3-3：参考图托盘移出上下文——V2 的作曲条自持文件状态（fork 侧由作曲条内
+ * 参考图托盘移出上下文——V2 的作曲条自持文件状态（fork 侧由作曲条内
  * usePaintingComposerInputFiles 实例承担），此处保留的旧托盘已无消费者。
  */
 import type { PaintingData } from '@renderer/pages/paintings/model/types/paintingData'
@@ -44,7 +44,7 @@ export function PaintingSessionProvider({
     })
   }, [])
 
-  // v0.3.3-3：参考图托盘（含 capability 推导）已移出上下文——V2 的作曲条自持文件状态，
+  // 参考图托盘（含 capability 推导）已移出上下文——V2 的作曲条自持文件状态，
   // fork 侧由作曲条内的 usePaintingComposerInputFiles 实例承担；上下文只留草稿与生成镜像。
 
   const value = useMemo<PaintingSessionValue>(

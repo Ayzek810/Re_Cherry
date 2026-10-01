@@ -1,10 +1,10 @@
 /**
  * 内核事件流的**唯一取数入口**（渲染层）。
  *
- * v0.3.0-1：注入的插件源消息（RuntimeContextProjection 的工具面快照、审批/沙箱档位标注等）
+ * 注入的插件源消息（RuntimeContextProjection 的工具面快照、审批/沙箱档位标注等）
  * 已在核嘴边被剔除（`src/main/kernel/sessionEventView.ts`），因此本模块只做通道搬运，
  * **不含任何可见性判据**——不可见靠结构，不靠每个消费方各自记得再封一次
- * （v0.3.0 逐条封堵时漏掉了历史搜索，注入快照会以 role:'user' 的形式出现在结果里）。
+ * 逐条封堵时漏掉了历史搜索，注入快照会以 role:'user' 的形式出现在结果里。
  *
  * 约定：渲染层任何需要内核会话事件的新代码都从本模块取数，不得直接触碰
  * `window.api.dshTopicEvents` / `window.api.dshOnSessionEvent`——由

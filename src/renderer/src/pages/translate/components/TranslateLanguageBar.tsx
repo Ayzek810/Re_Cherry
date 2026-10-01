@@ -2,7 +2,7 @@
  * 顶栏语言栏（V2 components/TranslateLanguageBar.tsx 结构）：源语言 / 交换 / 目标语言。
  * V2 的 Combobox + useLanguages 换成 fork 的 antd Select + 内置语言表；
  * 语言文案由页面注入的 languageLabel 提供（fork i18n languages.* 键族）。
- * v0.4.7：自定义语言（AnyTranslateLangCode）与内置同列表渲染，customLabel 提供文案。
+ * 自定义语言（AnyTranslateLangCode）与内置同列表渲染，customLabel 提供文案。
  */
 import { BUILTIN_TRANSLATE_LANGUAGES, type TranslateLangCode } from '@renderer/config/translateLanguages'
 import type { AnyTranslateLangCode, CustomTranslateLanguage } from '@renderer/types/translate'
@@ -22,7 +22,7 @@ type Props = {
   /** V1 语义（`TranslatePage.tsx:743-745`）：auto 源语言检测到的实际语言，追加在自动检测项后。 */
   detectedLanguage?: TranslateLangCode | null
   languageLabel: (code: AnyTranslateLangCode | 'auto') => string
-  /** v0.4.7 自定义语言（追加在内置之后；空 = 无）。 */
+  /** 自定义语言（追加在内置之后；空 = 无）。 */
   customLanguages: CustomTranslateLanguage[]
   exchangeDisabled: boolean
   onExchange: () => void

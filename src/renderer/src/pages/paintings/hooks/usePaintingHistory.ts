@@ -1,10 +1,10 @@
 /**
- * 绘画历史分页 hook（v0.3.3 批次4，V2 usePaintingHistory 重写）：
+ * 绘画历史分页 hook（V2 usePaintingHistory 重写）：
  * DataApi useInfiniteQuery → Dexie keyset 分页（orderBy('createdAt').reverse()
  * + where('createdAt').below(cursor)）；条目水合走 recordToPaintingData
  * （V2 recordsToPaintingDataList 语义，文件解析为 Dexie 内嵌直通）。
  *
- * 失败语义（二轮审查 f2-15）：读失败**不得**与"没有历史"同形，也不得让 `hasMore` 停在 true。
+ * 失败语义：读失败**不得**与"没有历史"同形，也不得让 `hasMore` 停在 true。
  * 失败时 `hasMore` 置 false（否则缩略条的 `{hasMore && <Loader2/>}` 永远转圈）、`error` 置位，
  * 由 `PaintingStrip` 渲染可重试的错误态；`retry()` 清错后重跑首页。
  */
@@ -44,7 +44,7 @@ export function usePaintingHistory(): PaintingHistoryResult {
   // keyset 游标：已载入最旧一行的 createdAt（reverse 后页尾）。
   const cursorRef = useRef<number | undefined>(undefined)
   const loadingRef = useRef(false)
-  // 二轮审查 f2-22：`reload()` 的调用点全是"写后刷新"（生成成功落盘、删除画作），而它此前在
+  // `reload()` 的调用点全是"写后刷新"（生成成功落盘、删除画作），而它此前在
   // 分页在途时被直接丢弃——用户滚动加载下一页（或条未满自动补页）期间生成完成，落盘的新画作
   // 不会出现在缩略条里，用户以为生成丢了。改为"待处理标志"：在途时记账，`finally` 里补跑一次首页。
   const pendingReloadRef = useRef(false)

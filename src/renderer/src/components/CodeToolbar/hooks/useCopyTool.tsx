@@ -34,7 +34,7 @@ export const useCopyTool = ({ showPreviewTools, previewRef, onCopySource, setToo
   }, [onCopySource, setCopiedTemporarily])
 
   const handleCopyImage = useCallback(() => {
-    // c2-13：`copy()` 是异步的（内部 await svgToPngBlob + navigator.clipboard.write），
+    // `copy()` 是异步的（内部 await svgToPngBlob + navigator.clipboard.write），
     // try/catch 看不见它的 rejection，`void` 又丢掉了 promise，于是对勾会在真正写进剪贴板
     // 之前就亮起。只在 promise resolve 之后才翻转成功态，失败给出可见信号。
     const copyPromise = previewRef.current?.copy()

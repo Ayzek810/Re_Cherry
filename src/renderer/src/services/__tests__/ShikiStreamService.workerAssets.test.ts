@@ -1,5 +1,5 @@
 /**
- * p2-04 行为测试：worker 侧语法/主题资产的**主线程应答端**。
+ * worker 侧语法/主题资产的**主线程应答端**。
  *
  * 背景（实测）：worker 曾是**一份独立的 rollup 模块图**，它自己 `import('shiki')` 会再编译一份
  * `bundledLanguages` 语言表 ⇒ 产物里每个语法两份，重复 4.15 MB。修法是把 worker 图里的语言表
@@ -9,7 +9,7 @@
  * 本测试锁定主线程这一端的三条不变量（worker 端 `requestAsset` 只在浏览器 Worker 里跑，
  * 由构建产物的 chunk 面验证）：
  *  1. `language` / `theme` 请求能拿到**非空注册数据**（数据可结构化克隆）；
- *  2. 未知语言/主题回**明确的 error**，而不是伪装成空结果（家规：失败不得看起来像空结果）；
+ *  2. 未知语言/主题回**明确的 error**，而不是伪装成空结果；
  *  3. 资产请求不占用 `pendingRequests`，也不取消 worker 空闲回收计时。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -23,7 +23,7 @@ interface PostedAssetResponse {
   error?: string
 }
 
-describe('ShikiStreamService worker asset protocol (p2-04)', () => {
+describe('ShikiStreamService worker asset protocol', () => {
   let posted: PostedAssetResponse[]
 
   beforeEach(() => {

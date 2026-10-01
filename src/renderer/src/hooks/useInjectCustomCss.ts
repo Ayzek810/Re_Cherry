@@ -1,5 +1,5 @@
 /**
- * `customCss` 注入的唯一实现（r2-65）。
+ * `customCss` 注入的唯一实现。
  *
  * 此前同一段「取 `#user-defined-custom-css` → remove → 建 style → 写入 textContent → append」
  * 在主窗口（`hooks/useAppInit.ts`）与 mini 窗口（`windows/mini/MiniWindowApp.tsx`）各写一遍，

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SYSTEM_PROVIDERS, SYSTEM_PROVIDERS_CONFIG } from '../providers'
 
 /**
- * r2-81 行为契约：`SYSTEM_PROVIDERS` 必须是 `SYSTEM_PROVIDERS_CONFIG` 的**副本**。
+ * `SYSTEM_PROVIDERS` 必须是 `SYSTEM_PROVIDERS_CONFIG` 的**副本**。
  * 此前它就是 `Object.values(SYSTEM_PROVIDERS_CONFIG)`——同一批对象引用，
  * 于是 Redux 初始态与 `store/migrate.ts` 的就地改写（`provider.anthropicApiHost = …`、
  * `provider.type = 'openai-response'`）会污染模块级默认表。
@@ -11,7 +11,7 @@ import { SYSTEM_PROVIDERS, SYSTEM_PROVIDERS_CONFIG } from '../providers'
  * 取舍：多出 N 个 provider 浅拷贝 + N 个 models 数组（model 条目仍共享），
  * 换来默认表在本会话内不可被 state 改写。
  */
-describe('SYSTEM_PROVIDERS isolation (r2-81)', () => {
+describe('SYSTEM_PROVIDERS isolation', () => {
   it('keeps the same export shape and ids', () => {
     expect(Array.isArray(SYSTEM_PROVIDERS)).toBe(true)
     expect(SYSTEM_PROVIDERS.length).toBe(Object.values(SYSTEM_PROVIDERS_CONFIG).length)

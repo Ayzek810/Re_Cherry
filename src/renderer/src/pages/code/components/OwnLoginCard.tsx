@@ -7,10 +7,10 @@ import { CliIcon } from './CliIcon'
 import { Button, NormalTooltip } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/OwnLoginCard.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。逐字；import 面对号（CliIcon/Button/NormalTooltip ← 本页移植件
+//（2026-09-24）。逐字；import 面对号（CliIcon/Button/NormalTooltip ← 本页移植件
 // 与 shim）。fork 的 LOGIN_CAPABLE_CLI_TOOLS 为空集——消费点（ConfigList）在 fork 为不可达面。
 //
-// 二轮审查 f2-46：与 ProviderCard 同法——去掉 `cursor-grab` 拖拽把手与 `dragging` 高亮
+// 与 ProviderCard 同法——去掉 `cursor-grab` 拖拽把手与 `dragging` 高亮
 //（ReorderableList 不实现拖拽），"置顶"按钮改为常显。
 
 export interface OwnLoginCardProps {

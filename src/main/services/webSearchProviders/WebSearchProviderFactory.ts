@@ -14,7 +14,7 @@ import TavilyProvider from './TavilyProvider'
 import ZhipuProvider from './ZhipuProvider'
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 WebSearchProviderFactory.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 WebSearchProviderFactory.ts）：
  * provider id → provider 实例的分派表原样保留；provider 类型换
  * KernelWebSearchProviderConfig（配置注入制）。
  */

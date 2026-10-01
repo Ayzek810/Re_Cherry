@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/shared/data/presets/codeCliTools.ts（2026-09-24，v0.3.4-1）。
+// fork 移植自 cherry-studio v2 src/shared/data/presets/codeCliTools.ts（2026-09-24）。
 // 改动仅两处裁剪，均已标 `// fork 缝`。路径映射注：V2 的 src/shared/data/presets/ 在本仓
 // 镜像为 packages/shared/data/presets/（保持 @shared/data/presets/codeCliTools import 原样）。
 
@@ -23,7 +23,7 @@ export interface CodeCliToolPreset {
    * as success, named as `peer` resolved from `host`'s own entry point.
    */
   requiredPeer?: { host: string; peer: string }
-  // v0.4.5 fork 缝：install:'source' 的源码获取事实（GitHub owner/repo + 分支）。
+  // fork 缝：install:'source' 的源码获取事实（GitHub owner/repo + 分支）。
   // 仅 fork 源码安装器（main/services/binaryManager/sourceInstaller）消费；注册表型
   // 工具不填。更新判据 = 安装时记录的 commit SHA 对比该分支 HEAD。
   repo?: string
@@ -50,7 +50,7 @@ function defineCodeCliTool({ pipxExtras, ...definition }: CodeCliToolDefinition)
  * Single source of truth for executable names, npm packages, and mise install
  * specs used by both main and renderer processes.
  */
-// fork 缝：预设表裁到 2 项（原 14 项），v0.4.5 增补 paper-agent（源码型）至 3 项。mise*
+// fork 缝：预设表裁到 2 项（原 14 项），增补 paper-agent（源码型）至 3 项。mise*
 // 字段逐字保留但 fork 安装器不消费——
 // fork 的 portable 安装器把 install:'npm' 映射为 npm --prefix、install:'pipx' 映射为
 // uv venv + uv pip install（见 main/services/binaryManager），mise 命令面被替换。
@@ -63,7 +63,7 @@ export const CODE_CLI_TOOL_PRESETS = Object.freeze([
     install: 'npm',
     misePrerelease: true,
     miseNpmShellOut: true
-    // fork 缝（v0.3.4-2）：requiredPeer 移除——dsh@0.1.5-rc.2 依赖树重构，
+    // fork 缝：requiredPeer 移除——dsh@0.1.5-rc.2 依赖树重构，
     // agent-loop 不再是直接依赖，agent-loop@0.1.5 自身也不引 scope（实测 registry）。
     // 旧映射 {host: dsh-agent-loop, peer: dsh-scope} 对 0.1.5 永不触发（host 不存在
     // → "recipe restructured" → not broken），保留只会误导。
@@ -76,7 +76,7 @@ export const CODE_CLI_TOOL_PRESETS = Object.freeze([
     install: 'pipx',
     pipxExtras: ['web']
   }),
-  // v0.4.5 fork 缝（原创，非 V2 移植）：Paper-Agent 源码型工具。它的 Web UI 与 dsh/hermes
+  // fork 缝（原创，非 V2 移植）：Paper-Agent 源码型工具。它的 Web UI 与 dsh/hermes
   // 同容器（软件内受管 webview），但分发形态是 GitHub 源码而非注册表包——安装=拉源码树 +
   // 受管 CPython venv 装依赖 + 受管 node 构建前端；用户态（config/data/logs/front dist）
   // 钉在 home/paper-agent，卸载不删（dsh home 先例）。更新检查为纯手动（见 BinaryManager

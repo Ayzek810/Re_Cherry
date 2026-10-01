@@ -1,5 +1,5 @@
 /**
- * 用量统计类型（v0.4.7）：回合级 usage 记录（Dexie usage_records 表行，v18 起用）。
+ * 用量统计类型：回合级 usage 记录（Dexie usage_records 表行，v18 起用）。
  * 派生分析数据——内核会话日志里的 usage 事件才是源头，本表是本地聚合用镜像。
  */
 export interface UsageRecord {

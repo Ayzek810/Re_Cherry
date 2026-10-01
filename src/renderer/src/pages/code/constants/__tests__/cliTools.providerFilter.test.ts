@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-44：DSH 服务商过滤的"凭据臂"恒真。
+ * DSH 服务商过滤的"凭据臂"恒真。
  *
  * `toCliProvider`（cliConfig/providerView.ts:124）投影出的 `apiKeys` 是
  * `[{ id: 'default', key: provider.apiKey ?? '', isEnabled: true }]`——`isEnabled` 硬编码 true，
@@ -29,7 +29,7 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
   }
 }
 
-describe('CLI_TOOL_PROVIDER_MAP[DEEPSEEK_HARNESS]（f2-44：凭据臂按 key 值判定）', () => {
+describe('CLI_TOOL_PROVIDER_MAP[DEEPSEEK_HARNESS]（凭据臂按 key 值判定）', () => {
   it('有启用且非空的 key + 可注入端点 ⇒ 进入列表', () => {
     expect(filter([makeProvider()])).toHaveLength(1)
   })

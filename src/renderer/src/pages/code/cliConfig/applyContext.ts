@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/applyContext.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/applyContext.ts（2026-09-24）。
 // 缝点两处，已标 `// fork 缝`：
 // ① import 对号：UniqueModelIdSchema/parseUniqueModelId ← fork @shared/types/uniqueModelId
 //   （V2 为 @shared/data/types/model）；Model ← ./providerView 投影。

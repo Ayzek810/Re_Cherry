@@ -1,5 +1,5 @@
 // fork 移植自 cherry-studio v2 packages/ui/src/components/icons/models/nousresearch/dark.tsx
-//（2026-09-24，v0.3.4-1 批次5：hermes 品牌图标——用户裁决"hermes 有自己的图标，不要通用图标"）。
+//2026-09-24：hermes 品牌图标——用户裁决"hermes 有自己的图标，不要通用图标"。
 // fork 缝：V2 为 light/dark 双变体（白/黑填充 + dark: 类切换）；本仓 CliIcon 消费面是
 // 固定尺寸盒，改单变体 + fill="currentColor"（随文字色适配双主题）。viewBox/path 数据逐字。
 

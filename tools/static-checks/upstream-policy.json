@@ -1,0 +1,67 @@
+{
+  "note": "上游对照策略：本仓是 Cherry Studio 的派生版，与上游的**非预期分叉**就是主要回归风险。check-upstream 按本表逐条比对；每条都必须写 why（评审时单独看这一项）。rule 取值：equal＝必须与上游一致；subset-of-upstream＝允许比上游少（例如 provider 已下线），但**不允许出现上游没有的条目**。",
+  "upstreamDefault": "参考资产/cherry-studio v1.9.11",
+  "upstreamVersionLabel": "v1.9.11（本 fork 的基线）",
+  "pairs": [
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "SUPPORT_URL_CONTEXT_PROVIDER_TYPES",
+      "rule": "equal",
+      "why": "按 ProviderType 索引：这些类型在 ProviderTypeSchema 里仍合法、用户仍可建该类型 provider，故条目不应随系统 provider 下线而裁剪（v0.3.0-1 曾误删 gemini/vertexai/azure-openai 并已恢复）。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_API_KEY_PROVIDER_TYPES",
+      "rule": "equal",
+      "why": "同上：按 ProviderType 索引。被清空会让 vertexai/aws-bedrock 类型的 provider 在 ApiService.checkApiProvider 处被直接拦下（要求 API Key）。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_API_KEY_PROVIDERS",
+      "rule": "subset-of-upstream",
+      "why": "按 SystemProviderId 索引：上游条目里的 vertexai/aws-bedrock 在本 fork 已随系统 provider 下线，少掉它们是正确的。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "SUPPORT_SERVICE_TIER_PROVIDERS",
+      "rule": "subset-of-upstream",
+      "why": "按 SystemProviderId 索引：azure-openai 已下线，少掉它是正确的。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_ARRAY_CONTENT_PROVIDERS",
+      "rule": "equal",
+      "why": "按 SystemProviderId 索引且涉及的 provider 全部健在：与上游逐条对齐即可，任何差异都值得看一眼。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_DEVELOPER_ROLE_PROVIDERS",
+      "rule": "equal",
+      "why": "同上（poe/qiniu 均健在）。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_STREAM_OPTIONS_PROVIDERS",
+      "rule": "equal",
+      "why": "同上（mistral 健在）。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_QWEN3_ENABLE_THINKING_PROVIDER",
+      "rule": "equal",
+      "why": "同上（ollama/lmstudio/nvidia/gpustack 均健在）。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_VERBOSITY_PROVIDERS",
+      "rule": "equal",
+      "why": "同上（groq 健在）。"
+    },
+    {
+      "file": "src/renderer/src/utils/provider.ts",
+      "constant": "NOT_SUPPORT_API_VERSION_PROVIDERS",
+      "rule": "equal",
+      "why": "同上（github/copilot/perplexity 均健在）。"
+    }
+  ]
+}

@@ -5,14 +5,14 @@ import { relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- * 结构门禁（v0.3.0-2 目标 B，`report.md` §3.4 的 B-1 / B-2）：把"话题成员资格问内核"钉成
+ * 结构门禁：把"话题成员资格问内核"钉成
  * 可执行断言，而不是靠后来者自觉。
  *
  * 背景：`shouldShowTopicRow` 用 `updatedAt >= BOOT_TIME` 这一时间戳启发式，在渲染层用**自己那份**
  * persist 推断**内核那份**的可见性。它已整体退役，替换为
  * `utils/topicBranch.ts`（取内核集合）+ `services/kernelTopics.ts`（对账：补齐 / 剪除）。
  * 本门禁守三条：① 退役符号零残留；② 裸通道只有权威层能碰；③ 显示层只消费 store——
- * 侧栏/管理模式不持对账快照、不问内核（v0.3.1：旧快照是注册表序，杀拖拽/滞显/乱跳三宗罪），
+ * 侧栏/管理模式不持对账快照、不问内核（旧快照是注册表序，杀拖拽/滞显/乱跳三宗罪），
  * 对账伞盖钉在 useTopic（切助手/开聊天必然执行），把对账写进 store 的结果自然反映到派生列表。
  */
 const RAW_CHANNEL = 'window.api.dshTopicList'
@@ -67,7 +67,7 @@ const SOURCE_FILES = listSourceFiles('src')
 const PRODUCTION_FILES = SOURCE_FILES.filter((file) => !relativeToRepo(file).includes('__tests__'))
 
 describe('话题权威结构门禁', () => {
-  it('退役符号零残留（B-1：全库、含别名/相对/barrel 三种引用形态）', () => {
+  it('退役符号零残留（全库、含别名/相对/barrel 三种引用形态）', () => {
     const offenders: string[] = []
     for (const file of PRODUCTION_FILES) {
       const repoPath = relativeToRepo(file)
@@ -79,7 +79,7 @@ describe('话题权威结构门禁', () => {
     expect(offenders).toEqual([])
   })
 
-  it('裸通道只有权威层能碰，且内核集合只在两个异步判定点被读（B-2）', () => {
+  it('裸通道只有权威层能碰，且内核集合只在两个异步判定点被读', () => {
     const channelOffenders: string[] = []
     const readerOffenders: string[] = []
     for (const file of PRODUCTION_FILES) {
@@ -98,7 +98,7 @@ describe('话题权威结构门禁', () => {
     expect(readerOffenders).toEqual([])
   })
 
-  it('侧栏只消费 store（不持对账快照、不自问内核），对账伞盖在 useTopic（B-3/B-4 落点，v0.3.1）', () => {
+  it('侧栏只消费 store（不持对账快照、不自问内核），对账伞盖在 useTopic（启动落点）', () => {
     const sidebar = readFileSync(repoRoot + sep + 'src/renderer/src/pages/home/Tabs/components/Topics.tsx', 'utf8')
     // 列表单源派生自 Redux 数组：名字/顺序的写入从此立刻反映到侧栏
     expect(sidebar).toContain('listRootTopics(')

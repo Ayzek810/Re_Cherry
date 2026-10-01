@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/main/services/codeCli/configWriter.ts（2026-09-24，v0.3.4-1）。
+// fork 移植自 cherry-studio v2 src/main/services/codeCli/configWriter.ts（2026-09-24）。
 // 缝点：① V2 的 @main/utils/file（atomicWriteFile/ensureDir/read/remove）→ fork 的
 // atomicFile.ts + 内联 fs.promises 包装；② application.getPath('sys.home') → os.homedir()；
 // ③ AbsoluteFilePath 品牌类型退化（见 config.ts 缝③）；④ target 表已裁到 hermes 两项。

@@ -32,7 +32,7 @@ type KernelHitResult = Omit<SearchResult, 'snippet'>
 
 interface Props extends React.HTMLAttributes<HTMLDivElement> {
   keywords: string
-  /** 面板是否可见。隐藏只影响展示，**不**影响检索入参（f2-60）。 */
+  /** 面板是否可见。隐藏只影响展示，**不**影响检索入参。 */
   visible?: boolean
   onMessageClick: (message: Message) => void
   onTopicClick: (topic: Topic) => void
@@ -229,7 +229,7 @@ const SearchResults: FC<Props> = ({ keywords, visible = true, onMessageClick, on
     const newSearchTerms = splitKeywordsToTerms(keywords)
 
     try {
-      // 内核查询三值契约（CLAUDE.md §6.5）：handler 要等 initTopics 之后才注册，启动窗口内的
+      // 内核查询三值契约：handler 要等 initTopics 之后才注册，启动窗口内的
       // "No handler registered" 是预期内的瞬时失败。`undefined` = 本次没问到（可重试）；
       // 任何其它值（含 hits 为空数组）都是确定性答案，立即返回；`null` = 全部尝试都没问到。
       const answer = await retryKernelQuery(async () => {
@@ -270,7 +270,7 @@ const SearchResults: FC<Props> = ({ keywords, visible = true, onMessageClick, on
       })
       setSearchTerms(newSearchTerms)
     } catch (error) {
-      // 失败不得伪装成"没有结果"，也不得把面板留在转圈 + 全透明的状态（二轮审查 f2-51）。
+      // 失败不得伪装成"没有结果"，也不得把面板留在转圈 + 全透明的状态。
       logger.error('Failed to search kernel messages', error as Error)
       if (requestId !== requestIdRef.current) return
       setRawResults([])
@@ -286,7 +286,7 @@ const SearchResults: FC<Props> = ({ keywords, visible = true, onMessageClick, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keywords, searchTermsKey, t])
 
-  // 摘要/高亮只依赖匹配模式：切换"整词/包含"是纯本地重算，不再重发一次内核检索（f2-59）。
+  // 摘要/高亮只依赖匹配模式：切换"整词/包含"是纯本地重算，不再重发一次内核检索。
   const sortedSearchResults = useMemo(() => {
     const results: SearchResult[] = rawResults.map((hit) => ({
       ...hit,
@@ -381,7 +381,7 @@ const SearchResults: FC<Props> = ({ keywords, visible = true, onMessageClick, on
             pageSize: 10,
             hideOnSinglePage: true
           }}
-          // `display: none` 的容器里不再保留可被读屏/自动化命中的内容（f2-60）。
+          // `display: none` 的容器里不再保留可被读屏/自动化命中的内容。
           aria-hidden={!visible}
           style={{ opacity: isLoading ? 0 : 1 }}
           renderItem={({ message, topic, snippet }) => (
@@ -421,7 +421,7 @@ const SearchStats = styled.div`
   color: var(--color-text-3);
 `
 
-/** 检索失败态：与"没有结果"显式分离，并给出重试入口（二轮审查 f2-51）。 */
+/** 检索失败态：与"没有结果"显式分离，并给出重试入口。 */
 const SearchErrorState = styled.div`
   display: flex;
   align-items: center;

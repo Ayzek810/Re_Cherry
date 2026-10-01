@@ -22,7 +22,7 @@ import { getCitationContent } from '../find'
 
 const createMessage = (blockIds: string[]) => ({ id: 'msg-1', blocks: blockIds }) as any
 
-describe('messageUtils/find – getCitationContent（audit2 r2-78）', () => {
+describe('messageUtils/find – getCitationContent', () => {
   beforeEach(() => {
     mockBlocks = {}
     vi.clearAllMocks()

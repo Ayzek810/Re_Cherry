@@ -23,7 +23,7 @@ export type MCPServerLogEntry = {
   source?: string
 }
 
-/** 网络搜索提供商的内核侧最小配置（批次2：渲染层 websearch 切片的同步投影）。 */
+/** 网络搜索提供商的内核侧最小配置（渲染层 websearch 切片的同步投影）。 */
 export type KernelWebSearchProviderConfig = {
   id: string
   name: string
@@ -82,7 +82,7 @@ export type KernelWebSearchConfig = {
 }
 
 // ============================================================================
-// DXT（.dxt）MCP 扩展包（v0.4.7 自上游 DxtService 移植；主进程产出，渲染层消费）
+// DXT（.dxt）MCP 扩展包（自上游 DxtService 移植；主进程产出，渲染层消费）
 // ============================================================================
 
 /** .dxt 包内 manifest.json 的形状（上游 DxtManifest 同构；只声明消费面用到的字段）。 */

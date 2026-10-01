@@ -12,7 +12,7 @@ import type { ConfigEditPanelProps } from './types'
 import { useConfigDraftController } from './useConfigDraftController'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/
-// useConfigEditPanelBodyProps.tsx（2026-09-24，v0.3.4-1 批次4b）。缝点七处，初载门控/模型槽/
+// useConfigEditPanelBodyProps.tsx（2026-09-24）。缝点七处，初载门控/模型槽/
 // foreign 字段锁定（fieldset disabled）逐字：
 // ① keys 缝：V2 `useProviderApiKeys(provider.id)`（DataApi 密钥表）→ fork provider 单 apiKey 字段
 //   （useCurrentCliConfigConnection 缝①同款：getStoreProviders 直读，同形单条 ApiKeyEntry）。

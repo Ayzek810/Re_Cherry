@@ -22,7 +22,7 @@ export class NodeTracer {
     }
     this.spanProcessor = spanProcessor || new BatchSpanProcessor(this.getExporter())
     this.provider = new NodeTracerProvider({
-      // k2-14: without an explicit resource every exported span carried the SDK
+      // without an explicit resource every exported span carried the SDK
       // default `unknown_service`, so the caller-supplied `serviceName` had no
       // effect at all. The attribute is what the trace view reads.
       resource: resourceFromAttributes({ 'service.name': defaultConfig.serviceName }),
@@ -34,7 +34,7 @@ export class NodeTracer {
     })
   }
 
-  /** Flush the batch buffer and stop the provider. Without this the tail of the buffer dies with the process (k2-20). */
+  /** Flush the batch buffer and stop the provider. Without this the tail of the buffer dies with the process . */
   public static async shutdown(): Promise<void> {
     await this.provider?.shutdown()
   }
@@ -46,7 +46,7 @@ export class NodeTracer {
   /**
    * Reads the merged `defaultConfig`, exactly like the web adapter — the old
    * `config?: TraceConfig` parameter was never passed, so an `endpoint` configured
-   * by the caller silently degraded to the console exporter (k2-18).
+   * by the caller silently degraded to the console exporter .
    */
   private static getExporter() {
     if (defaultConfig.endpoint) {

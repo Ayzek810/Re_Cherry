@@ -51,7 +51,7 @@ const KnowledgeNotes: FC<KnowledgeContentProps> = ({ selectedBase }) => {
   }
 
   // fork 分叉点：上游 RichEditPopup（TipTap 富文本）随编辑器链路一并移除，
-  // 批次1 以 fork 现存 TextEditPopup（纯文本）替代，show/resolve 契约一致。
+  // 以 fork 现存 TextEditPopup（纯文本）替代，show/resolve 契约一致。
   const handleAddNote = async () => {
     if (disabled) {
       return

@@ -1,5 +1,5 @@
 /**
- * c2-03 行为测试：备份失败必须可见、且弹窗不能死锁。
+ * 备份失败必须可见、且弹窗不能死锁。
  *
  * 缺陷原状：onOk 里 `await backup()` 没有 try/catch，失败时既不关弹窗也不提示；
  * 而 `isDisabled` 由进度阶段推导（未完成阶段恒为 true），确定与取消两个按钮同时被禁用，
@@ -52,7 +52,7 @@ vi.mock('react-i18next', async (importOriginal) => {
 describe('BackupPopup failure handling', () => {
   beforeEach(() => {
     backupMock.mockReset()
-    // k2-06：进度订阅走 preload 的具名事件桥（`window.api.events`），不再是
+    // 进度订阅走 preload 的具名事件桥（`window.api.events`），不再是
     // `window.electron.ipcRenderer.on`。桩保留两者，避免测试只钉在旧通路上。
     window.electron = {
       ipcRenderer: { on: vi.fn(() => vi.fn()), send: vi.fn(), invoke: vi.fn() },

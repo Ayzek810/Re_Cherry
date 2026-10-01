@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-54：`MinAppPage` 的每应用状态（`isReady` / `currentUrl`）只在初始化器里算一次，而组件
+ * `MinAppPage` 的每应用状态（`isReady` / `currentUrl`）只在初始化器里算一次，而组件
  * 实例跨 `appId` 存活（路由 `/apps/:appId` 没有 `key`，标签页切换走 `navigate(tab.path)`）。
  *
  * 为什么是问题：从 `/apps/A` 切到 `/apps/B` 后，工具栏"在浏览器打开"会打开 **A** 的地址，
@@ -92,7 +92,7 @@ function renderApp(appId: string) {
   return render(<MinAppPage />)
 }
 
-describe('MinAppPage 每应用状态随 appId 重置（f2-54）', () => {
+describe('MinAppPage 每应用状态随 appId 重置', () => {
   beforeEach(() => {
     toolbarProps.length = 0
     webviewSearchProps.length = 0

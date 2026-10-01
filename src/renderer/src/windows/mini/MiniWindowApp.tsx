@@ -18,7 +18,7 @@ import HomeWindow from './home/HomeWindow'
 function MiniWindowContent(): React.ReactElement {
   const { customCss } = useSettings()
 
-  // r2-65：与主窗口共用同一份注入实现（此前两端各写一遍，任一侧修改都会漂移）。
+  // 与主窗口共用同一份注入实现（此前两端各写一遍，任一侧修改都会漂移）。
   useInjectCustomCss(customCss)
 
   return <HomeWindow />
@@ -34,7 +34,7 @@ function MiniWindow(): React.ReactElement {
       <ThemeProvider>
         <AntdProvider>
           <CodeStyleProvider>
-            {/* r2-03：小窗保留 PersistGate 只是为了等"从主窗口快照 rehydrate 完成"这一次读取；
+            {/* ：小窗保留 PersistGate 只是为了等"从主窗口快照 rehydrate 完成"这一次读取；
                 本窗口的 persistor 已被 `miniWindowStoreRole` 暂停，不会回写 localStorage。 */}
             <PersistGate loading={null} persistor={persistor}>
               <ErrorBoundary>

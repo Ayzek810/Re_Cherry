@@ -148,7 +148,7 @@ export function useAssistant(id: string) {
     model,
     addTopic: (topic: Topic) => dispatch(addTopic({ assistantId: assistant.id, topic })),
     /**
-     * 删除一个话题。**乐观删除 + 失败回滚**（v0.3.0-2 §6.9）：行立刻消失（体验不变），
+     * 删除一个话题。**乐观删除 + 失败回滚**：行立刻消失（体验不变），
      * 内核若没删掉就把行放回去并提示——不留下"渲染层已删、内核还在"的分歧
      * （那正是真机上"删过的话题又回来"的来源）。
      */
@@ -200,7 +200,7 @@ export function useDefaultModel() {
   return {
     defaultModel,
     quickModel,
-    // 转述模型（v0.3.1 识图通道补全）：undefined = 关闭；Settings 默认模型第三栏读写。
+    // 转述模型（识图通道补全）：undefined = 关闭；Settings 默认模型第三栏读写。
     imageDescriberModel,
     // 转述提示词（设置弹窗）：'' = 内置默认。
     imageDescriberPrompt,

@@ -1,5 +1,5 @@
 /**
- * web_search 内核 builtin 工具（批次2 网络搜索接线）。
+ * web_search 内核 builtin 工具（网络搜索接线）。
  *
  * 上游 v1.9.11 同构形态：搜索以模型工具面呈现（其 aiCore 的 builtin_web_search
  * 工具 + 意图分析插件），fork 内核路径落在 BUILTIN_MOUNTS 数据驱动挂载表——
@@ -12,13 +12,13 @@
  * UI 侧：通用工具卡由 kernelChat 投影自动覆盖；presentationMeta 把结构化条目随
  * tool/result 上行给统一引用机制（3b99bf8），搜索结果审阅走工具卡内容区。
  *
- * MVP 边界（批次2）：不做上游的 LLM 意图分析预调用（模型自行按对话拟 query）；
+ * MVP 边界：不做上游的 LLM 意图分析预调用（模型自行按对话拟 query）；
  * 压缩相（cutoff / RAG）由引擎层 applyCompression 内联（webSearchProviders/
  * compression.ts），按渲染层设置的 compressionConfig 全局生效；模型原生搜索轨
  *（enableWebSearch
  * 无 providerId 的 provider 专参管道）未接，见到即拒答明错。
  *
- * v0.4.3（设置控制项实质生效）：count 不再在工具侧钳制——设置页「搜索结果个数」
+ * （设置控制项实质生效）：count 不再在工具侧钳制——设置页「搜索结果个数」
  * (maxResults) 是唯一权威上限，缺省即设置值，模型显式 count 由引擎服务统一钳到
  * [1, 设置值]（此前硬编码 1..12：设置 3 可被突破、设置 100 被 12 无声截断）。
  * RAG 压缩对 snippet 型提供商现经全页预抓实质生效（见 services/WebSearchService）。
@@ -105,12 +105,12 @@ export function apply(ctx: Context): void {
         if (topicId === undefined || providerId === undefined) {
           throw new Error('web_search: no web search provider is configured for this conversation turn')
         }
-        // v0.4.3：count 权威语义收敛进引擎服务（effectiveCount）——设置 maxResults 是
+        // count 权威语义收敛进引擎服务（effectiveCount）——设置 maxResults 是
         // 唯一权威上限，缺省即设置值，模型显式 count 由服务统一钳到 [1, 设置值]。
         // 工具侧只负责把模型参数原样（或 undefined）下传，不再自带硬编码钳制。
         const count = typeof args.count === 'number' && Number.isFinite(args.count) ? Math.trunc(args.count) : undefined
         // 引擎抛出（提供商未就绪 / 网络断 / 引擎不可用）与"真的搜到 0 条"是两件事：
-        // 前者**必须**以失败上行，不得折叠成"No web results found"（CLAUDE.md §9 第一条硬规则）。
+        // 前者**必须**以失败上行，不得折叠成"No web results found"。
         let result: Awaited<ReturnType<typeof webSearchService.search>>
         try {
           result = await webSearchService.search(providerId, query, { count, signal: exec.signal })

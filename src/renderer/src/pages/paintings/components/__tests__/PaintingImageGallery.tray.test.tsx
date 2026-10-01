@@ -1,7 +1,7 @@
 /**
  * 参考图托盘（`PaintingInputTray`）的灯箱契约测试。
  *
- * 行为级验证（§4.18）：V2 `pages/paintings/components/PaintingImageGallery.tsx:104-110`
+ * 行为级验证：V2 `pages/paintings/components/PaintingImageGallery.tsx:104-110`
  * 点缩略图开大图并可左右翻页。fork 曾经是 `preview={false}` —— 缩略图完全点不开（P1），
  * 本测试钉住「托盘里的缩略图都在同一个成组灯箱内、且每张自身的预览是开着的」这条配对契约：
  * 组内注册是 antd 翻页的充要条件，任何一张漏进组或 preview 被关掉都会在这里红。

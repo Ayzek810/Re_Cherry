@@ -21,7 +21,7 @@ export function getFileDirectory(filePath: string): string {
  * @param {string} filePath 文件路径
  * @returns {string} 文件扩展名（含前导点、小写）；没有扩展名时返回空串。
  *
- * 空串是唯一可区分的「没有扩展名」表示（audit2 r2-92）：原先返回 `'.'`，
+ * 空串是唯一可区分的「没有扩展名」表示：原先返回 `'.'`，
  * 与「扩展名恰好是一个点」（`C:\a\b.`）不可区分，还会传进
  * `supportExts.has(...)` 与 `mime2type` 被当成真扩展名。
  * `C:\a\b`、`C:\a\b.`、`.hidden`（无基名）一律返回 `''`；调用方用 `if (!ext)` 判断。
@@ -80,11 +80,11 @@ export function removeSpecialCharactersForFileName(str: string): string {
  * 1. 文件扩展名在supportExts集合中的文件
  * 2. 文本文件
  *
- * 失败语义（audit2 r2-93）：`window.api.file.isTextFile` 是 IPC 读盘探测，
+ * 失败语义：`window.api.file.isTextFile` 是 IPC 读盘探测，
  * 抛错表示「问不到答案」（文件被占用/权限/handler 未就绪），与「确实不是文本
  * 文件」同形。这里不得静默吞掉：catch 里记 `warn` 供取证，返回 false 保持
  * 现有签名（`filterSupportedFiles` 的调用方在本工作区之外，三值化改动见报告
- * 「跨区请求」）。
+ * 「」）。
  *
  * @param {string} filePath 文件路径
  * @param {Set<string>} supportExts 支持的文件扩展名集合

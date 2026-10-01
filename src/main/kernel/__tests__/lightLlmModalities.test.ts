@@ -224,7 +224,7 @@ describe('lightGenerateImage', () => {
   })
 })
 
-describe('lightGenerateImage — provider wire profiles（v0.3.3 批次6 参数真正下发）', () => {
+describe('lightGenerateImage — provider wire profiles（参数真正下发）', () => {
   it('openrouter：aspectRatio 归一化 + resolution/outputFormat/background 下发，seed/numImages 走 native', async () => {
     setLightLlmProviderRoutes([{ id: 'openrouter', apiHost: 'https://openrouter.ai/api/v1/', apiKey: 'sk-or' }])
     fetchMock.mockResolvedValueOnce(okResponse({ data: [{ url: 'https://cdn.example.com/o.png' }] }))
@@ -338,7 +338,7 @@ describe('lightGenerateImage — provider wire profiles（v0.3.3 批次6 参数�
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('未登记的 provider id（用户自建 OpenAI 兼容）走 diffusion 兼容档，不再被拒（v0.3.3-9）', async () => {
+  it('未登记的 provider id（用户自建 OpenAI 兼容）走 diffusion 兼容档，不再被拒', async () => {
     setLightLlmProviderRoutes([{ id: 'my-custom-endpoint', apiHost: 'http://127.0.0.1:8080', apiKey: 'sk-x' }])
     fetchMock.mockResolvedValueOnce(okResponse({ data: [{ url: 'https://cdn.example.com/c.png' }] }))
     await lightGenerateImage({
@@ -361,7 +361,7 @@ describe('lightGenerateImage — provider wire profiles（v0.3.3 批次6 参数�
     expect(url).toBe('http://127.0.0.1:8080/v1/images/generations')
   })
 
-  it('doubao（火山 Ark）：版本段是 /api/v3，不补 /v1，走 diffusion 兼容档（v0.3.3-9）', async () => {
+  it('doubao（火山 Ark）：版本段是 /api/v3，不补 /v1，走 diffusion 兼容档', async () => {
     setLightLlmProviderRoutes([
       { id: 'doubao', apiHost: 'https://ark.cn-beijing.volces.com/api/v3/', apiKey: 'sk-ark' }
     ])
@@ -443,7 +443,7 @@ describe('lightEditImage', () => {
   })
 })
 
-describe('k2-13：渲染层取消与 exec.signal 取并集（旧写法 `signal ?? abort` 丢弃 abort）', () => {
+describe('渲染层取消与 exec.signal 取并集（旧写法 `signal ?? abort` 丢弃 abort）', () => {
   const generatePending = (overrides: Record<string, unknown> = {}, signal?: AbortSignal): Promise<unknown> =>
     lightGenerateImage(
       {

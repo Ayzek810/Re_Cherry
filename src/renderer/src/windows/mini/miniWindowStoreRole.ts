@@ -1,7 +1,7 @@
 /**
  * 小窗（快捷助手 / mini window）的 store 角色：**只读 + 只收**。
  *
- * r2-03：`store/index.ts` 在模块顶层 `persistStore(store)`，而小窗是独立的 JS 上下文与独立的
+ * `store/index.ts` 在模块顶层 `persistStore(store)`，而小窗是独立的 JS 上下文与独立的
  * Redux store，于是它也会建一个写同一个 `persist:cherry-studio` 键的 persistor。小窗里没有进
  * `syncList` 的切片（mcp / knowledge / websearch / shortcuts / minapps / preprocess / skills …）
  * 永远停在它启动时的快照，之后每收到一条同步来的 settings/llm 动作都触发整片写盘——把这些切片

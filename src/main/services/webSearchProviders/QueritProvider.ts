@@ -8,7 +8,7 @@ const logger = loggerService.withContext('QueritProvider')
 
 // API Docs: https://www.querit.ai/en/docs/reference/post
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 QueritProvider.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 QueritProvider.ts）：
  * 上游本就是裸 fetch，原样移植——POST '{apiHost}/v1/search'，Bearer 头 +
  * defaultHeaders，body {query, count, filters?: {sites.exclude, timeRange.date:'d1'}}；
  * error_code!==200 明错，取 results.result[].{title,snippet,url} 与 query_context.query。

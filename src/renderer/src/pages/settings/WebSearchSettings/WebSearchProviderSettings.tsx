@@ -13,7 +13,7 @@ const WebSearchProviderSettings: FC = () => {
   const { theme } = useTheme()
   const { t } = useTranslation()
 
-  // v1 二轮审查 s2-45：缺参时此前 `return null`（静默空白，「没有地址」被画成「什么都没有」）。
+  // 缺参时此前 `return null`（静默空白，「没有地址」被画成「什么都没有」）。
   if (!providerId) {
     return (
       <SettingContainer theme={theme}>

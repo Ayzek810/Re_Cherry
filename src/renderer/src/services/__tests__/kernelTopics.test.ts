@@ -4,12 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as KernelTopicsModule from '../kernelTopics'
 
 /**
- * v0.3.0-2 目标 B（`report.md` §3.3.2 / §3.4）的对账逻辑单测。
+ * 对账逻辑单测。
  *
  * 这里守两件事：
  *   ① **成员资格问内核**——渲染层不得再用自己那份 persist 推断内核那份的可见性；
  *   ② **只有"上次会话留下的行"才可能被判失效**——本进程内新建的话题在首发建册前内核本来就不认识，
- *      不能因此被剪掉（`report.md` §3.4 的 B-6，本改动最容易踩的坑）。
+ * 不能因此被剪掉（本改动最容易踩的坑）。
  *
  * store 与两个 action 以桩注入：本文件测"对账做了什么决定"，不是 Redux 语义
  * （reducer 语义另见 `store/__tests__/assistants.pruneTopics.test.ts`）。
@@ -171,7 +171,7 @@ describe('reconcileAssistantTopicRows（行集合以内核为权威）', () => {
     expect(rows?.map((row) => row.id)).toEqual(['topic-b'])
   })
 
-  it('本进程内新建、尚未建册的行 → **不剪**且照样显示（B-6 的那个坑）', async () => {
+  it('本进程内新建、尚未建册的行 → **不剪**且照样显示（本改动最容易踩的坑）', async () => {
     assistantsState = [{ id: 'assistant-1', topics: [topic('topic-new')] }]
     stubApi({ topics: [] })
     const { reconcileAssistantTopicRows } = await loadReconcile([])

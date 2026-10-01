@@ -3,7 +3,7 @@ import * as htmlparser2 from 'htmlparser2'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /**
- * 元数据与其所属 link 绑定（r2-36）：只有 current link 的解析结果才允许展示，
+ * 元数据与其所属 link 绑定：只有 current link 的解析结果才允许展示，
  * 其它 link 的结果一律不回传 —— 流式重渲染按位置复用组件时 link 会变，
  * 旧实现会把上一个 link 的 `og:title` 配到新 hostname 上（过期数据被当成有效结果）。
  */

@@ -99,7 +99,7 @@ export class WindowService {
       ...(isLinux ? { icon: linuxIcon } : {}),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
-        // 以下三项是**有意保留**的载荷面（v1 二轮 k2-06 复核结论，勿"顺手"收紧）：
+        // 以下三项是**有意保留**的载荷面（复核结论，勿"顺手"收紧）：
         //  · sandbox:false —— preload 需要 Node 能力（contextBridge + electronAPI 收窄后的白名单）；
         //  · webSecurity:false —— 渲染层直接向各 provider 发跨源请求（模型列表/流式对话），关掉同源策略
         //    是这条通路的既有前提；收紧要同时把 provider 调用整体搬到主进程；
@@ -294,7 +294,7 @@ export class WindowService {
     })
 
     mainWindow.webContents.on('will-navigate', (event, url) => {
-      // v0.3.1-2：自身源豁免改为与「当前窗口自身 URL 的 origin」比对。
+      // 自身源豁免改为与「当前窗口自身 URL 的 origin」比对。
       // 原先硬编码上游 dev 端口 `localhost:517`，本 fork 的端口是 DSH_DEV_PORT||5870，
       // 豁免永不命中 → dev 下对自身源的整页导航被拦下并 shell.openExternal 丢进系统浏览器。
       if (isSelfOriginNavigation(mainWindow.webContents.getURL(), url)) {
@@ -350,7 +350,7 @@ export class WindowService {
           shell.openPath(filePath).catch((err) => logger.error('Failed to open file:', err))
         }
       } else if (isSelfOriginNavigation(mainWindow.webContents.getURL(), details.url)) {
-        // v0.3.1-2：自身源绝不丢进系统浏览器（dev 下 window.open 自身页面曾被 openExternal 拉起，
+        // 自身源绝不丢进系统浏览器（dev 下 window.open 自身页面曾被 openExternal 拉起，
         // 与 will-navigate 同一根因）。这里静默拒绝，不 openExternal。
         logger.warn(`Blocked window.open of app's own origin: ${details.url}`)
       } else if (isSafeExternalUrl(details.url)) {

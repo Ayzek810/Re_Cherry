@@ -45,7 +45,7 @@ const MinApp: FC<Props> = ({ app, onClick, size = 60, isLast }) => {
   const displayName = isLast ? t('settings.miniapps.custom.title') : app.nameKey ? t(app.nameKey) : app.name
 
   const handleClick = () => {
-    // fork 缝（v0.3.4-2）：code-mate 受管 Web UI 的磁贴是 /code 管理页的快捷方式——
+    // fork 缝：code-mate 受管 Web UI 的磁贴是 /code 管理页的快捷方式——
     // 点击进管理页做全新启动，而非按 url 开 webview（transient 应用的 url 是上次
     // 会话的陈旧端口，且未启动时根本没有 url）。启动台/顶栏/侧栏三个消费面统一。
     if (app.id.startsWith('code-mate-')) {
@@ -100,7 +100,7 @@ const MinApp: FC<Props> = ({ app, onClick, size = 60, isLast }) => {
             danger: true,
             onClick: async () => {
               try {
-                // r2-79/⑥：删除走同一个写点。此前直接 `read` + `JSON.parse`：全新安装下
+                // /⑥：删除走同一个写点。此前直接 `read` + `JSON.parse`：全新安装下
                 // （还没有 custom-minapps.json）读抛通用错误 → 用户看到"移除失败"，
                 // 而实际上这时候 redux 侧本来就没有任何自定义应用可删。
                 // `missing` 现在是合法缺省（从空列表开始），`error`（读不出来）仍抛出且不写盘。

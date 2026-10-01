@@ -1,4 +1,4 @@
-// fork 缝（原创，v0.4.5-1）：dshmarket（插件市场）受管通道。
+// fork 缝（原创）：dshmarket（插件市场）受管通道。
 //
 // 背景（真机反馈）：dsh 核心升级后插件市场停在旧版 → 与本代核心不兼容 → 用户报"新版本的
 // 插件市场不可用"。机理：dshmarket **不是官方包**（harness 源码里 grep `dshmarket` 零命中），
@@ -11,7 +11,7 @@
 // ② 每次启动 Harness 前把"缺失/不可读/链接残留/上次没修完"的市场补上，失败回滚 manifest 并
 //    留下次重试的标记；补不上但现有市场还能用时**不阻断启动**。
 //
-// **为什么不学社区版钉死一个"已验证版本"**（v0.4.5-1 两次真机回归的教训）：
+// **为什么不学社区版钉死一个"已验证版本"**（两次真机回归的教训）：
 // 社区版的 `VERIFIED_MARKET_BASELINE` 是**随代际 bump 的常量**——我参照的那份开发期快照
 // （2026-09-24）写的是 `1.45.1`，而社区当前（2026-09-29）已经改成 `1.65.1`。照着抄一份常量，
 // 就是在抄一个会过期的数字：本机 dsh 是 `0.2.0-rc.2`，而 `dshmarket@1.45.1` 只声明
@@ -204,7 +204,7 @@ export interface MarketMetadata {
   latest: string
 }
 
-/** 已装宿主的事实：判市场候选是否兼容的依据（v0.4.5-1；活探针纠正后）。 */
+/** 已装宿主的事实：判市场候选是否兼容的依据（活探针纠正后）。 */
 export interface HostFacts {
   /** 已装 dsh 的版本（只用于 `engines.dsh` / `dsh.minVersion`）。 */
   dshVersion?: string
@@ -496,7 +496,7 @@ function marketAddArgs(spec: string, registry: string): string[] {
     '--workspace-root',
     `${MARKET_PACKAGE}@${spec}`,
     `--registry=${registry}`
-    // v0.4.5-1 真机事故：这里**不能**带 `--no-frozen-lockfile`——它是 `pnpm install` 的开关，
+    // 真机事故：这里**不能**带 `--no-frozen-lockfile`——它是 `pnpm install` 的开关，
     // `pnpm add` 不认（exit 2: unexpected argument）。`add` 本身就是"改锁文件"的操作，
     // 在 CI 环境下也不需要放行参数。只有下面的 `plugin install` 那条要显式放行。
   ]

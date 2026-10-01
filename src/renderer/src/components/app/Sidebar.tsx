@@ -10,10 +10,12 @@ import useNavBackgroundColor from '@renderer/hooks/useNavBackgroundColor'
 import { modelGenerating, useRuntime } from '@renderer/hooks/useRuntime'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { getSidebarIconLabel, getThemeModeLabel } from '@renderer/i18n/label'
+import { useUpdatePrompt } from '@renderer/pages/home/components/UpdateAppButton'
 import { ThemeMode } from '@renderer/types'
 import { isEmoji } from '@renderer/utils'
 import { Avatar, Tooltip } from 'antd'
 import {
+  ArrowUpCircle,
   BookOpen,
   Code,
   Folder,
@@ -47,6 +49,8 @@ const Sidebar: FC = () => {
   const { theme, settedTheme, toggleTheme } = useTheme()
   const avatar = useAvatar()
   const { t } = useTranslation()
+  // 左侧导航布局没有顶栏，更新提示落在侧栏底部（与主题、设置图标并列）。
+  const { available: updateAvailable, version: updateVersion, trigger: updateTrigger } = useUpdatePrompt()
 
   const onEditUser = () => UserPopup.show()
 
@@ -88,6 +92,13 @@ const Sidebar: FC = () => {
         )}
       </MainMenusContainer>
       <Menus>
+        {updateAvailable && (
+          <Tooltip title={t('settings.about.update.available', { version: updateVersion })} placement="right">
+            <Icon theme={theme} onClick={updateTrigger}>
+              <ArrowUpCircle size={20} className="icon" />
+            </Icon>
+          </Tooltip>
+        )}
         <Tooltip title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)} placement="right">
           <Icon theme={theme} onClick={toggleTheme}>
             {settedTheme === ThemeMode.dark ? (
@@ -133,9 +144,9 @@ const MainMenus: FC = () => {
     knowledge: <BookOpen size={18} className="icon" />,
     translate: <Languages size={18} className="icon" />,
     paintings: <Palette size={18} className="icon" />,
-    // v0.3.3-2 笔记复活（V1 同图标）
+    // 笔记复活（V1 同图标）
     notes: <NotepadText size={18} className="icon" />,
-    // v0.3.4-1 编码助手（Code Mate，V2 移植）
+    // 编码助手（Code Mate，V2 移植）
     code: <Code size={18} className="icon" />
   }
 

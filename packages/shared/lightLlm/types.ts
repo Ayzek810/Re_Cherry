@@ -45,7 +45,7 @@ export interface LightLlmCall {
    */
   images?: LightLlmImage[]
   /**
-   * 图片**不落盘**（v0.3.3-2，快捷助手专用）：为真时本轮的图片只留在内存里供这一次请求读取，
+   * 图片**不落盘**（快捷助手专用）：为真时本轮的图片只留在内存里供这一次请求读取，
    * 请求结束即丢弃——不写 `<kernelDir>/attachments`，也不产生任何可被回放引用的持久字节。
    * 缺省（false/undefined）= 照旧落盘：会话日志里的 ref 需要字节可回读，主聊天/绘画不得开启。
    */
@@ -77,7 +77,7 @@ export type LightLlmStreamEvent =
 // ---- 图像模态（绘画页 / generate_image 工具的执行缝；OpenAI 兼容平面直连） ----
 
 /**
- * 图像生成请求（v0.3.3 批次6，V2 绘画参数来源移植）。
+ * 图像生成请求（V2 绘画参数来源移植）。
  *
  * fork 缝：V2 把「表单 canonical 参数袋」整包交给主进程，由 `splitParamValues` +
  * `WIRE_REGISTRY`/`buildVendorProviderOptions` 拆分下发；fork 的同一平面（单次
@@ -130,7 +130,7 @@ export interface LightImageResult {
   images: string[]
 }
 
-// ---- 图像模态的明错契约（v0.3.3 批次6） ----
+// ---- 图像模态的明错契约 ----
 
 /**
  * fork 缝：V2 的 provider 路由表在渲染层可查（registry），fork 的目录在

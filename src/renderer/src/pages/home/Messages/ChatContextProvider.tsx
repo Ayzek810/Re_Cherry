@@ -3,7 +3,7 @@ import type { Topic } from '@renderer/types'
 import { createContext, type FC, type ReactNode, use, useMemo } from 'react'
 
 /**
- * 聊天页的窄上下文（f2-02）。
+ * 聊天页的窄上下文。
  *
  * `useChatContext(topic)` 此前在 Chat / Messages / MessageGroup / Message / MessageHeader /
  * MessageMenubar 各自实例化一份：N 条消息 = N+2 份同域状态 —— 每份都重建一套

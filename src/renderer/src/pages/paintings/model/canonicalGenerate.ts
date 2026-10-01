@@ -1,5 +1,5 @@
 /**
- * 通用绘画生成路径（v0.3.3 批次6，V2 移植）：V2
+ * 通用绘画生成路径（V2 移植）：V2
  * `src/renderer/pages/paintings/model/canonicalGenerate.ts` 主体照抄——
  * 输入图过滤 / mode 推断 / maxInputImages / prompt 必填 / checkProviderEnabled /
  * customSize 合成 / bytesToDataUrl 全部保留。
@@ -34,7 +34,7 @@ export const MAX_INPUT_IMAGES = 4
 
 /**
  * fork 缝：旧参数键 → V2 canonical 键的一次性兼容映射。fork 的历史草稿/持久化行
- * 里存的是 `imageSize`/`batchSize`（v0.3.3 批次4 的自写参数表），V2 的 canonical
+ * 里存的是 `imageSize`/`batchSize`（的自写参数表），V2 的 canonical
  * 键是 `size`/`numImages`。只在 canonical 键缺席时兜底，绝不覆盖新值；其余未知键
  * 由 `buildParamsSchema` 的 loose 语义保留后被本函数丢弃，不报错。
  */

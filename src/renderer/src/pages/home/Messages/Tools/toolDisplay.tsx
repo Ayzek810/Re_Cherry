@@ -42,7 +42,7 @@ export function getToolDisplay(toolName: string): ToolDisplayInfo {
     case 'bash':
       return { icon: <SquareTerminal size={14} />, labelKey: 'message.tools.labels.bash' }
     case 'describe_images':
-      // 转述模型识图（v0.3.1 识图通道）：内核真实名暴露在悬浮 tooltip，卡片显示友好名。
+      // 转述模型识图（识图通道）：内核真实名暴露在悬浮 tooltip，卡片显示友好名。
       return { icon: <ScanText size={14} />, labelKey: 'message.tools.labels.describeImage' }
     case 'job_output':
       return { icon: <ListTodo size={14} />, labelKey: 'message.tools.labels.jobOutput' }

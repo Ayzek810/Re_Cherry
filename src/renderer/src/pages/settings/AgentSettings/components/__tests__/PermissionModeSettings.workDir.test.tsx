@@ -1,10 +1,10 @@
 /**
- * v0.3.1-2：工作目录"修改目录"按钮行为测试。
+ * 工作目录"修改目录"按钮行为测试。
  *
  * 需求（用户）：助手设置 → 权限模式 → 工作目录 右侧加一个"打开文件管理器选目录"的按钮，
  * 机制与 设置 → 应用数据 的"修改目录"一致（`window.api.select({properties:['openDirectory','createDirectory']})`）。
  *
- * 行为级验证（§4.18）：本组件自带 assistant/updateAssistant 两个 prop，不依赖 store，
+ * 行为级验证：本组件自带 assistant/updateAssistant 两个 prop，不依赖 store，
  * 故直接渲染即可断言"点按钮 → 弹选目录 → 选中路径写回助手"整条链。
  */
 import '@renderer/i18n'

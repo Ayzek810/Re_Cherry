@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 笔记上传的结果与失败语义（二轮审查 r2-43）。
+ * 笔记上传的结果与失败语义。
  *
  * 主进程批量接口对单文件失败只记日志、把它排除在 `fileCount` 之外并**照常成功返回**；
  * 旧实现把这个差额丢掉，用户在任何情况下都只看到"上传成功"。这里钉三件事：
@@ -76,7 +76,7 @@ beforeEach(() => {
   })
 })
 
-describe('uploadNotes（r2-43）', () => {
+describe('uploadNotes', () => {
   it('批量路径部分失败 → failedFiles 报出差额并弹可见信号', async () => {
     // 3 个 md 里主进程只写成功 1 个、跳过 1 个 → 失败 1 个
     batchUploadMarkdown.mockResolvedValue({ fileCount: 1, folderCount: 0, skippedFiles: 1 })

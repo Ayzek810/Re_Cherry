@@ -5,7 +5,7 @@ import { CurrentConfigPanel } from './CurrentConfigPanel'
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/LaunchDialog.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点两处，对话框骨架（标题/CurrentConfigPanel/取消-启动脚位）逐字：
+//（2026-09-24）。缝点两处，对话框骨架（标题/CurrentConfigPanel/取消-启动脚位）逐字：
 // ① terminal 选择数据面裁掉（useAvailableTerminals 缝注）——terminals/selectedTerminal/
 //   onSelectTerminal props 不搬。
 // ② UI 面缝：@cherrystudio/ui Dialog 族/Button → 本页 shim（antd Modal）。

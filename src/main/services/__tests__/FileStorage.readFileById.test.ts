@@ -45,7 +45,7 @@ afterEach(() => {
   rmSync(storageDir, { recursive: true, force: true })
 })
 
-describe('FileStorage.readFileById（r2-79/⑥：不存在 vs 读不出来）', () => {
+describe('FileStorage.readFileById（不存在 vs 读不出来）', () => {
   it('文件不存在 → status:missing（确定的终局答案，不是 error）', async () => {
     await expect(call('custom-minapps.json')).resolves.toEqual({ status: 'missing' })
   })

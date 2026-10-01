@@ -143,7 +143,7 @@ export const loading = (args: RequireSome<LoadingToastConfig, 'promise'>): Promi
   // Generate unique key for this loading message
   const key = args.key || `loading-${Date.now()}-${Math.random()}`
 
-  // c2-28：四个默认串是用户可见文案，必须过 i18next（中文界面下原样显示英文）。
+  // 四个默认串是用户可见文案，必须过 i18next（中文界面下原样显示英文）。
   api.loading({
     content: <ToastContent title={title || i18n.t('common.loading')} description={description} icon={icon} />,
     duration: 0, // Don't auto-close

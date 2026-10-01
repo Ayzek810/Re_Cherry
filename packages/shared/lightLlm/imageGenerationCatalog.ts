@@ -1212,7 +1212,7 @@ export function resolveImageWireProfile(providerId: string | undefined): ImageWi
  * ollama 本地 `/api/generate`、minimax `/image_generation`），fork 无该层，故**显式拒绝**而
  * 不是静默丢参数（用户裁决：范围外必须报不支持）。
  *
- * `v0.3.3-9` 修正：**doubao（火山 Ark）不在此列** —— Ark 的图像接口就是
+ *  修正：**doubao（火山 Ark）不在此列** —— Ark 的图像接口就是
  * `{base}/images/generations`（`base` 带 `/api/v3`，主进程已按版本段去重），把它当"范围外"
  * 拒绝是把能用的 provider 误杀（用户报告"参数选项消失"时暴露的一类问题）。
  */
@@ -1234,7 +1234,7 @@ export function isOffPlaneVendor(providerId: string | undefined): boolean {
 }
 
 /**
- * fork 缝（v0.3.3-9）：**某 provider 在本平面该用哪个 profile**。
+ * fork 缝：**某 provider 在本平面该用哪个 profile**。
  *
  * 与 V2 的差别只有一处、且是本 fork 必须的：V2 只有 registry 里的模型能进绘画页，所以
  * "未登记 = 不该出现"；fork 的绘画页按**模型能力**列模型（`isGenerateImageModel`），
@@ -1247,7 +1247,7 @@ export function imageWireProfileForProvider(providerId: string | undefined): Ima
   return IMAGE_WIRE_PROFILES[providerId] ?? IMAGE_WIRE_PROFILES[DEFAULT_IMAGE_WIRE_PROFILE_ID]
 }
 
-// ── 通用兜底字段面（fork 缝，v0.3.3-9） ─────────────────────────────────────
+// ── 通用兜底字段面（fork 缝） ─────────────────────────────────────
 //
 // 目录未收录的 (provider, model) —— 例如用户自建的 OpenAI 兼容 provider、或 gpt-4o 这类
 // "带生图工具的对话模型" —— 以前没有字段面，参数 Popover **整体消失**（V2 里这种情况不会出现：

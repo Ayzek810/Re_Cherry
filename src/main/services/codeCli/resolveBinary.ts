@@ -1,16 +1,16 @@
-// fork 缝：受管 CLI 二进制解析（2026-09-24，v0.3.4-1；批次2 升级；批次5 补能力探针）。
+// fork 缝：受管 CLI 二进制解析（2026-09-24；升级；补能力探针）。
 // 解析顺序：CodeMate 受管目录（tools/ 子树）→ 系统 PATH（where/which）。受管布局映射
-// v0.4.5-1 起由 binaryManager/layout.ts 提供（与安装器、PaperAgentService 同一份；此前
+// 起由 binaryManager/layout.ts 提供（与安装器、PaperAgentService 同一份；此前
 // 本文件内联一份、靠注释与安装器"保持一致"，已漂移过一次）。依赖方向仍单向：
 // resolveBinary → layout（叶子），BinaryManager → 本文件。
 //
-// 批次5 真机事故加固：批次2 的探测是"PATH 命中即可用"——不验能否运行、不验版本，系统 PATH
+// 真机事故加固：的探测是"PATH 命中即可用"——不验能否运行、不验版本，系统 PATH
 // 上的同名异物（旧版缺子命令、pipx 装的时候没带 [web] extras、损坏安装）照样被打上可用
 // 标签放行启动，最后炸一句 "exited before it was ready"（V2 的对位语义是 availability
 // 授权执行、application 授权变更；V2 探测含 realpath/归属/版本，fork 裁掉后无替代）。
 // 现补 `--version` 能力探针：能跑且报出版本 → runnable:true + version；否则 runnable:false
 // ——快照层标 broken，服务层启动前显式拒绝（不再靠子进程退出后的英文哑弹）。
-// 批次5 二次真机事故：探针原用裸 execFile——Windows 上 .cmd/.bat 不经 shell 直接 spawn 是
+// 二次真机事故：探针原用裸 execFile——Windows 上 .cmd/.bat 不经 shell 直接 spawn 是
 // EINVAL（CVE-2024-27980 防护，Node 同步 throw），受管 dsh 恰好是 node_modules/.bin/dsh.cmd
 // → 快照通道每 2s 炸一次。改用 V2 processRunner 的 executeCommand（内部 cross-spawn，
 // .cmd 转发已处理）——用户裁决"复制 V2 现成代码，别手搓"。probeSystemPath 的 where/which
@@ -48,7 +48,7 @@ export function probeSystemPath(executable: string): Promise<string | undefined>
 }
 
 /** `--version` 能力探针：能跑且非空输出 → {runnable:true, version}；否则 runnable:false。
- * 批次5 二次真机事故修复：原用裸 execFile（.cmd 直接 spawn EINVAL），换 V2 现成的
+ * 二次真机事故修复：原用裸 execFile（.cmd 直接 spawn EINVAL），换 V2 现成的
  * executeCommand（内部 cross-spawn 处理 .cmd 转发）。非零退出/超时 → 不能跑（诊断留日志）。 */
 export async function probeBinary(binPath: string): Promise<{ runnable: boolean; version?: string }> {
   try {
@@ -61,7 +61,7 @@ export async function probeBinary(binPath: string): Promise<{ runnable: boolean;
   }
 }
 
-/** 受管布局映射（v0.4.5-1：单点到 binaryManager/layout.ts——此前本文件内联一份并与
+/** 受管布局映射（单点到 binaryManager/layout.ts——此前本文件内联一份并与
  * BinaryManager.managedBinaryPath 靠注释"保持一致"，已经漂移过一次：paper-agent 加进
  * 预设表后这里不认识它，任何走本解析器的通道都会把已安装的源码型工具判成未安装）。
  * 未知工具返回 undefined → 调用方回落系统 PATH。 */
@@ -79,7 +79,7 @@ export async function resolveBinary(executable: string): Promise<ResolvedBinary 
       () => false
     ))
   ) {
-    // 受管件也过探针（批次5）：装了但跑不起来（peer 缺失/损坏）不该被当成可启动。
+    // 受管件也过探针：装了但跑不起来（peer 缺失/损坏）不该被当成可启动。
     const probe = await probeBinary(managed)
     if (!probe.runnable) {
       logger.warn(`code-mate: managed "${executable}" at ${managed} failed the --version probe`)

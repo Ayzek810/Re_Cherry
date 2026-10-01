@@ -54,7 +54,7 @@ const MessageHeader: FC<Props> = memo(({ assistant, model, message, isGroupConte
   const showMinappIcon = sidebarIcons.visible.includes('minapp')
 
   /**
-   * 功能二（v0.3.1）：助手级显示挡位 —— 'assistant' 时 AI 行展示助手标识与助手名，
+   * 功能二：助手级显示挡位 —— 'assistant' 时 AI 行展示助手标识与助手名，
    * 模型名退到时间戳小字右侧；缺省 'model' 保持原版模型头像 + 模型名。
    */
   const isAssistantIdentityMode =

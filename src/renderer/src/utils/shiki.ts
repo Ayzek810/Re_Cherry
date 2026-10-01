@@ -12,7 +12,7 @@ const logger = loggerService.withContext('Shiki')
 /**
  * Shiki 的 `FontStyle` 位域取值（`@shikijs/core` 的 `FontStyle` 枚举）。
  *
- * 为什么是本地字面量而不是 `import { FontStyle } from 'shiki/core'`（v1 二轮性能审计 p2-02）：
+ * 为什么是本地字面量而不是 `import { FontStyle } from 'shiki/core'`：
  * `shiki/core` 是一个**值**导入 ⇒ rollup 把整个 `@shikijs/core` 实体（含 Oniguruma 主题解析、
  * EncodedTokenMetadata、hast 工具链，产物里 174KB 的 `dist-*.js`）折进**首屏静态导入闭包**，
  * 而这里只需要 4 个位。改成动态导入会把同步的 `getReactStyleFromToken` 变成 async，代价面
@@ -80,7 +80,7 @@ function normalizeRegistrationResult(value: unknown): unknown[] | null {
 }
 
 /**
- * 解析语言语法注册数据（v1 二轮性能审计 p2-04）。
+ * 解析语言语法注册数据。
  *
  * 用途：`shiki-stream.worker` 不再 `import('shiki')`——worker 是一份**独立的 rollup 模块图**，
  * 它自己 import shiki 会让 `bundledLanguages` 语言表在产物里再编译一份（实测重复 4.15 MB）。
@@ -236,7 +236,7 @@ export function getReactStyleFromToken(
 /**
  * 获取 markdown-it（**装配一次**的模块级单例）
  *
- * r2-77：`mdInitializer` 是单例（`AsyncInitializer` 只跑一次工厂），而 `md.use()` 是**追加**
+ * `mdInitializer` 是单例（`AsyncInitializer` 只跑一次工厂），而 `md.use()` 是**追加**
  * 语义。此前 `md.use(fromHighlighter(...))` 写在 `getMarkdownIt` 里，每次调用都往同一个
  * 实例再挂一份高亮插件（消费点 `CodeStyleProvider` 的 `shikiMarkdownIt` 按渲染调用），
  * 插件数、内存与单次 render 的 CPU 随调用次数线性增长且永不自愈。

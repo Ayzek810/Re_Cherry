@@ -1,6 +1,6 @@
 /**
- * v0.3.2 自 CS_V1 移植（知识库状态；批次1 仅 UI 持久化，嵌入/索引/预处理批次4 接线）。
- * fork 改动点：`window.api.knowledgeBase.delete` 在 fork preload 尚无此通道（批次4 接线），
+ * 自 CS_V1 移植（知识库状态；仅 UI 持久化，嵌入/索引/预处理 接线）。
+ * fork 改动点：`window.api.knowledgeBase.delete` 在 fork preload 尚无此通道（接线），
  * 以可选调用守卫——现在是无害 no-op，不产生"看似删了库其实没删"的假信号（库本体在 redux）。
  */
 import { loggerService } from '@logger'
@@ -33,7 +33,7 @@ const knowledgeSlice = createSlice({
         state.bases = state.bases.filter((b) => b.id !== action.payload.baseId)
         const files = base.items.filter((item) => item.type === 'file')
         void FileManager.deleteFiles(files.map((item) => item.content) as FileMetadata[])
-        // 批次4 接线：主进程侧向量库/索引清理 IPC（fork preload 暂无该通道，运行期探测守卫）。
+        // 接线：主进程侧向量库/索引清理 IPC（fork preload 暂无该通道，运行期探测守卫）。
         const knowledgeBaseApi = (
           window.api as unknown as { knowledgeBase?: { delete?: (id: string) => Promise<void> } }
         ).knowledgeBase

@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { withDetail } from '../utils/errorDetail'
 
-// v0.4.5（fork 原创）：手动"检查更新"。
+// （fork 原创）：手动"检查更新"。
 // 与挂载时自动查询（useCliVersionStatuses → latestVersions）的分工：
 // ① 自动通道只覆盖注册表型工具（npm/PyPI）的"最新版本"展示；paper-agent 不在其中——它的
 //    上游查询是 GitHub API，纯手动（见 BinaryManager.getLatestVersions 的纸面策略）。
@@ -19,7 +19,7 @@ const logger = loggerService.withContext('useToolUpdateCheck')
 type CheckUpdatesResult =
   | {
       success: true
-      /** v0.4.5-1（O1）：解析到的安装来源；只有 managed 才谈得上"本应用可升级"。 */
+      /** （）：解析到的安装来源；只有 managed 才谈得上"本应用可升级"。 */
       source: 'managed' | 'system' | 'none'
       current?: string
       latest?: string
@@ -28,7 +28,7 @@ type CheckUpdatesResult =
   | { success: false; message: string }
 
 export interface ToolUpdateCheckResult {
-  /** v0.4.5-1（O1）：结论的适用面——装配点只在 managed 时把它注入版本卡。 */
+  /** （）：结论的适用面——装配点只在 managed 时把它注入版本卡。 */
   source: 'managed' | 'system' | 'none'
   latest?: string
   canUpgrade: boolean
@@ -76,7 +76,7 @@ export function useToolUpdateCheck(): ToolUpdateCheckState {
             ...(result.current ? { forVersion: result.current } : {})
           }
         }))
-        // v0.4.5-1（O1）：非受管安装不说"版本"——系统来源的工具本应用既不知道它的版本也
+        // （）：非受管安装不说"版本"——系统来源的工具本应用既不知道它的版本也
         // 升不了它，回一句"已是最新版本"是假陈述（这正是用户会照做的错误结论）。
         if (result.source === 'system') {
           window.toast.info(t('code.check_updates_system'))

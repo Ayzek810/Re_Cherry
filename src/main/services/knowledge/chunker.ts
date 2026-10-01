@@ -1,5 +1,5 @@
 /**
- * 知识库分块器（批次4）：fork 自写滑窗实现（不移植 embedjs 的 TextSplitter 全家）。
+ * 知识库分块器：fork 自写滑窗实现（不移植 embedjs 的 TextSplitter 全家）。
  *
  * 语义对齐上游：chunkSize/chunkOverlap 以字符计（embedjs 语义），空段落优先切分、
  * 超长段落硬切、块间保留 overlap 尾部。字段来自 KnowledgeBaseParams（渲染层可配）。

@@ -1,9 +1,9 @@
 /**
- * c2-12 / c2-24 行为测试：保存到知识库弹窗。
+ * 保存到知识库弹窗。
  *
- * c2-12 原状：分析抛错时 catch 里写了一个**全零统计对象**，于是 UI 走「此消息没有可保存的内容」
- * 空态 —— 一个与事实相反的结论，正面违反家规「A failure must never look like an empty result」。
- * c2-24 原状：内容类型行只有 onClick，键盘用户无法勾选，而「保存」的可用性由这些选择决定。
+ * 原状：分析抛错时 catch 里写了一个**全零统计对象**，于是 UI 走「此消息没有可保存的内容」
+ * 空态 —— 一个与事实相反的结论。
+ * 原状：内容类型行只有 onClick，键盘用户无法勾选，而「保存」的可用性由这些选择决定。
  *
  * antd Modal 换成最小壳：这里钉的是弹窗自己的状态机（错误态 / 重试 / 复选框语义），不是 antd 动画。
  */
@@ -103,7 +103,7 @@ const fullStats = (overrides: Partial<MessageContentStats> = {}): MessageContent
 const renderPopup = () =>
   render(<SaveToKnowledgePopupContainer source={{ type: 'message', data: { id: 'm1' } as never }} resolve={vi.fn()} />)
 
-describe('SaveToKnowledgePopup analysis failure (c2-12)', () => {
+describe('SaveToKnowledgePopup analysis failure', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(window as unknown as { toast: unknown }).toast = { error: mocks.toastError, success: vi.fn() }
@@ -143,7 +143,7 @@ describe('SaveToKnowledgePopup analysis failure (c2-12)', () => {
   })
 })
 
-describe('SaveToKnowledgePopup content type rows (c2-24)', () => {
+describe('SaveToKnowledgePopup content type rows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(window as unknown as { toast: unknown }).toast = { error: mocks.toastError, success: vi.fn() }

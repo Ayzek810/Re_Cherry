@@ -3,13 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { EMBEDDING_MODELS, getEmbeddingMaxContext } from '../embedings'
 
 /**
- * r2-82 行为契约：
  * 1. `voyage-code-3` 在表里只出现一次（原先四条 1024/256/512/2048，`.find` 只能取首条，
  *    后三条是死数据）；
  * 2. 未命中必须与「有上限」可区分 —— 返回 `null`，不再返回 `undefined` 让调用方
  *    `if (!value || !maxContext || …)` 把「没有答案」当成「没有上限」。
  */
-describe('getEmbeddingMaxContext (r2-82)', () => {
+describe('getEmbeddingMaxContext', () => {
   it('keeps exactly one entry per embedding id', () => {
     const ids = EMBEDDING_MODELS.map((m) => m.id)
     expect(new Set(ids).size).toBe(ids.length)

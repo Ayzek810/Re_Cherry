@@ -29,7 +29,7 @@ interface ToolCopyKeys {
   description: string
 }
 
-// k2-25：键类型写死成 id 联合（`TOOL_ORIGIN_NAMES` 同款写法），注册表新增工具时
+// 键类型写死成 id 联合（`TOOL_ORIGIN_NAMES` 同款写法），注册表新增工具时
 // 这两张表不补就**编译失败**；旧写法 `Record<string, …>` 会让漏项先编译通过，再在
 // 渲染期以 `copyMap[toolId]` 为 undefined 抛 TypeError。
 const BUILTIN_TOOL_COPY: Record<BuiltinToolId, ToolCopyKeys> = {
@@ -120,7 +120,7 @@ const ToolCardBody: FC<{
 }
 
 /**
- * 工具页（v0.3.0 验收设计；卡片为方形三排：名+开关 / 原版名 / 介绍）：两组工具各带开关
+ * 工具页（验收设计；卡片为方形三排：名+开关 / 原版名 / 介绍）：两组工具各带开关
  * （稀疏 map 缺省 = 开，默认全开），拨动下一轮对话生效。内置工具（@shared/config/agentTools）
  * 未开启工作模式也可用；外置工具仅工作模式开启时挂载；审批三档在「权限模式」页
  * （单一数据源单一编辑点）。
@@ -135,7 +135,7 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
   }
 
   // 泛型把 entries 与 copyMap 钉成同一套 id：两张表各自是**完整**的（`Record<BuiltinToolId>` /
-  // `Record<ExternalToolId>`），漏登记就编译失败，而不是取到 undefined 再渲染期抛错（k2-25）。
+  // `Record<ExternalToolId>`），漏登记就编译失败，而不是取到 undefined 再渲染期抛错。
   const renderToolGrid = <Id extends ToolPageCardId>(
     field: 'builtinTools' | 'externalTools',
     entries: readonly Id[],
@@ -163,7 +163,7 @@ const ToolsSettings: FC<Props> = ({ assistant, updateAssistant }) => {
       <SettingsItem divider={false}>
         <SettingsTitle>{t('settings.agentSettings.tools.builtinTitle')}</SettingsTitle>
         {renderToolGrid('builtinTools', BUILTIN_TOOL_IDS, BUILTIN_TOOL_COPY)}
-        {/* 批次5 双门：assistant.enableGenerateImage（工具面）+ llm.paintingModel（模型面）。
+        {/* 双门：assistant.enableGenerateImage（工具面）+ llm.paintingModel（模型面）。
             模型面在**设置页**配置（V2 的 feature.paintings.default_model_id 语义），绘画页只读它
             播种新草稿、不再写全局值。
             fork 缝：绘画模型选择器不在此处——已移到「设置 › 默认模型 › 绘画模型」

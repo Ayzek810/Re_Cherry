@@ -24,7 +24,7 @@ export class WebTracer {
     }
     this.processor = spanProcessor || new BatchSpanProcessor(this.getExporter())
     this.provider = new WebTracerProvider({
-      // k2-14: same as the node adapter — the resource is what makes
+      // same as the node adapter — the resource is what makes
       // `serviceName` observable; without it spans report `unknown_service`.
       resource: resourceFromAttributes({ 'service.name': defaultConfig.serviceName }),
       spanProcessors: [this.processor]
@@ -35,7 +35,7 @@ export class WebTracer {
     })
   }
 
-  /** Flush the batch buffer and stop the provider (k2-20: the buffer tail used to die with the page). */
+  /** Flush the batch buffer and stop the provider (: the buffer tail used to die with the page). */
   public static async shutdown(): Promise<void> {
     await this.provider?.shutdown()
   }

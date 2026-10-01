@@ -1,5 +1,5 @@
 /**
- * 文档处理引擎行为测试（v0.3.2 路由表落地后的共用引擎面）：
+ * 文档处理引擎行为测试（路由表落地后的共用引擎面）：
  * - 纯文本直读 / 本地 html → turndown Markdown（真实文件、真实转换器）；
  * - docx 派发走 mammoth Markdown 管线、pptx 派发走 officeparser（mammoth/
  *   officeparser mock，验证派发方向与 turndown 实转换——mammoth 真实管线由

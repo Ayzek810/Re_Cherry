@@ -2654,7 +2654,7 @@ describe('Kimi Models', () => {
         expect(isKimiReasoningModel(createModel({ id: 'kimi-k2.6' }))).toBe(true)
       })
 
-      it('should recognize future K2.x and K3+ variants', () => {
+      it('should recognize future .x and + variants', () => {
         expect(isKimiReasoningModel(createModel({ id: 'kimi-k2.7' }))).toBe(true)
         expect(isKimiReasoningModel(createModel({ id: 'kimi-k3' }))).toBe(true)
         expect(isKimiReasoningModel(createModel({ id: 'kimi-k3.5' }))).toBe(true)
@@ -2727,7 +2727,7 @@ describe('Kimi Models', () => {
         expect(isSupportedThinkingTokenKimiModel(createModel({ id: 'kimi-k2.6' }))).toBe(true)
       })
 
-      it('should recognize future K2.x and K3+ variants', () => {
+      it('should recognize future .x and + variants', () => {
         expect(isSupportedThinkingTokenKimiModel(createModel({ id: 'kimi-k2.7' }))).toBe(true)
         expect(isSupportedThinkingTokenKimiModel(createModel({ id: 'kimi-k3' }))).toBe(true)
         expect(isSupportedThinkingTokenKimiModel(createModel({ id: 'kimi-k3.5' }))).toBe(true)

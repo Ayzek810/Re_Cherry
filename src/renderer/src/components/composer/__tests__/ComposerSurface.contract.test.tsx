@@ -1,10 +1,10 @@
 /**
- * c2-08 / c2-14 行为测试：作曲条的高度契约与拖拽监听清理。
+ * 作曲条的高度契约与拖拽监听清理。
  *
- * c2-08 原状：`useComposerEditorFrameSizing` 发布的高度契约（`--composer-editor-max-height` 等）
+ * 原状：`useComposerEditorFrameSizing` 发布的高度契约（`--composer-editor-max-height` 等）
  * 在 `src` 下零消费方，承载高度契约的只有 `textarea` 的 `rows={1}` —— 输入长草稿既不会自动增高，
  * 也不会在封顶高度后滚动。
- * c2-14 原状：拖拽调高的两条 window 监听在 mousedown 回调里注册，没有任何卸载清理。
+ * 原状：拖拽调高的两条 window 监听在 mousedown 回调里注册，没有任何卸载清理。
  */
 import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
@@ -58,7 +58,7 @@ const Host = ({ initialText, isExpanded = false }: { initialText: string; isExpa
   )
 }
 
-describe('composer editor height contract (c2-08)', () => {
+describe('composer editor height contract', () => {
   it('publishes a max-height variable for both collapsed and expanded modes', () => {
     const collapsed = getComposerEditorContentStyle(14, false, null)
     const expanded = getComposerEditorContentStyle(14, true, null)
@@ -92,7 +92,7 @@ describe('composer editor height contract (c2-08)', () => {
   })
 })
 
-describe('composer resize drag listeners (c2-14)', () => {
+describe('composer resize drag listeners', () => {
   it('removes the window listeners when the composer unmounts mid-drag', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     const removeSpy = vi.spyOn(window, 'removeEventListener')

@@ -174,7 +174,7 @@ export function registerInteractionHost(
   if (questions === undefined) {
     throw new Error('kernel: ctx.userQuestions not registered (dsh-user-questions missing)')
   }
-  // k2-29：`registerProvider` 的返回值是注销函数。以前丢弃它，于是停机后这个 provider 仍挂在
+  // `registerProvider` 的返回值是注销函数。以前丢弃它，于是停机后这个 provider 仍挂在
   // `ctx.userQuestions` 上；把它交回调用方，`stopKernel()` 才能配对撤销。
   const unregister = questions.registerProvider({
     // dsh 的 provider 契约返回 { answers }；hub 内部只搬运数组

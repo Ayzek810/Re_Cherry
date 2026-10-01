@@ -85,7 +85,7 @@ const McpServersList: FC = () => {
   }, [])
 
   /**
-   * 版本探测（v1 二轮审查 s2-27）。
+   * 版本探测。
    *
    * 旧实现对每一次 `mcpServers` 身份变化**全体重探**：`store/mcp.ts` 的任一写入（开关、
    * 工具开关、日志回写、DXT 回写）都会换数组身份 → 一次点击 = 1 次即时探测 + N 次全体重探，
@@ -161,7 +161,7 @@ const McpServersList: FC = () => {
         content: t('settings.mcp.deleteServerConfirm'),
         centered: true,
         onOk: async () => {
-          // v1 二轮审查 s2-22：`onOk` 的 rejection 不会冒泡到外面的 try/catch（antd 内部
+          // `onOk` 的 rejection 不会冒泡到外面的 try/catch（antd 内部
           // `setLoading(false, true); return Promise.reject(e)`），删除失败会零用户可见信号。
           try {
             await mcpApi.removeServer(server)
@@ -206,7 +206,7 @@ const McpServersList: FC = () => {
     logger.silly('toggle activate', { serverId: serverForUpdate.id, active })
     try {
       if (active) {
-        // 记账后再探：探测账本让下面的 effect 不会为同一次启用再探一遍（见 s2-27）。
+        // 记账后再探：探测账本让下面的 effect 不会为同一次启用再探一遍。
         probedActiveIdsRef.current.add(serverForUpdate.id)
         await fetchServerVersion({ ...serverForUpdate, isActive: active })
       } else {

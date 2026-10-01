@@ -1,5 +1,4 @@
 /**
- * v1 二轮审查 m2-27 的行为证据。
  *
  * 缺陷：`executeCommand` 的超时与超量分支只 `child.kill('SIGKILL')` 杀直接子进程。同一文件的
  * `killProcessTree` 注释已写明：Windows 上 `crossPlatformSpawn` 让非 `.exe` 命令经 shell 执行，
@@ -40,7 +39,7 @@ class FakeChild extends EventEmitter {
 
 const isWin = process.platform === 'win32'
 
-describe('executeCommand process-tree termination (m2-27)', () => {
+describe('executeCommand process-tree termination', () => {
   let child: FakeChild
 
   afterEach(() => {

@@ -4,10 +4,10 @@ import type { ensureKernelTopic } from '../kernelChat'
 import type * as KernelChatModule from '../kernelChat'
 
 /**
- * v0.3.0-2 目标 B（`report.md` §3.3.2-5 / §3.4 的 B-5、§4 的 M2）：`ensureKernelTopic` **只服务真正新建的话题**。
+ * `ensureKernelTopic` **只服务真正新建的话题**。
  *
  * 背景：`dshTopicCreate` 是 **upsert**，对"内核已遗忘的 id"调用会让该 id **复活**——直接违反内核兼容契约
- * 第 4 节的墓碑纪律，也正是 `report.md` §2.2 列的"复活点"（`messageThunk.ts:291`）。
+ * 墓碑纪律，也正是 列的"复活点"（`messageThunk.ts:291`）。
  * 真机 M2 要对比 `topics.json` 前后，这里用桩把同一判定钉住：**来自上次会话的行**必须先由内核确认存在。
  *
  * `kernelChat.ts` 的 import 面很大（Redux 各 slice / 事件流桥 / 块构造器…），为了让本文件只测这一条判定，
@@ -80,7 +80,7 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
+describe('ensureKernelTopic 的建册门控', () => {
   it('三值 true（内核确认存在）→ 放行建册（幂等 upsert）', { timeout: COLD_IMPORT_TIMEOUT_MS }, async () => {
     const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
 
@@ -105,7 +105,7 @@ describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
   )
 
   it(
-    '三值 null（重试窗口内问不到）→ **同样拒绝**：不知道 ≠ 不存在，upsert 会复活墓碑 id（r2-04）',
+    '三值 null（重试窗口内问不到）→ **同样拒绝**：不知道 ≠ 不存在，upsert 会复活墓碑 id',
     { timeout: COLD_IMPORT_TIMEOUT_MS },
     async () => {
       const { ensureKernelTopic: ensure } = await loadEnsure(['topic-unanswered'], null)
@@ -130,18 +130,14 @@ describe('ensureKernelTopic 的建册门控（B-5 / M2）', () => {
     expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-new' }))
   })
 
-  it(
-    '验C-1 集成半边：启动窗口内第一次问不到、随后问到 → 不拒绝、照常建册',
-    { timeout: COLD_IMPORT_TIMEOUT_MS },
-    async () => {
-      // 旧实现在这里会因 `null` 放行而"碰巧"建册成功，但那是把"暂时不知道"当成"知道"：
-      // 若该行其实已被内核遗忘，upsert 就会复活墓碑 id。重试后拿到确定性答案，语义才成立。
-      const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
-      getTopic.mockRejectedValueOnce(new Error('No handler registered'))
+  it('集成半边：启动窗口内第一次问不到、随后问到 → 不拒绝、照常建册', { timeout: COLD_IMPORT_TIMEOUT_MS }, async () => {
+    // 旧实现在这里会因 `null` 放行而"碰巧"建册成功，但那是把"暂时不知道"当成"知道"：
+    // 若该行其实已被内核遗忘，upsert 就会复活墓碑 id。重试后拿到确定性答案，语义才成立。
+    const { ensureKernelTopic: ensure } = await loadEnsure(['topic-live'], { id: 'topic-live', name: 'live' })
+    getTopic.mockRejectedValueOnce(new Error('No handler registered'))
 
-      await expect(ensure('topic-live', assistant)).resolves.toBeUndefined()
-      expect(getTopic).toHaveBeenCalledTimes(2)
-      expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-live' }))
-    }
-  )
+    await expect(ensure('topic-live', assistant)).resolves.toBeUndefined()
+    expect(getTopic).toHaveBeenCalledTimes(2)
+    expect(createTopic).toHaveBeenCalledWith(expect.objectContaining({ id: 'topic-live' }))
+  })
 })

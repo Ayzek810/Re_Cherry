@@ -113,7 +113,7 @@ export const isSupportVerbosityProvider = (provider: Provider) => {
 // 早期精简把前三个 type 误删（**文本驱动剪枝事故**）：这三个 type 在 ProviderTypeSchema 里
 // 至今存在（用户仍可建这些类型的 provider），types/index.ts 也写明"enableUrlContext 是
 // Gemini/Anthropic 的特有功能"，UrlContextbutton 是活体开关——漏掉它们会让这些 provider
-// 被判为"不支持 URL 上下文"，按钮直接不出现。故按上游恢复（v0.3.0-1 后续修复）。
+// 被判为"不支持 URL 上下文"，按钮直接不出现。故按上游恢复（后续修复）。
 // 注：上游函数体里另有一条 `provider.id === SystemProviderIds.cherryin`，cherryin 已随精简
 // 整体移除（全仓 0 命中），该条**不**恢复。
 const SUPPORT_URL_CONTEXT_PROVIDER_TYPES = [
@@ -181,7 +181,7 @@ export const NOT_SUPPORT_API_KEY_PROVIDERS: readonly SystemProviderId[] = ['olla
 // （types/provider.ts:7-20），用户仍可建立该类型的 provider。
 // 影响不止提示：ApiService `checkApiProvider`（:443-451）对本表外的 provider 直接抛错要求 API Key，
 // `hasApiKey`（:224-232）也据此判假——即这些 provider 会在发请求前被拦下。
-// 故按上游恢复（v0.3.0-1 后续修复）。
+// 故按上游恢复（后续修复）。
 export const NOT_SUPPORT_API_KEY_PROVIDER_TYPES: readonly ProviderType[] = ['vertexai', 'aws-bedrock']
 
 // https://platform.claude.com/docs/en/build-with-claude/prompt-caching#1-hour-cache-duration

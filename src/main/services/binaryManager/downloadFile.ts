@@ -1,4 +1,4 @@
-// fork 缝（原创，v0.4.5-1）：受管下载原语（唯一一件）。
+// fork 缝（原创）：受管下载原语（唯一一件）。
 //
 // 为什么要有这件：旧实现（runtimeDownloader / sourceInstaller 各一份）把整包读进内存
 // （`Buffer.from(await response.arrayBuffer())`）、用 `AbortSignal.timeout(120_000)` 卡

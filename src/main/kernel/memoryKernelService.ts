@@ -1,5 +1,5 @@
 /**
- * memory 工具每轮登记缝（ctx.memory，v0.4.6；webSearch/knowledge/skills/documents 同先例）。
+ * memory 工具每轮登记缝（ctx.memory；webSearch/knowledge/skills/documents 同先例）。
  *
  * 状态本体在主进程模块单例（skillService 同先例），本缝只承担 cordis 声明制落位与转发。
  * 每轮登记持有的是**主进程派生**的受控目录（{userData}/Data/assistant-memory/<sanitize(id)>/memory，

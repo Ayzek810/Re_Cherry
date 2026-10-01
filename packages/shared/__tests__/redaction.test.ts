@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { REDACTED, redactSecretText } from '../utils/redaction'
 
 /**
- * k2-26 的行为证据：`redactSecretText` 的真实调用点喂的是自由文本（子进程诊断输出、
+ * `redactSecretText` 的真实调用点喂的是自由文本（子进程诊断输出、
  * provider 错误体、IPC handler 的入参摘要），而 provider 常把 `sk-…` 原文回显在
  * `{"error":{"message":"Incorrect API key provided: sk-…"}}` 这样的**值**里——
  * 没有 `key: value` 对可供旧的键名正则锚定。旧实现原样放行（实测），
  * 却给调用方一个"已清洗"的假信号，比不调用更危险。
  */
-describe('redactSecretText 值形状兜底（k2-26）', () => {
+describe('redactSecretText 值形状兜底', () => {
   it('脱敏 JSON 错误体里回显的 OpenAI 风格密钥', () => {
     const body = '{"error":{"message":"Incorrect API key provided: sk-abcdef123456"}}'
     const out = redactSecretText(body)

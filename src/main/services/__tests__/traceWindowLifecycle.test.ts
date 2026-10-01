@@ -1,5 +1,5 @@
 /**
- * v1 二轮审查 m2-12 的行为证据：trace 窗口语言回调的订阅生命周期与空引用守卫。
+ * trace 窗口语言回调的订阅生命周期与空引用守卫。
  *
  * 原实现两个缺陷：
  * ① `did-finish-load` 每次都 `configManager.subscribe`（数组 push），而 `closed` 只退订一次；
@@ -84,7 +84,7 @@ function languageSends(win: (typeof wins)[number]): unknown[][] {
   return win.send.mock.calls.filter(([channel]) => channel === IpcChannel.Trace_SetLanguage) as unknown[][]
 }
 
-describe('trace 窗口语言订阅生命周期 (m2-12)', () => {
+describe('trace 窗口语言订阅生命周期', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     wins.length = 0

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getProtectedTrashTargetReason, moveItemToTrash, type TrashProtectionContext } from '../moveToTrashTool'
 
 /**
- * move_to_trash 机测（v0.4.6 V2 移植）：保护路径矩阵 + 围栏/symlink 校验。
+ * move_to_trash 机测（V2 移植）：保护路径矩阵 + 围栏/symlink 校验。
  * shell.trashItem 由注入函数替代（不触真回收站）；真实 fs 只用于 lstat/realpath 链。
  * 主测试 setup mock 掉 node:os，临时目录挂进程工作目录下统一清扫。
  */

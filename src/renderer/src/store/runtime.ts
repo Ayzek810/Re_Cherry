@@ -18,6 +18,7 @@ import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { AppLogo, UserAvatar } from '@renderer/config/env'
 import type { MinAppRegion, MinAppType, Topic, WebSearchStatus } from '@renderer/types'
+import type { AppUpdateState } from '@shared/types/appUpdate'
 
 export interface ChatState {
   isMultiSelectMode: boolean
@@ -54,6 +55,8 @@ export interface RuntimeState {
   detectedRegion: MinAppRegion | null
   /** Query whether a task is processing or not. undefined and false share same semantics.  */
   loadingMap: Record<string, boolean>
+  /** 应用更新：主进程推送的最近一份状态快照；null = 还没收到。 */
+  update: AppUpdateState | null
 }
 
 export interface ExportState {
@@ -84,7 +87,8 @@ const initialState: RuntimeState = {
     activeSearches: {}
   },
   detectedRegion: null,
-  loadingMap: {}
+  loadingMap: {},
+  update: null
 }
 
 const runtimeSlice = createSlice({
@@ -151,6 +155,9 @@ const runtimeSlice = createSlice({
     },
     setDetectedRegion: (state, action: PayloadAction<MinAppRegion | null>) => {
       state.detectedRegion = action.payload
+    },
+    setUpdateState: (state, action: PayloadAction<AppUpdateState | null>) => {
+      state.update = action.payload
     }
   }
 })
@@ -175,7 +182,9 @@ export const {
   startLoadingAction,
   finishLoadingAction,
   // Region detection
-  setDetectedRegion
+  setDetectedRegion,
+  // App update
+  setUpdateState
 } = runtimeSlice.actions
 
 export default runtimeSlice.reducer

@@ -1,8 +1,8 @@
 /**
- * 批次1 输入栏三开关契约测试（webSearchTool / knowledgeBaseTool / mcpToolsTool）。
+ * 输入栏三开关契约测试（webSearchTool / knowledgeBaseTool / mcpToolsTool）。
  *
- * 批次1 语义：开关只做「持久化到 Assistant 字段 + 打开 QuickPanel」，不触发任何搜索/检索/
- * 服务器进程行为（接线在批次2/3/4）。本文件把这些交互契约钉住：
+ * 语义：开关只做「持久化到 Assistant 字段 + 打开 QuickPanel」，不触发任何搜索/检索/
+ * 服务器进程行为（接线在后续轮次）。本文件把这些交互契约钉住：
  * - WebSearchButton：未启用时点击打开提供商面板；已选提供商时点击关闭（清 webSearchProviderId）。
  * - KnowledgeBaseButton：面板列出 knowledge 切片 bases；选择回调 onSelect。
  * - MCPToolsButton：模式菜单三项齐全；选择 auto 写入 assistant.mcpMode。
@@ -136,7 +136,7 @@ afterEach(() => {
 
 // ---- WebSearchButton -------------------------------------------------------
 
-describe('WebSearchButton（批次1：开关只写助手字段）', () => {
+describe('WebSearchButton（开关只写助手字段）', () => {
   it('未启用时点击打开提供商面板', () => {
     render(<WebSearchButton quickPanelController={quickPanelControllerStub} assistantId="a-1" />)
 
@@ -164,7 +164,7 @@ describe('WebSearchButton（批次1：开关只写助手字段）', () => {
 
 // ---- KnowledgeBaseButton ---------------------------------------------------
 
-describe('KnowledgeBaseButton（批次1：选择写 knowledge_bases）', () => {
+describe('KnowledgeBaseButton（选择写 knowledge_bases）', () => {
   it('面板列出知识库项；选择回调 onSelect', () => {
     const onSelect = vi.fn()
     render(
@@ -201,7 +201,7 @@ describe('KnowledgeBaseButton（批次1：选择写 knowledge_bases）', () => {
 
 // ---- MCPToolsButton --------------------------------------------------------
 
-describe('MCPToolsButton（批次1：模式切换写 mcpMode）', () => {
+describe('MCPToolsButton（模式切换写 mcpMode）', () => {
   it('模式菜单含 disabled/auto/manual 三项；选择 auto 写回助手', async () => {
     render(
       <MemoryRouter>

@@ -25,7 +25,7 @@ export interface DiagnosisContext {
 }
 
 /**
- * 诊断候选模型（r2-41）。
+ * 诊断候选模型。
  *
  * 旧实现只放一个 `defaultModel`，且用 `!models.some(...)` 检查**刚刚建好的空数组**——
  * 那是恒真死分支，所以列表最多 1 个元素；当失败模型就是默认模型、或用户没配默认模型时
@@ -197,7 +197,7 @@ Output: {"summary":"OpenAI API key is invalid or expired","category":"auth","exp
 
   for (const model of modelsToTry) {
     try {
-      // r2-41：`fetchGenerate` 用返回值表达失败（不 reject），必须解构 error 才能区分
+      // `fetchGenerate` 用返回值表达失败（不 reject），必须解构 error 才能区分
       // 「模型返回空」与「调用失败（401/超时/网络）」——旧实现把两者都读成「空响应」。
       const { text, error: generateError } = await fetchGenerate({ prompt, content, model })
       if (!text) {

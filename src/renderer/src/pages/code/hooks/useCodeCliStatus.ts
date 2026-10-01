@@ -1,12 +1,12 @@
 import type { ManagedToolStatusState } from '@shared/types/managedTool'
 import { useEffect, useRef, useState } from 'react'
 
-// fork 缝（批次4a 原创缝 hook，~60 行）：V2 的状态读取走 useSharedCacheValue
+// fork 缝（原创缝 hook，~60 行）：V2 的状态读取走 useSharedCacheValue
 //（'feature.deepseek_harness.status' / 'feature.hermes_dashboard.status' / gateway 运行态 /
-// binary 快照，主进程共享缓存 + 推送）；fork 无 Cache 层——主进程在批次 1-3 已将同一状态面
+// binary 快照，主进程共享缓存 + 推送）；fork 无 Cache 层——主进程在-3 已将同一状态面
 // 改为全窗口 onStatus 广播（DeepSeekHarnessService/HermesDashboardService/ApiGatewayService/
 // BinaryManager 的 publishStatus），本模块把四个消费点收敛为对号 hook。deepseek/hermes 的
-// "立即拉当前值" 由批次 4a 新增的 GetStatus 通道承担（code-cli:*:get-status，订阅前无推送
+// "立即拉当前值" 由 新增的 GetStatus 通道承担（code-cli:*:get-status，订阅前无推送
 // 也能拿到当下状态）；binary 快照立即拉取用既有 binary.snapshots()。
 
 /** fork 缝：V2 gateway 运行态载荷（{running, lanRunning, port?}，见 ApiGatewayService.publishRunningState）。 */
@@ -93,7 +93,7 @@ export function useHermesDashboardStatus(): ManagedToolStatusState {
   )
 }
 
-/** v0.4.5：Paper-Agent 状态（同 Hermes Dashboard 的订阅缝形状）。 */
+/** Paper-Agent 状态（同 Hermes Dashboard 的订阅缝形状）。 */
 export function usePaperAgentStatus(): ManagedToolStatusState {
   const { paperAgent } = window.api.codeCli
   return useManagedToolStatusState(

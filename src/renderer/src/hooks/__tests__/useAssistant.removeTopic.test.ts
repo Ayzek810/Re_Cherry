@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as UseAssistantModule from '../useAssistant'
 
 /**
- * `useAssistant().removeTopic` 的**乐观删除 + 失败回滚**（v0.3.0-2 §6.9）。
+ * `useAssistant().removeTopic` 的**乐观删除 + 失败回滚**。
  *
  * 真机实证的产线：旧写法 `void TopicManager.removeTopic(id)` 把内核侧失败吞成一条日志，渲染层行照删、
  * 内核行还在 → 沉淀出"删过又看得见"的幽灵话题（2026-09-15 那次运行里 9 个）。修法是把删除结果

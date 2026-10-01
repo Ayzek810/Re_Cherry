@@ -1,5 +1,5 @@
 /**
- * 遗留会话事件的 `ignorable` 补标记迁移（v0.3.0-1 后续）。
+ * 遗留会话事件的 `ignorable` 补标记迁移（后续）。
  *
  * ## 为什么需要它（一条真实断裂）
  *
@@ -38,7 +38,7 @@ const logger = loggerService.withContext('KernelLegacyMigration')
 const LEGACY_IGNORABLE_EVENT_TYPES = ['cherry/work-mode'] as const
 
 /**
- * 迁移结果**三值**（v0.4.x 二轮审查 k2-10）：
+ * 迁移结果**三值**：
  *
  * | 取值 | 含义 |
  * |---|---|

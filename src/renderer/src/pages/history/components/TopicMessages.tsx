@@ -29,7 +29,7 @@ interface Props extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * 已取到的话题内容，连同它属于哪个话题 id（f2-53）。
+ * 已取到的话题内容，连同它属于哪个话题 id。
  *
  * 话题行本身**不含 messages**（`store/assistants.ts` 把列表行的 messages 清空），消息要经
  * `loadTopicMessagesThunk` 从内核会话日志投影进 `messageIdsByTopic`。带 id 存值是为了在**渲染期**
@@ -60,7 +60,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
 
   const loadTopic = useCallback(async () => {
     if (!topicId) return
-    // 先清掉上一条话题的内容：否则取数完成前渲染的是旧话题的消息（f2-53）。
+    // 先清掉上一条话题的内容：否则取数完成前渲染的是旧话题的消息。
     setLoaded(null)
     setLoadFailed(false)
     setInFlight(true)
@@ -68,7 +68,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
       const topic = await getTopicById(topicId)
       if (!aliveRef.current) return
       // `getTopicById` 用 spread 组装话题：store 里查不到这一行时它返回的是一个 `id` 为
-      // undefined 的空壳。那同样是"来源没到手"，不能落到空历史（f2-53）。
+      // undefined 的空壳。那同样是"来源没到手"，不能落到空历史。
       setLoaded(topic?.id ? { id: topicId, topic } : null)
       setLoadFailed(!topic?.id)
     } catch (error) {
@@ -91,7 +91,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
   }
 
   const onContinueChat = async (topic: Topic) => {
-    // r2-62：`isGenerating()` 改返回 `Promise<boolean>`，不再 reject——`true` = 可以继续，
+    // `isGenerating()` 改返回 `Promise<boolean>`，不再 reject——`true` = 可以继续，
     // `false` = 正在生成（已弹提示）。旧写法只 `await` 不读结果，闸门形同虚设：生成中点击
     // "继续对话"仍会切页，把正在流式的回答丢在后台。必须读返回值并提前返回。
     if (!(await isGenerating())) return
@@ -101,7 +101,7 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
     setTimeoutTimer('onContinueChat', () => EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR), 100)
   }
 
-  // 三态互斥（f2-53）：加载中（骨架）/ 失败（错误条 + 重试）/ 有答案（空态或消息列表）。
+  // 三态互斥：加载中（骨架）/ 失败（错误条 + 重试）/ 有答案（空态或消息列表）。
   // 三者绝不同形——"失败"不得读成"这个话题没有消息"，"加载中"不得先闪一次空历史。
   // `loaded.id !== topicId` 即"手上是上一条话题的内容"，渲染期直接算作加载中。
   const loadedTopic = loaded !== null && loaded.id === topicId ? loaded.topic : null
@@ -180,13 +180,13 @@ const ContainerWrapper = styled.div`
   flex-direction: column;
 `
 
-/** 加载态占位：静默留白是最差失败形态（CLAUDE.md §9 rendering）。 */
+/** 加载态占位：静默留白是最差失败形态。 */
 const LoadingState = styled.div`
   width: 100%;
   padding: 8px 0;
 `
 
-/** 取数失败态：与"这个话题没有消息"显式分离，并给出重试入口（f2-53）。 */
+/** 取数失败态：与"这个话题没有消息"显式分离，并给出重试入口。 */
 const ErrorState = styled.div`
   width: 100%;
   display: flex;

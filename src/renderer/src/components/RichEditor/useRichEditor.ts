@@ -34,7 +34,7 @@ import { EnhancedMath } from './extensions/enhanced-math'
 import { Placeholder } from './extensions/placeholder'
 import { YamlFrontMatter } from './extensions/yaml-front-matter'
 import { blobToArrayBuffer, compressImage, shouldCompressImage } from './helpers/imageUtils'
-// v0.3.3-2 笔记移植：V1 用的是 Cherry 自维护的 `@cherrystudio/extension-table-plus`
+// 笔记移植：V1 用的是 Cherry 自维护的 `@cherrystudio/extension-table-plus`
 //（原包 exports 指向 dist/ + tsdown 构建链，fork 没有那套），故把它的 src **内联**到
 // `./table-plus`（21 文件，只改相对 import 的 .js 后缀）——V1 语义与那两个行/列操作钩子全保留。
 import { TableKit } from './table-plus'

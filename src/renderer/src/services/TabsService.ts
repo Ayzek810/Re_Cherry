@@ -43,7 +43,7 @@ class TabsService {
    * @returns 是否成功关闭
    */
   public closeTab(tabId: string): boolean {
-    // 批次5（用户裁决「关闭标签页即停」）：code-mate 受管 Web UI 的标签页关闭时，
+    // （用户裁决「关闭标签页即停」）：code-mate 受管 Web UI 的标签页关闭时，
     // 对应的受管进程（dsh/hermes dashboard）一并停止。必须在 tab 查找之前做——
     // LRU disposeAfter 触发时标签页可能已不存在（早退会跳过清理）。
     this.stopCodeMateToolIfMinappTab(tabId)
@@ -123,7 +123,7 @@ class TabsService {
   }
 
   /**
-   * 批次5（用户裁决「关闭标签页即停」）：code-mate 受管 Web UI 的标签页关闭时，
+   * （用户裁决「关闭标签页即停」）：code-mate 受管 Web UI 的标签页关闭时，
    * 对应的受管进程一并停止（dsh web / hermes dashboard 都是随标签生亡的瞬态服务）。
    * 经 IPC 走主进程服务；stop 对已停服务是幂等空操作。同时把应用从打开集合摘除，
    * 侧栏磁贴与启动台条目随标签关闭一并消失。
@@ -194,7 +194,7 @@ class TabsService {
   }
 
   /**
-   * 把 tabs 切片里的固定集合镜像进**已持久化**的 settings（v0.3.3-1）：
+   * 把 tabs 切片里的固定集合镜像进**已持久化**的 settings：
    * `tabs` 在 persist `blacklist` 里，固定标签页要跨重启保留只能走这里；值未变则不派发。
    */
   private syncPinnedTabs(): void {

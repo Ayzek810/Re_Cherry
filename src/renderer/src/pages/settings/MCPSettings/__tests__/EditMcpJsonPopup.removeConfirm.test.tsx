@@ -5,11 +5,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * JSON 编辑器保存路径（v1 二轮审查 s2-23 / s2-24）。
+ * JSON 编辑器保存路径。
  *
- * s2-24：守卫写成 `if (parseJSON === null)`——比较的是导入的函数而非解析结果，恒为 false，
+ * 守卫写成 `if (parseJSON === null)`——比较的是导入的函数而非解析结果，恒为 false，
  * 于是语法错误带着 `null` 进入 zod 校验，用户看到的是 "expected object, received null"。
- * s2-23：清空编辑器再确定 = 无确认地删掉所有服务器，且绕过 `mcpApi.removeServer`
+ * 清空编辑器再确定 = 无确认地删掉所有服务器，且绕过 `mcpApi.removeServer`
  *（主进程关客户端 + DXT 解包目录清理），磁盘上的 DXT 目录泄漏。
  */
 

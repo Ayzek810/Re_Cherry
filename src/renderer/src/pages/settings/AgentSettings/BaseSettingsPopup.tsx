@@ -24,7 +24,7 @@ interface BaseSettingsPopupProps {
 /**
  * 智能体设置弹窗外壳（移植自 V1 BaseSettingsPopup；数据源为 Redux 同步读取，
  * 无加载/错误态，故去掉 V1 的 isLoading/error 分支）。
- * v0.3.1-2：补确认键——V1 原样是 footer=null，只能靠 X 关闭，用户要求"加确认键"。
+ * 补确认键——V1 原样是 footer=null，只能靠 X 关闭，用户要求"加确认键"。
  */
 export const BaseSettingsPopup: React.FC<BaseSettingsPopupProps> = ({
   initialTab = 'essential',

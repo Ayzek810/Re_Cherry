@@ -106,16 +106,16 @@ interface MountedToolsState {
   builtins: string[]
   externals: string[]
   /**
-   * MCP 挂载单元的漂移签名（批次3）：`mcp:<serverId>` 挂载单元的 id 不含工具集信息，
+   * MCP 挂载单元的漂移签名：`mcp:<serverId>` 挂载单元的 id 不含工具集信息，
    * 服务器配置/工具清单变化（listTools 缓存内容）不会改 id——签名把每台服务器的
    * 工具集哈希折叠进比对，变化即触发 dispose 重挂（工具面跟轮走的 MCP 补充维度）。
    * 无 mcp 挂载单元时为 ''（与 idListEquals 同语义：无该维度则恒等）。
    */
   mcpSignature: string
   /**
-   * 每轮登记漂移签名（批次5/6）：skill/read_document 的可用清单（cherry:skills /
+   * 每轮登记漂移签名：skill/read_document 的可用清单（cherry:skills /
    * cherry:documents 快照节）是 setup 时静态计算的——挂载单元 id 不随清单内容变化，
-   * 启用集/附件集跨轮变更必须靠本签名触发重挂才对模型可见（v0.3.2 真机实锤：
+   * 启用集/附件集跨轮变更必须靠本签名触发重挂才对模型可见（真机实锤：
    * 注释曾声称"无需漂移签名"，实际首测即索引缺失）。无登记时为 ''。
    */
   turnRegSignature: string
@@ -139,43 +139,43 @@ const liveAgentRoute = new Map<string, { provider: string; model: string }>()
  */
 const BUILTIN_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) => PromiseLike<unknown> }> = [
   { id: 'ask_user_question', mount: (agentCtx) => agentCtx.plugin(askUserTool) },
-  // v0.3.1 识图通道补全：主模型无视觉 + 已配置转述模型时由渲染层注入 builtinTools；
+  // 识图通道补全：主模型无视觉 + 已配置转述模型时由渲染层注入 builtinTools；
   // 工具体 = describe_images（本仓模块）。图片 ref 的真相源是会话日志，
   // 工具执行时在日志内反查（不建并行登记表）。
   { id: 'describe_images', mount: (agentCtx) => agentCtx.plugin(describeImagesTool) },
-  // v0.3.2 批次2 网络搜索接线：渲染层 messageThunk 在助手网络搜索开启（webSearchProviderId
+  // 网络搜索接线：渲染层 messageThunk 在助手网络搜索开启（webSearchProviderId
   // 就绪）的轮把 'web_search' 并入 builtinTools；执行走主进程引擎（services/WebSearchService），
   // 每轮提供商经 sendMessage options.webSearch 登记（见 sendMessage 内 setTurnProvider）。
   { id: 'web_search', mount: (agentCtx) => agentCtx.plugin(webSearchTool) },
-  // v0.3.2 批次4 知识库接线：助手挂知识库（knowledge_bases 非空）的轮把 'knowledge_search'
+  // 知识库接线：助手挂知识库（knowledge_bases 非空）的轮把 'knowledge_search'
   // 并入 builtinTools；执行直调主进程 KnowledgeService（嵌入+余弦检索），每轮库清单经
   // sendMessage options.knowledgeBases 登记（webSearch 同构）。
   { id: 'knowledge_search', mount: (agentCtx) => agentCtx.plugin(knowledgeSearchTool) },
-  // v0.3.2 批次5 skills 接线：助手启用技能（enabledSkills 非空）的轮把 'skill' 并入
+  // skills 接线：助手启用技能（enabledSkills 非空）的轮把 'skill' 并入
   // builtinTools；可用技能的 name/description 索引由 setup 写入 RuntimeContextProjection
   // 快照节（setup 静态计算——启用集跨轮变更靠 turnRegSignature 漂移重挂刷新），工具按
   // name 反查磁盘 SKILL.md。
   { id: 'skill', mount: (agentCtx) => agentCtx.plugin(skillTool) },
-  // v0.3.2 批次6 文档阅读（roadmap L29"聊天中文档阅读处理"）：触发消息带文件附件的
+  // 文档阅读（"聊天中文档阅读处理"）：触发消息带文件附件的
   // 轮把 'read_document' 并入 builtinTools；文档名清单由 setup 写入快照节，工具按名
   // 反查登记读全文（直读：PDF 文本层，无扫描件检测；空文本如实报错）。
   { id: 'read_document', mount: (agentCtx) => agentCtx.plugin(documentTool) },
-  // v0.3.2 验收轮（2026-09-22 用户裁决）：OCR 分体独立内置工具——模型自行判断何时
+  // 验收轮（2026-09-22 用户裁决）：OCR 分体独立内置工具——模型自行判断何时
   // 调用（read_document 文本层空/乱、或用户明确要 OCR）。挂载条件 = 本轮有
   // 文档附件（渲染层与 read_document 同轮并入）。执行按本轮登记的文档处理服务商
   // 路由（用户第三轮裁决：挂进文档处理通道，LocalPaddle 只是通道里的本地条目）；
   // 未登记/未配置时执行侧如实报可行动错误，不做静默降级。
   { id: 'ocr_document', mount: (agentCtx) => agentCtx.plugin(ocrDocumentTool) },
-  // v0.3.3 批次5 聊天生图（V2 PaintingTool 同构）：助手 enableGenerateImage 开且
+  // 聊天生图（V2 PaintingTool 同构）：助手 enableGenerateImage 开且
   // 绘画模型已配置的轮把 'generate_image' 并入 builtinTools；每轮绘画模型经
   // sendMessage options.generateImage 登记（webSearch 同构）。执行 = 轻量 AI 服务面
   // lightGenerateImage（主进程直调，无 IPC 旁路）。
   { id: 'generate_image', mount: (agentCtx) => agentCtx.plugin(generateImageTool) },
-  // v0.4.6 web_fetch（V2 WebFetchTool 同构）：随 web_search 挂载（webSearchActive 门由
+  // web_fetch（V2 WebFetchTool 同构）：随 web_search 挂载（webSearchActive 门由
   // 渲染层决定，fetch 本身不依赖搜索提供商）；执行走三级抓取链 + Readability，
   // 结果并入 web_search 同一条 [n] 编号链与引用卡。
   { id: 'web_fetch', mount: (agentCtx) => agentCtx.plugin(webFetchTool) },
-  // v0.4.6 knowledge_read（V2 kb_read 同构）：随 knowledge_search 挂载（turnBases 门）；
+  // knowledge_read（V2 kb_read 同构）：随 knowledge_search 挂载（turnBases 门）；
   // 命中文档整读/文档内 grep，baseId 执行侧防线复用每轮登记。
   { id: 'knowledge_read', mount: (agentCtx) => agentCtx.plugin(knowledgeReadTool) }
 ]
@@ -188,11 +188,11 @@ const EXTERNAL_MOUNTS: ReadonlyArray<{ id: string; mount: (agentCtx: Context) =>
   { id: 'editor', mount: (agentCtx) => agentCtx.plugin(toolStrReplaceEditor) },
   { id: 'pwsh', mount: (agentCtx) => agentCtx.plugin(toolPwsh) },
   { id: 'jobs', mount: (agentCtx) => agentCtx.plugin(toolJobs) },
-  // v0.4.6（V2 同名工具移植）：工作区安全删除（OS 回收站）+ 附件物化。
+  // （V2 同名工具移植）：工作区安全删除（OS 回收站）+ 附件物化。
   // 两者共用档位升级流（read-only 档拒绝 + sandbox_permissions 问询放行）。
   { id: 'trash', mount: (agentCtx) => agentCtx.plugin(moveToTrashTool) },
   { id: 'saveAttachment', mount: (agentCtx) => agentCtx.plugin(saveAttachmentTool) },
-  // v0.4.6 用户裁决：memory / todo / goal 归外置（工作模式作用域）——它们都在会话之外
+  // 用户裁决：memory / todo / goal 归外置（工作模式作用域）——它们都在会话之外
   // 留持久状态（memory 写磁盘助手级 FACT/JOURNAL；todo/goal 写会话日志并驱动 UI 面板/
   // 自动续轮）。memory 每轮根目录经 sendMessage options.memory（assistantId）登记，
   // FACT.md 内容进 cherry:memory 快照节（recall side），JOURNAL 仅工具可达。
@@ -225,7 +225,7 @@ const EXTERNAL_TOOL_CAPABILITIES: Record<ExternalToolId, string> = {
  * 具体工具的使用时机在各工具自身 description 里（不在此处逐工具写死）。
  */
 function buildToolFaceSection(builtins: string[], externals: string[]): string {
-  // 纯聊天轮（externals 为空；ask_user 等内置问答工具不算"工具面"）压缩版（v0.3.1 上下文
+  // 纯聊天轮（externals 为空；ask_user 等内置问答工具不算"工具面"）压缩版（上下文
   // 净化 B）：保留杀幻觉内核（本请求即环境全部事实）与 DSML/快照两条防线，砍掉逐条能力
   // 面与"调用前先说明"等只在有文件/命令工具时才有意义的行——真机实录无工具轮模型会把
   // 整段英文注入当用户话语复述。
@@ -255,14 +255,14 @@ function buildToolFaceSection(builtins: string[], externals: string[]): string {
   if (enabled.length > 0) {
     lines.push(
       '- File and command tools available this turn:',
-      // k2-02: the map is keyed by `ExternalToolId`, so a missing entry is a compile
+      // the map is keyed by `ExternalToolId`, so a missing entry is a compile
       // error, not a silently dropped line. The old `=== undefined ? [] : …` branch
       // turned "you forgot to register the new tool" into a successful omission.
       ...enabled.map((id) => `  - ${EXTERNAL_TOOL_CAPABILITIES[id]}`)
     )
   } else if (!externals.some((id) => id.startsWith('mcp:'))) {
     // 本轮只有 MCP 工具时不说"没有任何工具"——MCP 工具的 schema 已在本请求里，
-    // 该行只针对文件/命令执行体缺席（批次3）。
+    // 该行只针对文件/命令执行体缺席。
     lines.push(
       '- You have NO file or command tools this turn. Do not simulate reading, writing, or executing anything; ' +
         'if the task requires them, say so plainly and let the user decide.'
@@ -309,7 +309,7 @@ function mountedStateEquals(
 }
 
 /**
- * 每轮登记漂移签名（批次5/6）：折叠 skill/read_document/memory 本轮登记清单（技能
+ * 每轮登记漂移签名：折叠 skill/read_document/memory 本轮登记清单（技能
  * name/description、文档 name/path/ext、memory 根 + FACT.md 内容哈希）为单串。清单随轮
  * 重写（sendMessage 内 setTurnSkills/setTurnDocuments/setTurnRoot），快照节文本又是
  * setup 时静态计算——签名变化即 dispose 重挂，索引才对模型新鲜。与 computeMcpSignature
@@ -341,7 +341,7 @@ async function computeTurnRegSignature(topicId: string): Promise<string> {
 }
 
 /**
- * MCP 挂载漂移签名（批次3）：对每个 `mcp:<serverId>` 外置单元，取主进程 MCPService
+ * MCP 挂载漂移签名：对每个 `mcp:<serverId>` 外置单元，取主进程 MCPService
  * 的工具集哈希（getToolsetSignature 走 listTools 缓存，服务器不可达 → 'unreachable'）
  * 折叠成单串。仅同步自渲染层的配置缺失也编码进签名（missing），配置到位后下一轮
  * 自然漂移重挂。无 mcp 单元返回 ''。
@@ -481,7 +481,7 @@ function registryPath(): string {
 }
 
 /**
- * 注册表加载结果。**`absent` 与 `failed` 必须分开**（v0.3.0-4 问题 D）：
+ * 注册表加载结果。**`absent` 与 `failed` 必须分开**：
  *
  * | 状态 | 含义 | 是否允许破坏性清扫 |
  * |---|---|---|
@@ -510,7 +510,7 @@ let corruptBackupTaken = false
 /**
  * 加载话题注册表。
  *
- * v0.3.0-4 问题 D：区分三态（见 {@link RegistryLoadOutcome}），并在**读不出来**时把原始文件复制一份
+ * 区分三态（见 {@link RegistryLoadOutcome}），并在**读不出来**时把原始文件复制一份
  * 到 `topics.json.corrupt-<时间戳>`——复制必须发生在**任何可能覆盖它的写盘之前**，而加载时刻是唯一
  * 能保证这一点的位置（写盘侧（`persistRegistry`）无法保证自己没有先被别人跑过）。
  * @param dir - 仅测试使用：显式指定 userData 目录（生产调用不传）。
@@ -613,7 +613,7 @@ async function backupCorruptRegistry(): Promise<void> {
  * 两个独立的否决项——都是"不可知状态"（架构规则 #6），都必须先于清扫判定：
  *
  * 1. 注册表 `failed`：注册表不可知时，"库里每个会话都不在注册表里"**不构成孤儿证据**。
- * 2. 遗留事件迁移 `failed`（k2-10）：迁移写不进去时，含遗留 `cherry/work-mode` 事件的旧会话
+ * 2. 遗留事件迁移 `failed`：迁移写不进去时，含遗留 `cherry/work-mode` 事件的旧会话
  *    *仍然整段不可读*，因此启动阶段不会把它们登记进注册表——它们看上去"不在注册表里"，
  *    但真实原因是"读不出来"。若照常清扫，这些日志会被物理 DELETE。
  *
@@ -679,13 +679,13 @@ export async function persistRegistry(): Promise<void> {
   return run
 }
 
-/** 启动话题子系统：加载注册表。（v0.3.1 起标题不再经 session 事件回写：命名由渲染层
+/** 启动话题子系统：加载注册表。（起标题不再经 session 事件回写：命名由渲染层
  *  services/topicNaming.ts 调度，经 Dsh_TopicRename → renameTopic 落注册表。） */
 export async function initTopics(ctx: Context): Promise<void> {
   await loadRegistry()
   // 先补历史事件的 ignorable 标记，再清扫：含遗留事件的旧会话此前对内核是"整段不可读"，
   // 而"不可读"与"孤儿"是两回事，不该被同一个兜底路径吞掉（详见 legacySessionMigration.ts）。
-  // 迁移结果**必须参与清扫闸门**（k2-10）：写不进去时"读不出来"的会话不得被当孤儿物理删除。
+  // 迁移结果**必须参与清扫闸门**：写不进去时"读不出来"的会话不得被当孤儿物理删除。
   const migration = await migrateLegacyIgnorableEvents()
   await sweepOrphanSessions(ctx, migration)
 
@@ -849,7 +849,7 @@ export async function forkTopic(
  * 删除话题：销毁 agent + 物理清盘；其 fork 出的子分支一并递归删除。清盘统一经 ctx.sessionGC 服务。
  *
  * @returns `true` = 注册表行删除且会话数据已从磁盘清掉；`false` = 注册表行已删，但**物理清盘失败**
- *   （会话数据仍在磁盘上）。调用方必须消费该信号（k2-09：删除返回真实结果，不得只记日志）。
+ * （会话数据仍在磁盘上）。调用方必须消费该信号（删除返回真实结果，不得只记日志）。
  */
 export async function deleteTopic(ctx: Context, id: string): Promise<boolean> {
   return await deleteTopicRecursive(ctx, id, new Set())
@@ -895,15 +895,15 @@ async function deleteTopicRecursive(ctx: Context, id: string, visited: Set<strin
 // truncateTopicAtTurn / isProjectionPrefixOf·sessionProjection·blockText /
 // anchorUserSeq(registry 字段) / deleteSessionOnly。
 // 保留：整话题删除 deleteTopic → deleteTopicRecursive → ctx.sessionGC.purge（物理清盘）。
-// v0.2.3 已用新引擎重装：destroyTurns（同轮 turn/start 起物理前缀截断），
+// 已用新引擎重装：destroyTurns（同轮 turn/start 起物理前缀截断），
 // 替代 v1 的截断标记法；本段保留作 v1 机制的历史说明。
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// 消息级删除引擎（v0.2.3）。一次调用内完成受影响集合计算 + 物理执行 + 焦点推导
+// 消息级删除引擎。一次调用内完成受影响集合计算 + 物理执行 + 焦点推导
 // ——内核权威，渲染层只传锚点（目标话题 + user seq），绝不自行算集合。
 //
-// 语义（version-report-v0.2.2.1 §2.7，引擎统一按下述派生）：
+// 语义（version-report-.1 ，引擎统一按下述派生）：
 //   · 删轮 = 锚点创建会话从该轮 turn/start 起的后缀物理删除（保留会话 id，
 //     与 forkTopic 的种子切片边界对称）；
 //   · 血统上自被删轮分叉出的直接子分支（seed_length >= cutoff）整子树清盘；
@@ -924,7 +924,7 @@ export interface DestroyTurnsResult {
   /** 删除后 UI 焦点话题；null = 无可聚焦（整棵根话题被删空）。 */
   focusTopicId: string | null
   /**
-   * 注册表行已删、但**磁盘上的会话数据仍在**的话题（k2-09）。非空即"删不干净"这一失败信号，
+   * 注册表行已删、但**磁盘上的会话数据仍在**的话题。非空即"删不干净"这一失败信号，
    * 必须透传到调用方；旧写法把清盘失败吞成一条 warn，UI 呈现为完全成功。
    */
   purgeFailures: string[]
@@ -1193,7 +1193,7 @@ export async function destroyTurns(
 
 /** 每轮发送能力载荷（Dsh_TopicSend handler 校验后透传的权威形状；
  * IPC 三层——preload 声明 / handler 白名单 / topicTree.send——必须与它逐字段对齐。
- * v0.3.2 事故：handler 白名单停在 v0.3.1 五字段，批次2/4/5/6 新增的
+ * 事故：handler 白名单停在五字段，后续新增的
  * webSearch/knowledgeBases/skills/documents 被静默剥离，工具挂载了但每轮登记永远
  * 落空（"no web search provider is configured for this conversation turn"）。 */
 export interface TopicSendOptions {
@@ -1205,49 +1205,49 @@ export interface TopicSendOptions {
   /** 外置工具的权限档位（沙箱/审批预设）；仅外置清单非空时落位。 */
   tier?: WorkModeApprovalTier
   /**
-   * 随消息附带的图片（base64 wire 形态，v0.3.1 识图通道）。
+   * 随消息附带的图片（base64 wire 形态，识图通道）。
    * 经 ctx.attachments 准入（容器/尺寸/字节预算校验 + 内容寻址落盘）后，
    * 以 image 内容块并入用户消息；纯文本路由由内核降级为稳定 handle 文本。
    */
   images?: EncodedImageAttachment[]
   /**
-   * 网络搜索（批次2）：本轮 web_search 工具使用的提供商 id。渲染层在助手
+   * 网络搜索：本轮 web_search 工具使用的提供商 id。渲染层在助手
    * 网络搜索开启且提供商就绪时随 builtinTools='web_search' 一并上行；
    * 缺省/undefined = 本轮未启用，工具执行侧防线拒答。
    */
   webSearch?: { providerId: string }
   /**
-   * 知识库检索（批次4）：本轮 knowledge_search 工具可检索的库清单。渲染层在
+   * 知识库检索：本轮 knowledge_search 工具可检索的库清单。渲染层在
    * 助手挂知识库（knowledge_bases 非空）时随 builtinTools='knowledge_search'
    * 一并上行；缺省/undefined = 本轮未启用，工具执行侧防线拒答。
    */
   knowledgeBases?: KnowledgeTurnBase[]
   /**
-   * 技能（批次5）：本轮 skill 工具可读的技能清单（enabledSkills ∩ 切片元数据）。
+   * 技能：本轮 skill 工具可读的技能清单（enabledSkills ∩ 切片元数据）。
    * 渲染层在助手启用技能时随 builtinTools='skill' 一并上行；缺省/undefined =
    * 本轮未启用，工具执行侧防线拒答（索引进 RuntimeContextProjection 快照节）。
    */
   skills?: SkillTurnEntry[]
   /**
-   * 文档阅读（批次6）：本轮 read_document 工具可读的文档清单（触发消息 FILE 附件）。
+   * 文档阅读：本轮 read_document 工具可读的文档清单（触发消息 FILE 附件）。
    * 渲染层随 builtinTools='read_document' 一并上行；缺省/undefined = 本轮无文档
    * 附件，工具执行侧防线拒答（名清单进 RuntimeContextProjection 快照节）。
    */
   documents?: TurnDocument[]
   /**
-   * 文档处理通道（§7.17 三轮）：本轮 ocr_document 工具的服务商 id（渲染层上行
+   * 文档处理通道（三轮）：本轮 ocr_document 工具的服务商 id（渲染层上行
    * preprocess.defaultProvider；缺省/undefined = 本轮未登记，工具执行侧如实报错，
    * 不静默降级）。配置本体经 Dsh_SyncPreprocess 投影进主进程内存（apiKey 不走此通道）。
    */
   preprocess?: { providerId: string }
   /**
-   * 聊天生图（批次5）：本轮 generate_image 工具使用的绘画模型（渲染层在助手
+   * 聊天生图：本轮 generate_image 工具使用的绘画模型（渲染层在助手
    * enableGenerateImage 开且 llm.paintingModel 已配置时随 builtinTools='generate_image'
    * 一并上行；缺省/undefined = 本轮未启用，工具执行侧如实报可行动错误）。
    */
   generateImage?: { providerId: string; modelId: string }
   /**
-   * 持久记忆（v0.4.6）：本轮 memory 工具的助手 id——主进程据此派生受控目录
+   * 持久记忆：本轮 memory 工具的助手 id——主进程据此派生受控目录
    *（{userData}/Data/assistant-memory/<sanitize(id)>/memory，路径权威在主进程，渲染层
    * 不上行路径）。渲染层在助手工具页 memory 开关开时随 builtinTools='memory' 一并上行；
    * 缺省/undefined = 本轮未启用，工具执行侧防线拒答。
@@ -1258,14 +1258,14 @@ export interface TopicSendOptions {
 export async function sendMessage(ctx: Context, id: string, text: string, options?: TopicSendOptions): Promise<void> {
   const builtins = [...new Set(options?.builtinTools ?? [])].sort()
   const externals = [...new Set(options?.externalTools ?? [])].sort()
-  // 批次2 网络搜索：本轮提供商登记（web_search 工具执行时按 topicId 反查）。
+  // 网络搜索：本轮提供商登记（web_search 工具执行时按 topicId 反查）。
   // 即设即覆盖：每轮发送都会重写或置空，工具只在挂载轮可被调。
   const webSearchKernel = (
     ctx as unknown as { webSearch?: { setTurnProvider: (topicId: string, providerId: string | undefined) => void } }
   ).webSearch
   if (webSearchKernel !== undefined) {
     webSearchKernel.setTurnProvider(id, options?.webSearch?.providerId)
-    // 诊断锚点（v0.3.2 真机事故）：登记缺失 = "no web search provider is configured"，
+    // 诊断锚点（真机事故）：登记缺失 = "no web search provider is configured"，
     // 这行日志区分"本轮未启用"（providerId=undefined，正常）与"启用但登记失败"。
     if (options?.webSearch?.providerId !== undefined) {
       logger.info(`kernel: turn provider registered (topic=${id}, provider=${options.webSearch.providerId})`)
@@ -1273,7 +1273,7 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   } else {
     logger.error('kernel: webSearch seam not mounted; per-turn provider registration skipped')
   }
-  // 批次4 知识检索：本轮库清单登记（knowledge_search 工具执行时按 topicId 反查）。
+  // 知识检索：本轮库清单登记（knowledge_search 工具执行时按 topicId 反查）。
   const knowledgeKernel = (
     ctx as unknown as {
       knowledge?: { setTurnBases: (topicId: string, bases: KnowledgeTurnBase[] | undefined) => void }
@@ -1284,7 +1284,7 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   } else {
     logger.error('kernel: knowledge seam not mounted; per-turn base registration skipped')
   }
-  // 批次5 技能：本轮可读技能登记（skill 工具执行时按 topicId 反查；索引进快照节）。
+  // 技能：本轮可读技能登记（skill 工具执行时按 topicId 反查；索引进快照节）。
   const skillKernel = (
     ctx as unknown as { skills?: { setTurnSkills: (topicId: string, skills: SkillTurnEntry[] | undefined) => void } }
   ).skills
@@ -1293,7 +1293,7 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   } else {
     logger.error('kernel: skills seam not mounted; per-turn skill registration skipped')
   }
-  // 批次6 文档阅读：本轮附件文档登记（read_document 工具执行时按 topicId 反查）。
+  // 文档阅读：本轮附件文档登记（read_document 工具执行时按 topicId 反查）。
   const documentKernel = (
     ctx as unknown as {
       documents?: { setTurnDocuments: (topicId: string, documents: TurnDocument[] | undefined) => void }
@@ -1304,13 +1304,13 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   } else {
     logger.error('kernel: documents seam not mounted; per-turn document registration skipped')
   }
-  // §7.17 三轮 文档处理通道：本轮服务商登记（ocr_document 工具执行时按 topicId
+  // 文档处理通道：本轮服务商登记（ocr_document 工具执行时按 topicId
   // 反查，未登记 = 如实报错不静默降级）。配置本体（apiKey 等）走 Dsh_SyncPreprocess，
   // 不经发送参数——webSearch 同构（id 登记 + 配置整体投影分离）。
   preprocessChannel.setTurnProvider(id, options?.preprocess?.providerId)
-  // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
+  // 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
   generateImageTool.setTurnGenerateImageConfig(id, options?.generateImage)
-  // v0.4.6 持久记忆：本轮根目录登记（主进程派生受控目录并确保存在）。
+  // 持久记忆：本轮根目录登记（主进程派生受控目录并确保存在）。
   const memoryKernel = (
     ctx as unknown as { memory?: { setTurnRoot: (topicId: string, assistantId: string | undefined) => Promise<void> } }
   ).memory
@@ -1326,11 +1326,11 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   const mountedState = mountedTools.get(id)
   const desiredPrompt = topics.get(id)?.systemPrompt ?? ''
   const handle = liveHandles.get(id)
-  // MCP 漂移签名（批次3）：本轮期望工具集哈希 vs 活体挂载时快照——服务器配置/工具
+  // MCP 漂移签名：本轮期望工具集哈希 vs 活体挂载时快照——服务器配置/工具
   // 清单变化时 id 清单不变，靠签名差异触发重挂（computeMcpSignature 走 listTools 缓存，
   // 失败按 'unreachable' 计，服务恢复后下一轮自动重挂）。
   const desiredMcpSignature = await computeMcpSignature(externals)
-  // 每轮登记漂移签名（批次5/6）：技能/文档/记忆清单跨轮变更同样 id 不变、靠签名触发重挂
+  // 每轮登记漂移签名：技能/文档/记忆清单跨轮变更同样 id 不变、靠签名触发重挂
   //（登记已在本函数开头写入，快照节由重挂后的 setup 重建）。
   const desiredTurnRegSignature = await computeTurnRegSignature(id)
   if (
@@ -1398,7 +1398,7 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
 /**
  * 物理清盘统一经 ctx.sessionGC 服务（插件可接管）；服务缺失或失败时退回默认实现。
  *
- * **返回值是真的清盘结果**（k2-09）：`false` = 磁盘上的会话数据仍在。调用方
+ * **返回值是真的清盘结果**：`false` = 磁盘上的会话数据仍在。调用方
  * （`deleteTopicRecursive` / `sweepOrphanSessions`）必须消费它——旧写法吞掉两次异常、
  * 只记 warn，于是"删不干净"被 UI 呈现为删除成功。
  *
@@ -1509,7 +1509,7 @@ export async function purgePersistedSession(id: string): Promise<boolean> {
 /**
  * 清扫孤儿会话。
  * @param ctx - 内核上下文。
- * @param migration - 遗留事件迁移结果（k2-10）：`'failed'` 时本轮整体跳过。
+ * @param migration - 遗留事件迁移结果：`'failed'` 时本轮整体跳过。
  */
 async function sweepOrphanSessions(
   ctx: Context,
@@ -1518,7 +1518,7 @@ async function sweepOrphanSessions(
   try {
     const headers = await ctx.sessionPersistence.list()
     // 两个不可知前置条件都否决清扫（详见 shouldSweepOrphans）：注册表读不出来
-    //（v0.3.0-4 问题 D）与遗留迁移写不进去（k2-10）。
+    //与遗留迁移写不进去。
     const decision = shouldSweepOrphans(registryLoadOutcome, topics.size, migration)
     if (!decision.sweep) {
       logger.error(
@@ -1533,7 +1533,7 @@ async function sweepOrphanSessions(
       )
     }
     const known = new Set(topics.keys())
-    // 失败必须与成功分开计数（§9 批删报告"N succeeded / M failed"）：purge 失败时行确实还在磁盘上，
+    // 失败必须与成功分开计数（批删报告"N succeeded / M failed"）：purge 失败时行确实还在磁盘上，
     // 旧写法把 `removed += 1` 无条件执行，于是"清不掉"被报成"已清掉"。
     let purged = 0
     let failed = 0
@@ -1605,7 +1605,7 @@ export function sessionEvents(ctx: Context, id: string): readonly SessionEvent[]
  * included), and it is the only read seam the kernel exposes — `list()` has no paging.
  * A search therefore deserializes the whole library. The brake is a bounded pool
  * instead of one serial `await` chain, so the scans overlap without an unbounded
- * fan-out (k2-11). The inspected set and the AND/case-insensitive semantics are
+ * fan-out . The inspected set and the AND/case-insensitive semantics are
  * unchanged: no session is skipped and no match is dropped.
  */
 const SEARCH_INSPECT_CONCURRENCY = 4
@@ -1626,7 +1626,7 @@ interface KernelSearchHit {
  * 数据源是内核 SQLite（权威）；旧 Dexie 数据按既定政策不参与。
  *
  * 结果顺序是 list() 的 header 顺序、header 内按 seq（每个会话的命中先收进自己的桶，
- * 最后按 header 下标的顺序拼起来）——与旧的串行版本逐条一致（k2-11）。
+ * 最后按 header 下标的顺序拼起来）——与旧的串行版本逐条一致。
  */
 export async function searchSessions(ctx: Context, terms: string[]): Promise<KernelSearchHit[]> {
   const normalized = terms.map((term) => term.trim().toLowerCase()).filter((term) => term.length > 0)
@@ -1746,7 +1746,7 @@ async function ensureAgent(
     // 用户消息之后，最近因位置），状态变化即被模型以最高新鲜度看到，压掉它对自己历史回答
     // 的锚定（真机实锤：挂载/schema 全对，模型仍连续复读旧状态）。面没变不注入（dsh 去重）。
     // 文本刻意压到最短（无感注入：一词一句都是 token）。
-    // 批次5/6 修正（真机实锤）：cherry:skills / cherry:documents 每轮索引走同一运行时
+    // /6 修正（真机实锤）：cherry:skills / cherry:documents 每轮索引走同一运行时
     // 快照投影——挂了这两个内置工具的轮不得抑制（曾按"仅外置"判定，索引被吞，模型看不到
     // Attached skills、按用户原话瞎猜技能名被执行侧防线拒答）。web_search/knowledge_search
     // 的登记在工具执行时才反查、无快照节，保持原抑制（上下文净化的收益不回吐）。
@@ -1758,7 +1758,7 @@ async function ensureAgent(
         text: `Tools: ${[...builtinsMounted, ...externalsMounted].join(', ')}.`
       })
     } else {
-      // 纯聊天/仅内置问答轮抑制整个运行时快照（v0.3.1 上下文净化 C）：快照的另两行
+      // 纯聊天/仅内置问答轮抑制整个运行时快照（上下文净化 C）：快照的另两行
       // （文件策略/审批档位）只对带文件/命令工具的轮有意义，零工具时无可越权、无可幻读，
       // 注入只剩 token 与复述噪音（真机实录模型把快照与图片句柄当用户话语复述）。
       // 作用域级抑制器随 agent dispose 自动撤销；工具话题与后续 remount（externals>0）不受影响。
@@ -1771,7 +1771,7 @@ async function ensureAgent(
     for (const entry of EXTERNAL_MOUNTS) {
       if (externalsMounted.includes(entry.id)) await entry.mount(agentCtx)
     }
-    // MCP 挂载单元（批次3）：id 形如 `mcp:<serverId>`，由渲染层 messageThunk 按助手
+    // MCP 挂载单元：id 形如 `mcp:<serverId>`，由渲染层 messageThunk 按助手
     // mcpMode/mcpServers 派生（manual=勾选集，auto=全部活跃——fork 无 hub，auto 语义
     // 就地降级为全量，交付注记有记）。服务器配置经 Dsh_SyncMcpServers 同步进主进程
     // 内存（同 webSearch 的 apiKey 只进主进程先例）；工具清单 mcpService.listTools（缓存）。
@@ -1796,7 +1796,7 @@ async function ensureAgent(
     logger.info(
       `kernel: tools mounted for topic "${topic.id}" builtins=[${builtinsMounted.join(',') || '(none)'}] externals=[${externalsMounted.join(',') || '(none)'}]`
     )
-    // 技能索引（批次5）：skill 工具挂载的轮，把可用技能（本轮登记的
+    // 技能索引：skill 工具挂载的轮，把可用技能（本轮登记的
     // enabledSkills ∩ 切片元数据）的 name/description 索引进 RuntimeContextProjection
     // 快照节——文本为 setup 时静态计算，启用集跨轮变更靠 turnRegSignature 漂移重挂
     // 刷新；模型按需用 skill 工具读 SKILL.md 全文（progressive disclosure）。
@@ -1817,11 +1817,11 @@ async function ensureAgent(
         text: `Attached skills (${turnSkills.length}); read one with the skill tool by its exact name:\n${index}`
       })
     }
-    // 文档清单（批次6）：read_document 挂载的轮，附件文档名索引进快照节（同上，逐轮新鲜）。
-    // v0.4.4-1（ASD-STE100 + 拼名修复）：文档名加引号定边界（名字含空格/混合文字，
+    // 文档清单：read_document 挂载的轮，附件文档名索引进快照节（同上，逐轮新鲜）。
+    // （ASD-STE100 + 拼名修复）：文档名加引号定边界（名字含空格/混合文字，
     // 裸名 + 冗余扩展标记导致模型首轮拼错文件名）；OCR 提示压成一句（与
     // ocr_document 描述不重复）。工具挂载态决定动词短语（ocr_document 未挂载不提及）。
-    // v0.4.6：文档名经 hardenUntrustedText（归一 + 拆解真标签；进受信边界的用户可写文本）。
+    // 文档名经 hardenUntrustedText（归一 + 拆解真标签；进受信边界的用户可写文本）。
     if (builtinsMounted.includes('read_document')) {
       const turnDocuments = knowledgeService.getTurnDocuments(topic.id) ?? []
       const index =
@@ -1841,7 +1841,7 @@ async function ensureAgent(
         text: `Attached documents (${turnDocuments.length}); pass one to the ${verbs} tool, quoted exactly as listed below.${ocrHint}${saveHint}\n${index}`
       })
     }
-    // 持久记忆（v0.4.6，外置——工作模式作用域）：memory 工具挂载且有登记根的轮，FACT.md
+    // 持久记忆（外置——工作模式作用域）：memory 工具挂载且有登记根的轮，FACT.md
     // 内容（存在且非空时）注入快照节——V2 的 recall side 同构（工具是唯一写入口，注入只
     // 读回放）。内容是模型自己写的持久文本，进受信边界前清洗（hardenUntrustedText：归一 + 拆解真标签）。
     if (externalsMounted.includes('memory')) {

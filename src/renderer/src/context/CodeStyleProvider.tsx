@@ -12,7 +12,7 @@ import { bundledThemesInfo } from 'shiki/bundle/web'
 import type { BundledThemeInfo } from 'shiki/types'
 
 /**
- * Shiki 主题元数据（v1 二轮性能审计 p2-05）。
+ * Shiki 主题元数据。
  *
  * 此前这里在 effect 里 `getShiki().then(({ bundledThemesInfo }) => ...)`：为了拿一份**静态可知**
  * 的主题 id / 明暗类型表，把整个 `shiki` 包（`utils/shiki.ts:17 await import('shiki')` → 含核心

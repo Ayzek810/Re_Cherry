@@ -1,12 +1,12 @@
 /**
- * 翻译页类型（v0.3.3 批次3）：历史记录行（Dexie translate_records 表）与语言选择状态。
+ * 翻译页类型：历史记录行（Dexie translate_records 表）与语言选择状态。
  */
 import type { TranslateLangCode } from '../config/translateLanguages'
 
 /** 任意语言码 = 内置码或用户自定义码（自定义码为任意字符串，V2 PersistedLangCode 同语义）。 */
 export type AnyTranslateLangCode = TranslateLangCode | (string & {})
 
-/** 用户自定义语言（v0.4.7 偏好项回补；store.settings.translateCustomLanguages）。 */
+/** 用户自定义语言（偏好项回补；store.settings.translateCustomLanguages）。 */
 export interface CustomTranslateLanguage {
   langCode: string
   /** 展示名（用户语言书写）。 */

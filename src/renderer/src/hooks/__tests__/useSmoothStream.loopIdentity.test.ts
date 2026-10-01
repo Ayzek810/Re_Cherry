@@ -1,5 +1,5 @@
 /**
- * r2-34 行为测试：`streamDone` 翻转不得重建/重启 playout 的 rAF 循环。
+ * `streamDone` 翻转不得重建/重启 playout 的 rAF 循环。
  *
  * 改动前 `renderLoop` 的依赖数组含 `streamDone`，于是：
  *   `streamDone` 翻转 → `renderLoop` 换 identity → `ensureLoop` 换 identity
@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('useSmoothStream r2-34：循环 identity 稳定', () => {
+describe('useSmoothStream ：循环 identity 稳定', () => {
   it('streamDone 翻转不取消在途帧（不重建循环），且最终文本不变', async () => {
     const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame')
     const texts: string[] = []

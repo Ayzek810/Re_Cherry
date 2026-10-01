@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/main/services/deepSeekHarness/config.ts（2026-09-24，v0.3.4-1）。
+// fork 移植自 cherry-studio v2 src/main/services/deepSeekHarness/config.ts（2026-09-24）。
 // 锁机制 / YAML 事务 / 渲染逻辑逐字。缝点（均标注于行内）：
 // ① 投影模型形状：V2 携带完整 Model 且由 projectModelInput/projectReasoningEfforts 现场投影；
 //    fork 改为携带内核已投影的字段（KernelModelInput.input / reasoningEfforts 同形），两个

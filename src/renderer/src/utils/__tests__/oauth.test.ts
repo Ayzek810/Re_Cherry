@@ -62,7 +62,7 @@ const installWindow = () => {
 /** 让监听器里的 Promise 链跑完。 */
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-describe('utils/oauth（audit2 r2-95）', () => {
+describe('utils/oauth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

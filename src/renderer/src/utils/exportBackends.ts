@@ -1,5 +1,5 @@
 /**
- * 外部导出后端（v1 二轮性能审计 p2-03/p2-04/p2-07 拆分）。
+ * 外部导出后端（拆分）。
  *
  * `utils/export.ts` 是首屏静态面（`MessageMenubar.tsx` / `Topics.tsx` / `MessagesService.ts`
  * 顶层 import 纯文本能力），此前它顶层 import `@notionhq/client` + `@tryfabric/martian` +
@@ -7,8 +7,8 @@
  * （`html-to-image` + `browser-image-compression`）一并拖进首屏静态图。
  *
  * 本模块承载"点了导出才发生"的后端闭包。**只被 `utils/export.ts` 内 `await import()` 消费**，
- * 因此 rollup 把它及其 weight 闭包切成懒 chunk（实测首屏 −0.72MB，见
- * `reports/audit2-fixes/performance.md`）。任何从首屏静态面 import 本文件的行为都会让收益消失。
+ * 因此 rollup 把它及其 weight 闭包切成懒 chunk（实测首屏 −0.72MB）。
+ * 任何从首屏静态面 import 本文件的行为都会让收益消失。
  */
 import { loggerService } from '@logger'
 import { Client } from '@notionhq/client'

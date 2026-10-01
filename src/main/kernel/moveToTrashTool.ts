@@ -1,5 +1,5 @@
 /**
- * move_to_trash 工作模式外置工具（v0.4.6）。
+ * move_to_trash 工作模式外置工具。
  *
  * V2 moveToTrash.ts 同构物：把工作区内文件/目录移入系统回收站（electron
  * shell.trashItem）——工作模式 fs 族（read/write/edit/glob/grep/pwsh）此前没有删除口子，

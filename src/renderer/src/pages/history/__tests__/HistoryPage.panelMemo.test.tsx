@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-58 / f2-60：`HistoryPage` 用内联对象与组件体内的箭头函数给面板传参，`memo(SearchResults)`
+ * `HistoryPage` 用内联对象与组件体内的箭头函数给面板传参，`memo(SearchResults)`
  * 完全失效；并且用"给 `keywords` 喂空串"来表达"面板当前不可见"。
  *
  * 观察窗（provable，不依赖对测试库行为的猜测）：
@@ -64,7 +64,7 @@ function renderPage() {
   )
 }
 
-describe('HistoryPage 面板传参稳定性（f2-58）与检索入参保留（f2-60）', () => {
+describe('HistoryPage 面板传参稳定性与检索入参保留', () => {
   beforeEach(() => {
     searchResultsProps.length = 0
     topicMessagesProps.length = 0
@@ -87,7 +87,7 @@ describe('HistoryPage 面板传参稳定性（f2-58）与检索入参保留（f2
 
     const after = searchResultsProps.at(-1)
     // 逐项按引用比对：`style` 与两个回调都不再内联新建（旧实现三项全变，`memo` 必然击穿）；
-    // `keywords` 只在提交检索时更新，输入过程不动它 —— 这正是 f2-60 的前提。
+    // `keywords` 只在提交检索时更新，输入过程不动它 —— 这正是缓存命中的前提。
     expect(after?.style).toBe(before?.style)
     expect(after?.onMessageClick).toBe(before?.onMessageClick)
     expect(after?.onTopicClick).toBe(before?.onTopicClick)
@@ -111,7 +111,7 @@ describe('HistoryPage 面板传参稳定性（f2-58）与检索入参保留（f2
     expect(searchMessageProps.at(-1)?.style).toBe(messageStyle)
   })
 
-  it('进入消息视图：搜索面板保留 `keywords`，只把 `visible` 置 false（f2-60）', async () => {
+  it('进入消息视图：搜索面板保留 `keywords`，只把 `visible` 置 false', async () => {
     renderPage()
 
     const input = screen.getByRole('textbox')

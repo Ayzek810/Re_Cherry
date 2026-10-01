@@ -80,7 +80,7 @@ export function formatErrorMessage(error: unknown): string {
 }
 
 /**
- * 唯一的 getErrorMessage 实现（`utils/index.ts` 从这里再导出，r2-89）。
+ * 唯一的 getErrorMessage 实现（`utils/index.ts` 从这里再导出）。
  * 只要有可用的 message 就返回它；否则返回 i18n 的 `error.unknown`，
  * 绝不返回空串——空串会让调用方的错误提示变成空尾巴（失败看起来像没发生）。
  */
@@ -360,7 +360,7 @@ export function serializeHealthCheckError(error: unknown): SerializedError {
   if (AISDKError.isInstance(error)) {
     return serializeError(error)
   }
-  // v1 二轮审查 s2-03：`safeToString` 对 Error 走 JSON.stringify，得到 "{}" —— 失败原因
+  // `safeToString` 对 Error 走 JSON.stringify，得到 "{}" —— 失败原因
   // 在健康检查面板里对用户不可见。Error 取 name/message，其余仍走 safeToString。
   if (error instanceof Error) {
     return {

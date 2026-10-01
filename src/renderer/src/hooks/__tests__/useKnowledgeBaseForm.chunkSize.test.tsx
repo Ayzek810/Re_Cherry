@@ -1,8 +1,8 @@
 /**
- * 跨区请求⑬ 行为测试：`handleChunkSizeChange` 必须把「嵌入模型上下文上限查不到」（`null`）
+ * `handleChunkSizeChange` 必须把「嵌入模型上下文上限查不到」（`null`）
  * 与「不适用 → 无上限」分开。
  *
- * 背景（r2-82 的消费侧）：`getEmbeddingMaxContext` 的三值契约是「数值 = 确定上限 /
+ * 背景（的消费侧）：`getEmbeddingMaxContext` 的三值契约是「数值 = 确定上限 /
  * `null` = 没有答案」。旧实现把两者都喂给 `if (!value || !maxContext || value <= maxContext)`，
  * 于是 `null`（提供方没给出答案）与 `undefined`（真的不适用）同形：都静默放过任意 chunkSize
  * —— 失败长得像通过。
@@ -51,7 +51,7 @@ describe('useKnowledgeBaseForm.handleChunkSizeChange（⑬：null ≠ 无上限�
   beforeEach(() => {
     getEmbeddingMaxContextMock.mockReset()
     // 替身不返回值 = 返回 undefined：类型声明是 `number | null`，这一支模拟"调用方拿不到答案"，
-    // 现存实现的 `!maxContext` 分支正是为它保留的（家规：undefined = 稍后重试/不适用）。
+    // 现存实现的 `!maxContext` 分支正是为它保留的（undefined = 稍后重试/不适用）。
     getEmbeddingMaxContextMock.mockImplementation(() => nextMaxContext.value)
     toastMocks.error.mockReset()
     toastMocks.warning.mockReset()

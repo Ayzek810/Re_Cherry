@@ -1,5 +1,5 @@
 /**
- * c2-04 行为测试：产物弹窗必须沿用会话的只读契约，且保存勾要有真实依据。
+ * 产物弹窗必须沿用会话的只读契约，且保存勾要有真实依据。
  *
  * 缺陷原状：CodePanel 把 `editable` 写死为 true，于是调用方 fail-closed 传入的
  * `editable: false`（MessageHtmlArtifact 的默认值）在弹窗路径里被静默放宽成可改写；

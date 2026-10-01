@@ -72,7 +72,7 @@ export const useMinappPopup = () => {
   }
 
   /**
-   * r2-37：容量变化后的重建从渲染期移入 effect。重建会用 `set()` 回填旧条目，LRU 的
+   * 容量变化后的重建从渲染期移入 effect。重建会用 `set()` 回填旧条目，LRU 的
    * `onInsert` 会同步 `dispatch(setOpenedKeepAliveMinapps(...))`（`disposeAfter` 还会
    * `dispatch` + `TabsService.closeTab`）—— 那是「渲染另一个组件时更新 store」的非法副作用
    * （React 可能丢弃或重复执行该渲染）。`lru-cache@11` 的 `max` 是只读 getter，改容量只能

@@ -46,7 +46,7 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
   useEffect(() => {
     if (activeTopic) {
       void store.dispatch(loadTopicMessagesThunk(activeTopic.id)).catch((error) => {
-        // X9：加载失败已在 thunk 内记 error；此处只防未处理拒绝（消费方有各自错误态）。
+        // 加载失败已在 thunk 内记 error；此处只防未处理拒绝（消费方有各自错误态）。
         logger.warn(`useTopic: failed to load messages for topic ${activeTopic.id}`, error as Error)
       })
       void EventEmitter.emit(EVENT_NAMES.CHANGE_TOPIC, activeTopic)
@@ -70,7 +70,7 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
     }
   }, [activeTopic?.id, assistant])
 
-  // v0.3.0-2 目标 B：**对账不能只挂在侧栏上**。
+  // **对账不能只挂在侧栏上**。
   //
   // 真机实测（2026-09-15 02:28 那次运行）：侧栏没展开时 `Topics.tsx` 的对账 effect 不执行，于是
   // "剪除内核不认识的历史行 / 补齐内核有的行"两件事一件都没发生——日志里一条 `pruned`/`materialized`
@@ -84,7 +84,7 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
     )
   }, [assistantId])
 
-  // v0.3.0-2 目标 B（`report.md` §3.3.2-6）：启动落点必须经过一致性判定。
+  // 启动落点必须经过一致性判定。
   //
   // "隐藏"曾被绕过的那条通道就在这里——初始落点直接取 `assistant.topics`，没有任何"内核认不认识"的
   // 判定，于是打开一个内核已遗忘的历史话题会走 `loadTopicMessagesThunk` → `topic not found` → 空历史。
@@ -93,7 +93,7 @@ export function useActiveTopic(assistantId: string, topic?: Topic) {
   // 内核本来就不认识（不是失效）；fork 子行不在 `dshTopicList` 里（要查得用 `kernelKnowsTopic`，
   // 而分支落点由分支图负责，不在这里）。
   //
-  // r2-72：依赖从整个 `assistant` 对象收窄到 `assistant?.topics`（本 effect 实际读到的唯一字段）。
+  // 依赖从整个 `assistant` 对象收窄到 `assistant?.topics`（本 effect 实际读到的唯一字段）。
   // `assistant` 是被 `updateAssistant`/`updateTopics` 等 action 重建的新对象引用，任何助手字段更新
   // （含流式期 `updateTopicUpdatedAt` 的 `updatedAt` bump）都会让这个 effect 重跑并进入上面的
   // `kernelRootTopics()`（重试窗口内的 IPC）对账。`topics` 引用只在话题行真的变化时才换新，
@@ -233,7 +233,7 @@ export const TopicManager = {
   /**
    * 删除话题：清本地关联文件 → 让内核删注册表行并物理清会话。
    *
-   * **返回值是真的删除结果**（v0.3.0-2 §6.9）：内核删除会在 IPC 边界失败（内核尚未就绪时
+   * **返回值是真的删除结果**：内核删除会在 IPC 边界失败（内核尚未就绪时
    * `requireKernel()` 抛 `kernel not booted`；boot 窗口内 handler 还没注册），旧写法用
    * `void … .catch(warn)` 把它吞掉——渲染层行照删、内核留着，于是沉淀出"删不掉又看得见"的幽灵话题
    * （真机 2026-09-15 实证）。调用方必须据此决定是否把行放回去。
@@ -247,7 +247,7 @@ export const TopicManager = {
       // 成员集合变了：下一次查询重新问内核（否则对账会把刚删的行又当成"内核还在"）
       invalidateKernelRootTopics()
       // 注册表删了但磁盘会话没清掉 = 只成功一半。内核侧已把 purge 失败做成 `purged:false`
-      // 的显式信号（v1 二轮 k2-05/k2-09：不可知状态不得静默），这里必须让用户看见。
+      // 显式信号（不可知状态不得静默），这里必须让用户看见。
       if (result?.purged === false) {
         // 该函数在 TopicManager 对象里（非组件），拿不到 hook 的 t → 用 i18next 全局 t。
         window.toast?.warning(translate('kernel.topicDelete.purgeFailed'))

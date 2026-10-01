@@ -1,5 +1,5 @@
 /**
- * 话题自动命名（渲染层调度，v0.3.1）。
+ * 话题自动命名（渲染层调度）。
  *
  * 命名管线回归 V1 原理：**轻量调用 + 用户可控**——
  * - 走 `fetchMessagesSummary`（快速模型 + `topicNamingPrompt` 设置项/默认指令，经 lightComplete
@@ -13,7 +13,7 @@
  *
  * 落名走两条（缺一不可）：
  * - Redux `updateTopicName`（免 bump 专属 action）：名字是标签不是活动，bump 会翻转
- *   familyRowSignature 导致页码条/分支图全家族重取（v0.3.1 对话树数字连跳的根治位）；
+ * familyRowSignature 导致页码条/分支图全家族重取（对话树数字连跳的根治位）；
  * - `Dsh_TopicRename`（内核注册表）：重启恢复时 reconcile 只在"物化缺行"时读注册表名，
  *   存活行的显示名以 Redux 为准（kernelTopics.ts 的既定契约），注册表名是恢复语义的权威。
  *   手动改名（本文件 `syncTopicNameToKernel` 的所有调用点）同一规则。
@@ -92,7 +92,7 @@ export async function autoNameKernelTopic(topicId: string): Promise<void> {
     let name = ''
     if (getStoreSetting('enableTopicNaming')) {
       try {
-        // r2-63：`fetchMessagesSummary` 用返回值 `{text:null, error}` 表达调用失败（不 reject），
+        // `fetchMessagesSummary` 用返回值 `{text:null, error}` 表达调用失败（不 reject），
         // 旧实现只解构 `text`，于是真正的失败连一条日志都没有、静默走兜底名。
         const { text, error: summaryError } = await fetchMessagesSummary({ messages })
         if (summaryError) {

@@ -73,7 +73,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
   customParametersRef.current = customParameters
 
   /**
-   * 延迟写入的采样参数必须能在卸载 / 重置前落库（v1 二轮审查 s2-02）。
+   * 延迟写入的采样参数必须能在卸载 / 重置前落库。
    *
    * 旧实现把写入挂在 500ms/1000ms 的 `setTimeoutTimer` 上，而 `useTimer` 在卸载时
    * `clearAllTimers()`：改完参数立刻关弹窗或切 tab，`setTemperature` 已经跑过、界面
@@ -255,7 +255,7 @@ const ChatSettingsSection: FC<Props> = ({ assistant, updateAssistantSettings }) 
   }
 
   const onReset = () => {
-    // 先清掉挂起的延迟写入，否则重置后它们会把刚重置的值再写回去（s2-02）。
+    // 先清掉挂起的延迟写入，否则重置后它们会把刚重置的值再写回去。
     clearAllTimeoutTimers()
     pendingRef.current = {}
     setTemperature(DEFAULT_ASSISTANT_SETTINGS.temperature)

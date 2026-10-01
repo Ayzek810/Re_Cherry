@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTempUserData, seedKernelState } from './helpers/seedKernelState'
 
 /**
- * v0.3.1 路由漂移重挂（真机回归：fork 话题后连切 Qwen/V4，六轮请求仍全发给首建时的
+ * 路由漂移重挂（真机回归：fork 话题后连切 Qwen/V4，六轮请求仍全发给首建时的
  * Kimi）。dsh 只在 create/resume 时消费 agentOptions——活体 agent 不会随后续 createTopic
  * upsert 自动换模型。ensureAgent 必须识别"注册表路由已变、活体还持旧路由"并重挂。
  *

@@ -1,5 +1,5 @@
 /**
- * 模板轮播（v0.3.3 批次4，② 薄适配）：5 卡轮播原样（位置/旋转/缩放表保留）；
+ * 模板轮播（② 薄适配）：5 卡轮播原样（位置/旋转/缩放表保留）；
  * 资源路径同 usePaintingTemplateCatalog（file:// URL，resources/painting-templates）。
  * NormalTooltip → antd Tooltip。
  */

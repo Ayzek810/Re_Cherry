@@ -1,5 +1,5 @@
 /**
- * 历史文件行修复（v0.3.3-2）：`downloadFile` 曾把 Content-Type 后缀追加到已有后缀之后，
+ * 历史文件行修复：`downloadFile` 曾把 Content-Type 后缀追加到已有后缀之后，
  * 落成 `xxx.png.bin` / `ext=.bin` / `type=other` —— 文件页「图片」分类里看不到 AI 生成的图。
  * 这里钉住纯函数的判定：只认"`.bin` + origin_name 尾部这个多余后缀 + 去后缀后是已知类型"三合一。
  */

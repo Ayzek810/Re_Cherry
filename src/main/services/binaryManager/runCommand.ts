@@ -1,4 +1,4 @@
-// fork 缝（原创，v0.4.5-1）：受管子进程命令执行原语。
+// fork 缝（原创）：受管子进程命令执行原语。
 // 从 BinaryManager 的私有 runCommand 逐字抽出（两个调用方：安装器本身、市场基线通道），
 // 语义不变：
 // - crossPlatformSpawn（cross-spawn）负责 Windows .cmd 的 cmd.exe 转发与逐参引号；
@@ -20,7 +20,7 @@ export interface BoundedCommandOptions {
   timeoutMs?: number
   cwd?: string
   /**
-   * 逐行回调（v0.4.5-1）：给"只能从输出里读出进度"的阶段用（pip 的 `Collecting …` /
+   * 逐行回调：给"只能从输出里读出进度"的阶段用（pip 的 `Collecting …` /
    * `Downloading … (1.2 MB)`）。收到的总是**完整行**（内部处理跨 chunk 拼接）。
    * 回调抛错不影响命令执行（进度是附属信息，不该拖垮安装）。
    */

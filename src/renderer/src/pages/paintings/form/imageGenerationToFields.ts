@@ -1,5 +1,5 @@
 /**
- * 参数 support → 表单字段派发器（v0.3.3 批次6，V2 移植）：V2
+ * 参数 support → 表单字段派发器（V2 移植）：V2
  * `src/renderer/pages/paintings/form/imageGenerationToFields.ts` 全文照抄，
  * 仅两处 fork 缝：
  *   1. `CanonicalParamKey` / `SupportSpec` / `ImageGenerationSupport` 改从

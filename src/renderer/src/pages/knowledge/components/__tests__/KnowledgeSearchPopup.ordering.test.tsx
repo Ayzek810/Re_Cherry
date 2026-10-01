@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-18：知识库检索无并发/乱序保护——慢的旧查询会覆盖新查询的结果。
+ * 知识库检索无并发/乱序保护——慢的旧查询会覆盖新查询的结果。
  *
  * 缺陷形态：`handleSearch` 没有 requestId / 取消，`await searchKnowledgeBase(...)` 的 resolve 直接
  * `setResults`。依次回车检索 "A" 再 "B" 时，若 A 的响应后到，`results` 会变成 A 的命中，而
@@ -85,7 +85,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-describe('KnowledgeSearchPopup 检索乱序守卫（f2-18）', () => {
+describe('KnowledgeSearchPopup 检索乱序守卫', () => {
   beforeEach(() => {
     searchKnowledgeBase.mockReset()
     ;(window as unknown as { toast: unknown }).toast = {

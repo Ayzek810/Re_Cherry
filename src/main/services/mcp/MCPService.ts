@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次3 自 CS_V1 src/main/services/MCPService.ts（1197 行）移植 + 裁剪。
+ * 自 CS_V1 src/main/services/MCPService.ts（1197 行）移植 + 裁剪。
  *
  * **做**（上游同语义）：客户端缓存（serverKey=配置 JSON 哈希键，ping 1s 复用）、
  * pendingClients 并发去重、stdio/sse/streamableHttp 三传输、connect 超时下限 180s、
@@ -17,7 +17,7 @@
  *（双缺抛引导装 Node.js/uv 的文案）、progress 事件推送、resolveHubTool、
  * callToolById、遥测与上游 CacheService/withSpanFunc（TTLCache/直 logger 替代）。
  *
- * v0.4.7：DXT 自裁剪清单恢复（上游 DxtService 移植，services/DxtService.ts）——
+ * DXT 自裁剪清单恢复（上游 DxtService 移植，services/DxtService.ts）——
  * stdio 启动前按 server.dxtPath 重解 manifest（平台覆写 + 变量替换，失败降级安装期
  * 值并记 warn，上游同语义）、传输 cwd 指向解包目录、removeServer 时删除解包目录。
  *
@@ -88,7 +88,7 @@ export class McpService {
   /** 渲染层同步投影的服务器配置注册表（id → 配置）。 */
   private servers = new Map<string, MCPServer>()
   /**
-   * `id → 配置内容哈希键` 投影缓存（v1 二轮审查 m2-22）：serverKey 是
+   * `id → 配置内容哈希键` 投影缓存：serverKey 是
    * `JSON.stringify({baseUrl, command, args, env, id, registryUrl})`，此前每个调用点逐次重算
    * ——`emitServerLog` 每个 stderr 分片一次、`listPrompts`/`listResources` 的 60min TTL 缓存键
    * 与日志缓冲键每次都重新构造。同一注册表同步周期内配置是不变量，故随 `setServers` 投影一次。
@@ -118,11 +118,11 @@ export class McpService {
       }
     }
 
-    // v1 二轮审查 m2-23：关闭判据此前只是「id 从新表消失」，而 `clients` 的键是**配置内容哈希**。
+    // 关闭判据此前只是「id 从新表消失」，而 `clients` 的键是**配置内容哈希**。
     // 编辑服务器（改 command/args/env 是设置页常规操作）时 id 仍在表里，旧 key 的 Client 与它
     // spawn 的 stdio 子进程都不会被关闭——用户视角是「改了配置，旧进程还在跑」。按 id 逐条比对
     // 「消失 or key 变化」都关旧客户端，并同步丢弃 pending 项（否则旧 in-flight 会复活旧 key）。
-    // v1 二轮审查 m2-22：key 在这里算一次（原来是各调用点逐次重算）。
+    // key 在这里算一次（原来是各调用点逐次重算）。
     const nextKeys = new Map<string, string>()
     for (const server of next.values()) {
       nextKeys.set(server.id, McpService.computeServerKey(server))
@@ -170,7 +170,7 @@ export class McpService {
   }
 
   /**
-   * 取该服务器的配置内容键（m2-22：读 `setServers` 投影期缓存的那一份）。注册表里还没有的
+   * 取该服务器的配置内容键（读 `setServers` 投影期缓存的那一份）。注册表里还没有的
    * 服务器（如渲染层直传、尚未同步的入参）按同一纯函数就地计算，行为与缓存前一致。
    */
   private getServerKey(server: MCPServer): string {
@@ -282,7 +282,7 @@ export class McpService {
         }
       }
 
-      // v1 二轮审查 m2-06：注入面收敛到真正 spawn 的这一步。此前只有 npx/uvx/uv 三条
+      // 注入面收敛到真正 spawn 的这一步。此前只有 npx/uvx/uv 三条
       // 分支走 findCommandInShellEnv（命令名白名单），其余 command 直接进 StdioClientTransport。
       // 现在裸名走命令名白名单、绝对路径走"存在 + 是文件 + 扩展名受限"，非法即明确报错。
       const normalized = normalizeMcpCommand(cmd)
@@ -386,7 +386,7 @@ export class McpService {
   }
 
   /**
-   * 按**显式 key** 关闭客户端并清缓存（m2-23：注册表替换时旧 key 已不在 `serverKeys` 里，
+   * 按**显式 key** 关闭客户端并清缓存（注册表替换时旧 key 已不在 `serverKeys` 里，
    * 必须由调用方把它带进来）。
    */
   private async closeClientByKey(server: MCPServer, serverKey: string): Promise<void> {
@@ -580,7 +580,7 @@ export class McpService {
   async removeServer(server: MCPServer): Promise<void> {
     await this.closeClient(server)
     this.logBuffer.remove(this.getServerKey(server))
-    // DXT 服务器：连带删除解包目录。清理失败**不静默**（v1 二轮审查 m2-13）：配置一旦从
+    // DXT 服务器：连带删除解包目录。清理失败**不静默**：配置一旦从
     // 注册表消失，界面就再也看不到这个服务器，留在磁盘上的解包目录（含可执行物）成了孤儿。
     // 失败即上抛——注册表条目保留，用户可重试（上游"只记日志、不阻断移除"会吞掉这个信号）。
     if (server.dxtPath) {

@@ -1,5 +1,5 @@
 /**
- * LocalPaddle OCR 编排测试（v0.4.4-1 常驻 worker + 页级并发 + 打断交缓存语义）：
+ * LocalPaddle OCR 编排测试（常驻 worker + 页级并发 + 打断交缓存语义）：
  * - 常驻：worker 句柄跨解析/跨测试复用（FakeChild 模块级共享），结束不 kill；
  *   断言用 forkCount 增量而非 children 数组（旧世界是"每次解析必 fork"）；
  * - 信用窗：job 带 window，页消息即时回信；
@@ -93,7 +93,7 @@ describe('runLocalOcr（常驻 worker 编排）', () => {
     feedPage(child, 2, 2, '第二页')
     emit(child, { type: 'done', pagesDone: 2, totalPages: 2 })
     await expect(promise).resolves.toBe('第一页\n\n第二页')
-    // 常驻语义：解析结束不 kill（与 v0.4.4 前"结束即 kill"相反）
+    // 常驻语义：解析结束不 kill（与 前"结束即 kill"相反）
     expect(child.kill).not.toHaveBeenCalled()
     expect(forkCount()).toBe(forks + 1)
   })

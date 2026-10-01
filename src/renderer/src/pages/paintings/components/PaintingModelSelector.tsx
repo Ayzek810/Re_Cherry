@@ -1,5 +1,5 @@
 /**
- * 绘画模型选择器（v0.3.3 批次4，V2 PaintingModelSelector 重写）：
+ * 绘画模型选择器（V2 PaintingModelSelector 重写）：
  * 优先用 fork 既有 SelectChatModelPopup 薄封装——filter 谓词用
  * paintingModelSelection 的 supportsPaintingEdit/selectImageGenerationModels
  * 组合消化（feature 不直接 import config/models）。弹窗返回 Model，本组件
@@ -29,7 +29,7 @@ interface PaintingModelSelectorProps {
   model: Model | undefined
   onSelect: (selection: PaintingModelSelection) => void
   disabled?: boolean
-  /** fork 缝（v0.3.3-7）：作曲条窄窗下的图标态——只留头像 + 箭头，模型名转屏读专用（保名）。 */
+  /** fork 缝：作曲条窄窗下的图标态——只留头像 + 箭头，模型名转屏读专用（保名）。 */
   iconOnly?: boolean
 }
 

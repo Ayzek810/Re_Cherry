@@ -3,7 +3,7 @@ import { HealthStatus } from '@renderer/types/healthCheck'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 健康检查的失败语义（v1 二轮审查 s2-03）。
+ * 健康检查的失败语义。
  *
  * 修改前：`Promise.all` 的 fail-fast 异常被 catch 吞掉，函数返回被截断的 `results`，
  * 调用方把「整体失败」渲染成「0/N 通过」的成功态，UI 无从表达失败。
@@ -123,7 +123,7 @@ describe('checkModelsHealth 的失败语义', () => {
     expect(seen.sort()).toEqual([0, 1])
   })
 
-  // ---- r2-39：`isConcurrent:false` 必须是真串行 --------------------------------------
+  // ---- ：`isConcurrent:false` 必须是真串行 --------------------------------------
   //
   // 旧实现 `models.map(async …)` 在 map 阶段就把全部请求发出去了（`checkModelWithMultipleKeys`
   // 内的 `apiKeys.map` 同样全并发），`else` 分支只是"按序 await"——等待有序而请求早已并发，

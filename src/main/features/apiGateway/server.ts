@@ -104,7 +104,7 @@ export class ApiGateway {
   /**
    * Stop the listener and report whether it truly closed.
    *
-   * v1 二轮审查 m2-04：`stop()` 此前永不 reject，调用方无从知道端口是否真的释放了——
+   * `stop()` 此前永不 reject，调用方无从知道端口是否真的释放了——
    * 关不掉时服务状态已经改口为「已停」、端口却仍被占。返回值把这件事变成调用方可消费的事实。
    */
   async stop(): Promise<boolean> {

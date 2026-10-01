@@ -33,7 +33,7 @@ function initStoreSync() {
 }
 
 /**
- * 按需初始化渲染层 trace（v1 二轮性能审计 p2-05）。
+ * 按需初始化渲染层 trace。
  *
  * 此前无条件 `webTraceService.init()` 会在**每个**窗口启动时构造
  * `FunctionSpanExporter` + `FunctionSpanProcessor` 并 `WebTracer.init()`，把

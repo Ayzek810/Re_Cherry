@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTempUserData, readSessionCounts, seedKernelState } from './helpers/seedKernelState'
 
 /**
- * k2-05 / k2-09：**清盘失败必须可被调用方感知**，且清理动作本身要带内核连接的两条契约
+ * **清盘失败必须可被调用方感知**，且清理动作本身要带内核连接的两条契约
  * （`busy_timeout` + 单事务）。
  *
  * 旧行为（二轮审查记录）：`purgePersistedSession` 返回 `void`，内部 `catch` 只记 warn；
@@ -56,7 +56,7 @@ afterEach(async () => {
   if (dir.length > 0) await rm(dir, { recursive: true, force: true })
 })
 
-describe('purgePersistedSession 的真实返回值（k2-05/k2-09）', () => {
+describe('purgePersistedSession 的真实返回值', () => {
   it('真删成功 → true，且两张表的行都没了', async () => {
     await seedKernelState({ dir, registry: { topics: [] }, sessions: [{ id: 'sess-a', events: 3 }] })
     expect(await readSessionCounts(dir)).toEqual({ sessions: 1, events: 3 })
@@ -83,7 +83,7 @@ describe('purgePersistedSession 的真实返回值（k2-05/k2-09）', () => {
   })
 })
 
-describe('清扫消费清盘结果：失败不得谎报为已清除（k2-09）', () => {
+describe('清扫消费清盘结果：失败不得谎报为已清除', () => {
   it('ctx.sessionGC.purge 回 false → 记 error，且磁盘上的会话数据仍在', async () => {
     await seedKernelState({ dir, registry: { topics: [] }, sessions: [{ id: 'orphan-a', events: 2 }] })
     expect(await loadRegistry(dir)).toBe('loaded')

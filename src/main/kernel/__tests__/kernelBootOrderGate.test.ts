@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * 结构门禁：**内核 IPC 的注册顺序**（v0.3.0-2 §6.9）。
+ * 结构门禁：**内核 IPC 的注册顺序**。
  *
  * `src/main/index.ts` 建窗口与启动内核是**并行**的（`createMainWindow()` 之后才 `bootKernel()`），
  * 所以渲染层会在一段时间里问不到内核。此时两种"问不到"的后果完全不同：

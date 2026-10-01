@@ -1,5 +1,5 @@
 /**
- * r2-49：`resolvedInputs`（审批放行后的改写入参）必须有界，且能按话题清理。
+ * `resolvedInputs`（审批放行后的改写入参）必须有界，且能按话题清理。
  *
  * 背景：只有直播路径的 `tool/result`（`removeByToolCallId`）会删条目；历史投影路径
  * （kernelChat 回放）不调用它，回合被中断/结果从未到达时条目也会留存。因此：
@@ -45,7 +45,7 @@ function allow(
   )
 }
 
-describe('toolPermissions.resolvedInputs（r2-49）', () => {
+describe('toolPermissions.resolvedInputs', () => {
   it('clearByTopic 清掉该话题已放行的入参（历史投影路径不调用 removeByToolCallId）', () => {
     let state = reducer(undefined, toolPermissionsActions.requestReceived(request('r1', 'call-1', 'topic-a')))
     state = reducer(state, toolPermissionsActions.requestReceived(request('r2', 'call-2', 'topic-b')))

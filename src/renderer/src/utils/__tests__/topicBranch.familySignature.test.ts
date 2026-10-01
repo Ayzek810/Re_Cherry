@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 只盖本话题家族的行——与"盖全助手清单"旧口径的区别直接决定页码条会不会被
  * 无关话题的变动拖着反复重取（真机实证的"乱跳"形态之一）。
  *
- * r2-71：家族闭包与 `collectSubtreeIds` 共用一份 `parentTopicId → 子行[]` 索引 + 一次 BFS。
+ * 家族闭包与 `collectSubtreeIds` 共用一份 `parentTopicId → 子行[]` 索引 + 一次 BFS。
  * 本文件的"共父分支 / 父行缺失 / 父行已删"三例是那份索引的正确性契约：索引只要记错一处
  * （覆盖同父的第二个兄弟、把不可达的行拉进家族、把断链的行接到祖辈上），签名立刻变。
  */
@@ -88,7 +88,7 @@ describe('familyRowSignature（家族域签名）', () => {
   })
 
   //
-  // r2-71：父→子索引的正确性（索引 + 一次 BFS 替换了逐轮全表扫描）。
+  // 父→子索引的正确性（索引 + 一次 BFS 替换了逐轮全表扫描）。
   // 下面三例分别钉住"共父的第二个兄弟"、"父行缺失的孤儿"、"父行已删的断链"。
   //
   it('共父的两个分支都在家族里（索引覆盖兄弟会让整条分支消失）', () => {
@@ -157,7 +157,7 @@ describe('familyRowSignature（家族域签名）', () => {
 })
 
 /**
- * r2-71：`collectSubtreeIds`（`removeTopic` / `pruneTopics` 的删除闭包）改用与
+ * `collectSubtreeIds`（`removeTopic` / `pruneTopics` 的删除闭包）改用与
  * `familyRowSignature` 同一份父→子索引 + 同一次 BFS。这里的断言钉住那条共享路径：
  * 共父分支必须全收、兄弟子树不得互相牵连、断链与成环都必须终止。
  */

@@ -1,11 +1,11 @@
 /**
- * LocalPaddle OCR 主进程编排（v0.4.4 收编；v0.4.4-1 常驻 worker + 页级并发 + 打断交缓存）。
+ * LocalPaddle OCR 主进程编排（收编；常驻 worker + 页级并发 + 打断交缓存）。
  *
  * 事故背景：1436 页 PDF 在主进程逐页推理数小时且独占主线程 → 窗口冻结（真机实锤）。
  * 推理在 utilityProcess 子进程（localOcrWorker.ts）——worker_threads 加载
  * onnxruntime/sharp = 整进程 0xC0000005（实测），utility 子进程崩溃被隔离。
  *
- * **v0.4.4-1 常驻 + 并发（用户裁定）**：
+ * ** 常驻 + 并发（用户裁定）**：
  * - **常驻 worker**：句柄跨解析复用，热模型跨本保留（省 ~15s/本冷加载）；worker
  *   5 分钟无消息自退，主进程静默接管、下次解析重 fork。stdout/stderr/message/exit
  *   在 fork 时挂**一次**（每解析挂会泄漏监听），经模块级派发器路由给当前解析。
@@ -106,7 +106,7 @@ export async function terminateActiveOcrProcess(): Promise<void> {
 
 /** 同步终止常驻 worker（app before-quit 释放 onnxruntime/PaddleOCR 句柄）。在跑的解析
  *  不再结算——进程退出即终点，调用方不等待。
- *  为什么需要它（v1 二轮审查 m2-03）：该 worker 加载 onnxruntime + OCR 模型（数百 MB），
+ * 为什么需要它：该 worker 加载 onnxruntime + OCR 模型（数百 MB），
  *  空闲 5 分钟才自退；解析后 5 分钟内退出应用会留下残留子进程。此前只有删模型路径会终止它。 */
 export function disposeOcrWorker(): void {
   const child = worker
@@ -132,7 +132,7 @@ function acquireWorker(): UtilityProcessLike {
     logger.info(`local OCR worker stdout: ${String(chunk).trim()}`)
   })
   child.stderr?.on('data', (chunk: unknown) => {
-    // stderr 降为 warn（v0.4.4-1）：ORT 的 EP 分配警告（DML 会话创建期的正常
+    // stderr 降为 warn：ORT 的 EP 分配警告（DML 会话创建期的正常
     // 告警）走 stderr，ERROR 面不该被它污染；真崩溃有 exit 事件 + 解析拒绝双
     // 通道在 ERROR 面兜底，forensics 不受损。
     logger.warn(`local OCR worker stderr: ${String(chunk).trim()}`)
@@ -217,7 +217,7 @@ async function runOnWorker(
       if (onAbort !== null) signal?.removeEventListener('abort', onAbort)
       if (workerDispatch === dispatch) workerDispatch = null
       if (workerExited === notifyExit) workerExited = null
-      // v1 二轮审查 m2-26：此处原有 `controller.abort()`，但 `controller.signal` 全链
+      // 此处原有 `controller.abort()`，但 `controller.signal` 全链
       // 没有任何消费者——真正的打断链是「外部 signal → 发 `{type:'cancel'}` 给 worker」，
       // 死代码会让人误以为这里有第二条中断路径，故删除。
       fn()

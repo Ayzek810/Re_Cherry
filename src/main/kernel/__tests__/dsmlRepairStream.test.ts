@@ -6,7 +6,7 @@ import { registerDsmlRepair } from '../dsmlRepair'
 /**
  * DSML 修复中间件的**运行期**验证（不只是纯函数单测）。
  *
- * 为什么需要它：v0.3.0-1 把修复从"pnpm patch 内核包"迁到 fork 自己的 `llm/stream` waterfall 上，
+ * 为什么需要它：把修复从"pnpm patch 内核包"迁到 fork 自己的 `llm/stream` waterfall 上，
  * 其正确性依赖三个只有真跑才知道的事实：
  *   1. 中间件确实被挂进 `llm/stream` waterfall（而不是挂了个没人触发的监听）；
  *   2. 它确实委托了 `next()`（waterfall 不委托就会短路，适配器根本不会被调用）；

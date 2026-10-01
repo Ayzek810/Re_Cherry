@@ -1,4 +1,4 @@
-// fork 缝（原创，v0.4.5-1）：受管工具布局单点。
+// fork 缝（原创）：受管工具布局单点。
 //
 // 为什么要有这件：同一份"装到哪"的知识此前散在三处——`BinaryManager.managedBinaryPath`
 // （安装器）、`resolveBinary.managedBinaryPath`（解析器；文件头注释写着"与 BinaryManager 的

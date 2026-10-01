@@ -127,11 +127,10 @@ async function searchClawhub(query: string): Promise<SkillSearchResult[]> {
 // ===========================================================================
 
 /**
- * 技能检索结果（二轮审查 r2-07：失败源必须结构化返回）。
+ * 技能检索结果（失败源必须结构化返回）。
  *
  * 旧实现给每个源挂 `.catch(() => [])`，把「源失败」替换成「成功但空」——与「该源确实没有
- * 命中」不可区分，`useSkills.ts` 的 `setError` 永不置位（三个源全断网时界面显示「无结果」，
- * 违反 CLAUDE.md §9「A failure must never look like an empty result」）。
+ * 命中」不可区分，`useSkills.ts` 的 `setError` 永不置位（三个源全断网时界面显示「无结果」）。
  */
 export interface SkillSearchOutcome {
   results: SkillSearchResult[]
@@ -145,7 +144,7 @@ const SEARCH_SOURCES: readonly SkillSearchSource[] = ['skills.sh', 'claude-plugi
 /**
  * Search all 3 skill registries.
  *
- * r2-07 修正两点：
+ * 修正两点：
  * 1. 失败按源结构化返回（不再吞成空数组）——调用方可以区分「零命中」与「有源失败」；
  * 2. 去重键改为 `registry + slug`。旧注释写「keep first occurrence = fastest source」是错的
  *    （`Promise.allSettled` 等最慢的源，顺序只由 `sources` 数组决定），而按裸 `name` 去重会把

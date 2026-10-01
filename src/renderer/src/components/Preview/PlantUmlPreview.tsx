@@ -87,7 +87,7 @@ const PlantUmlPreview = ({
   ref
 }: BasicPreviewProps & { ref?: React.RefObject<BasicPreviewHandles | null> }) => {
   // 定义渲染函数
-  // c2-41：错误正文是用户可见文案（会直接渲染在预览的错误区），不能硬编码英文。
+  // 错误正文是用户可见文案（会直接渲染在预览的错误区），不能硬编码英文。
   // 复用既有的 i18n 键表达「渲染失败 / 服务端异常」，不再自造英文句子。
   const { t } = useTranslation()
   const renderPlantUml = useCallback(

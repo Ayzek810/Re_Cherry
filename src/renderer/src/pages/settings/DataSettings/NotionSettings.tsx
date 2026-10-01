@@ -31,13 +31,13 @@ const NotionSettings: FC = () => {
   const notionPageNameKey = useSelector((state: RootState) => state.settings.notionPageNameKey)
   const notionExportReasoning = useSelector((state: RootState) => state.settings.notionExportReasoning)
 
-  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片。
+  // 打字只改本地草稿，失焦才写 redux-persist 切片。
   const tokenField = useCommittedInput(notionApiKey, (next) => dispatch(setNotionApiKey(next)))
   const databaseIdField = useCommittedInput(notionDatabaseID, (next) => dispatch(setNotionDatabaseID(next)))
   const pageNameKeyField = useCommittedInput(notionPageNameKey, (next) => dispatch(setNotionPageNameKey(next)))
 
   const handleNotionConnectionCheck = () => {
-    // v1 二轮审查 s2-33：守卫此前写成 `=== null`，而持久化默认值是空串（`store/settings.ts`
+    // 守卫此前写成 `=== null`，而持久化默认值是空串（`store/settings.ts`
     // 的 `notionApiKey: ''` / `notionDatabaseID: ''`），所以永远不触发——空 key 会真的发出
     // `databases.retrieve`，用户最终看到的是无关的「连接失败」，而不是「请先填 API Key」。
     // Joplin / Siyuan 对同一校验用的是 falsy 判断，这里对齐。
@@ -69,7 +69,7 @@ const NotionSettings: FC = () => {
   const handleNotionTitleClick = () => {
     openSmartMinapp({
       id: 'notion-help',
-      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
+      // `name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
       name: t('settings.data.notion.title'),
       url: 'https://docs.cherry-ai.com/advanced-basic/notion',
       logo: AppLogo

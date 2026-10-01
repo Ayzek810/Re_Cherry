@@ -1,4 +1,4 @@
-// fork 缝（批次4a 原创缝模块）：V2 渲染层 CLI 消费的 Provider/Model 宇宙
+// fork 缝（原创缝模块）：V2 渲染层 CLI 消费的 Provider/Model 宇宙
 //（@shared/data/types/provider、@shared/data/types/model）未随 fork 移植——fork 的真源是
 // redux `llm.providers`（V1 形状：apiHost/anthropicApiHost/apiKey、models[].supported_endpoint_types，
 // 见 @renderer/types）。本模块把 fork 原生形状投影成 V2 CLI 层函数体所需的最小结构

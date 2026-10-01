@@ -24,7 +24,7 @@ interface OnboardingPageProps {
 const OnboardingPage: FC<OnboardingPageProps> = ({ onComplete }) => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
-  // 初值取**已持久化的**值（f2-56）：本组件挂在 PersistGate 之内，rehydrate 已完成，读 settings 安全。
+  // 初值取**已持久化的**值：本组件挂在 PersistGate 之内，rehydrate 已完成，读 settings 安全。
   // 旧写法 `useState(true)` 让复选框默认已勾选，且挂载即强制写 true，把用户此前持久化的拒绝覆盖掉。
   const persistedDataCollection = useAppSelector((state: RootState) => state.settings.enableDataCollection)
   const [step, setStep] = useState<OnboardingStep>('welcome')
@@ -34,7 +34,7 @@ const OnboardingPage: FC<OnboardingPageProps> = ({ onComplete }) => {
     (enabled: boolean) => {
       setPrivacyAccepted(enabled)
       dispatch(setEnableDataCollection(enabled))
-      // fire-and-forget 写入也必须有信号（CLAUDE.md §9）：写盘失败时 redux 已是新值，
+      // fire-and-forget 写入也必须有信号：写盘失败时 redux 已是新值，
       // 静默失败会让内存与磁盘无声分叉。
       void window.api.config.set('enableDataCollection', enabled).catch((error: unknown) => {
         logger.error('Failed to persist enableDataCollection', error as Error)

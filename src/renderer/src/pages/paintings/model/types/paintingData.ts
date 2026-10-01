@@ -1,5 +1,5 @@
 /**
- * 绘画草稿/展示态类型（v0.3.3 批次4，② 薄适配）：V2 paintingData.ts 原样保留
+ * 绘画草稿/展示态类型（② 薄适配）：V2 paintingData.ts 原样保留
  * `generationStatus`/`generationError`；裁掉 `generationTaskId`/`generationProgress`
  * （fork 无 job 机制，取消走 lightImageAbort(requestId)）。`inputFiles` 从 V2 的
  * FileEntry[] 换成 fork FileMetadata[]（页面自持托盘的最终形态）。

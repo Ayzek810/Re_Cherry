@@ -1,11 +1,11 @@
 /**
  * DSML 调用修复（响应端，恒开）—— `llm/stream` waterfall 中间件。
  *
- * 问题（v0.3.0 真机实锤）：DeepSeek 服务端会把模型输出的 DSML 工具调用标记抽成结构化
+ * 问题（真机实锤）：DeepSeek 服务端会把模型输出的 DSML 工具调用标记抽成结构化
  * tool call，但抽取不稳定——同一会话可能这一轮正常解析，下一轮把**同样的标记原样漏进
  * 文本块**。漏掉的那一轮以"零工具调用"结束（无任何失败反馈），模型却以为调用已执行。
  *
- * 修复位置（v0.3.0-1 迁移）：v0.3.0 用 `pnpm patch` 改内核包 `dsh-llm-pi-ai` 的编译产物
+ * 修复位置（迁移）：用 `pnpm patch` 改内核包 `dsh-llm-pi-ai` 的编译产物
  * `lib/index.js`，把补丁钉死在 `0.1.1-rc.2`（契约明确不喜欢动内核行为）。此处改用 dsh
  * 文档化的 **`llm/stream` waterfall 缝**（`@deepseek-ai/dsh-llm` LlmRuntime）：agent-loop 的
  * 两条取流路径——`ctx.llm.stream()`（agent.ts:346 回退分支）与 `prepareCall().stream()`
@@ -17,7 +17,7 @@
  * 块（正文剥离标记）；畸形标记或非 JSON 参数**原样透传**。已关闭的工具因不在 schema 中，
  * 被本中间件转成真调用后由 dsh 原生 `unknown tool` 结构化回执反馈给模型（带内反馈，不静默）。
  *
- * 恒开：不受任何开关约束——开关只关"模型是否拿到 schema"这一件事（v0.3.0 架构原则）。
+ * 恒开：不受任何开关约束——开关只关"模型是否拿到 schema"这一件事（架构原则）。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'

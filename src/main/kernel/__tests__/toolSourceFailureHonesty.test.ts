@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * k2-03：**数据源全失败不得说成"没找到"**（CLAUDE.md §9 第一条硬规则）。
+ * **数据源全失败不得说成"没找到"**。
  *
  * 本文件是四处工具的**行为契约钉子**：
  *   - `knowledge_search`：全部库失败 → 抛错；有库成功但 0 命中 → 中性一句；部分失败 → 明说结果不完整。
@@ -75,7 +75,7 @@ function makeExec(topicId = 'topic-1', signal?: AbortSignal): unknown {
   }
 }
 
-describe('knowledge_search：数据源全失败 ≠ 空结果（k2-03）', () => {
+describe('knowledge_search：数据源全失败 ≠ 空结果', () => {
   it('全部库失败 → 直接抛错，错误里带每个库的失败原因', async () => {
     searchMock.mockReset()
     searchMock
@@ -122,7 +122,7 @@ describe('knowledge_search：数据源全失败 ≠ 空结果（k2-03）', () =>
   })
 })
 
-describe('web_search：引擎失败 ≠ 没有结果（k2-03）', () => {
+describe('web_search：引擎失败 ≠ 没有结果', () => {
   it('引擎抛错 → 工具以失败拒绝，不返回 "No web results found"', async () => {
     engineSearchMock.mockReset()
     engineSearchMock.mockRejectedValueOnce(new Error('engine not ready'))
@@ -145,7 +145,7 @@ describe('web_search：引擎失败 ≠ 没有结果（k2-03）', () => {
   })
 })
 
-describe('web_fetch：全部页失败 / 取消（k2-03）', () => {
+describe('web_fetch：全部页失败 / 取消', () => {
   it('每一页都失败 → 抛错，而不是回一份"已取回"的列表', async () => {
     fetchPageMock.mockReset()
     fetchPageMock.mockRejectedValue(new Error('network down'))

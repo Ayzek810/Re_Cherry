@@ -55,7 +55,7 @@ const ProviderList: FC<ProviderListProps> = ({ isOnboarding = false }) => {
   }, [])
 
   /**
-   * v1 二轮审查 s2-37：providers 的数组身份在**每一次** provider 字段写入后都会换
+   * providers 的数组身份在**每一次** provider 字段写入后都会换
    *（`store/llm.ts` 的 `updateProvider` 是 immer 就地改元素 → 新数组），此前以 `providers`
    * 为依赖会让「在 provider 设置里打字」每轮都重读 N 次 IndexedDB 并整表替换 providerLogos。
    * 现在只在 id 集合变化（新增 / 删除 provider）时重读；单条 logo 的增量更新走

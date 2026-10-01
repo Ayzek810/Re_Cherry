@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import type { ConfirmDialog } from '../components/shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useRemoveCliToolDialog.ts
-//（2026-09-24，v0.3.4-1 批次4b）。逐字；import 面对号：ConfirmDialog 类型 ← 本页 shim
+//（2026-09-24）。逐字；import 面对号：ConfirmDialog 类型 ← 本页 shim
 //（fork 无 @cherrystudio/ui）、CodeCli ← @shared/types/codeCli。
 
 interface RemoveCliToolDialogController {
@@ -41,7 +41,7 @@ export function useRemoveCliToolDialog({
         setIsRemoving(true)
         try {
           await remove(removeTarget)
-          // v0.3.4-2（用户裁决）：卸载完成后关闭确认窗——原实现只复位 isRemoving，
+          // （用户裁决）：卸载完成后关闭确认窗——原实现只复位 isRemoving，
           // 窗口停在已完成的确认态。失败时保留窗口便于就地重试（错误行常驻渲染）。
           setRemoveTarget(null)
         } finally {

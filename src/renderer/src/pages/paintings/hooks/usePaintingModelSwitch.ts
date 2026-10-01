@@ -1,5 +1,5 @@
 /**
- * 模型切换 hook（v0.3.3 批次4，② 薄适配）：computeModelFieldReset 保留（以
+ * 模型切换 hook（② 薄适配）：computeModelFieldReset 保留（以
  * PAINTING_PARAM_TABLE 为输入）；跨 provider createDefaultPainting 原样；
  * isEditImageModel 判断改用 supportsPaintingEdit（paintingModelSelection）。
  */

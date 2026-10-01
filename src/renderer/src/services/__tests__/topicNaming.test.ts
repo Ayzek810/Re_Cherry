@@ -2,7 +2,7 @@ import type { Message } from '@renderer/types/newMessage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 话题自动命名（service/topicNaming.ts，v0.3.1）的单测。
+ * 话题自动命名（service/topicNaming.ts）的单测。
  *
  * 钉四件事：
  *   ① 五道门逐一到位（缺名行/手改/分支/非默认名/消息<2 → 什么都不干，不调模型）；
@@ -167,7 +167,7 @@ describe('降级面（模型失败/为空/开关关）', () => {
     })
   })
 
-  it('summary 返回 error 字段（不 reject）→ 仍走兜底，不静默丢弃失败（r2-63）', async () => {
+  it('summary 返回 error 字段（不 reject）→ 仍走兜底，不静默丢弃失败', async () => {
     summaryResult = { text: null, error: 'invalid api key' }
     const { autoNameKernelTopic } = await import('../topicNaming')
     await autoNameKernelTopic('topic-a')

@@ -7,7 +7,7 @@ import { classifySessionReadFailure } from '../sessionReadFailure'
  *
  * 是否允许"resume 失败后用同一 id 新建会话"，由 `sessionResumeFallback.ts` 的持久化存在性查询
  * （`ctx.sessionPersistence.list()`）决定——判据是本机事实，不依赖上游抛错行为（上游无格式兼容
- * 承诺，靠错误分类会无声失效）。本分类只用于把故障形态写进日志（v0.3.0-2 目标 A，`report.md` §2.3）。
+ * 承诺，靠错误分类会无声失效）。本分类只用于把故障形态写进日志。
  * 因此这里测的是"三类分得开"，而不是"哪些错误允许新建"。
  */
 describe('classifySessionReadFailure（诊断分类，不参与新建决策）', () => {

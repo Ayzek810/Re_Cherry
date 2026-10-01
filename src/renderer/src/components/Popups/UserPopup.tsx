@@ -170,7 +170,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
         <Input
           placeholder={t('settings.general.user_name.placeholder')}
           value={userName}
-          // c2-15：受控输入不能在 onChange 里 trim —— 下一次渲染会把去掉尾随空格的字符串
+          // 受控输入不能在 onChange 里 trim —— 下一次渲染会把去掉尾随空格的字符串
           // 灌回输入框，于是空格永远打不进去（"My Name" → "MyName"）。原始值照存，只在
           // 失焦时收敛首尾空白。
           onChange={(e) => dispatch(setUserName(e.target.value))}

@@ -9,7 +9,7 @@ import { parseUniqueModelId } from '@shared/types/uniqueModelId'
 import { type Model, toCliModel } from '../../cliConfig/providerView'
 import { isUniqueModelId, safeCreateUniqueModelId } from '../../cliConfig/values'
 
-// fork 缝（批次4b 原创缝模块，configEditPanel 的模型选择面）：V2 的 ModelSelector 为自绘
+// fork 缝（原创缝模块，configEditPanel 的模型选择面）：V2 的 ModelSelector 为自绘
 // popup + 自定义 trigger（ModelSelectorTrigger.tsx，未单独移植——antd Select 无自定义 trigger
 // 面）。本模块以 fork 既有 ModelSelector（antd Select 封装）对号：filter 谓词经 toCliModel 投影
 // 回 V2 面、值面在 UniqueModelId（"provider::id"）与 fork getModelUniqId（JSON 串）间换算，

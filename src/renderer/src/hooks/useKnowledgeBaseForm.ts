@@ -11,10 +11,10 @@ import { useTranslation } from 'react-i18next'
 const logger = loggerService.withContext('useKnowledgeBaseForm')
 
 /**
- * 表单态（r2-69）：`model` 在这里是「用户还没选」的空位（`undefined`），而不是
+ * 表单态：`model` 在这里是「用户还没选」的空位（`undefined`），而不是
  * `KnowledgeBase.model` 要求的已定模型。旧实现写 `model: null as any`，把这段窗口
  * 藏出类型系统之外：编译器无法再强制提交路径的校验，而 `KnowledgeBase.model` 的
- * 消费方会在"未选择"期间拿到 `null`（家规：`null` = no answer，`undefined` = retry later），
+ * 消费方会在"未选择"期间拿到 `null`（`null` = no answer，`undefined` = retry later），
  * 属于三值契约混用。提交路径负责窄化（`AddKnowledgeBasePopup.onOk` 先校验再构造
  * `KnowledgeBase`）。
  */
@@ -123,7 +123,7 @@ export const useKnowledgeBaseForm = (base?: KnowledgeBase) => {
       const modelId = newBase.model?.id || base?.model?.id
       if (!modelId) return
       const maxContext = getEmbeddingMaxContext(modelId)
-      // 三值契约（r2-82 的消费侧，跨区请求⑬）：
+      // 三值契约（的消费侧）：
       //  · 数值   = 确定上限 → 校验；
       //  · `null` = 「没有答案」（这个嵌入模型的上限查不到）。**不得**当成「没有上限」静默放过：
       //             必须给用户可见信号（旧实现让它落进 `!maxContext` 分支，失败伪装成通过）；

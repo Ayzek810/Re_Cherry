@@ -1,5 +1,5 @@
 /**
- * DxtService 测试（v0.4.7 自上游 DxtService.test.ts 移植 + fork 扩展）。
+ * DxtService 测试（自上游 DxtService.test.ts 移植 + fork 扩展）。
  *
  * 纯函数（ensurePathWithin/validateCommand/validateArgs）用例同上游；uploadDxt /
  * getResolvedMcpConfig / cleanupDxtServerByPath 为真 fs 集成测试：fixtures 用 archiver
@@ -348,7 +348,7 @@ describe('cleanupDxtServerByPath', () => {
     expect(fs.existsSync(dir)).toBe(false)
   })
 
-  // v1 二轮审查 m2-13：清理用途此前复用 ensurePathWithin 的「直系子目录」判据，二级子目录
+  // 清理用途此前复用 ensurePathWithin 的「直系子目录」判据，二级子目录
   // 一律抛错并被 catch 吞成 false —— 配置已从注册表消失、解包目录永久留在磁盘上。
   it('删除 mcpDir 下的二级子目录（清理判据是「后代」而非「直系子目录」）', () => {
     const dir = path.join(mcpDir, 'group', 'server-nested-cleanup')

@@ -1,8 +1,8 @@
 /**
- * 用量记录存储（v0.4.7 用量统计面板）：Dexie usage_records 表（v18 起用）的读写薄封装。
+ * 用量记录存储（用量统计面板）：Dexie usage_records 表（v18 起用）的读写薄封装。
  * 纯聚合在 services/usageStats.ts（可独立测试）；本文件只做 I/O 与边界。
  *
- * 失败语义（v1 二轮审查 s2-06）：读取失败**不能**返回 `summarizeUsage([], range)` ——
+ * 失败语义：读取失败**不能**返回 `summarizeUsage([], range)` ——
  * 那是合法的「空汇总」，UI 会把它渲染成「0 用量 + 暂无数据」这张权威报表，用户据此
  * 认为统计坏了却找不到原因。这里返回判别式结果，让调用方能区分「失败」与「真的 0」。
  */
@@ -34,7 +34,7 @@ export type UsageQueryResult = { ok: true; summary: UsageSummary } | { ok: false
 export async function queryUsage(range: UsageRange): Promise<UsageQueryResult> {
   try {
     const records = await db.usage_records.where('timestamp').between(range.start, range.end, true, true).toArray()
-    // r2-56：`between(..., true, true)` 已按同一闭区间筛过，聚合不必再整表判定一遍。
+    // `between(..., true, true)` 已按同一闭区间筛过，聚合不必再整表判定一遍。
     return { ok: true, summary: summarizeUsage(records, range, true) }
   } catch (error) {
     logger.error('usageStore: failed to query usage', error as Error)

@@ -1,11 +1,11 @@
 /**
- * 「重置数据」的清除范围（v0.3.1-2）。
+ * 「重置数据」的清除范围。
  *
  * 背景：`Data/` 之外的三样（内核数据、provider key 真源、应用配置）原来不在重置范围内，
  * 于是"重置后 key/会话历史/应用配置全都还在"。本文件锁两件事：
  *   ① `resetData()` 是否把这三样也预备成"空副本"；
  *   ② `handleStartupRestore()` 下次启动时是否把它们顶掉真身。
- * 反证（§4.3）：把 `RESET_ROOT_ENTRIES` 里任一名字去掉，对应断言按名变红。
+ * 反证：把 `RESET_ROOT_ENTRIES` 里任一名字去掉，对应断言按名变红。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -85,7 +85,7 @@ describe('「重置数据」的清除范围', () => {
     expect(fns.writeJson).toHaveBeenCalledWith(`${USER_DATA}/config.json.restore`, {})
   })
 
-  it('handleStartupRestore：用空副本顶掉真身，且真身是先挪开再删（v1 m2-02：不得先删后改名）', async () => {
+  it('handleStartupRestore：用空副本顶掉真身，且真身是先挪开再删（不得先删后改名）', async () => {
     // 真身与 .restore 同时存在（真实还原场景）
     fns.pathExists.mockImplementation(async (target: string) =>
       ROOT_ENTRIES.some((name) => target === `${USER_DATA}/${name}.restore` || target === `${USER_DATA}/${name}`)
@@ -110,7 +110,7 @@ describe('「重置数据」的清除范围', () => {
     }
   })
 
-  it('还原失败时回滚旧真身并保留 .restore（v1 m2-02：失败不能清掉用户数据的唯一副本）', async () => {
+  it('还原失败时回滚旧真身并保留 .restore（失败不能清掉用户数据的唯一副本）', async () => {
     fns.pathExists.mockImplementation(async (target: string) =>
       ROOT_ENTRIES.some((name) => target === `${USER_DATA}/${name}.restore` || target === `${USER_DATA}/${name}`)
     )

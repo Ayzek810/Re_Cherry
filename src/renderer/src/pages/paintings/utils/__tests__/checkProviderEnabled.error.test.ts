@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-20：`checkProviderEnabled` 抛出裸字符串。
+ * `checkProviderEnabled` 抛出裸字符串。
  *
  * 缺陷形态：`throw 'Provider disabled'`（非 Error）。异常上行到 `runPainting` 的
  * `if (error instanceof Error && error.name !== 'AbortError')` 之外的 `throw error`：不分类、不打日志；
@@ -33,7 +33,7 @@ function confirmWith(confirmed: boolean) {
   }
 }
 
-describe('checkProviderEnabled 的错误契约（f2-20）', () => {
+describe('checkProviderEnabled 的错误契约', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(window as unknown as { navigate: unknown }).navigate = vi.fn()

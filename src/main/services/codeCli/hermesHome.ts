@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/main/services/codeCli/hermesHome.ts（2026-09-24，v0.3.4-1）。
+// fork 移植自 cherry-studio v2 src/main/services/codeCli/hermesHome.ts（2026-09-24）。
 // fork 缝：V2 默认落 pathRegistry('external.hermes.default_home')；fork 钉进 CodeMate 子树
 // （随数据目录移动、卸载=删子树，portable 语义）。显式 HERMES_HOME 覆盖仍尊重（V2 语义）。
 // AbsoluteFilePath 品牌类型未移植，退化为 string。

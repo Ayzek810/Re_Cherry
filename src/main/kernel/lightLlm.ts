@@ -49,7 +49,7 @@ interface EphemeralImageScope {
 }
 
 /**
- * 调用方声明 `ephemeralImages: true` 且真的带图时，取出附件仓的临时作用域（v0.3.3-2）。
+ * 调用方声明 `ephemeralImages: true` 且真的带图时，取出附件仓的临时作用域。
  * 快捷助手是**不写持久化**的通路：它的图片原先会落成 `<kernelDir>/attachments/<sha256>.<ext>`
  * 的孤儿字节（没会话、没引用、也删不掉）。作用域必须**包住整轮请求**——准入时入内存，
  * 真正读字节发生在流式请求过程中，所以不能在 assembleCall 返回时就退出。
@@ -192,7 +192,7 @@ export async function lightStream(
   if (controller !== undefined && requestId !== undefined) {
     streamAborts.set(requestId, controller)
   }
-  // 图片不落盘作用域（v0.3.3-2）：必须包住整轮——准入时入内存，读字节发生在流式请求过程中。
+  // 图片不落盘作用域：必须包住整轮——准入时入内存，读字节发生在流式请求过程中。
   const ephemeral = ephemeralImageScope(ctx, call)
   ephemeral?.beginEphemeralImages()
   try {

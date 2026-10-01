@@ -25,7 +25,7 @@ const hasPlugin = (marker: string): boolean =>
 
 vi.mock('@renderer/hooks/useSettings', () => ({
   useSettings: () => mockUseSettings(),
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   useSetting: (key: string) => (mockUseSettings() as Record<string, unknown>)[key]
 }))
 

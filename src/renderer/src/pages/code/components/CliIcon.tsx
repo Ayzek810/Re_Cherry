@@ -1,7 +1,7 @@
-// fork 移植自 cherry-studio v2 src/renderer/components/icons/CliIcon.tsx（2026-09-24，v0.3.4-1 批次4b）。
+// fork 移植自 cherry-studio v2 src/renderer/components/icons/CliIcon.tsx（2026-09-24）。
 // fork 缝（品牌图标）：V2 @cherrystudio/ui/icons 的品牌 SVG fork 没有现成封装——
 // dsh 用 fork 已有的 DeepSeek provider logo 资产（assets/images/providers/deepseek.png），
-// hermes 用批次5 从 V2 ui 包逐字搬运的 Nousresearch SVG（components/Icons/NousresearchIcon，
+// hermes 用 从 V2 ui 包逐字搬运的 Nousresearch SVG（components/Icons/NousresearchIcon，
 // fill=currentColor 适配双主题——用户裁决"hermes 有自己的图标，不要通用图标"）。
 // paper-agent：用户 2026-09-29 提供位图 → components/Icons/PaperAgentIcon（此前是 lucide 占位）。
 // CLI_TOOLS 裁到 3 项；OPTICAL_VIEWBOXES 随 SVG 源裁剪移除（位图/lucide 图标无 viewBox 面）。
@@ -36,7 +36,7 @@ export const CLI_TOOLS = [
   { value: CodeCli.PAPER_AGENT, label: 'code.cli_tools.paper_agent', icon: PaperAgentToolIcon }
 ] as const satisfies ReadonlyArray<{ value: CodeCli; label: string; icon: IconComponent }>
 
-// v0.4.5-1（O5）：图标表按**真实契约** IconComponent（size/className）存——原来存成
+// （）：图标表按**真实契约** IconComponent（size/className）存——原来存成
 // SvgIcon（SVGProps）并在渲染处传 width/height，而三个图标组件读的都是 `size`：dsh 的位图
 // 图标因此恒为默认 28px，传入的 size 完全失效（hermes 的 SVG 恰好也吃 width/height 才没露）。
 const CLI_ICONS: Record<string, IconComponent> = Object.fromEntries(CLI_TOOLS.map((tool) => [tool.value, tool.icon]))

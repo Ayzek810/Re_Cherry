@@ -27,7 +27,7 @@ const YuqueSettings: FC = () => {
   const yuqueToken = useSelector((state: RootState) => state.settings.yuqueToken)
   const yuqueUrl = useSelector((state: RootState) => state.settings.yuqueUrl)
 
-  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片。
+  // 打字只改本地草稿，失焦才写 redux-persist 切片。
   const tokenField = useCommittedInput(yuqueToken, (next) => dispatch(setYuqueToken(next)))
   const repoUrlField = useCommittedInput(yuqueUrl, (next) => dispatch(setYuqueUrl(next)))
 
@@ -41,7 +41,7 @@ const YuqueSettings: FC = () => {
       return
     }
 
-    // v1 二轮审查 s2-32：这里此前完全没有错误路径——离线 / DNS 失败时 fetch 直接拒绝，
+    // 这里此前完全没有错误路径——离线 / DNS 失败时 fetch 直接拒绝，
     // 未处理的 rejection + 按钮毫无反馈；响应体缺 `data` 时读 `data.data.id` 抛 TypeError。
     // 对照同目录 SiyuanSettings 的样板（try/catch + 三种 toast）。
     try {
@@ -83,7 +83,7 @@ const YuqueSettings: FC = () => {
   const handleYuqueHelpClick = () => {
     openSmartMinapp({
       id: 'yuque-help',
-      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它），
+      // `name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它），
       // 此前硬编码英文，zh-CN 下与周围全部本地化的字符串不一致。
       name: t('settings.data.yuque.title'),
       url: 'https://www.yuque.com/settings/tokens',

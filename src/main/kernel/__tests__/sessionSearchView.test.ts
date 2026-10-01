@@ -10,9 +10,9 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { searchSessions } from '../topics'
 
 /**
- * v0.3.0 的注入封堵漏掉了历史搜索：`searchSessions` 遍历全部 user/message 事件，
+ * 注入封堵漏掉了历史搜索：`searchSessions` 遍历全部 user/message 事件，
  * 注入快照会以 role:'user' 的形式出现在结果里（用户会看到自己"没说过"的话）。
- * 本测试锁定 v0.3.0-1 的修复：UI 视界判据同样施用在这一出口。
+ * 本测试锁定的修复：UI 视界判据同样施用在这一出口。
  */
 const events = [
   {

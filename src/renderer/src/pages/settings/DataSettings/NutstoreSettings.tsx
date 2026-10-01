@@ -109,7 +109,7 @@ const NutstoreSettings: FC = () => {
    * 连接检测：被调方会 reject（`checkConnection` → IPC → `WebDav.ts` 抛错）。
    * 修改前没有 try/catch，「凭据 / 主机 / 路径写错」这条最该有反馈的路径会让
    * `setCheckConnectionLoading(false)` 永不执行 —— 按钮永久转圈、状态停在旧值、
-   * 用户既看不到原因也无法重试（v1 二轮审查 s2-07）。对照 SiyuanSettings 的样板。
+   * 用户既看不到原因也无法重试。对照 SiyuanSettings 的样板。
    */
   const handleCheckConnection = async () => {
     if (!nutstoreToken) return

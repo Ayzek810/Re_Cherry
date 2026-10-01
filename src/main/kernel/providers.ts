@@ -24,7 +24,7 @@ export interface KernelProviderInput {
  * 可透传给 pi-ai 的 per-model 兼容覆盖（引擎 getCompat：仅出现的键覆盖自动探测）。
  * Re_Cherry 用它修正第三方网关的思考参数语义（如硅基流动 DeepSeek/Zhipu 用 enable_thinking）。
  *
- * 声明本身定义在 `@shared/types/reasoning`（r2-88 跨包上提）：渲染层构造、内核消费，
+ * 声明本身定义在 `@shared/types/reasoning`（跨包上提）：渲染层构造、内核消费，
  * 两侧引用同一份。此前两边各抄一份、靠注释约束对齐——注释不是保证。
  */
 export type KernelModelCompatInput = ProviderReasoningCompat
@@ -40,7 +40,7 @@ export interface KernelModelInput {
   /** 渲染进程按 provider 端点/模型家族给出的思考协议修正（缺省走 pi-ai 自动探测）。 */
   compat?: KernelModelCompatInput
   /**
-   * 输入模态声明（pi-ai models[].input，v0.3.1 识图通道）。
+   * 输入模态声明（pi-ai models[].input，识图通道）。
    * 视觉模型由渲染进程声明 ['text','image']；缺省不声明（目录外模型按纯文本保守处理，
    * 图片会被内核降级为稳定 handle 文本而不是发上 wire）。
    */
@@ -51,7 +51,7 @@ export interface KernelModelInput {
  * Cherry provider 类型 → pi-ai 手写路由协议。
  * 覆盖三种线路协议；其余类型（gemini/azure/vertex/bedrock 等）暂不支持，跳过并告警。
  */
-// v0.3.4-1 导出：CodeMate（dsh 直连投影）复用同一类型→协议映射，避免两处真相源。
+// 导出：CodeMate（dsh 直连投影）复用同一类型→协议映射，避免两处真相源。
 export const PROTOCOL_BY_TYPE: Record<string, string> = {
   openai: 'openai-completions',
   'openai-response': 'openai-responses',

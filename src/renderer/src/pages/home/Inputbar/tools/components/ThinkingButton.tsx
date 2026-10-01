@@ -134,10 +134,10 @@ const ThinkingButton: FC<Props> = ({
   /**
    * 当前能否"一键关闭思考"：思考已开启，且档位表里有"关"（none）这一项。
    *
-   * 历史：v0.3.0 之前该条件还要求"非多档模型"（`!hasMultipleLevels`），但档位表改成
+   * 历史：之前该条件还要求"非多档模型"（`!hasMultipleLevels`），但档位表改成
    * **模型无关常驻六项**（`reasoningOptionsForModel`）之后，"含 none"必然意味着同时含
    * low/medium/high → `hasMultipleLevels` 恒为 true → 该分支永不成立，"一键关闭"实际消失
-   * （`disableThinking` 沦为死代码）。v0.3.0-1 按用户裁决恢复该交互：只要有"关"这一项，
+   * （`disableThinking` 沦为死代码）。按用户裁决恢复该交互：只要有"关"这一项，
    * 点一下就直接关掉，不再看档位数。
    */
   const canTurnOffThinking = isThinkingEnabled && supportedOptions.includes('none')
@@ -191,7 +191,7 @@ const ThinkingButton: FC<Props> = ({
     }
   }, [currentReasoningEffort, openQuickPanel, quickPanel, t, isFixedReasoning])
 
-  // 提示语与点击行为必须一致（v0.3.0-1 修正：此前"多档且已开启"给的是"Reasoning Effort"，
+  // 提示语与点击行为必须一致（修正：此前"多档且已开启"给的是"Reasoning Effort"，
   // 但那时点击其实会打开面板——档位重构后点击变成"关闭"，标签不改就会再次出现标签与行为不符）：
   // - 固定推理模型：永远"Thinking"（点击无响应）
   // - 可一键关闭（已开启且有"关"）："Close"（点击即关闭）
@@ -234,9 +234,9 @@ const ThinkingIcon = (props: { option?: ThinkingOption; isFixedReasoning?: boole
       case 'high':
         IconComponent = MdiLightbulbOn90
         break
-      // `max`（UI 常驻档位的最高档）与 xhigh 同图标：v0.3.0 引入 REASONING_UI_OPTIONS 时
+      // `max`（UI 常驻档位的最高档）与 xhigh 同图标：引入 REASONING_UI_OPTIONS 时
       // 漏了这个 case，导致"满"档落到 default 分支显示问号（"未知"）图标——label/description
-      // 侧当时已为 max 复用 xhigh 文案，故这里是遗漏而非设计（v0.3.0-1 后续修复）。
+      // 侧当时已为 max 复用 xhigh 文案，故这里是遗漏而非设计（后续修复）。
       // 注：注释必须放在 case 'xhigh' **之前**——夹在两个 case 之间会被 no-fallthrough 判警告。
       case 'xhigh':
       case 'max':

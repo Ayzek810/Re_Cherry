@@ -16,7 +16,7 @@ import { isUniqueModelId } from '../../cliConfig/values'
 import type { ConfigDraft } from './types'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/configDraftState.ts
-//（2026-09-24，v0.3.4-1 批次4b）。缝点两处，快照/初载/受管草稿构造逐字：
+//（2026-09-24）。缝点两处，快照/初载/受管草稿构造逐字：
 // ① Claude 臂删除：claudeModelMode 判定（hasClaudeDetailedModels）、detailed 模式选项解析
 //   （getClaudeContextModelId）与 commonModeWillClearDetailedModels 脏检查项随 claudeModels.ts
 //   未移植裁剪（见 4a useConfigMetadata 缝④）；resolveManagedDraftOptions 收敛为单返回臂。

@@ -1,5 +1,5 @@
 /**
- * 表单字段重置补丁（v0.3.3 批次6，V2 移植）：V2
+ * 表单字段重置补丁（V2 移植）：V2
  * `src/renderer/pages/paintings/utils/computeModelFieldReset.ts` 主体照抄——
  * 旧键清空 / 新默认播种 / 越界重置三段逻辑逐行相同。
  *
@@ -47,7 +47,7 @@ export async function computeModelFieldReset(input: {
   if (oldModelId && oldModelId === newModelId) return {}
 
   // fork 缝：V2 在此 await prefetch（可失败 → undefined）；fork 目录同步，未收录时
-  // `resolveImageGenerationSupport` 给通用兜底字段面（v0.3.3-9），厂商不在本平面才 undefined。
+  // `resolveImageGenerationSupport` 给通用兜底字段面，厂商不在本平面才 undefined。
   const fetchSupport = (modelId: string): ImageGenerationSupport | undefined => {
     try {
       return resolveImageGenerationSupport(providerId, modelId).support

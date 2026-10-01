@@ -32,7 +32,7 @@ beforeEach(() => {
 })
 
 describe('utils/image', () => {
-  describe('getImageBlobFromSource — MIME 判定（v0.3.3-10 回归）', () => {
+  describe('getImageBlobFromSource — MIME 判定（回归）', () => {
     it('file:// 且扩展名查不出类型（octet-stream）→ 放行，字节仍可解码', async () => {
       // 绘画文件的真实形态：file:// + 无扩展名存储名 ⇒ mime.getType 返回 null ⇒ octet-stream。
       // 此前这里抛 "Not an image blob"，导致自然尺寸取不到、图片"上对齐填满"。

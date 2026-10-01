@@ -4,7 +4,7 @@ import { relative, sep } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * 结构门禁（v0.3.0-2 目标 A，`report.md` §2.4 的验A-1）：把"数据安全靠查库事实、不靠错误分类"
+ * 结构门禁：把"数据安全靠查库事实、不靠错误分类"
  * 钉成可执行断言，而不是靠后来者自觉。
  *
  * 背景：原实现在 `ensureAgent` 的 catch 里用 `instanceof` 判"日志读不出来"来决定是否拒绝新建。

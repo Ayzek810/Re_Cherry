@@ -60,7 +60,7 @@ export function isSafeExternalUrl(url: string): boolean {
 }
 
 /**
- * v0.3.1-2：判断一次导航/开窗目标是否属于**应用自身源**。
+ * 判断一次导航/开窗目标是否属于**应用自身源**。
  *
  * 事故：`WindowService` 的 `will-navigate` 里，自身源豁免被硬编码为上游的 `localhost:517`，
  * 而本 fork 的 dev 服务器端口是 `DSH_DEV_PORT || 5870`——豁免永不命中，于是 dev 下任何

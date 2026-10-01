@@ -3,7 +3,7 @@ import { CLI_OWN_LOGIN_PROVIDER_ID } from '@shared/types/codeCli'
 import type { Provider } from '../cliConfig/providerView'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/constants/ownLoginProvider.ts
-//（2026-09-24，v0.3.4-1 批次4b）。fork 缝：V2 的 Provider 为 @shared/data/types/provider 全形状
+//（2026-09-24）。fork 缝：V2 的 Provider 为 @shared/data/types/provider 全形状
 //（authType/authMethods/reportsActualCost/settings + DEFAULT_PROVIDER_SETTINGS），fork 渲染层
 // CLI 宇宙的 Provider 为 cliConfig/providerView 投影面——合成条目按投影形状给最小占位
 //（endpointConfigs 空表 + 空 apiKeys + 空 models）。消费点（useCodeCliPageViewProps 的

@@ -2389,7 +2389,40 @@
         "button": "Releases",
         "title": "Release Notes"
       },
-      "title": "About"
+      "title": "About",
+      "update": {
+        "autoDownload": "Download new versions automatically",
+        "available": "New version v{{version}}",
+        "cancel": "Cancel download",
+        "check": "Check for updates",
+        "checkTitle": "Manual check",
+        "checking": "Checking…",
+        "current": "Current version",
+        "download": "Download",
+        "error": {
+          "digest": "The installer failed its checksum check and was discarded",
+          "http": "The update source returned an error status",
+          "io": "Reading or writing the installer failed",
+          "network": "The network request failed",
+          "no-asset": "This release has no installer asset",
+          "parse": "The update source returned something unreadable",
+          "unsupported": "This build cannot update itself"
+        },
+        "ignore": "Ignore this version",
+        "ignored": "v{{version}} is ignored",
+        "install": "Restart and install",
+        "latest": "You are on the latest version",
+        "openReleasePage": "Open release page",
+        "portable": "A portable build has no installation directory to replace. Download the new version from the release page.",
+        "releaseNotes": "What changed",
+        "source": "Update source",
+        "sourcePlaceholder": "Leave empty to use the default source",
+        "sourceReset": "Reset to default",
+        "title": "App update",
+        "unignore": "Stop ignoring",
+        "unverified": "The update source gave no checksum, so the installer was not verified",
+        "verified": "The installer checksum (sha256) is verified"
+      }
     },
     "advanced": {
       "auto_switch_to_topics": "Auto switch to topic",

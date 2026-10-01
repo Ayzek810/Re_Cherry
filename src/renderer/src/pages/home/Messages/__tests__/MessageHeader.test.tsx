@@ -42,12 +42,12 @@ vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { userName: 'User', sidebarIcons: { visible: [], disabled: [] } }
   return {
     useSettings: () => settings,
-    // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+    // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
     useSetting: (key: string) => settings[key as keyof typeof settings],
     useMessageStyle: () => ({ isBubbleStyle: false })
   }
 })
-// 聊天上下文改由 ChatContextProvider 下发（f2-02）：这里桩掉上下文读取面即可
+// 聊天上下文改由 ChatContextProvider 下发：这里桩掉上下文读取面即可
 vi.mock('../ChatContextProvider', () => ({
   useChatContextValue: () => ({ isMultiSelectMode: false, selectedMessageIds: [], handleSelectMessage: vi.fn() })
 }))

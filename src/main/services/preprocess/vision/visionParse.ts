@@ -1,5 +1,5 @@
 /**
- * 视觉模型文档解析编排（v0.4.4）：文档处理通道 vision-model 条目的执行缝。
+ * 视觉模型文档解析编排：文档处理通道 vision-model 条目的执行缝。
  *
  * 链路：utility 子进程逐页光栅化（visionWorker）→ 主进程逐页交 lightVisionDocument
  *（OpenAI 兼容多模态 chat，页图 data URL）→ 页文本按序拼装。**页级并发**（用户裁定：

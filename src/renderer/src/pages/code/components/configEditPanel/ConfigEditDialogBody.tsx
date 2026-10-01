@@ -14,7 +14,7 @@ import { AdvancedConfigToggle } from './AdvancedConfigToggle'
 import { CliConfigEditor } from './CliConfigEditor'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/
-// ConfigEditDialogBody.tsx（2026-09-24，v0.3.4-1 批次4b）。缝点四处，对话框骨架（标题行/三段
+// ConfigEditDialogBody.tsx（2026-09-24）。缝点四处，对话框骨架（标题行/三段
 // SettingGroup/取消-保存脚位）逐字：
 // ① 头像缝：V2 GatewayIcon/ProviderAvatarPrimitive logo ReactNode 面 → fork ProviderAvatarPrimitive
 //   logoSrc 面 + getProviderLogo 位图资产（无命中回落 ProviderAvatarPrimitive 的首字母块，

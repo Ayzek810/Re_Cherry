@@ -1,4 +1,4 @@
-/** v0.3.2 自 CS_V1 移植（文档预处理服务商默认表）。
+/** 自 CS_V1 移植（文档预处理服务商默认表）。
  * 独立成 config 的原因：store/preprocess（initialState 种子）与 hooks/usePreprocess
  * （向后兼容 re-export，store/migrate.ts 消费）双向需要，放 hooks 侧会成循环导入。
  * 形态照上游 store/preprocess initialState。v0.4 验收轮补 PREPROCESS_PROVIDER_CONFIG
@@ -39,14 +39,14 @@ export const defaultPreprocessProviders: PreprocessProvider[] = [
     apiHost: ''
   },
   {
-    /** 本地推理条目（v0.3.2 自 CS_V2 local-paddleocr 移植；v0.4.4 收编为文档处理
+    /** 本地推理条目（自 CS_V2 local-paddleocr 移植；收编为文档处理
      * 子系统 src/main/services/preprocess/localPaddle/）：无密钥无 apiHost，
      * 设置面板渲染模型下载卡片；执行缝走文档处理通道 parsePdf 路由。 */
     id: 'local-paddle',
     name: 'LocalPaddle'
   },
   {
-    /** 视觉模型文档解析条目（v0.4.4）：视觉模型 = 文档处理子系统的服务商，不是独立
+    /** 视觉模型文档解析条目：视觉模型 = 文档处理子系统的服务商，不是独立
      * 系统——无密钥无 apiHost（模型的服务商/密钥走 LLM provider 快照），设置面板选
      * 一个视觉模型；执行缝 src/main/services/preprocess/vision/（本机光栅化 +
      * OpenAI 兼容多模态 chat 逐页转写）。 */

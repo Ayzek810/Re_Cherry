@@ -681,7 +681,7 @@ export const isSupportedThinkingTokenMiMoModel = (model: Model): boolean => {
  * Detects whether a Kimi model supports thinking control
  *
  * This function identifies Kimi models that support thinking token control.
- * Currently only supports Kimi K2.5 / K2.6 and their variants.
+ * Currently only supports Kimi .5 / .6 and their variants.
  *
  * @param model - The model object to check
  * @returns true if the model supports thinking control, false otherwise
@@ -782,8 +782,8 @@ export const isBaichuanReasoningModel = (model?: Model): boolean => {
  *
  * This function identifies Moonshot AI's Kimi series reasoning models.
  * Currently should only support:
- * - Kimi K2 Thinking and its variants (including -turbo suffix)
- * - Kimi K2.5+ (K2.5, K2.6, ...) and K3+ (K3, K3.x, K4, ...)
+ * - Kimi Thinking and its variants (including -turbo suffix)
+ * - Kimi .5+ (.5, .6, ...) and + (, .x, , ...)
  *
  * @param model - The model object to check, can be undefined
  * @returns true if it's a Kimi reasoning model, false otherwise

@@ -1,5 +1,4 @@
 /**
- * v1 二轮审查 m2-14 的行为证据。
  *
  * 缺陷：本地还原/删除走 `resolveAndValidatePath(localBackupDir, fileName)`，而 WebDAV 两条
  * 完全绕开它，直接把渲染层给的 `webdavConfig.fileName` 交给 `path.join(this.backupDir, filename)`
@@ -20,7 +19,7 @@ vi.mock('../../utils', () => ({ getDataPath: vi.fn(() => '/mock/data') }))
 
 import { assertSafeRemoteBackupFileName } from '../BackupManager'
 
-describe('assertSafeRemoteBackupFileName (m2-14)', () => {
+describe('assertSafeRemoteBackupFileName', () => {
   it('accepts a plain file name and trims surrounding whitespace', () => {
     expect(assertSafeRemoteBackupFileName('cherry-studio.backup.zip')).toBe('cherry-studio.backup.zip')
     expect(assertSafeRemoteBackupFileName('  cherry-studio.backup.zip  ')).toBe('cherry-studio.backup.zip')

@@ -51,7 +51,7 @@ class ApiGatewayService {
    * {@link LatestReconciler.getLastError} — and not retried, so a persistent failure (e.g. port in
    * use, or a close that did not release the port) can't spin the loop.
    *
-   * fork 缝②（v1 二轮审查 m2-04/m2-21 收窄）：V2 的临时租约计数（`leaseCount` +
+   * fork 缝②（收窄）：V2 的临时租约计数（`leaseCount` +
    * acquireLease/releaseLease）随瞬态消费者子系统裁掉——那几个方法全仓零调用，
    * 却把 `|| leaseCount > 0` 编进了收敛目标与 `ApiGatewayStopOutcome` 的 `'deferred'` 态。
    */
@@ -115,7 +115,7 @@ class ApiGatewayService {
   }
 
   /**
-   * v1 二轮审查 m2-04：关闭失败必须抛，不能把 `activated` 抹成 false。
+   * 关闭失败必须抛，不能把 `activated` 抹成 false。
    *
    * 此前 `closeHttpServer` 永不 reject（超时也不再等），而这里无条件 `activated = false`
    * 并 `publishRunningState(false)`——于是「开关是关的、端口是占的」，此后同端口 start()

@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单：
+ * 自 CS_V1 移植 + 适配点清单：
  * - 上游 provider 层消费渲染层 types 的 WebSearchProviderResult/Response 与
  *   渲染层 store/websearch 的 WebSearchState；主进程禁渲染层 import，这里按
  *   provider 实际消费字段收窄为本文件最小结构类型（配置注入制，无 Redux）。

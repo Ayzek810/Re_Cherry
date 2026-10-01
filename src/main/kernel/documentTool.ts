@@ -1,5 +1,5 @@
 /**
- * read_document 内核 builtin 工具（批次6 聊天中文档阅读处理，roadmap L29）。
+ * read_document 内核 builtin 工具（聊天中文档阅读处理）。
  *
  * 渲染层 messageThunk 在触发消息带文件附件（FILE 块）的轮把 'read_document' 并入
  * builtinTools 并随发送参数登记文档清单；可用文档名列表进 RuntimeContextProjection
@@ -11,7 +11,7 @@
  * knowledgeService.readTurnDocument，全部格式走共用引擎（PDF 读文本层；纯文本直读、
  * .doc word-extractor、docx/html 原生 Markdown 管线 mammoth+turndown、office 族
  * officeparser、epub zip→Markdown——全程进程内，零 CLI/Python 前置）。空抽取返回
- * 中性提示（§7.22），扫描件由模型自行调 ocr_document（同轮裁决：OCR 分体独立）。
+ * 中性提示，扫描件由模型自行调 ocr_document（同轮裁决：OCR 分体独立）。
  * 原 DocumentService 已删除（b27a0c1）。
  */
 import type { Context } from '@deepseek-ai/cordis'

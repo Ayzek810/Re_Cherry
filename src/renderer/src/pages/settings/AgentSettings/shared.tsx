@@ -4,7 +4,6 @@ import type { Assistant } from '@renderer/types'
 import { cn } from '@renderer/utils'
 import type { ModalProps } from 'antd'
 import { Menu, Modal } from 'antd'
-import type { ReactNode } from 'react'
 import React from 'react'
 import styled from 'styled-components'
 
@@ -15,15 +14,12 @@ import { SettingDivider } from '..'
  * 数据实体改为 Redux 的 Assistant；去掉 V1 特有的 soul-mode / agents-db 类型）。
  */
 
-export interface SettingsTitleProps extends React.ComponentPropsWithRef<'div'> {
-  contentAfter?: ReactNode
-}
+export interface SettingsTitleProps extends React.ComponentPropsWithRef<'div'> {}
 
-export const SettingsTitle: React.FC<SettingsTitleProps> = ({ children, contentAfter }) => {
+export const SettingsTitle: React.FC<SettingsTitleProps> = ({ children }) => {
   return (
     <div className="mb-1 flex items-center gap-2">
       <span className="flex items-center gap-1 font-bold">{children}</span>
-      {contentAfter !== undefined && contentAfter}
     </div>
   )
 }

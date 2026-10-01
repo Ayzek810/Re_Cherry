@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 稳定性说明（v0.3.0-1 后续修复存量 flaky）：
+ * 稳定性说明（后续修复存量 flaky）：
  *
  * 本文件原先通过 `vi.doMock('../../constant', () => ({ isWin }))` 来控制 isWin，而
  * `isWin` 的真值来源是 `src/main/constant.ts` 的 `process.platform === 'win32'`。

@@ -3,7 +3,7 @@
  * 给定图片自然尺寸与可用容器尺寸，返回**完整容纳**图片的盒子（contain，绝不超出容器、
  * 绝不放大超过原始尺寸）。V2 里这段算术内联在组件里（`Artboard.tsx` 的 `displayedImageBoxSize`
  * 与 `PaintingImageSkeleton` 的 lockedSize）；fork 抽成纯函数以便用测试钉住
- * "完整展示"这条不变量（v0.3.3-9：此前高度算不出来时退化成"上对齐填满 + 裁切"）。
+ * "完整展示"这条不变量（此前高度算不出来时退化成"上对齐填满 + 裁切"）。
  */
 
 export interface Size {

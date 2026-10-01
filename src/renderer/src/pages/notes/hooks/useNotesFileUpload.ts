@@ -10,7 +10,7 @@ interface UseNotesFileUploadProps {
  * 读完一个目录条目的**全部**子项。
  *
  * `FileSystemDirectoryReader.readEntries()` 按规范分批返回（Chromium 每批 100 项），
- * 只有拿到空批次才代表读完。二轮审查 f2-35/f2-37：旧实现只读第一批，拖入 100+ 项的
+ * 只有拿到空批次才代表读完。：旧实现只读第一批，拖入 100+ 项的
  * 文件夹时后 100 项被静默丢弃，页面照常弹"上传成功"。
  */
 function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
@@ -77,7 +77,7 @@ export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseN
         await Promise.all(promises)
 
         if (files.length === 0) {
-          // §9：拖进来却什么都没上传，不得表现为"点了没反应"。
+          // 拖进来却什么都没上传，不得表现为"点了没反应"。
           window.toast.warning(t('notes.no_valid_files'))
           return
         }

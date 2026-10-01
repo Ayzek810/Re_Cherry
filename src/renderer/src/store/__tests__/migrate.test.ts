@@ -112,7 +112,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('migration 223: codeCliConfigs backfill (v0.3.4-1 真机 TypeError 修复)', () => {
+  describe('migration 223: codeCliConfigs backfill (真机 TypeError 修复)', () => {
     it('backfills missing codeCliConfigs on persisted settings (old shape → {})', async () => {
       const state = {
         settings: { sidebarIcons: { visible: ['assistants'] } },
@@ -143,7 +143,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('migration 225: VisionModel default provider backfill (v0.4.4 视觉模型文档处理)', () => {
+  describe('migration 225: VisionModel default provider backfill (视觉模型文档处理)', () => {
     it('appends the missing vision-model entry to the persisted array', async () => {
       const state = {
         preprocess: {
@@ -201,7 +201,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('migration 227: defaultObsidianVault backfill (v0.4.7 Obsidian 集成移植)', () => {
+  describe('migration 227: defaultObsidianVault backfill (Obsidian 集成移植)', () => {
     it('backfills missing defaultObsidianVault on persisted settings (old shape → null)', async () => {
       const state = {
         settings: { exportMenuOptions: { obsidian: true } },
@@ -231,7 +231,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('migration 228: memory slice removal (v0.4.7 全局记忆废弃)', () => {
+  describe('migration 228: memory slice removal (全局记忆废弃)', () => {
     it('removes the stale memory slice from persisted state', async () => {
       const state = {
         memory: { memoryConfig: { llmModel: { id: 'm', provider: 'p' } }, globalMemoryEnabled: true },
@@ -256,7 +256,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('migration 229: sidebar icon reconciliation + pinnedTabs backfill (r2-11 / r2-50)', () => {
+  describe('migration 229: sidebar icon reconciliation + pinnedTabs backfill', () => {
     /**
      * 老账号升级路径的忠实复现：'209'（旧白名单）砍到 3 项 → '217' 补 knowledge →
      * '220' 补 translate/paintings → '222' 补 code。'notes' 只能由 '141' 补，而 '141' 排在
@@ -336,7 +336,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('r2-29: addMiniApp 不把 config/minapps 的模块对象推进持久化状态', () => {
+  describe(': addMiniApp 不把 config/minapps 的模块对象推进持久化状态', () => {
     // 分支 '68' 是最小的 addMiniApp 载体（`addMiniApp(state, 'notebooklm')`），
     // 且 'notebooklm' 仍在 config/minapps 的默认表里（'143' 的 'longcat' 已被裁掉，是 no-op）。
     const MINI_APP_ID = 'notebooklm'
@@ -370,7 +370,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('r2-73: 迁移分支抛错时留下 logger.error 面包屑（失败不再伪装成「无事可做」）', () => {
+  describe(': 迁移分支抛错时留下 logger.error 面包屑（失败不再伪装成「无事可做」）', () => {
     const restores: Array<() => void> = []
     afterEach(() => {
       while (restores.length > 0) restores.pop()?.()
@@ -408,7 +408,7 @@ describe('store migrations', () => {
     })
   })
 
-  describe('r2-81: 迁移链不就地改写模块级默认 provider 表', () => {
+  describe(': 迁移链不就地改写模块级默认 provider 表', () => {
     it('整链跑完（0 → 229）后 SYSTEM_PROVIDERS_CONFIG 分毫不动', async () => {
       // 快照：浅拷贝即可——迁移的写入都是**顶层字段赋值**（type / anthropicApiHost），
       // 嵌套对象（models）只做整表替换，`toEqual` 会连嵌套一起比对。

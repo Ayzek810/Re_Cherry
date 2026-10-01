@@ -101,7 +101,7 @@ export function getDefaultTopic(assistantId: string): Topic {
 /**
  * 默认 provider = 默认模型所属的 provider。
  *
- * r2-42：`getProviderByModel` 现在如实返回 `undefined`，本函数也不再回落到清单中的
+ * `getProviderByModel` 现在如实返回 `undefined`，本函数也不再回落到清单中的
  * **任意** provider（旧行为是 `defaultProvider || providers[0]`）。那会把「默认模型的
  * provider 已被删除」伪装成「找到了」，并把请求发到「外来 model.id + 别的 provider」上。
  * 需要回落的地方在**调用点**显式写（见 `hooks/useProvider.ts`、`MessagesService.checkRateLimit`）。
@@ -121,7 +121,7 @@ export function getQuickModel() {
 /**
  * 助手当前使用的 provider。
  *
- * 显式回落顺序（r2-42）：助手模型所属 provider → 默认模型所属 provider。
+ * 显式回落顺序：助手模型所属 provider → 默认模型所属 provider。
  * 两级都查不到（助手未选模型、且默认 provider 不可用）时返回 `undefined`。
  * 调用方必须显式处理，不得假定一定拿到 provider。
  */
@@ -131,7 +131,7 @@ export function getAssistantProvider(assistant: Assistant): Provider | undefined
 }
 
 /**
- * 按模型解析 provider（三值契约，r2-42）。
+ * 按模型解析 provider（三值契约）。
  *
  * 本函数不再有第二份实现：唯一实现在 `ProviderService.getProviderByModel`（纯查表），
  * 此处只做转发，返回值与它逐字一致：

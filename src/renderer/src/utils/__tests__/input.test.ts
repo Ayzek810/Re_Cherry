@@ -108,7 +108,7 @@ describe('input', () => {
     })
 
     // 坏 JSON：原实现里 JSON.parse 在异步回调中无守卫，resolve 永不执行 → await 永久挂起
-    it('should resolve an empty list when the codefiles payload is malformed JSON (audit2 r2-94)', async () => {
+    it('should resolve an empty list when the codefiles payload is malformed JSON', async () => {
       const mockGetAsString = vi.fn((callback) => {
         callback('{not valid json')
       })

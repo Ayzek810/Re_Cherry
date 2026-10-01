@@ -23,7 +23,7 @@ const WebViewContainer = styled.div`
   }
 `
 
-/** c2-16：正文就绪前不能是空白 body，否则用户在从未看到内容的弹窗上完成「接受」。 */
+/** 正文就绪前不能是空白 body，否则用户在从未看到内容的弹窗上完成「接受」。 */
 const StatusOverlay = styled.div`
   position: absolute;
   inset: 0;
@@ -115,7 +115,7 @@ const PopupContainer: React.FC<Props> = ({
         if (cancelled) return
         setPrivacyUrl(url)
       } catch (error) {
-        // c2-16：`runAsyncFunction` 不 catch，`getAppInfo()` reject 会让 body 永久空白，
+        // `runAsyncFunction` 不 catch，`getAppInfo()` reject 会让 body 永久空白，
         // 而「我已知晓」照样可点。这里显式记账成错误态并给出重试。
         logger.error('Failed to resolve the privacy policy URL:', error as Error)
         if (!cancelled) setLoadState('error')

@@ -7,7 +7,7 @@ import type { WebSearchHttpOptions, WebSearchProviderResponse, WebSearchRuntimeS
 const logger = loggerService.withContext('ExaProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 ExaProvider.ts + @agentic/exa 7.3.3）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 ExaProvider.ts + @agentic/exa 7.3.3）：
  * - @agentic/exa 的 ExaClient → 等价裸 fetch：POST '{apiHost}/search'，header
  *   'x-api-key: <apiKey>'（agentic 客户端即此 header），body 照上游调用参数
  *   {query, numResults: max(1, maxResults), contents: {text: true}}；响应取

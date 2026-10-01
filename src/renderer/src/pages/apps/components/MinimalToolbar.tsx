@@ -144,7 +144,7 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
       if (cancelled) return
       checkTimeout = setTimeout(() => {
         checkTimeout = null
-        // 卸载后不得再排下一轮：定时器句柄必须置空，否则清理阶段无从取消（f2-57）。
+        // 卸载后不得再排下一轮：定时器句柄必须置空，否则清理阶段无从取消。
         if (cancelled) return
         // Use requestAnimationFrame to avoid blocking the main thread
         checkFrame = requestAnimationFrame(() => {
@@ -187,7 +187,7 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
       attachListeners()
     }
 
-    // Cleanup：定时器与 rAF 都要收口（f2-57）。旧实现只在 timeout 已排、rAF 未跑的瞬间之外
+    // Cleanup：定时器与 rAF 都要收口。旧实现只在 timeout 已排、rAF 未跑的瞬间之外
     // 才清得掉东西：若在 timeout 已触发、rAF 未执行的窗口内卸载，rAF 回调仍会跑，
     // `attachListeners()` 为 false 就再排一条**永无人清理**的 timeout 链（约 30 秒），
     // 为 true 则对已卸载组件 setState，并把 did-navigate 监听挂到脱离文档的元素上（泄漏）。

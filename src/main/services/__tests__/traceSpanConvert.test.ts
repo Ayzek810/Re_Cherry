@@ -1,5 +1,5 @@
 /**
- * k2-22 / k2-23 的行为证据：`convertSpanToSpanEntity` 是 trace 面唯一的数据出口。
+ * `convertSpanToSpanEntity` 是 trace 面唯一的数据出口。
  *
  * 旧实现写的是 `span.endTime ? <ms> : undefined`——`ReadableSpan.endTime` 是二元组
  * `HrTime`，未结束时是 `[0, 0]`，**永远 truthy**，所以未结束的 span 会得到 `endTime = 0`
@@ -37,7 +37,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('convertSpanToSpanEntity（k2-22 / k2-23）', () => {
+describe('convertSpanToSpanEntity', () => {
   it('运行中的 span 得到 endTime === null 与 isEnd === false，而不是 1970', () => {
     const span = trace.getTracer('k2-trace-test').startSpan('running') as unknown as ReadableSpan
 
@@ -96,7 +96,7 @@ describe('convertSpanToSpanEntity（k2-22 / k2-23）', () => {
   })
 })
 
-describe('TraceMethod 属性上限（k2-15）', () => {
+describe('TraceMethod 属性上限', () => {
   it('Buffer 返回值只记字节摘要，不再展开成 JSON 数字数组', async () => {
     class FileService {
       @TraceMethod({ spanName: 'readFile', tag: 'FileService' })
@@ -149,7 +149,7 @@ describe('TraceMethod 属性上限（k2-15）', () => {
   })
 })
 
-describe('导出器与适配器（k2-14 / k2-20）', () => {
+describe('导出器与适配器', () => {
   it('FunctionSpanExporter.shutdown 等待在建写入', async () => {
     let settled = false
     const fnExporter = new FunctionSpanExporter(async () => {
@@ -172,13 +172,13 @@ describe('导出器与适配器（k2-14 / k2-20）', () => {
     await expect(fnExporter.shutdown()).resolves.toBeUndefined()
   })
 
-  it('NodeTracer 暴露 shutdown/forceFlush（k2-20）', async () => {
+  it('NodeTracer 暴露 shutdown/forceFlush', async () => {
     expect(typeof NodeTracer.shutdown).toBe('function')
     expect(typeof NodeTracer.forceFlush).toBe('function')
     await expect(NodeTracer.shutdown()).resolves.toBeUndefined()
   })
 
-  it('service.name 资源是 k2-14 的传递路径（provider 收到 resource 后属性可见）', () => {
+  it('service.name 资源是 resource 的传递路径（provider 收到 resource 后属性可见）', () => {
     const resource = resourceFromAttributes({ 'service.name': 'Re_Cherry' })
     expect(resource.attributes['service.name']).toBe('Re_Cherry')
   })

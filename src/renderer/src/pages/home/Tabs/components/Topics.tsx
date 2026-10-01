@@ -72,7 +72,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const { assistant, addTopic, removeTopic, moveTopic, updateTopic, updateTopics } = useAssistant(_assistant.id)
   // 侧栏只展示"根话题"；fork 分支仅通过分支图切换。
   //
-  // v0.3.1 显示序单源化：列表直接派生自 Redux 数组（listRootTopics），不再持有"对账快照"。
+  // 显示序单源化：列表直接派生自 Redux 数组（listRootTopics），不再持有"对账快照"。
   // 旧快照（reconciledRoots）取的是注册表序（updatedAt desc = 最近活动序），三宗罪同根：
   // ①吞掉拖拽/置顶写入的数组序（用户排了也白排）；②改名/自动命名写入 store 却不刷新
   //   （名字一直显示旧值，直到数组成员变化才偶然恢复）；③每次对账重触发整列表按最近
@@ -82,7 +82,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const { showTopicTime, setTopicPosition, topicPosition } = useSettings()
 
   const renamingTopics = useSelector((state: RootState) => state.runtime.chat.renamingTopics)
-  // v0.3.1 第三轮：pending 信号改为**回合口径**（PENDING/PROCESSING 的助手消息存在）——
+  // 第三轮：pending 信号改为**回合口径**（PENDING/PROCESSING 的助手消息存在）——
   // 旧的 loadingByTopic 挂在发送任务队列上，queue 排空即熄（内核流还在打），黄点半路死；
   // fulfilled 的 true 已改在 kernelChat.finishTurn（回合真正结束时）落地。
   const generatingTopicIds = useSelector(selectGeneratingTopicIds)
@@ -121,7 +121,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const dispatch = useDispatch()
 
   useEffect(() => {
-    // v0.3.1 第三轮：清除端与写入端同域（**根 id 投影**，kernelChat.finishTurn 记账在根行）。
+    // 第三轮：清除端与写入端同域（**根 id 投影**，kernelChat.finishTurn 记账在根行）。
     // rootTopicOf 拿 activeTopic 行对象上溯，行不在本帧清单也能经由 parentTopicId 到根。
     const rootId = rootTopicOf(activeTopic, assistant?.topics ?? []).id
     dispatch(newMessagesActions.setTopicFulfilled({ topicId: rootId, fulfilled: false }))
@@ -181,7 +181,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     [activeTopic.id, addTopic, assistant.id, removeTopic, rootTopics, setActiveTopic]
   )
 
-  // v0.3.1 第三轮（验收反馈"置顶还乱动"）：置顶改为**纯显示层分组**。
+  // 第三轮（验收反馈"置顶还乱动"）：置顶改为**纯显示层分组**。
   // 旧实现是"物理重排版"（点击时写数组序），受 pinTopicsToTop 开关门控，且与浮顶/拖拽
   // 全都挤同一个数组序——谁后写谁赢，正是"点了置顶还是乱动"的病根。
   // 新语义：置顶行永远在顶区（与数组序解耦），点击只翻转 pinned 位；浮顶/拖拽只影响
@@ -493,7 +493,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     rootTopics.length
   ])
 
-  // 置顶区无条件分组（v0.3.1 第三轮）：置顶行在前，组内保持数组序；
+  // 置顶区无条件分组（第三轮）：置顶行在前，组内保持数组序；
   // 不再有开关——"固定"名不副实的双重根源（开关+物理重排）一并消除
   const sortedTopics = useMemo(() => {
     const pinned = rootTopics.filter((topic) => topic.pinned)

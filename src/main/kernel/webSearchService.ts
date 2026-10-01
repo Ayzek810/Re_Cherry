@@ -1,5 +1,5 @@
 /**
- * 网络搜索服务缝（ctx.webSearch，批次2）。
+ * 网络搜索服务缝（ctx.webSearch）。
  *
  * 持两份状态：渲染层 websearch 切片的同步投影（providers 含 apiKey / blacklist /
  * searchWithTime，Dsh_SyncWebSearch 推送）与"每轮搜索提供商"登记（topics.sendMessage

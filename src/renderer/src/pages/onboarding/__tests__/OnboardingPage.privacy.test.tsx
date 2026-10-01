@@ -1,9 +1,9 @@
 /**
- * 二轮审查 f2-56：Onboarding 隐私同意勾选框默认已选，且挂载即强制写入"已同意"。
+ * Onboarding 隐私同意勾选框默认已选，且挂载即强制写入"已同意"。
  *
  * 证据形态：`useState(true)` + `useEffect(() => updateDataCollection(true), [...])` —— 只要页面挂载
  * （含"跳过"路径），`enableDataCollection=true` 就被写进 redux 与 `config`，把用户此前持久化的拒绝
- * 覆盖掉；而 `config.set` 是 fire-and-forget，写盘失败没有任何信号（CLAUDE.md §9）。
+ * 覆盖掉；而 `config.set` 是 fire-and-forget，写盘失败没有任何信号。
  *
  * 行为级断言：
  *   ① 持久化值为 false 时，勾选框初始未选中，且挂载**不**写 config；
@@ -41,7 +41,7 @@ function checkbox() {
   return screen.getByRole('checkbox')
 }
 
-describe('Onboarding 隐私同意（f2-56）', () => {
+describe('Onboarding 隐私同意', () => {
   beforeEach(() => {
     configSet.mockReset()
     configSet.mockResolvedValue(undefined)

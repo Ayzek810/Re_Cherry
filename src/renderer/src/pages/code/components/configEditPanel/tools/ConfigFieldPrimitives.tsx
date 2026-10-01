@@ -3,7 +3,7 @@ import { Select as AntSelect } from 'antd'
 import type { ReactNode } from 'react'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/tools/
-// ConfigFieldPrimitives.tsx（2026-09-24，v0.3.4-1 批次4b）。缝点两处：
+// ConfigFieldPrimitives.tsx（2026-09-24）。缝点两处：
 // ① UI 面缝：V2 Radix 组合式 Select（SelectTrigger/SelectValue/SelectContent/SelectItem）改写为
 //   antd Select props 式——受控 open/onOpenChange 保留（ConfigSelectField 的外点关闭监听逻辑
 //   由 antd 自带行为替代后移除）；UNSET 哨兵语义逐字保留。

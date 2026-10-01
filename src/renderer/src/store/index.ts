@@ -74,22 +74,22 @@ const rootReducer = combineReducers({
   inputTools: inputToolsReducer,
   toolPermissions,
   userQuestions,
-  // v0.3.2 加回四功能的状态切片（批次1 仅 UI 持久化；机制批次 2/3/4/5 接线）
+  // 加回四功能的状态切片（仅 UI 持久化；机制接线）
   websearch,
   mcp,
   knowledge,
   skills,
-  // v0.3.2 验收轮：文档预处理服务商配置（设置页 /settings/preprocess 编辑）
+  // 验收轮：文档预处理服务商配置（设置页 /settings/preprocess 编辑）
   preprocess,
-  // v0.3.3-2 笔记（V1 原样移植）：笔记目录 + 排序/展开等 UI 态（notesPath 由启动时 App_Info 补）
+  // 笔记（V1 原样移植）：笔记目录 + 排序/展开等 UI 态（notesPath 由启动时 App_Info 补）
   note,
-  // v0.4.7 追问队列（V2 QueuedFollowupsDock 同构）：会话级临时态，见 store/followupQueue.ts
+  // 追问队列（V2 QueuedFollowupsDock 同构）：会话级临时态，见 store/followupQueue.ts
   followupQueue
 })
 
-// v0.2.4 K3：写盘前剥离非空 provider apiKey（明文不落 localStorage）。
+// 写盘前剥离非空 provider apiKey（明文不落 localStorage）。
 // 仅删除非空密钥 —— 空串/缺省字段保留，保证 rehydrate 后 apiKey 字段语义不变；
-// 运行时内存仍持有 key（跨窗口 StoreSync 语义不变），K4 启动时从 main 加密存储回填。
+// 运行时内存仍持有 key（跨窗口 StoreSync 语义不变），启动时从 main 加密存储回填。
 const stripProviderApiKeys = createTransform<any, any>(
   (inboundState) => inboundState,
   (outboundState, key) => {
@@ -158,7 +158,7 @@ export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
 
 /**
- * 次窗口角色判定（v1 二轮 r2-03）：小窗（`miniWindow.html`）与 trace 窗各自是独立 JS 上下文
+ * 次窗口角色判定：小窗（`miniWindow.html`）与 trace 窗各自是独立 JS 上下文
  * 与独立 Redux store，但它们读的是同一份 `persist:cherry-studio` 快照。启动回填只应由主窗口做：
  * 小窗侧已 `persistor.pause()` + 只收不发（见 `windows/mini/miniWindowStoreRole.ts`），这里把
  * `backfillProviderKeysFromVault`（会 `dispatch(updateProviders)`）与 `initializeNotesPath`
@@ -175,21 +175,21 @@ function isSecondaryWindowRole(): boolean {
 }
 
 export const persistor = persistStore(store, undefined, () => {
-  // v0.2.4-1：原 ReduxStoreReady invoke 已删除（main 侧 handler 随 ReduxService 一并移除）
-  // v0.2.4 K4：rehydrate 完成后从 main 加密存储回填 provider key（本地持久层已不再落明文）
+  // 原 ReduxStoreReady invoke 已删除（main 侧 handler 随 ReduxService 一并移除）
+  // rehydrate 完成后从 main 加密存储回填 provider key（本地持久层已不再落明文）
   void recordRestoredTopicIds()
   if (isSecondaryWindowRole()) {
     logger.info('Redux store ready (secondary window: startup backfill skipped)')
     return
   }
   void backfillProviderKeysFromVault()
-  // v0.3.3-2 笔记：rehydrate 后若笔记目录为空，用主进程 App_Info 的 notesPath 补上（V1 同形）。
+  // 笔记：rehydrate 后若笔记目录为空，用主进程 App_Info 的 notesPath 补上（V1 同形）。
   // 失败只记日志：笔记页自己有"未配置目录"的兜底提示，不因这一条挡住启动。
   void initializeNotesPath()
   logger.info('Redux store ready')
 })
 
-/** v0.3.3-2：笔记根目录来自主进程（`{userData}/Data/Notes` 或用户自选目录），只在缺省时注入。
+/** 笔记根目录来自主进程（`{userData}/Data/Notes` 或用户自选目录），只在缺省时注入。
  *  延后一个宏任务（V1 同形）：不在 persist 回调里同步 dispatch，确保 store 已完全就绪。 */
 async function initializeNotesPath(): Promise<void> {
   if (store.getState().note.notesPath) return
@@ -205,7 +205,7 @@ async function initializeNotesPath(): Promise<void> {
   }
 }
 
-/** v0.3.0-2 目标 B：登记"上次会话留下的行"。
+/** 登记"上次会话留下的行"。
  *
  * 这是"内核不认识这一行"能否作为**失效**判据的唯一依据（见 `utils/topicBranch.ts` 的
  * `noteRestoredTopicIds`）：本进程内新建的话题在首发前内核本来就不认识它，不能据此判失效。
@@ -224,7 +224,7 @@ async function recordRestoredTopicIds(): Promise<void> {
   }
 }
 
-/** v0.2.4 K4：启动回填 —— main 加密存储（ProviderKeyStore）是 key 的持久真源。
+/** 启动回填 —— main 加密存储（ProviderKeyStore）是 key 的持久真源。
  * rehydrate 后按 providerId 把 key 注入 redux（运行态语义与旧版一致），
  * 并对已删除/迁移过滤的 provider 清掉 main 侧残留 key。 */
 async function backfillProviderKeysFromVault(): Promise<void> {
@@ -247,9 +247,9 @@ async function backfillProviderKeysFromVault(): Promise<void> {
       }
       return p
     })
-    // 已删除/迁移过滤的 provider → **不再删除** main 侧残留 key（v0.3.3-1 修复"更新后 key 消失"）：
+    // 已删除/迁移过滤的 provider → **不再删除** main 侧残留 key（修复"更新后 key 消失"）：
     // 这份 redux 清单"是否已知完整"不可判定（localStorage 换 origin/清空、rehydrate 竞态、迁移分支
-    // 丢字段都会让用户的 provider 暂时不在表里），而不变式 6 要求"不可判定的状态不做破坏性动作"。
+    // 丢字段都会让用户的 provider 暂时不在表里）。
     // 残留 key 无副作用；用户显式删 provider/清 key 时走 ProviderKeys_Remove，这里只如实记账。
     for (const [id] of entries) {
       if (!ids.has(id)) {

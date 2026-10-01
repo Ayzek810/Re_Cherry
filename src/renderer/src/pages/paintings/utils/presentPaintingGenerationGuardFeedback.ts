@@ -1,5 +1,5 @@
 /**
- * guard 反馈出口（v0.3.3 批次4，② 薄适配）：V2 toast/modal → window.toast /
+ * guard 反馈出口（② 薄适配）：V2 toast/modal → window.toast /
  * antd Modal（window.modal.confirm）。四类 reason 的文案键保留。
  */
 import i18n from '@renderer/i18n'

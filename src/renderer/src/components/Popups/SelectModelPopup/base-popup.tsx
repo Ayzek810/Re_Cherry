@@ -79,7 +79,7 @@ const SelectModelPopupView: React.FC<Props> = ({
     })
   }, [])
 
-  // c2-34：全局 keydown 的处理器通过 ref 读取当前高亮项。原实现把 `focusedItemKey` 直接放进
+  // 全局 keydown 的处理器通过 ref 读取当前高亮项。原实现把 `focusedItemKey` 直接放进
   // 依赖数组，而它由鼠标划过每一行驱动 —— 划过十几行就是十几次 window 监听重挂，
   // 每次都有一个「监听器不存在」的短窗口（期间 ↑/↓/Enter 丢事件）。
   const focusedItemKeyRef = useRef(focusedItemKey)
@@ -445,7 +445,7 @@ const SelectModelPopupView: React.FC<Props> = ({
               tabIndex={0}
               aria-label={item.isPinned ? t('tabs.unpin') : t('tabs.pin')}
               onKeyDown={(e) => {
-                // c2-25：「固定常用模型」原本只能靠鼠标完成（不可聚焦、无 aria-label、
+                // 「固定常用模型」原本只能靠鼠标完成（不可聚焦、无 aria-label、
                 // 不响应 Enter/Space），而列表本身有完整的键盘导航。
                 if (e.key !== 'Enter' && e.key !== ' ') return
                 e.preventDefault()

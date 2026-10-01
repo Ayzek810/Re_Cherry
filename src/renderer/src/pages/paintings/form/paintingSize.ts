@@ -25,7 +25,7 @@ export function sizeOptionLabel(
  * the composer's summary chips and the skeleton's aspect-ratio/size-label
  * derivation so the two never drift.
  *
- * v0.3.3 批次6：随 canonical 键名统一回 V2 原值（`size`/`imageResolution`/
+ * 随 canonical 键名统一回 V2 原值（`size`/`imageResolution`/
  * `aspectRatio`）；旧 fork 键 `imageSize` 已由 canonicalGenerate 兼容映射。
  */
 export const SIZE_PREVIEW_KEYS = ['size', 'imageResolution', 'aspectRatio'] as const

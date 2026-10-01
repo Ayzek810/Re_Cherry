@@ -1,5 +1,5 @@
 /**
- * 用量统计聚合（v0.4.7 用量统计面板的纯函数层）。
+ * 用量统计聚合（用量统计面板的纯函数层）。
  *
  * 数据模型：一次回合 = 一条 UsageRecord（kernelChat 回合收尾处落库；本地记录是
  * 内核会话日志中 usage 事件的派生分析数据，不是会话状态的第二真相源——不变量2
@@ -75,7 +75,7 @@ function emptyModelBucket(modelId: string): UsageModelBucket {
  *
  * @param records 记录集合。
  * @param range 时间范围（用于按天分桶的边界语义）。
- * @param alreadyFiltered r2-56：调用方已用 `between(start, end, true, true)` 按**同一闭区间**
+ * @param alreadyFiltered ：调用方已用 `between(start, end, true, true)` 按**同一闭区间**
  *   取过数时传 `true`，跳过 `filterUsageRecords` 的整表 O(n) 二次判定（否则随表增长白白翻倍）。
  *   默认 `false`，语义与既有调用方逐字一致。
  */

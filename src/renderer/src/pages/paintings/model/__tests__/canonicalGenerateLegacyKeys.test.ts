@@ -1,5 +1,5 @@
 /**
- * 旧参数键兼容路径机测（v0.3.3 批次6，canonical 键名从 fork 自写的
+ * 旧参数键兼容路径机测（canonical 键名从 fork 自写的
  * `imageSize`/`batchSize` 统一到 V2 的 `size`/`numImages`）。
  *
  * 断言的是契约：**新键永远优先**，旧键只在 canonical 缺席时兜底，且兜底后旧键

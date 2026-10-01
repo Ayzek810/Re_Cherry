@@ -1,5 +1,5 @@
 /**
- * 视觉模型文档解析编排测试（v0.4.4）：utility 子进程协议（ping-pong 有界内存）、
+ * 视觉模型文档解析编排测试：utility 子进程协议（ping-pong 有界内存）、
  * 逐页模型调用与拼装、空页跳过、失败/abort/产物缺失语义。
  * 被测缝：runVisionDocumentParse（visionWorker 为 FakeChild，模型调用 mock）。
  */

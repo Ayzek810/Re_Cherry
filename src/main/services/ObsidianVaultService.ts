@@ -79,7 +79,7 @@ class ObsidianVaultService {
   /**
    * 获取Vault中的文件夹和Markdown文件结构
    *
-   * v1 二轮审查 m2-24：`traverseDirectory` 此前用 `fs.readdirSync`/`fs.existsSync`/`fs.statSync`
+   * `traverseDirectory` 此前用 `fs.readdirSync`/`fs.existsSync`/`fs.statSync`
    * 在主进程同步递归整个 vault 目录树。vault 内笔记上千时，一次 IPC 会阻塞主进程消息循环
    * （同仓 `FileStorage.getDirectoryStructure` 用的是异步 `scanDir`）。改为全异步 IO；
    * 方法因此返回 Promise，IPC 层 await。

@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-55：小程序设置里的"交换"按钮只改本地 state，不落库。
+ * 小程序设置里的"交换"按钮只改本地 state，不落库。
  *
  * 对比同排的"重置"（会 `updateMinapps(allMinApps)` + `updateDisabledMinapps([])`）与列表内部的实际
  * 写入口（`MiniAppIconsManager.handleListUpdate`，拖拽/移动都会写），"交换"绕过了写入路径 ——
@@ -36,7 +36,7 @@ vi.mock('@renderer/hooks/useMinapps', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { maxKeepAliveMinapps: 3, showOpenedMinappsInSidebar: false, minappsOpenLinkExternal: false }
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   return { useSettings: () => settings, useSetting: (key: string) => settings[key] }
 })
 
@@ -71,7 +71,7 @@ function renderSettings() {
   )
 }
 
-describe('MiniAppSettings 交换按钮落库（f2-55）', () => {
+describe('MiniAppSettings 交换按钮落库', () => {
   beforeEach(() => {
     updateMinapps.mockReset()
     updateDisabledMinapps.mockReset()

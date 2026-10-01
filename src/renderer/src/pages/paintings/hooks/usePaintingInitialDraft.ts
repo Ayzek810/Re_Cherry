@@ -1,5 +1,5 @@
 /**
- * 初始草稿对齐 hook（v0.3.3 批次4，② 薄适配）：V2 usePreference 两键
+ * 初始草稿对齐 hook（② 薄适配）：V2 usePreference 两键
  * （painting.defaultProvider / painting.defaultModel）→ fork settings slice
  * （useAppSelector s.settings）；fork 无对应字段，用默认值常量（不改 settings
  * slice 结构）。isUntouchedDraft 判定原样。

@@ -44,7 +44,7 @@ export const getFilesFromDropEvent = async (e: React.DragEvent<HTMLDivElement>):
           item.getAsString(async (filePathListString) => {
             // getAsString 的数据来自外部拖放源，JSON 可能是任意内容。解析失败必须
             // 给出一个终态（resolve([])）——否则 async 回调抛错，resolve 永不执行，
-            // 调用方的 await 永久挂起（audit2 r2-94）。
+            // 调用方的 await 永久挂起。
             let filePathList: string[]
             try {
               const parsed = JSON.parse(filePathListString)

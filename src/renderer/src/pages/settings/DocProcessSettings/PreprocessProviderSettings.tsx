@@ -1,10 +1,10 @@
 /**
- * v0.3.2 自 CS_V1 移植（单个文档处理 provider 表单）。
+ * 自 CS_V1 移植（单个文档处理 provider 表单）。
  * v0.4 验收轮补 V1 的官网/取密钥外链（PREPROCESS_PROVIDER_CONFIG）：标题行官网
  * 图标链接 + apiKey 帮助行「点击这里获取密钥」。多 Key 管理弹窗（ApiKeyListPopup）保留。
  * 表单为本地 state + blur 提交（apiKey 经 formatApiKeys 规范化逗号分隔多 key；
  * apiHost trim 去尾 /）；无 model 字段 UI（mistral 默认值来自切片初始表）。
- * v0.4.4：local-paddle（模型下载卡片）与 vision-model（视觉模型选择器）两个本地/自带
+ * local-paddle（模型下载卡片）与 vision-model（视觉模型选择器）两个本地/自带
  * 模型条目各有专属面板——两者都是通道里的服务商条目，不是独立系统。
  */
 import ModelSelector from '@renderer/components/ModelSelector'
@@ -42,8 +42,8 @@ const PreprocessProviderSettings: FC<Props> = ({ provider: _provider }) => {
     setApiHost(preprocessProvider?.apiHost ?? '')
   }, [preprocessProvider?.apiKey, preprocessProvider?.apiHost, preprocessProvider?.options])
 
-  // v1 二轮审查 s2-11：找不到该 provider 时渲染显式占位，不再 `return null`
-  //（静默整块消失是家规点名的「最坏失败模式」）。位置仍在全部 hooks 之后——hook 顺序不得条件化。
+  // 找不到该 provider 时渲染显式占位，不再 `return null`
+  //（静默整块消失是最坏失败模式）。位置仍在全部 hooks 之后——hook 顺序不得条件化。
   if (!preprocessProvider) {
     return (
       <SettingHelpTextRow>
@@ -174,7 +174,7 @@ const ProviderName = styled.span`
   font-weight: 500;
 `
 
-/** LocalPaddle 模型下载卡片（v0.4.4 收编自 CS_V2 LocalModelRequirement 形态裁剪：
+/** LocalPaddle 模型下载卡片（收编自 CS_V2 LocalModelRequirement 形态裁剪：
  * 状态机 not_downloaded/downloading/ready/error/unsupported，进度轮询自 useLocalPaddle）。 */
 const LocalPaddleModelPanel: FC = () => {
   const { provider, updateProvider } = usePreprocessProvider('local-paddle')
@@ -257,7 +257,7 @@ const LocalPaddleModelPanel: FC = () => {
 }
 
 /**
- * 视觉模型文档解析面板（v0.4.4）：选一个视觉模型写入 preprocess 切片该条目的
+ * 视觉模型文档解析面板：选一个视觉模型写入 preprocess 切片该条目的
  * visionModel 字段（持久化 Model 对象，llm.imageDescriberModel 同款形态）——
  * 执行缝在 preprocess/vision（本机光栅化 + 多模态 chat 逐页转写）。
  * 下拉只列视觉模型（isVisionModel 是唯一判据，与设置页转述模型共用）。

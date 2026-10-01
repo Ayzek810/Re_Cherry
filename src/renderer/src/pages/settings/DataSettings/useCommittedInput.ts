@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 
 /**
- * 输入框草稿（v1 二轮审查 s2-14）。
+ * 输入框草稿。
  *
  * `settings` 切片是 redux-persist 持久化的，且 persist 配置没有节流：`onChange` 里直接
  * `dispatch` 等于**每敲一个字符**就「序列化整片 settings + 写 localStorage」一次，全部发生在

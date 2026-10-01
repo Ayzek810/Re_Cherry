@@ -3,7 +3,7 @@ import type { Message } from '@renderer/types/newMessage'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * TokenService 估算口径（二轮审查 r2-25 / r2-26 / r2-27）。
+ * TokenService 估算口径。
  *
  * 钉三件事：
  *   ① `estimateUserPromptUsage` 的 `completion_tokens` 恒为 0、`total_tokens = prompt + 图片`，
@@ -63,7 +63,7 @@ beforeEach(() => {
   filesOf = []
 })
 
-describe('estimateUserPromptUsage（r2-25 / r2-26）', () => {
+describe('estimateUserPromptUsage', () => {
   it('completion_tokens = 0，total = 正文 + 图片估算（不再翻倍）', async () => {
     const usage = await estimateUserPromptUsage({ content: 'hello', files: [imageFile(500)] })
 
@@ -89,7 +89,7 @@ describe('estimateUserPromptUsage（r2-25 / r2-26）', () => {
   })
 })
 
-describe('estimateMessageUsage（r2-26）', () => {
+describe('estimateMessageUsage', () => {
   it('同一口径：completion_tokens = 0，total = 正文 + 图片', async () => {
     textOf = { m1: 'hello' }
     filesOf = [imageFile(500)]
@@ -102,7 +102,7 @@ describe('estimateMessageUsage（r2-26）', () => {
   })
 })
 
-describe('estimateHistoryTokens（r2-27）', () => {
+describe('estimateHistoryTokens', () => {
   it('有测量基线：用基线 prompt_tokens + 其后消息的本地增量，不重复累加历史', async () => {
     textOf = { m2: 'assistantmsg', m3: 'seconduserquestion' }
     const messages = [

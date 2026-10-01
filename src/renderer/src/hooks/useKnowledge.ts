@@ -1,9 +1,9 @@
 /**
- * v0.3.2 自 CS_V1 移植（知识库 hooks；批次4 接真实处理链：extract → chunk → embed → 落库）。
+ * 自 CS_V1 移植（知识库 hooks；接真实处理链：extract → chunk → embed → 落库）。
  * fork 改动点：
  * - 不移植上游 KnowledgeQueue 全套：条目处理经 knowledgeBaseApi.add（主进程 FIFO 串行），
  *   状态机 pending → processing → completed/failed 直接回填 redux；
- * - file/url/note 三类进处理链；sitemap/directory/video 仅 redux 记录不处理（批次4 后置，
+ * - file/url/note 三类进处理链；sitemap/directory/video 仅 redux 记录不处理（后置，
  *   交付注记有记）；笔记内容按 fork KnowledgeNoteItem 形状直接存于条目 content；
  * - 嵌入引用只含 {providerId, modelId, dimensions}，密钥主进程自解析（fork 偏离上游）。
  */
@@ -39,7 +39,7 @@ import { useAssistants } from './useAssistant'
 
 const logger = loggerService.withContext('useKnowledge')
 const t = i18n.t.bind(i18n)
-/** 创建一个新知识库条目（批次4：file/url/note 预置 processingStatus='pending'，进处理链）。 */
+/** 创建一个新知识库条目（file/url/note 预置 processingStatus='pending'，进处理链）。 */
 const createKnowledgeItem = (
   type: KnowledgeItem['type'],
   content: KnowledgeItem['content'],
@@ -72,7 +72,7 @@ export const useKnowledge = (baseId: string) => {
     dispatch(updateBase(base))
   }
 
-  // 批次4：条目处理（主进程 FIFO；完成/失败回填 redux，嵌入引用只含 id）
+  // 条目处理（主进程 FIFO；完成/失败回填 redux，嵌入引用只含 id）
   const enqueueItem = (item: KnowledgeItem, payload: Parameters<typeof knowledgeBaseApi.add>[0]['item']) => {
     if (!base) return
     const baseSnapshot = base
@@ -201,9 +201,9 @@ export const useKnowledge = (baseId: string) => {
   }
 
   /**
-   * 移除项目（批次4：向量条目按 uniqueIds 整批删 + redux 移除 + 文件清理）。
+   * 移除项目（向量条目按 uniqueIds 整批删 + redux 移除 + 文件清理）。
    *
-   * 删除纪律（CLAUDE.md §9 / 二轮审查 f2-14）：**返回 `Promise<boolean>`**，乐观移除失败必须回滚并
+   * 删除纪律：**返回 `Promise<boolean>`**，乐观移除失败必须回滚并
    * 给出用户可见信号。旧实现是纯乐观写：redux 行先消失，向量库 `remove` 或文件清理一旦 reject，行不会
    * 恢复（刷新后条目仍不在列表里但向量还占着），而六个 onClick 调用点把 Promise 交给 React——失败只是
    * 一条未处理的 rejection，磁盘与 UI 都没有任何信号。
@@ -247,7 +247,7 @@ export const useKnowledge = (baseId: string) => {
       }
     } catch (error) {
       // 本地文件清理失败不回滚索引行：文件已从 redux 与向量库摘除，行本身没有可还原的语义；
-      // 但失败不得静默——磁盘上会留下孤儿文件，必须让用户知道（§9「Never fail silently」）。
+      // 但失败不得静默——磁盘上会留下孤儿文件，必须让用户知道（「Never fail silently」）。
       logger.error('Failed to clean up knowledge item files', error as Error)
       window.toast.warning(t('knowledge.remove_file_cleanup_failed'))
     }
@@ -255,7 +255,7 @@ export const useKnowledge = (baseId: string) => {
     return true
   }
 
-  // 刷新项目（批次4：remove + 重新入队嵌入；处理中条目拒绝重刷）
+  // 刷新项目（remove + 重新入队嵌入；处理中条目拒绝重刷）
   const refreshItem = async (item: KnowledgeItem) => {
     const status = getProcessingStatus(item.id)
 
@@ -272,7 +272,7 @@ export const useKnowledge = (baseId: string) => {
       await knowledgeBaseApi.remove(baseId, uniqueIds)
     }
 
-    // 重新入队（file/url/note 三类可处理；其余类型批次4 后置，仅复位状态不处理）
+    // 重新入队（file/url/note 三类可处理；其余类型 后置，仅复位状态不处理）
     if (isKnowledgeFileItem(item)) {
       enqueueItem(
         { ...item, processingStatus: 'pending' },
@@ -348,7 +348,7 @@ export const useKnowledge = (baseId: string) => {
     dispatch(clearAllProcessing({ baseId }))
   }
 
-  // 迁移知识库（保留原知识库；批次1：条目按原内容纯复制，不触发重新处理）
+  // 迁移知识库（保留原知识库：条目按原内容纯复制，不触发重新处理）
   const migrateBase = async (newBase: KnowledgeBase) => {
     if (!base) return
 
@@ -446,7 +446,7 @@ export const useKnowledgeBases = () => {
 
   const addKnowledgeBase = (base: KnowledgeBase) => {
     dispatch(addBase(base))
-    // 批次4：同步建向量库文件（LibSQL 单文件；失败仅日志——库文件在首次条目入队时也会惰性建）。
+    // 同步建向量库文件（LibSQL 单文件；失败仅日志——库文件在首次条目入队时也会惰性建）。
     void knowledgeBaseApi.create({ id: base.id }).catch(() => undefined)
   }
 
@@ -457,7 +457,7 @@ export const useKnowledgeBases = () => {
   /**
    * 删除知识库（整库）。
    *
-   * 删除纪律（CLAUDE.md §9 / 二轮审查 r2-10）：**返回 `Promise<boolean>`**，失败必须给出
+   * 删除纪律：**返回 `Promise<boolean>`**，失败必须给出
    * 用户可见信号，且不得留下「界面已删、库还在」的分歧。
    *
    * 实现顺序是**先真实删除、后改投影**（而不是像 `removeItem` 那样乐观删+回滚）：整库删除的
@@ -484,7 +484,7 @@ export const useKnowledgeBases = () => {
     dispatch(deleteBase({ baseId }))
 
     // remove assistant knowledge_base
-    // fork 分叉点：上游还会同步清理 assistant presets，fork 批次1 无 presets 状态
+    // fork 分叉点：上游还会同步清理 assistant presets，fork 无 presets 状态
     const _assistants = assistants.map((assistant) => {
       if (assistant.knowledge_bases?.find((kb) => kb.id === baseId)) {
         return {

@@ -64,7 +64,7 @@ export function calculateRelevanceScore(node: NotesTreeNode, keyword: string, ma
 }
 
 /**
- * 单文件检索结果（二轮审查 r2-05：判别式，失败与「零命中」必须可分）
+ * 单文件检索结果（判别式，失败与「零命中」必须可分）
  * - `matched`：命中；
  * - `no-match`：文件读到了、内容也扫了，就是没有匹配（正常的零命中）；
  * - `error`：读文件 / 构造正则失败 —— **不是**零命中（旧实现把两者都返回 `null`，
@@ -75,7 +75,7 @@ export type SearchFileOutcome =
   | { kind: 'no-match' }
   | { kind: 'error'; error: Error }
 
-/** 全库检索结果：命中 + 逐文件失败清单（失败不得伪装成空结果，CLAUDE.md §9）。 */
+/** 全库检索结果：命中 + 逐文件失败清单（失败不得伪装成空结果）。 */
 export interface SearchAllFilesOutcome {
   results: SearchResult[]
   /** 读取/扫描失败的文件（含原因），供调用方给出「N 个文件读取失败」的可见信号。 */
@@ -175,7 +175,7 @@ export async function searchFileContent(
   } catch (error) {
     const failure = error instanceof Error ? error : new Error(String(error))
     logger.error(`Failed to search file content for ${node.externalPath}:`, failure)
-    // r2-05：失败以 `error` 判别返回，由 searchAllFiles 汇总进 failures；
+    // 失败以 `error` 判别返回，由 searchAllFiles 汇总进 failures；
     // 不再与「零命中」同值，调用方的 setError 因此可达。
     return { kind: 'error', error: failure }
   }
@@ -214,7 +214,7 @@ export function flattenTreeToFiles(nodes: NotesTreeNode[]): NotesTreeNode[] {
 /**
  * Search all files concurrently
  *
- * r2-05：返回值改为 `{ results, failures }` 汇总。此前失败与「零命中」同为 `null`，
+ * 返回值改为 `{ results, failures }` 汇总。此前失败与「零命中」同为 `null`，
  * 调用方（`useFullTextSearch`）的 `setError` 永不执行——读文件失败时全库检索静默显示「无结果」。
  * 现在逐文件失败被收集成显式清单，调用方可以给出「N 个文件读取失败」的信号。
  */

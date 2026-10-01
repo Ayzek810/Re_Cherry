@@ -14,9 +14,9 @@ interface SkillsSettingsProps {
 }
 
 /**
- * 技能页（v0.3.2 批次1）：按助手启用的技能开关列表（用户裁决）。
- * 数据源为 redux skills 切片（批次5 接线后由本地 skill 目录/市场安装填充）；
- * 开关写 assistant.enabledSkills（仅持久化选择，执行注入随批次5 接线）。
+ * 技能页：按助手启用的技能开关列表（用户裁决）。
+ * 数据源为 redux skills 切片（接线后由本地 skill 目录/市场安装填充）；
+ * 开关写 assistant.enabledSkills（仅持久化选择，执行注入随 接线）。
  */
 const SkillsSettings: FC<SkillsSettingsProps> = ({ assistant, updateAssistant }) => {
   const { t } = useTranslation()

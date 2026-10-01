@@ -118,7 +118,7 @@ describe('classifyError', () => {
   it('classifies embedding error as knowledge', () => {
     const result = classifyError(makeError({ message: 'embedding model failed' }))
     expect(result.category).toBe('knowledge')
-    // v0.3.2 批次1：knowledge 页面回归，断言按 v0.2.4-1 的预告恢复
+    // knowledge 页面回归：导航目标按预期恢复
     expect(result.navTarget).toBe('/knowledge')
   })
 
@@ -143,7 +143,7 @@ describe('classifyError', () => {
   it('classifies mcp server error', () => {
     const result = classifyError(makeError({ message: 'MCP server failed to start' }))
     expect(result.category).toBe('mcp')
-    // v0.2.4-1：MCP 设置页已从本 fork 移除，生产侧返回 null（v0.3.1 加回时同步恢复）
+    // MCP 设置页已从本 fork 移除，生产侧返回 null（加回时同步恢复）
     expect(result.navTarget).toBeNull()
   })
 
@@ -163,7 +163,7 @@ describe('classifyError', () => {
     expect(result.category).toBe('auth')
   })
 
-  // v0.3.1-1：内核回合错误码
+  // 内核回合错误码
   it('classifies EMPTY_RESPONSE code as empty_response (kernelChat 空轮守门)', () => {
     const result = classifyError(
       makeError({ message: 'The model finished this turn but returned no content.', code: 'EMPTY_RESPONSE' })

@@ -2,7 +2,7 @@
  * 引用胶囊（悬浮弹层）——V2 形态的分体式：同一壳，按引用类型分 Web / Knowledge
  * 两种 hover 体。调用方：Markdown 的 Link（有 URL 引用）与 CitationSup（无 URL 引用）。
  *
- * v0.3.2 验收修复（透明窗案）：antd Tooltip 的内衬只承载布局（padding/底色/阴影
+ * 验收修复（透明窗案）：antd Tooltip 的内衬只承载布局（padding/底色/阴影
  * 全部归零、无箭头），卡体视觉由 TooltipBody 自绘——显式不透明背景 + 描边 +
  * 阴影。主题变量在 antd 传送门内可解析（AntdProvider 的 token 全局用 var() 同证），
  * 但卡底色仍带字面回退值，任何主题层都不再把胶囊画成透明。

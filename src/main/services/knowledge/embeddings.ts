@@ -1,7 +1,7 @@
 /**
  * 知识库嵌入客户端：openai-compatible /v1/embeddings 与 ollama /api/embeddings 两路。
  *
- * v0.3.3 批次2 归位：实现整体迁至 kernel/lightLlmModalities.ts（轻量 AI 服务面
+ * 归位：实现整体迁至 kernel/lightLlmModalities.ts（轻量 AI 服务面
  * embed 端点，与 chat/rerank/image 共用一套 provider 路由底座）；本文件退为薄委托
  * ——KnowledgeService 的既有引用面不变，路由快照同步也仍经本类转发
  * （Dsh_SyncProviders 同一载荷；密钥不回渲染层、不进会话日志，fork 偏离不变）。

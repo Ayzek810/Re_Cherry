@@ -1,12 +1,12 @@
 /**
- * LocalPaddle 模型资产表（v0.4.4 收编：自 services/localModel 的
+ * LocalPaddle 模型资产表（收编：自 services/localModel 的
  * localModelCatalog + modelSource 两文件合并为文档处理通道的本地条目数据层）。
  *
  * 数据 only：抓什么（PP-OCRv6_medium 检测/识别权重 + 识别仓 inference.yml 里的
  * 字符字典）；从哪抓（镜像直链解析）。下载落盘/状态机在 modelStore，推理在
  * localOcr / localOcrWorker——本文件不 import electron。
  *
- * 模型身份（PaddlePaddle 官方 ONNX 导出仓）与 minBytes 守门逐字节继承 v0.3.2
+ * 模型身份（PaddlePaddle 官方 ONNX 导出仓）与 minBytes 守门逐字节继承
  * 移植时的实证形态：ModelScope 三直链 Range 探测 + 真模型端到端识别
  * （tools/scratch-verify probe A/B，2026-09-27 复验全绿）。
  */

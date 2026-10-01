@@ -1,5 +1,5 @@
 /**
- * 绘画模板目录 hook（v0.3.3 批次4，② 薄适配）：读取逻辑原样（manifest 校验/
+ * 绘画模板目录 hook（② 薄适配）：读取逻辑原样（manifest 校验/
  * 翻译归一/洗牌）；资源根 = fork 静态资源 resources/painting-templates/。
  * 渲染进程读法：window.api.fs.readText（fork 既有 IPC，主进程
  * readTextFileWithAutoEncoding 直读绝对路径）；图片经 file:// URL

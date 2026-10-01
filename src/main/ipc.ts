@@ -21,6 +21,7 @@ import fontList from 'font-list'
 import { apiGatewayService } from './features/apiGateway/ApiGatewayService'
 import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
+import { appUpdateService, parsePrefsPatch } from './services/AppUpdateService'
 import BackupManager from './services/BackupManager'
 import { binaryManager } from './services/binaryManager/BinaryManager'
 import { BINARY_TOOL_NAMES, type BinaryToolName, isBinaryToolName } from './services/binaryManager/presets'
@@ -84,7 +85,7 @@ const exportService = new ExportService()
 // obsidian vault 只读枚举（V1 移植）：配置路径在首次调用时惰性解析，不占启动序
 const obsidianVaultService = new ObsidianVaultService()
 
-// v1 二轮审查 m2-15：`registerIpc` 函数体里有**进程级**副作用，此前无任何幂等保护。
+// `registerIpc` 函数体里有**进程级**副作用，此前无任何幂等保护。
 // `ipcMain.handle` 重复注册只是覆盖（无害），但 `on` / `subscribe` 是**累积**的：
 // `mcpService.onServerLog` 返回的解绑函数被丢弃、`mainWindow.on('maximize')` 按窗口闭包挂载。
 // 任何第二次调用（macOS 激活重建主窗、将来加多窗口、dev 下模块重求值）都会让日志事件被重复
@@ -405,7 +406,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       options.args = options.args || []
     }
 
-    // v0.3.2：沙箱 runner 的 node 语义已改为 dsh-subprocess-local 补丁按子进程注入
+    // 沙箱 runner 的 node 语义已改为 dsh-subprocess-local 补丁按子进程注入
     // （见 kernel/index.ts 的说明），内核不再设 ambient `ELECTRON_RUN_AS_NODE`。
     // 这里保留防御性剥除：若用户系统环境同名变量存在，`app.relaunch` 继承后重启的
     // 应用会以 **node** 启动而非 Electron 应用。
@@ -417,6 +418,17 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 
   // Reset all data (factory reset)
   ipcMain.handle(IpcChannel.App_ResetData, () => backupManager.resetData())
+
+  // 应用更新：渲染层只发起动作，状态一律由主进程推送（App_Update_State）。
+  ipcMain.handle(IpcChannel.App_Update_GetState, () => appUpdateService.getState())
+  ipcMain.handle(IpcChannel.App_Update_GetPrefs, () => appUpdateService.getPrefs())
+  ipcMain.handle(IpcChannel.App_Update_SetPrefs, (_, raw: unknown) => appUpdateService.setPrefs(parsePrefsPatch(raw)))
+  ipcMain.handle(IpcChannel.App_Update_Check, (_, options?: { manual?: boolean }) =>
+    appUpdateService.check({ manual: options?.manual === true })
+  )
+  ipcMain.handle(IpcChannel.App_Update_Download, () => appUpdateService.download())
+  ipcMain.handle(IpcChannel.App_Update_Cancel, () => appUpdateService.cancelDownload())
+  ipcMain.handle(IpcChannel.App_Update_Install, () => appUpdateService.install())
 
   // notification
   ipcMain.handle(IpcChannel.Notification_Send, async (_, notification: Notification) => {
@@ -457,7 +469,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.File_Upload, fileManager.uploadFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Clear, fileManager.clear.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Read, fileManager.readFile.bind(fileManager))
-  // r2-79/⑥：区分「不存在」与「读失败」的读通道（渲染层播种自定义小应用要用）
+  // /⑥：区分「不存在」与「读失败」的读通道（渲染层播种自定义小应用要用）
   ipcMain.handle(IpcChannel.File_ReadById, fileManager.readFileById.bind(fileManager))
   ipcMain.handle(IpcChannel.File_ReadExternal, fileManager.readExternalFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Delete, fileManager.deleteFile.bind(fileManager))
@@ -474,7 +486,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.File_Mkdir, fileManager.mkdir.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Write, fileManager.writeFile.bind(fileManager))
   ipcMain.handle(IpcChannel.File_WriteWithId, fileManager.writeFileWithId.bind(fileManager))
-  // v0.3.3-2：聊天页 generate_image 出图的内容寻址落盘（id 由渲染层按源串 sha256 给出）
+  // 聊天页 generate_image 出图的内容寻址落盘（id 由渲染层按源串 sha256 给出）
   ipcMain.handle(IpcChannel.File_SaveGeneratedImage, fileManager.saveGeneratedImage.bind(fileManager))
   ipcMain.handle(IpcChannel.File_SaveImage, fileManager.saveImage.bind(fileManager))
   ipcMain.handle(IpcChannel.File_Base64Image, fileManager.base64Image.bind(fileManager))
@@ -490,7 +502,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.File_IsDirectory, fileManager.isDirectory.bind(fileManager))
   ipcMain.handle(IpcChannel.File_ListDirectory, fileManager.listDirectory.bind(fileManager))
   ipcMain.handle(IpcChannel.File_GetDirectoryStructure, fileManager.getDirectoryStructure.bind(fileManager))
-  // v0.3.3-2 笔记（V1 原样）：FileStorage.validateNotesDirectory 一直在，补回这一层转发
+  // 笔记（V1 原样）：FileStorage.validateNotesDirectory 一直在，补回这一层转发
   ipcMain.handle(IpcChannel.File_ValidateNotesDirectory, fileManager.validateNotesDirectory.bind(fileManager))
   ipcMain.handle(IpcChannel.File_CheckFileName, fileManager.fileNameGuard.bind(fileManager))
   ipcMain.handle(IpcChannel.File_StartWatcher, fileManager.startFileWatcher.bind(fileManager))
@@ -504,7 +516,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Fs_Read, FileService.readFile.bind(FileService))
   ipcMain.handle(IpcChannel.Fs_ReadText, FileService.readTextFileWithAutoEncoding.bind(FileService))
 
-  // provider key 加密存储（v0.2.4 K 线）
+  // provider key 加密存储（K 线）
   ipcMain.handle(IpcChannel.ProviderKeys_GetAll, () => providerKeyStore.getAll())
   ipcMain.handle(IpcChannel.ProviderKeys_Set, (_e, providerId: string, apiKey: string) => {
     providerKeyStore.set(providerId, apiKey)
@@ -517,7 +529,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Export_Word, exportService.exportToWord.bind(exportService))
 
   // obsidian（V1 移植）：vault 枚举与目录结构只读查询。
-  // v1 二轮审查 m2-24：目录结构遍历改为异步 IO（千级笔记不再阻塞主进程消息循环），故 await。
+  // 目录结构遍历改为异步 IO（千级笔记不再阻塞主进程消息循环），故 await。
   ipcMain.handle(IpcChannel.Obsidian_GetVaults, () => {
     return obsidianVaultService.getVaults()
   })
@@ -598,7 +610,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
 
   // Send maximized state changes to renderer：监听器在 registerIpc 入口按窗口记账挂载
-  // （wireMainWindowListeners，v1 二轮审查 m2-15），此处不再重复挂。
+  // （wireMainWindowListeners），此处不再重复挂。
 
   // VertexAI
   // mini window
@@ -622,12 +634,12 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.SearchWindow_OpenUrl, async (_, uid: string, url: string) => {
     return await searchService.openUrlInSearchWindow(uid, url)
   })
-  // 批次2：刮取窗口显式关闭（上游 LocalSearchProvider finally 依赖；防按 uid 泄漏）
+  // 刮取窗口显式关闭（上游 LocalSearchProvider finally 依赖；防按 uid 泄漏）
   ipcMain.handle(IpcChannel.SearchWindow_Close, (_, uid: string) => {
     return searchService.closeSearchWindow(uid)
   })
 
-  // 知识库（批次4）：薄转发直调 KnowledgeService（不变量1）；嵌入模型引用只含
+  // 知识库：薄转发直调 KnowledgeService（不变量1）；嵌入模型引用只含
   // providerId/modelId/dimensions，主进程自解析 apiHost/apiKey（不跨进程回传密钥）。
   ipcMain.handle(IpcChannel.KnowledgeBase_Create, (_, base: { id: string }) => knowledgeService.createBase(base))
   ipcMain.handle(IpcChannel.KnowledgeBase_Reset, (_, baseId: string) => knowledgeService.resetBase(baseId))
@@ -667,13 +679,13 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     ) => knowledgeService.search(payload.base, payload.embedding, payload.query)
   )
 
-  // 文档处理通道 local-paddle 条目（v0.4.4 收编自 LocalModel_*）：下载生命周期薄转发。
+  // 文档处理通道 local-paddle 条目（收编自 LocalModel_*）：下载生命周期薄转发。
   ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_GetStatus, () => localPaddle.getStatus())
   ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_Download, () => localPaddle.download())
   ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_Cancel, () => localPaddle.cancel())
   ipcMain.handle(IpcChannel.Preprocess_LocalPaddle_Remove, () => localPaddle.remove())
 
-  // 技能（批次5）：薄转发直调 SkillService（磁盘 = 真相源；渲染层切片退为投影）。
+  // 技能：薄转发直调 SkillService（磁盘 = 真相源；渲染层切片退为投影）。
   ipcMain.handle(IpcChannel.Skill_InstallFromZip, (_, zipFilePath: string) => skillService.installFromZip(zipFilePath))
   ipcMain.handle(IpcChannel.Skill_InstallFromDirectory, (_, directoryPath: string) =>
     skillService.installFromDirectory(directoryPath)
@@ -682,7 +694,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.Skill_Uninstall, (_, folderName: string) => skillService.uninstall(folderName))
   ipcMain.handle(IpcChannel.Skill_List, () => skillService.list())
 
-  // MCP 设置页通道（批次3 契约；v0.3.3-1 补注册）：preload 桥、渲染层 mcpApi、MCPService 方法
+  // MCP 设置页通道（契约；补注册）：preload 桥、渲染层 mcpApi、MCPService 方法
   // 三层本已齐备，唯独主进程 handler 与日志事件转发缺失——设置页读版本/工具/日志一律报
   // "No handler registered for 'mcp:*'"（日志噪音 + 功能不可用）。服务实例按内核同款动态导入，
   // 避免在 app ready 前就把 MCP 客户端层实例化。
@@ -702,14 +714,14 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     ipcMain.handle(IpcChannel.Mcp_CheckConnectivity, (_, server) => mcpService.checkConnectivity(asServer(server)))
     // MCP 运行时依赖探测（v1）：命令名 → 可执行绝对路径 | null。命令名由
     // findCommandInShellEnv 内的白名单正则校验，非法名返回 null。
-    // 注（v1 二轮审查 m2-06）：真正 spawn 的通道（initTransport 的 server.command）
+    // 注：真正 spawn 的通道（initTransport 的 server.command）
     // 现在也过 normalizeMcpCommand 校验——注入面不只这一处。
     ipcMain.handle(IpcChannel.Mcp_CheckCommand, async (_, command: string) => {
       const { findCommandInShellEnv, getInheritedEnv } = await import('./services/mcp/commandResolution')
       return findCommandInShellEnv(command, getInheritedEnv())
     })
 
-    // DXT 扩展安装（v0.4.7 自上游 Mcp_UploadDxt 移植）：上传内容落临时文件后交 DxtService
+    // DXT 扩展安装（自上游 Mcp_UploadDxt 移植）：上传内容落临时文件后交 DxtService
     // 解包校验。文件名过 basename 防穿越（createTempFile 直接拼接，不可透传原始名字）；
     // 失败如实回 { success:false, error }，不吞错。
     const { default: DxtService } = await import('./services/DxtService')
@@ -730,7 +742,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     })
 
     // 服务器日志事件（主 → 渲染）：MCPService 只维护回调注册表，转发由调用方接线。
-    // m2-15：订阅只接一次；解绑函数登记下来（原来被丢弃，订阅只增不减）。
+    // 订阅只接一次；解绑函数登记下来（原来被丢弃，订阅只增不减）。
     // 目标窗口在**发送时**从 windowService 取（而非闭包捕获首次传入的窗口）——主窗可在运行期
     // 重建，被捕获的旧窗口只会让日志静默丢失。
     if (mcpLogUnsubscribe === null) {
@@ -829,11 +841,11 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     analyticsService.trackTokenUsage(data)
   )
 
-  // 编码助手（v0.3.4-1）：受管 DeepSeek Harness Web UI 的生命周期（非内核通道 → 本文件）。
+  // 编码助手：受管 DeepSeek Harness Web UI 的生命周期（非内核通道 → 本文件）。
   ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Start, (_, input) =>
     deepSeekHarnessService.start(input as Parameters<typeof deepSeekHarnessService.start>[0])
   )
-  // 批次5 修复：stop 原样透传 void → IPC 回 undefined → 渲染层读 result.success 炸
+  // 修复：stop 原样透传 void → IPC 回 undefined → 渲染层读 result.success 炸
   // （hermes 侧同位 handler 是 {success} 包裹形状，此处对齐）。
   ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_Stop, async () => {
     try {
@@ -846,10 +858,10 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       }
     }
   })
-  // 批次4a：渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道（载荷同 Status 广播）。
+  // 渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道（载荷同 Status 广播）。
   ipcMain.handle(IpcChannel.CodeCli_DeepseekHarness_GetStatus, () => deepSeekHarnessService.getStatus())
 
-  // 编码助手（v0.3.4-1 批次1 收尾）：Hermes Dashboard 生命周期 + code_cli 配置读写。
+  // 编码助手（收尾）：Hermes Dashboard 生命周期 + code_cli 配置读写。
   // 非内核通道 → 本文件；V2 的 zod 路由层（hermes_dashboard.* / code_cli.*）不搬，
   // start/stop 的 Result 与错误包装逐字照抄 V2 ipc/handlers/hermesDashboard.ts。
   ipcMain.handle(IpcChannel.CodeCli_HermesDashboard_Start, async () => {
@@ -874,10 +886,10 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       }
     }
   })
-  // 批次4a：同 DeepseekHarness_GetStatus。
+  // 同 DeepseekHarness_GetStatus。
   ipcMain.handle(IpcChannel.CodeCli_HermesDashboard_GetStatus, () => hermesDashboardService.getStatus())
   // Non-ENOENT read errors propagate to the renderer's error model by design.
-  // v0.4.5-1：读通道载荷是 `{ targets: [...] }`（V2 形状，渲染层 cliConfig/file.ts 同形）。
+  // 读通道载荷是 `{ targets: [...] }`（V2 形状，渲染层 cliConfig/file.ts 同形）。
   // 断言搬进 services/codeCli/configPayload.ts（可单测）——此前把它当裸数组断言，渲染层
   // 按 V2 发对象，于是每次读配置都炸在这行，且被渲染层 catch 成"连接态 null"。
   ipcMain.handle(IpcChannel.CodeCli_ReadConfig, async (_, payload: unknown) => {
@@ -900,7 +912,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     }
   })
 
-  // 编码助手（v0.3.4-1 批次2）：portable 受管 CLI 安装器（装卸/快照/最新版本）。
+  // 编码助手：portable 受管 CLI 安装器（装卸/快照/最新版本）。
   // 结果对象语义（{success}|{removed}）在 BinaryManager 内部完成清洗与日志；入参走
   // 白名单（parseBinaryToolName，见文件尾 parseCliConfig* 同款手写断言风格）。
   ipcMain.handle(IpcChannel.CodeCli_Binary_Install, (_, name: unknown, targetVersion: unknown) => {
@@ -909,16 +921,16 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.CodeCli_Binary_Remove, (_, name: unknown) => {
     return binaryManager.removeTool(parseBinaryToolName(name))
   })
-  // v0.4.5-1：入参改用预设表（原为硬编码 ['dsh','hermes']——v0.4.5 加入 paper-agent 后这份
+  // 入参改用预设表（原为硬编码 ['dsh','hermes']—— 加入 paper-agent 后这份
   // 字面量就已过期，只因 getToolSnapshots 当前忽略入参才没暴露成真 bug）。
   ipcMain.handle(IpcChannel.CodeCli_Binary_Snapshots, () => binaryManager.getToolSnapshots(BINARY_TOOL_NAMES))
   ipcMain.handle(IpcChannel.CodeCli_Binary_LatestVersions, () => binaryManager.getLatestVersions())
-  // v0.4.5：手动检查更新（三个工具页共用；source 型只在此时触 GitHub——纯手动策略）。
+  // 手动检查更新（三个工具页共用；source 型只在此时触 GitHub——纯手动策略）。
   ipcMain.handle(IpcChannel.CodeCli_Binary_CheckUpdates, (_, name: unknown) => {
     return binaryManager.checkUpdates(parseBinaryToolName(name))
   })
 
-  // v0.4.5：Paper-Agent（源码型受管工具）Web UI 生命周期。形状照 dsh/hermes 两处：
+  // Paper-Agent（源码型受管工具）Web UI 生命周期。形状照 dsh/hermes 两处：
   // start 直接透传 Result（含 reason 分态），stop 包 {success}，getStatus 供订阅初值。
   ipcMain.handle(IpcChannel.CodeCli_PaperAgent_Start, async () => {
     try {
@@ -944,7 +956,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
   ipcMain.handle(IpcChannel.CodeCli_PaperAgent_GetStatus, () => paperAgentService.getStatus())
 
-  // 编码助手（v0.3.4-1 批次3）：统一网关生命周期 + 配置同步（非内核通道 → 本文件）。
+  // 编码助手：统一网关生命周期 + 配置同步（非内核通道 → 本文件）。
   // 结果对象语义照 V2 @shared/types/apiGateway（ApiGatewayStatusResult /
   // ApiGatewayStopResult）；SyncGatewayConfig 为 {enabled?, port?, host?} 部分更新，
   // 先 ConfigManager 持久化再收敛（V2 #18521 语义，缝注见 ApiGatewayService.syncConfig）。
@@ -1003,7 +1015,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       }
     }
   })
-  // 批次4a：立即拉当前运行态。fork 缝：publishRunningState 的载荷构造为私有，此处按其
+  // 立即拉当前运行态。fork 缝：publishRunningState 的载荷构造为私有，此处按其
   // 语义（running && config.enabled && config.host === '0.0.0.0'）以公开查询面
   // （isRunning/getCurrentConfig）等价重建；port 为配置端口（运行期即绑定端口）。
   ipcMain.handle(IpcChannel.CodeCli_ApiGateway_GetStatus, () => {
@@ -1013,7 +1025,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     return { running, ...(lanRunning ? { lanRunning, port: config.port } : {}) }
   })
 
-  // 批次5：网关配置读取——渲染层合成网关 provider（卡片/模型选择）与 hermes 配置草稿
+  // 网关配置读取——渲染层合成网关 provider（卡片/模型选择）与 hermes 配置草稿
   // （.env 的 CHERRY_HERMES_API_KEY）的数据源。apiKey 只读不生成（V2 语义：网关从未
   // 启动过则为 null；生成发生在 start 流程内）。
   ipcMain.handle(IpcChannel.CodeCli_ApiGateway_GetConfig, () => {
@@ -1033,8 +1045,8 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 // 载荷形状错配（渲染层发 `{ targets }`、主进程按裸数组断言）此前在类型检查、静态检查、全部
 // 单测下全绿，只在真机运行时报 `targets must be an array`，且被渲染层 catch 成"连接态 null"。
 
-// 批次2：binary install/remove/check-updates 的工具名白名单（来自 shared 预设表：
-// 'dsh' | 'hermes' | 'paper-agent'，v0.4.5 起含源码型工具）。
+// binary install/remove/check-updates 的工具名白名单（来自 shared 预设表：
+// 'dsh' | 'hermes' | 'paper-agent'，含源码型工具）。
 function parseBinaryToolName(value: unknown): BinaryToolName {
   if (!isBinaryToolName(value)) {
     throw new Error(`Invalid binary tool name: ${String(value)}`)
@@ -1043,7 +1055,7 @@ function parseBinaryToolName(value: unknown): BinaryToolName {
 }
 
 /**
- * v0.4.5-1：安装目标版本（可选）——渲染层从"检查更新"结论里带过来，主进程据此钉 spec。
+ * 安装目标版本（可选）——渲染层从"检查更新"结论里带过来，主进程据此钉 spec。
  * 只做形状与长度校验：它是 registry 版本串或短 SHA，不是路径/命令（不进 shell 拼接，
  * 由 cross-spawn 逐参传递）。
  */
@@ -1055,7 +1067,7 @@ function parseInstallTargetVersion(value: unknown): string | undefined {
   return value
 }
 
-// 批次3：网关 IPC 入参的手写断言（V2 zod schema 的等价裁剪，风格同 parseCliConfig*）。
+// 网关 IPC 入参的手写断言（V2 zod schema 的等价裁剪，风格同 parseCliConfig*）。
 function parseLanEnabled(value: unknown): boolean {
   if (typeof value !== 'boolean') {
     throw new Error('Invalid api_gateway.lan_set_enabled input: enabled must be a boolean')

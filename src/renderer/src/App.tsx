@@ -30,14 +30,14 @@ const queryClient = new QueryClient({
 })
 
 /**
- * v0.3.1-2：白屏护栏（详见 docs）。占位组件见 components/PersistLoadingFallback。
+ * 白屏护栏（详见 docs）。占位组件见 components/PersistLoadingFallback。
  */
 function App(): React.ReactElement {
   logger.info('App initialized')
 
   return (
     <Provider store={store}>
-      {/* v0.3.1-2：顶层错误边界。此前渲染期抛错（hook 契约违规、持久化形态不匹配等）
+      {/* ：顶层错误边界。此前渲染期抛错（hook 契约违规、持久化形态不匹配等）
           会整窗空白、没有任何线索，只能靠人工猜。现在至少显示错误文本，并给出
           「打开 DevTools / 重新加载」。 */}
       <ErrorBoundary>

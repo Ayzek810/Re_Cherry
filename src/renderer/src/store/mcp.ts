@@ -1,4 +1,4 @@
-/** v0.3.2 自 CS_V1 移植（MCP 服务器配置状态；批次1 仅 UI 持久化，服务器进程/调用批次3 接线）。 */
+/** 自 CS_V1 移植（MCP 服务器配置状态；仅 UI 持久化，服务器进程/调用 接线）。 */
 import { loggerService } from '@logger'
 import { createSlice, nanoid, type PayloadAction } from '@reduxjs/toolkit'
 import { type BuiltinMCPServer, BuiltinMCPServerNames, type MCPConfig, type MCPServer } from '@renderer/types'

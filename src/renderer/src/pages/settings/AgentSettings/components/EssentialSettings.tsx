@@ -30,7 +30,7 @@ interface Props {
 }
 
 /**
- * 基础页（v0.3.0 验收调整）：原"提示词"页栏目并入本页——
+ * 基础页（验收调整）：原"提示词"页栏目并入本页——
  * 名称/emoji + 默认模型 + 提示词编辑器 + 聊天设置（平铺，无折叠项），区块标题统一对齐。
  */
 const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssistantSettings }) => {
@@ -47,7 +47,7 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
   const defaultModel = assistant.model ?? assistant.defaultModel
 
   /**
-   * 提示词草稿的卸载兜底（v1 二轮审查 s2-09）。
+   * 提示词草稿的卸载兜底。
    *
    * 提示词编辑区只有区内那个「保存」键会提交；弹窗底部的「确认」只关窗（`BaseSettingsPopup`
    * 的 `handleConfirm` 不提交任何东西）。用户在编辑器里改完提示词直接按「确认」→ 本组件卸载
@@ -82,7 +82,7 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
   }
 
   /**
-   * 标识单路径写入（v0.3.1 功能一）：库选 emoji 与 `img:` 图片引用都落在 assistant.emoji 上；
+   * 标识单路径写入（功能一）：库选 emoji 与 `img:` 图片引用都落在 assistant.emoji 上；
    * 被替换的图片标识在再无引用时回收。
    */
   const applyIdentity = (next: string) => {
@@ -237,9 +237,16 @@ const EssentialSettings: FC<Props> = ({ assistant, updateAssistant, updateAssist
       </SettingsItem>
 
       <SettingsItem>
-        <SettingsTitle contentAfter={<HelpCircle size={14} color="var(--color-text-2)" />}>
+        <SettingsTitle>
+          {/* 问号必须**在 Popover 之内**才吃得到悬停：此前 Popover 只包标题文字，
+              图标经 contentAfter 渲染成同级兄弟节点，悬停问号完全无反应（鼠标得放到
+              "提示词"三个字上才弹），而标题文字反倒挂着问号专用的 cursor:help。
+              这里把图标收进 Popover，cursor:help 也归位到图标上。 */}
           <Popover title={t('assistants.presets.add.prompt.variables.tip.title')} content={promptVarsContent}>
-            <PromptTitleButton>{t('common.prompt')}</PromptTitleButton>
+            <PromptTitleButton>
+              {t('common.prompt')}
+              <HelpCircle size={14} color="var(--color-text-2)" />
+            </PromptTitleButton>
           </Popover>
         </SettingsTitle>
         <PromptEditorContainer>
@@ -295,6 +302,9 @@ const EmojiButtonWrapper = styled.div`
 `
 
 const PromptTitleButton = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   cursor: help;
 `
 

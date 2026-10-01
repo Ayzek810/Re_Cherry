@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/values.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/values.ts（2026-09-24）。
 // fork 缝：函数面按 hermes 依赖闭包裁剪——cliProviderKeyName / omitKeysByPrefix /
 // isCherryManagedModel / findCherryProviderKey / dropFeatureGoalsIfEmpty /
 // dropSecurityAuthSelectedTypeIfEmpty / numberValue / sanitizeProviderName 再导出随对应

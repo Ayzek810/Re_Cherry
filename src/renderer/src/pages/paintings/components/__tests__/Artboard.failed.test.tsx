@@ -1,10 +1,10 @@
 /**
- * 二轮审查 f2-23：`generationError` 只写不读——回到一幅失败的画作时画板全空且无任何解释。
+ * `generationError` 只写不读——回到一幅失败的画作时画板全空且无任何解释。
  *
  * 缺陷形态：失败路径把错误写进 `PaintingData.generationError`（并镜像进会话），但全 paintings 目录
  * 只有类型声明、状态投影与写入点，**没有任何读取/渲染**；画板的占位分支只看 `generationStatus`。
  * 失败当刻的 modal/toast 是唯一信号，切走再回来后用户看到的是一块空占位、没有失败说明，
- * 也看不到错误详情（§9 静默不可见）。
+ * 也看不到错误详情（静默不可见）。
  *
  * 行为级断言：无图 + `generationStatus==='failed'` → 渲染失败说明 + 底层错误详情；
  * 同一条画在 `running` 之外的成功态（无状态无文件）仍然走原占位，不被这条新分支吃掉。
@@ -58,7 +58,7 @@ const painting = (overrides: Partial<PaintingData>): PaintingData =>
     ...overrides
   }) as PaintingData
 
-describe('Artboard 失败态（f2-23）', () => {
+describe('Artboard 失败态', () => {
   it('失败且无图：渲染失败说明与底层错误详情', () => {
     const { container } = render(
       <Artboard

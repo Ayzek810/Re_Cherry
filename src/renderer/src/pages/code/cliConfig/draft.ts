@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/draft.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/draft.ts（2026-09-24）。
 // 缝点三处，已标 `// fork 缝`：
 // ① 数据缝：V2 经 DataApi（dataApiService.get('/providers/…') 等）按需查询；fork 无 DataApi，
 //   provider/apiKeys/modelRecord 从 redux llm 快照（getStoreProviders）同步读出，并经

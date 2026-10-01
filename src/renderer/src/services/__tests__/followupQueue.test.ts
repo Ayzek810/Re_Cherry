@@ -9,10 +9,10 @@ import followupQueueReducer, {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 追问队列（v0.4.7）单测：
+ * 追问队列单测：
  *   ① 切片：入队/移除/暂停/清空/选择器缺省；
  *   ② 泵：空队列/暂停 → 不发；门全过 → 移除队首并按正常路径发送；
- *      限流命中 → **原位**退回队首（保 id/顺序，r2-18）；构建失败 → 原位退回 + toast（r2-17）；
+ * 限流命中 → **原位**退回队首（保 id/顺序）；构建失败 → 原位退回 + toast；
  *      话题行缺失 → 丢弃并记日志（不假装已发）。
  * store / MessagesService / TokenService / messageThunk 全部桩注入。
  */
@@ -95,7 +95,7 @@ describe('followupQueue 切片', () => {
     expect(state.byTopic['t1']).toBeUndefined()
   })
 
-  it('requeueFollowupHead：原样放回队首，保 id/createdAt/顺序（r2-18）', () => {
+  it('requeueFollowupHead：原样放回队首，保 id/createdAt/顺序', () => {
     let state = { byTopic: {} as typeof byTopicState }
     const root = () => ({ followupQueue: state })
     state = followupQueueReducer(state, enqueueFollowup({ topicId: 't1', text: 'a' }))
@@ -142,7 +142,7 @@ describe('pumpFollowupQueue（泵）', () => {
     expect(getUserMessageApi).toHaveBeenCalledWith(expect.objectContaining({ content: '追问-first' }))
   })
 
-  it('限流命中 → 原位退回队首，不发新 id/不推到队尾（r2-18）', async () => {
+  it('限流命中 → 原位退回队首，不发新 id/不推到队尾', async () => {
     const head = item('first')
     byTopicState = { 'topic-a': { items: [head, item('second')], paused: false } }
     checkRateLimitApi.mockReturnValue(true)
@@ -157,7 +157,7 @@ describe('pumpFollowupQueue（泵）', () => {
     expect(requeued[0].payload).toEqual({ topicId: 'topic-a', item: head })
   })
 
-  it('发送构建失败 → 队首原位保留 + toast.error（r2-17，不静默丢文本）', async () => {
+  it('发送构建失败 → 队首原位保留 + toast.error（不静默丢文本）', async () => {
     const toastError = vi.fn()
     vi.stubGlobal('window', { ...globalThis.window, toast: { error: toastError, warning: vi.fn() } })
 

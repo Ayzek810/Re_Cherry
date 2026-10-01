@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-40：图片视图整页 DOM 展开。
+ * 图片视图整页 DOM 展开。
  *
  * 图片分类是唯一会随使用量单调增长的数据面（AI 出图与上传图片都归 image）。旧实现一次性为
  * **全部**图片渲染 `Image` + `Spin` + 删除按钮 + 信息条四层节点，几百张图时首帧明显卡顿。
@@ -7,7 +7,7 @@
  * 行为级断言：
  *   ① 首帧只渲染首批（24 张），不是全部 30 张；
  *   ② 底部哨兵进入视口后才追加渲染剩余图片（30 张全部就位）；
- *   ③ 图片总数少于一批时一次性渲染完，且不出现哨兵（不静默少显示，§9）。
+ * ③ 图片总数少于一批时一次性渲染完，且不出现哨兵（不静默少显示）。
  */
 import type { FileMetadata } from '@renderer/types'
 import { act, render } from '@testing-library/react'
@@ -72,7 +72,7 @@ const list = [] as {
   actions: React.ReactNode
 }[]
 
-describe('FileList · 图片视图（f2-40：按需揭示）', () => {
+describe('FileList · 图片视图（按需揭示）', () => {
   beforeEach(() => {
     observerCallbacks = []
     observedCount = 0

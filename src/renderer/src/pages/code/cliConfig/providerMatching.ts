@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/providerMatching.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/providerMatching.ts（2026-09-24）。
 // 缝点一处（import 对号，函数体逐字）：Provider ← ./providerView 投影；ApiKeyEntry 为 V2
 // @shared/data/types/provider 的消费面最小结构（fork 无独立 keys 表，由调用方构造）。
 

@@ -258,7 +258,7 @@ class SpanManagerService {
     }
 
     // remove span
-    // r2-60：此前是 `if (entity.removeSpan(span)) { this.getModelSpanEntity(topicId).removeSpan(span) }`
+    // 此前是 `if (entity.removeSpan(span)) { this.getModelSpanEntity(topicId).removeSpan(span) }`
     // ——对同一 span 做两次 remove。第二次拿的是 root entity（无 modelName 的实体），span 不在
     // 它里面，必然返回 false；当 modelName 缺省时 `entity` 本身就是 root entity，一次就够。
     entity.removeSpan(span)

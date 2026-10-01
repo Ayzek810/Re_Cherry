@@ -1,5 +1,5 @@
 /**
- * 追问队列（v0.4.7，V2 QueuedFollowupsDock 同构裁剪）：生成中的输入不再被发送键
+ * 追问队列（V2 QueuedFollowupsDock 同构裁剪）：生成中的输入不再被发送键
  * 锁死——内核聊天话题在回合进行中提交的纯文本消息进本队列，回合成功结束后由
  * services/followupQueue.ts 的泵自动按序发出（V2 的 steer=插入当前轮需要内核
  * mid-turn 注入缝，fork 暂无，先行排队自动发）。
@@ -49,7 +49,7 @@ const followupQueueSlice = createSlice({
       queue.items = queue.items.filter((item) => item.id !== action.payload.id)
     },
     /**
-     * 把一条追问放回**队首原位**（r2-17/r2-18）。
+     * 把一条追问放回**队首原位**。
      *
      * 限流或发送失败时，旧实现是 `removeFollowup` + `enqueueFollowup`：那会把队首推到队尾、
      * 并重铸 `id`/`createdAt`——用户看到的队列顺序静默改变，任何按 id 定位的 UI（编辑/删除

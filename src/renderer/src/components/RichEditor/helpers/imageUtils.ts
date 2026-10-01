@@ -31,7 +31,7 @@ export async function compressImage(file: File, options: ImageCompressionOptions
     }
 
     img.onload = () => {
-      // c2-37：图片已解码，立刻释放 blob URL。否则 blob URL 注册表会把每张处理过的
+      // 图片已解码，立刻释放 blob URL。否则 blob URL 注册表会把每张处理过的
       // 图片字节留在内存里直到文档卸载（`compressImage` 对每张 >1MB 的粘贴图片都会跑）。
       URL.revokeObjectURL(objectUrl)
       // 计算压缩后的尺寸
@@ -105,7 +105,7 @@ export async function getImageInfo(file: File): Promise<{
     const objectUrl = URL.createObjectURL(file)
 
     img.onload = () => {
-      // c2-37：同上，解码完成后立刻释放。
+      // 同上，解码完成后立刻释放。
       URL.revokeObjectURL(objectUrl)
       resolve({
         width: img.width,

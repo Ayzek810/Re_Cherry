@@ -1,4 +1,4 @@
-/** v0.3.2 自 CS_V1 移植（网络搜索设置状态；批次1 仅 UI 持久化，搜索执行批次2 接线）。 */
+/** 自 CS_V1 移植（网络搜索设置状态；仅 UI 持久化，搜索执行 接线）。 */
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import { WEB_SEARCH_PROVIDERS } from '@renderer/config/webSearchProviders'
@@ -48,7 +48,7 @@ export type CherryWebSearchConfig = Pick<WebSearchState, 'searchWithTime' | 'max
 
 export const initialState: WebSearchState = {
   defaultProvider: 'local-bing',
-  // r2-28：禁止把 config 的模块级数组（及其元素对象）直接别名进 state。
+  // 禁止把 config 的模块级数组（及其元素对象）直接别名进 state。
   // `WEB_SEARCH_PROVIDERS` 是 `config/webSearchProviders.ts` 的模块单例；任何非 Immer 的就地写入
   // （updateWebSearchProvider 之外的历史调用点、reset 到初值、后续迁移）都会落到模块默认表上，
   // 让「初值」被同会话的编辑污染。副本与 migrate 侧 addWebSearchProvider 的 `{ ...provider }` 同形。

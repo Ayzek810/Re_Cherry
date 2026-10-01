@@ -19,7 +19,7 @@ const PopupContainer: FC<Props> = ({ resolve }) => {
 
   const acknowledgeLatestPrivacyPolicy = useCallback(() => {
     dispatch(setPrivacyPolicyVersion(LATEST_PRIVACY_POLICY_VERSION))
-    // v0.3.1-2：上游在此对 "20260531" 版政策做了一次性**强制重置**——把
+    // 上游在此对 "20260531" 版政策做了一次性**强制重置**——把
     // [设置]-[通用]-[隐私设置] 各开关一律置回默认**开**（含数据收集），从而把用户已关闭的开关
     // 重新打开、继续向 cherry-studio 通道上报。本 fork 不再执行该重置：政策版本号照常记录，
     // 用户自己的开关选择不被覆盖。

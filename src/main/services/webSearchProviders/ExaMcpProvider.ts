@@ -7,7 +7,7 @@ import type { WebSearchHttpOptions, WebSearchProviderResponse, WebSearchRuntimeS
 const logger = loggerService.withContext('ExaMcpProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 ExaMcpProvider.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 ExaMcpProvider.ts）：
  * - 上游本就是裸 fetch（MCP jsonrpc tools/call → web_search_exa），请求构造、
  *   25s 超时 + AbortSignal.any 合并外部信号、defaultHeaders + SSE accept 头原样保留。
  * - SSE 解析改为主进程 fetch body 流手工按行解析（data: 帧切分，规则 d）：上游是

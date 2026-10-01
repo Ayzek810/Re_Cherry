@@ -1,8 +1,8 @@
 /**
- * r2-38：`useInstalledSkills.refresh` 必须如实报告加载态与失败态。
+ * `useInstalledSkills.refresh` 必须如实报告加载态与失败态。
  *
  * 此前 `loading`/`error` 硬编码为 `false`/`null` 且失败只打日志，主进程扫描失败时切片保持原状
- * （首次进入即空），页面只能渲染"未安装任何技能"——失败伪装成空结果（§9）。这里钉住：
+ * （首次进入即空），页面只能渲染"未安装任何技能"——失败伪装成空结果。这里钉住：
  * - 扫描期间 `loading === true`，结束后 `false`；
  * - 失败时 `error` 有值且给用户可见信号（toast.error）；
  * - 成功时清掉上一次的 error。
@@ -35,7 +35,7 @@ beforeEach(() => {
   ;(window as unknown as { toast: unknown }).toast = { error: toastError, info: vi.fn(), success: vi.fn() }
 })
 
-describe('useInstalledSkills 的加载/失败态（r2-38）', () => {
+describe('useInstalledSkills 的加载/失败态', () => {
   it('初始 loading 为 true；扫描成功后 loading=false 且 error=null', async () => {
     skillsList.mockResolvedValue([
       { id: 's1', folderName: 's1', name: 'S1', description: 'd', author: null, contentHash: 'h' }

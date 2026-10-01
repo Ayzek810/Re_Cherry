@@ -10,7 +10,7 @@ const urlContextTool = defineTool({
   label: (t) => t('chat.input.url_context'),
   visibleInScopes: [TopicType.Chat],
   condition: ({ model }) => {
-    // r2-42：`getProviderByModel` 查不到时返回 `undefined`（不再回落到任意 provider）。
+    // `getProviderByModel` 查不到时返回 `undefined`（不再回落到任意 provider）。
     // 本工具按「provider 未知 ⇒ 不显示按钮」处理；`!!provider` 同时完成类型窄化。
     const provider = getProviderByModel(model)
     return (

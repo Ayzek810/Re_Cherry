@@ -6,11 +6,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as UseTopicModule from '../useTopic'
 
 /**
- * v0.3.0-2 目标 B（`report.md` §3.3.2-6 / §3.4 的 B-5）：**启动落点的一致性判定**。
+ * **启动落点的一致性判定**。
  *
  * 这条是"隐藏曾被绕过"的那条通道：初始 `useState` 直接取 `assistant.topics`，没有任何"内核认不认识"
  * 的判定，于是打开一个内核已遗忘的历史话题 → `loadTopicMessagesThunk` → `topic not found` → **空历史**。
- * `report.md` 把它的验证列为真机手测（M1），但那需要一份"渲染层有行、内核已遗忘"的历史数据。
+ * 把它的验证列为真机手测（M1），但那需要一份"渲染层有行、内核已遗忘"的历史数据。
  * 这里把同一场景在 jsdom 里构造出来，使这条验收不再依赖真机数据：判据与回落都在真实 hook 里跑，
  * 只有 IPC 与助手数据是桩。
  */
@@ -90,7 +90,7 @@ beforeEach(() => {
   stubApi([kernelRow('live')])
 })
 
-describe('useActiveTopic 的启动落点判定（B-5）', () => {
+describe('useActiveTopic 的启动落点判定', () => {
   it('活跃话题是"上次会话留下、内核已不认识"的行 → 回落到内核确认存在的行，并**显式提示**', async () => {
     const { useActiveTopic } = await loadHook(['stale', 'live'])
 

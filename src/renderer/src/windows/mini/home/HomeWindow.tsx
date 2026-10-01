@@ -39,7 +39,7 @@ const logger = loggerService.withContext('HomeWindow')
 const MINI_ASSISTANT_ID = 'quick-assistant'
 
 /**
- * 找该话题的在途助手消息（r2-66：原先 `clearConversation` 用 `status === PROCESSING`、
+ * 找该话题的在途助手消息（原先 `clearConversation` 用 `status === PROCESSING`、
  * `handlePause` 用 `askId/id` 匹配，两套判据各自演化——只改一处另一条路径就会漏 abort，
  * 旧流继续计费）。统一判据 = 「带 PROCESSING 状态」**或**「本轮 askId/消息 id 命中」。
  */
@@ -123,7 +123,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   const [clipboardText, setClipboardText] = useState('')
   const lastClipboardTextRef = useRef<string | null>(null)
 
-  // v0.3.3 批次5 收图入口：粘贴的图片（快捷助手视觉通路，LightLlmCall.images 批次1 已备）
+  // 收图入口：粘贴的图片（快捷助手视觉通路，LightLlmCall.images 已备）
   const [clipboardImage, setClipboardImage] = useState<KernelImageInput | null>(null)
 
   const [isPinned, setIsPinned] = useState(false)
@@ -168,7 +168,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     //   （复刻 handlePause 的 requestId 约定：在途流的 requestId 就是该助手消息 id）。
     cancelledRef.current = true
     const topicId = currentTopic.current?.id
-    // r2-66：找在途助手 + 取消收敛为单一实现（`abortInFlight`），判据不再与 handlePause 漂移。
+    // 找在途助手 + 取消收敛为单一实现（`abortInFlight`），判据不再与 handlePause 漂移。
     // 清空会话不落 PAUSED（随后第 ② 步会整条清掉消息，落终态是多余写）；暂停要落 PAUSED。
     if (topicId) abortInFlight(topicId, { markPaused: false, askId: currentAskId.current })
     // ② 清该话题消息（V2 `setMessages([])`）。
@@ -325,7 +325,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     setUserInputText(e.target.value)
   }
 
-  // v0.3.3 批次5 收图入口：粘贴图片 → 规范化为内核附件载荷（单张，后贴覆盖前贴）。
+  // 收图入口：粘贴图片 → 规范化为内核附件载荷（单张，后贴覆盖前贴）。
   const handlePasteImage = useCallback(
     async (items: DataTransferItemList) => {
       const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
@@ -374,7 +374,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
       const topicId = currentTopic.current.id
       cancelledRef.current = false
 
-      // r2-02：终态收敛的句柄（消息 id / 回复块 id / rAF / 收尾函数）**声明在 try 之外**。
+      // 终态收敛的句柄（消息 id / 回复块 id / rAF / 收尾函数）**声明在 try 之外**。
       // 「未配置快捷助手模型」这条最常见的失败发生在助手消息已落库（PENDING）、已 setIsLoading(true)
       // 之后；旧实现把 finishError 关在 try 内，catch 只走 handleError → store 里留下一条永为
       // PENDING 的助手消息，聊天区无限转圈（失败看起来像"还在生成"）。句柄外移后，任何 throw
@@ -439,7 +439,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         return block.id
       }
 
-      // 收尾（幂等，v0.3.3-1）：本轮的终态**只处理一次**——事件先到就用事件的结论，事件没到就由
+      // 收尾（幂等）：本轮的终态**只处理一次**——事件先到就用事件的结论，事件没到就由
       // Promise 落地兜底。看到的现象是"正文已输出完、消息仍 processing、块仍 streaming、"按 ESC
       // 暂停"一直挂着"：终态事件与 invoke 回复走两条通道会赛跑，末条 done 有概率输掉（见 preload
       // `dshStreamComplete` 的宽限期修复）。以"通道结束 = 本轮结束"为准收尾，UI 就一定能停下来。
@@ -502,7 +502,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
           topic: currentTopic.current
         })
 
-        // v0.3.3-2：粘贴的图片同时进消息块（否则只在 images 载荷里给模型看，会话里不显示）。
+        // 粘贴的图片同时进消息块（否则只在 images 载荷里给模型看，会话里不显示）。
         // **必须显式给 SUCCESS**：`createBaseMessageBlock` 的默认状态是 PROCESSING，而 ImageBlock
         // 只渲染 PENDING/STREAMING/SUCCESS —— 不给状态时整块 `return null`，真机上就是"我发出去的图
         // 在聊天里什么都不显示"（同处的文字块都显式带了 status，所以字能显示、图不能）。
@@ -578,8 +578,8 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
             system: system || undefined,
             messages: context,
             reasoningEffort,
-            // v0.3.3 批次5：随触发消息上行的图片（粘贴收图；主聊天同语义——附最后一条 user）
-            // v0.3.3-2：快捷助手不写持久化 ⇒ 图片声明为"不落盘"（只在本轮请求内存里，见 lightLlm）。
+            // 随触发消息上行的图片（粘贴收图；主聊天同语义——附最后一条 user）
+            // 快捷助手不写持久化 ⇒ 图片声明为"不落盘"（只在本轮请求内存里，见 lightLlm）。
             ...(clipboardImage !== null
               ? {
                   images: [
@@ -628,7 +628,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
         if (cancelledRef.current) {
           return
         }
-        // r2-02：catch 也必须收敛终态（助手消息/回复块落 ERROR + 停加载动画），
+        // catch 也必须收敛终态（助手消息/回复块落 ERROR + 停加载动画），
         // 而不是只 setIsLoading(false)/setError —— 后者会留下永为 PENDING 的消息与无限转圈。
         finishError(err instanceof Error ? err.message : 'An error occurred')
         logger.error('Quick assistant error:', err as Error)
@@ -641,7 +641,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     cancelledRef.current = true
     const requestUser = currentAskId.current
     const topicId = currentTopic.current?.id
-    // r2-66：与 clearConversation 共用同一实现在途查找 + 取消（判据统一：PROCESSING ∪ askId/id）。
+    // 与 clearConversation 共用同一实现在途查找 + 取消（判据统一：PROCESSING ∪ askId/id）。
     if (topicId) abortInFlight(topicId, { markPaused: true, askId: requestUser })
     // 无条件收敛 Footer/聊天区加载动画
     setIsLoading(false)
@@ -713,7 +713,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     })
   }, [referenceText, route, t, currentAssistant])
 
-  /** v0.3.3 批次5：粘贴图片预览条（有图才渲染；Backspace/发送后清除）。 */
+  /** 粘贴图片预览条（有图才渲染；Backspace/发送后清除）。 */
   const imagePreview =
     clipboardImage !== null ? (
       <ImagePreviewRow>

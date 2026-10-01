@@ -1,5 +1,5 @@
 /**
- * skill 内核 builtin 工具（批次5 skills 接线）。
+ * skill 内核 builtin 工具（skills 接线）。
  *
  * 上游 v1.9.11 生效机制 = Claude Code SDK 的文件系统发现（symlink 到 agent 工作区），
  * fork 无该工作区概念，改为工具形态：助手启用技能（Assistant.enabledSkills ∩ 切片

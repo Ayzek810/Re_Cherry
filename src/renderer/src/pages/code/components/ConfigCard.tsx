@@ -8,14 +8,14 @@ import { useTranslation } from 'react-i18next'
 import { Button, GatewayIcon, NormalTooltip } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/ConfigCard.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，卡片渲染（头像/名称行/悬停脚位）逐字：
+//（2026-09-24）。缝点三处，卡片渲染（头像/名称行/悬停脚位）逐字：
 // ① 图标缝：V2 `useIcon(resolveProviderIconRef(provider.id))`（V2 图标注册表）→ fork
 //   getProviderLogo(provider.id) 位图资产（dsh→deepseek.png 等）；ProviderAvatarPrimitive 的
 //   V2 logo ReactNode 面 → fork logoSrc 面（同组件名，fork 移植件见 components/ProviderAvatar.tsx）。
 // ② UI 面缝：Button/NormalTooltip/GatewayIcon → 本页 shim（GatewayIcon 以 lucide RadioTower 等值）。
 // ③ 视觉缝：V2 复合状态色令牌不涉本文件；className 串保留原文。
 //
-// 二轮审查 f2-46：删掉 `cursor-grab` 的拖拽把手与 `dragging` 高亮——ReorderableList 不实现拖拽，
+// 删掉 `cursor-grab` 的拖拽把手与 `dragging` 高亮——ReorderableList 不实现拖拽，
 // 把手是"渲染承诺了交互但语义为空"；顺序改由常显的"置顶"按钮承担（见下方 actions 容器拆分）。
 
 export interface ProviderCardProps {

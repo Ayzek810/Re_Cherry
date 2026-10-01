@@ -1,12 +1,12 @@
 /**
- * v0.3.2 自 CS_V1 移植（启动台：顶栏"+"按钮的落地页，路由 /launchpad）。
+ * 自 CS_V1 移植（启动台：顶栏"+"按钮的落地页，路由 /launchpad）。
  *
- * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的七张——小程序（/apps，v0.3.4 实装）、
- * 知识库（/knowledge）、文件（/files）、翻译（/translate，v0.3.3 批次3 回归）、
- * 绘画（/paintings，v0.3.3 批次4 回归）、笔记（/notes，v0.3.3-2 复活）与编码助手
- * （/code，v0.3.4-1 移植）。网格不再是上游写死的 6 列，改为按最小磁贴宽度自适应
- * （f2-62：7 个入口塞进 6 列会在第二行只剩 1 个磁贴；同一份列定义也供下方 Minapps 区使用）。
- * v0.3.4 补齐 V1 的 Minapps 区（固定 + 已打开的小程序磁贴，MinApp 组件 v0.3.4 已移植）。
+ * fork 裁剪：上游 9 张入口卡片只保留本 fork 存活路由的七张——小程序（/apps，实装）、
+ * 知识库（/knowledge）、文件（/files）、翻译（/translate，回归）、
+ * 绘画（/paintings，回归）、笔记（/notes，复活）与编码助手
+ * （/code，移植）。网格不再是上游写死的 6 列，改为按最小磁贴宽度自适应
+ * 7 个入口塞进 6 列会在第二行只剩 1 个磁贴；同一份列定义也供下方 Minapps 区使用。
+ * 补齐 V1 的 Minapps 区（固定 + 已打开的小程序磁贴，MinApp 组件 已移植）。
  * 交互照抄上游（悬停缩放；bgColor 用 v6 瞬态 prop $bgColor）。
  */
 import App from '@renderer/components/MinApp/MinApp'
@@ -57,14 +57,14 @@ const LaunchpadPage: FC = () => {
       bgColor: 'linear-gradient(135deg, #8B5CF6, #A78BFA)'
     },
     {
-      // v0.3.3-2 笔记复活：V1 的启动台同样带这一项（颜色/图标逐字照 V1）
+      // 笔记复活：V1 的启动台同样带这一项（颜色/图标逐字照 V1）
       icon: <NotepadText size={32} className="icon" />,
       text: t('title.notes'),
       path: '/notes',
       bgColor: 'linear-gradient(135deg, #F97316, #FB923C)'
     },
     {
-      // v0.3.4-1 编码助手（Code Mate，V2 移植；颜色逐字照 V2 启动台）
+      // 编码助手（Code Mate，V2 移植；颜色逐字照 V2 启动台）
       icon: <Code size={32} className="icon" />,
       text: t('title.code'),
       path: '/code',
@@ -150,7 +150,7 @@ const SectionTitle = styled.h2`
   padding: 0 36px;
 `
 /**
- * 自适应列数（f2-62）：写死 `repeat(6, 1fr)` 时 7 个磁贴会在第二行只留 1 个靠左的磁贴，
+ * 自适应列数：写死 `repeat(6, 1fr)` 时 7 个磁贴会在第二行只留 1 个靠左的磁贴，
  * 且列数语义被硬编码绑死。96px 下限 + `Content` 的 720px 宽度在收窄时自动折行，不压缩磁贴。
  *
  * 为什么必须是 **auto-fill 而不是 auto-fit**（W4-3 真机）：两个区块共用本样式，而 `auto-fit`

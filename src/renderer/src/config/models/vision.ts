@@ -139,7 +139,7 @@ const AUTO_ENABLE_IMAGE_MODELS = [
 
 const AUTO_ENABLE_IMAGE_MODELS_REGEX = new RegExp(AUTO_ENABLE_IMAGE_MODELS.join('|'), 'i')
 
-// v0.3.3-18 删除的三份名单（`OPENAI_TOOL_USE_IMAGE_GENERATION_MODELS`、`MODERN_IMAGE_MODELS`、
+// 删除的三份名单（`OPENAI_TOOL_USE_IMAGE_GENERATION_MODELS`、`MODERN_IMAGE_MODELS`、
 // `GENERATE_IMAGE_MODELS` 及其正则）：它们曾把 o3/gpt-4o/gpt-4.1*/gpt-5 与 `gemini-*-image`
 // 也算进"生图模型"，导致生图判定同时存在多套口径。现在生图判定只读数据
 // （`isGenerateImageModel`：用户覆盖 → 端点 → 已移植的 V2 registry 目录），**没有任何名单**。
@@ -152,7 +152,7 @@ export const isAutoEnableImageGenerationModel = (model: Model): boolean => {
 }
 
 /**
- * 判断模型是否支持图像生成 —— **生图场景的唯一判据（宽语义）**（v0.3.3-18 收敛）。
+ * 判断模型是否支持图像生成 —— **生图场景的唯一判据（宽语义）**（收敛）。
  *
  * 依据 V2 的机制（`cherry-studio v2/src/shared/utils/model.ts:45-46`：
  * `isGenerateImageModel = (model) => model.capabilities.includes(MODEL_CAPABILITY.IMAGE_GENERATION)`，

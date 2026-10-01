@@ -1,9 +1,9 @@
 /**
- * 用量统计面板（v0.4.7）：回合级 usage 的本地聚合视图（usage_records 表 →
+ * 用量统计面板：回合级 usage 的本地聚合视图（usage_records 表 →
  * services/usageStats 纯聚合）。范围预设 + 总量卡 + 按日条形 + 按模型分布。
  * 数据只进不出（本地分析），无网络无上报。
  *
- * 失败语义（v1 二轮审查 s2-06）：读取失败必须渲染成显式错误态。修改前 `queryUsage`
+ * 失败语义：读取失败必须渲染成显式错误态。修改前 `queryUsage`
  * 失败返回合法空汇总，面板把它画成「0 用量 + 暂无数据」——一张权威报表，用户会据此
  * 认为统计坏了却找不到原因，且数字 0 与真的 0 不可区分。
  */
@@ -39,7 +39,7 @@ const UsageSettings: FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  /** 竞态守卫：快速连点范围预设时，慢的旧查询不得覆盖新结果（s2-06/s2-20）。 */
+  /** 竞态守卫：快速连点范围预设时，慢的旧查询不得覆盖新结果。 */
   const requestIdRef = useRef(0)
   const [failedRequestId, setFailedRequestId] = useState(0)
 

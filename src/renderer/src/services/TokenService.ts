@@ -73,7 +73,7 @@ export function estimateImageTokens(file: FileMetadata) {
 }
 
 /**
- * 汇总文件列表里所有图片的 token 估算（r2-26：`estimateUserPromptUsage` 与
+ * 汇总文件列表里所有图片的 token 估算（`estimateUserPromptUsage` 与
  * `estimateMessageUsage` 里逐字重复的两段循环合并到这里）。
  */
 function sumImageTokens(files: FileMetadata[]): number {
@@ -86,7 +86,7 @@ function sumImageTokens(files: FileMetadata[]): number {
 }
 
 /**
- * 用量字段的唯一口径（r2-25/r2-26）。
+ * 用量字段的唯一口径。
  *
  * 用户输入只有"输入"没有"输出"：`completion_tokens` 恒为 0。此前两处估算都把它设成
  * `prompt_tokens`，于是 `MessageTokens` 对 user 消息展示的 `total_tokens` 恰好是输入的
@@ -158,7 +158,7 @@ export async function estimateMessagesUsage({
   const outputMessage = messages.pop()!
 
   const prompt_tokens = await estimateHistoryTokens(assistant, messages)
-  // r2-26：`estimateMessageUsage` 的 `completion_tokens` 口径改为 0（估算值只表达输入），
+  // `estimateMessageUsage` 的 `completion_tokens` 口径改为 0（估算值只表达输入），
   // 回复的输出量按同一套本地估算单独算出来，否则这条兜底 usage 会退化成 0 输出。
   const completion_tokens = estimateTextTokens(getMainTextContent(outputMessage))
 
@@ -172,14 +172,14 @@ export async function estimateMessagesUsage({
 /**
  * 历史上下文占用估算（`Messages.tsx` → `ESTIMATED_TOKEN_COUNT`，输入框的上下文百分比）。
  *
- * r2-27：旧实现把窗口内**每条**带 usage 消息的 `total_tokens` 直接相加。那是"该条消息
+ * 旧实现把窗口内**每条**带 usage 消息的 `total_tokens` 直接相加。那是"该条消息
  * 发出时那一刻的累积量"，本身已包含被 `takeRight(maxContextCount)` 截掉的早期消息——
  * 逐条累加等于把历史长度重复计入，上报值会显著高于真实占用。
  *
  * 现口径（确定性、不依赖窗口外的数据）：
  *   ① 基线 = 窗口内**第一条**带 usage 消息的 `prompt_tokens`（它是一次真实测量，覆盖到它为止的上下文）；
  *   ② 该条之后的每条消息，按本地 `estimateMessageParams` 估算增量后相加（含 usage 的也照算，
- *      因为 `completion_tokens` 已按 r2-26 归零，它的 `prompt_tokens` 只代表走到它的那段，
+ * 因为 `completion_tokens` 已按 归零，它的 `prompt_tokens` 只代表走到它的那段，
  *      再计入就会重复）；
  *   ③ 窗口内没有一条带 usage 消息时退化为纯本地估算（与旧实现同构：prompt + 全部消息文本）。
  */
@@ -201,7 +201,7 @@ export async function estimateHistoryTokens(assistant: Assistant, msgs: Message[
     return estimateTextTokens(assistant.prompt + '\n' + joinBodies(bodies, 0))
   }
 
-  // 基线之后的增量：测到的部分不再重复计入（r2-27 的核心修复）。
+  // 基线之后的增量：测到的部分不再重复计入（的核心修复）。
   return baselineTokens + estimateTextTokens(joinBodies(bodies, baselineIndex + 1))
 }
 

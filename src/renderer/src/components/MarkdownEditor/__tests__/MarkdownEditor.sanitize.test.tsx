@@ -1,5 +1,5 @@
 /**
- * c2-27 行为测试：`MarkdownEditor` 的预览链上有 `rehypeRaw`（原始 HTML 会变成真实节点树），
+ * `MarkdownEditor` 的预览链上有 `rehypeRaw`（原始 HTML 会变成真实节点树），
  * 却没有 sanitize。修复后用仓库既有的 `dompurify` 在交给 ReactMarkdown 之前净化含 HTML 的源码。
  */
 import { render, screen } from '@testing-library/react'
@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import MarkdownEditor from '../index'
 
-describe('MarkdownEditor sanitization (c2-27)', () => {
+describe('MarkdownEditor sanitization', () => {
   it('strips executable markup from the live preview', () => {
     const { container } = render(
       <MarkdownEditor

@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-57：`MinimalToolbar` 的附着轮询在卸载后仍会继续（定时器 + rAF 未收口）。
+ * `MinimalToolbar` 的附着轮询在卸载后仍会继续（定时器 + rAF 未收口）。
  *
  * 缺陷形态：`setTimeout` 触发后没有把句柄置空，`requestAnimationFrame` 的句柄从未保存/取消。
  * 若在"timeout 已触发、rAF 尚未执行"的窗口内卸载：清理阶段清不掉任何东西，rAF 回调仍会跑，
@@ -26,7 +26,7 @@ vi.mock('@renderer/hooks/useMinapps', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { minappsOpenLinkExternal: false }
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   return { useSettings: () => settings, useSetting: (key: string) => settings[key] }
 })
 
@@ -56,7 +56,7 @@ function renderToolbar() {
   )
 }
 
-describe('MinimalToolbar 附着轮询的卸载收口（f2-57）', () => {
+describe('MinimalToolbar 附着轮询的卸载收口', () => {
   beforeEach(() => {
     frames.length = 0
     timeouts.length = 0

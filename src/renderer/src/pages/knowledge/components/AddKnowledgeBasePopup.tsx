@@ -48,7 +48,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ title, resolve }) => {
     }
 
     try {
-      // r2-69：表单态允许 `model` 为空位（`undefined` = 还没选），提交路径在这里**窄化**为
+      // 表单态允许 `model` 为空位（`undefined` = 还没选），提交路径在这里**窄化**为
       // 已定模型。旧实现写 `model: null as any`，把这段窗口藏出类型系统之外。
       const _newBase: KnowledgeBase = {
         ...newBase,
@@ -57,7 +57,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ title, resolve }) => {
         updated_at: Date.now()
       }
 
-      // fork 批次1：主进程 create 通道未接线 → knowledgeBaseApi 替身（无主进程索引）
+      // fork ：主进程 create 通道未接线 → knowledgeBaseApi 替身（无主进程索引）
       await knowledgeBaseApi.create(getKnowledgeBaseParams(_newBase))
 
       addKnowledgeBase(_newBase)

@@ -109,7 +109,7 @@ export const ApiKeyList: FC<ApiKeyListProps> = ({ provider, updateProvider, show
               renderItem={(keyStatus, index) => {
                 const isNew = pendingNewKey && index === displayKeys.length - 1
                 return (
-                  // c2-30：已存在的 key 用数组下标作 React key，`ApiKeyItem` 又持有本地
+                  // 已存在的 key 用数组下标作 React key，`ApiKeyItem` 又持有本地
                   // `isEditing`/`editValue` state。删掉中间一行后下标前移，React 会把「原来是第 3 行」
                   // 的实例复用给「现在的第 2 行」——幸存行会显示被删行的编辑缓冲与编辑模式。
                   // 改用稳定标识：已存在的行用它自己的 key，新增行用 pending 条目的 id。
@@ -199,7 +199,7 @@ export const LlmApiKeyList: FC<SpecificApiKeyListProps> = ({ providerId, showHea
 
 export const DocPreprocessApiKeyList: FC<DocPreprocessApiKeyListProps> = ({ providerId, showHealthCheck = true }) => {
   const { provider, updateProvider } = usePreprocessProvider(providerId)
-  // v0.3.2 接真：provider 现读自 preprocess 切片；未知 id 时无表单可管。
+  // 接真：provider 现读自 preprocess 切片；未知 id 时无表单可管。
   if (!provider) return null
 
   return <ApiKeyList provider={provider} updateProvider={updateProvider} showHealthCheck={showHealthCheck} />

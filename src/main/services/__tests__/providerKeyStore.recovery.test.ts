@@ -1,5 +1,5 @@
 /**
- * provider key 的跨目录补齐（v0.3.3-1 修复"更新后 key 消失要重填"）。
+ * provider key 的跨目录补齐（修复"更新后 key 消失要重填"）。
  *
  * 真机事故链：electron-store 在**构造时**取
  * `app.getPath('userData')`，而 `ProviderKeyStore` 单例在打包产物里被入口最先 require ⇒ 构造早于

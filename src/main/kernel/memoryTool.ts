@@ -1,5 +1,5 @@
 /**
- * memory 内核 builtin 工具（v0.4.6，V2 memoryTools.ts 同构移植）。
+ * memory 内核 builtin 工具（V2 memoryTools.ts 同构移植）。
  *
  * 模型可见的持久记忆：每助手一个受控目录（主进程派生，tools/memoryKernelService），
  * 两文件分工——`memory/FACT.md` 持久知识（update 整体覆写，tmp+rename 原子写，内容经

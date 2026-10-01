@@ -73,9 +73,9 @@ const KnowledgeUrls: FC<KnowledgeContentProps> = ({ selectedBase }) => {
     if (urlInput) {
       // Split input by newlines and filter out empty lines
       const urls = urlInput.split('\n').filter((url) => url.trim())
-      // 二轮审查 f2-21：非法/重复输入此前被静默丢弃（`catch { continue }`）——用户一次粘贴 10 行、
+      // 非法/重复输入此前被静默丢弃（`catch { continue }`）——用户一次粘贴 10 行、
       // 其中 7 行非法时界面只多 3 条，没有任何"7 条被跳过"的信号，也无法区分"我粘错了"与"程序没处理"。
-      // §9「Never fail silently」+ 批量操作要报「N succeeded / M failed」：循环后一次性发真实信号。
+      // 「Never fail silently」+ 批量操作要报「N succeeded / M failed」：循环后一次性发真实信号。
       const invalid: string[] = []
       const duplicates: string[] = []
 

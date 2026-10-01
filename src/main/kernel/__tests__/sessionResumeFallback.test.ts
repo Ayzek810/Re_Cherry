@@ -5,7 +5,7 @@ import { SessionFormatUnsupportedError } from '@deepseek-ai/dsh-session-persiste
 import { type ResumeOrCreateOptions, resumeOrCreateSession } from '../sessionResumeFallback'
 
 /**
- * v0.3.0-2 目标 A（`report.md` §2.4 的验A-2 / 验A-3 / 验A-4）。
+ * / /。
  *
  * 这里守的是一条**数据安全**边界：resume 失败后是否允许用同一 id 新建空会话。判错的方向有代价——
  * 把"读不出来"当成"不存在"，就可能在一个已有日志的 id 上 `create()`，最坏情况覆盖用户历史。
@@ -56,7 +56,7 @@ describe('resumeOrCreateSession（resume 失败后的唯一处置点）', () => 
     expect(createCount()).toBe(0)
   })
 
-  it('验A-2：库里有该会话（读不出来）→ 原样抛出 resume 的错误，且**不新建**', async () => {
+  it('库里有该会话（读不出来）→ 原样抛出 resume 的错误，且**不新建**', async () => {
     const cause = new SessionFormatUnsupportedError(
       'session "topic-1" contains event type "cherry/work-mode" (seq 0) unknown to this harness and not marked ignorable'
     )
@@ -69,7 +69,7 @@ describe('resumeOrCreateSession（resume 失败后的唯一处置点）', () => 
     expect(createCount()).toBe(0)
   })
 
-  it('验A-2 补：错误形态是未知的普通 Error、但库里有该会话 → 同样拒绝（判据不是错误类型）', async () => {
+  it('补：错误形态是未知的普通 Error、但库里有该会话 → 同样拒绝（判据不是错误类型）', async () => {
     const cause = new Error('a failure shape this harness has never seen before')
     const { options, createCount } = harness({
       resume: () => Promise.reject(cause),
@@ -80,7 +80,7 @@ describe('resumeOrCreateSession（resume 失败后的唯一处置点）', () => 
     expect(createCount()).toBe(0)
   })
 
-  it('验A-3：库里没有该会话 → 保留兜底新建（既有健壮性不回归）', async () => {
+  it('库里没有该会话 → 保留兜底新建（既有健壮性不回归）', async () => {
     const { options, handle, createCount } = harness({
       resume: () => Promise.reject(new Error('session "topic-1" not found')),
       listPersisted: () => Promise.resolve([])
@@ -90,7 +90,7 @@ describe('resumeOrCreateSession（resume 失败后的唯一处置点）', () => 
     expect(createCount()).toBe(1)
   })
 
-  it('验A-4：list() 自身失败 → fail-closed：抛出且**不新建**', async () => {
+  it('list() 自身失败 → fail-closed：抛出且**不新建**', async () => {
     const listError = new Error('persistence backend unavailable')
     const { options, createCount } = harness({
       resume: () => Promise.reject(new Error('session "topic-1" not found')),

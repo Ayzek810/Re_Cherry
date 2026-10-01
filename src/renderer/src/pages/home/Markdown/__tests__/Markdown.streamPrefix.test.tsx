@@ -1,7 +1,7 @@
 /**
- * p2-09 行为测试：流式期「稳定前缀复用 + 尾块重解析」。
+ * 流式期「稳定前缀复用 + 尾块重解析」。
  *
- * 证明两件事（家规 §9 渲染：UI 交互/热路径改动需行为级证据）：
+ * 证明两件事：
  *  1. 正文仍逐 delta 增长，最终全文正确（切分不丢字、不重字）；
  *  2. 同一段稳定前缀不被重复解析——`ReactMarkdown` 的调用次数；
  *  3. 不变量：`renderedPrefix + renderedTail === 当前全文`（任何一帧都成立）。
@@ -46,7 +46,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { mathEngine: 'none', mathEnableSingleDollar: true }
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   return { useSettings: () => settings, useSetting: (key: string) => settings[key as keyof typeof settings] }
 })
 
@@ -105,7 +105,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('Markdown 流式尾块切分（p2-09）', () => {
+describe('Markdown 流式尾块切分', () => {
   describe('splitStablePrefix', () => {
     it('切点落在空行上，tail 拼回等于原文', () => {
       const { prefix, tail } = splitStablePrefix(FULL)

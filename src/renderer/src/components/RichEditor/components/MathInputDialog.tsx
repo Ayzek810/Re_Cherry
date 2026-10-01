@@ -91,7 +91,7 @@ const MathInputDialog: React.FC<MathInputDialogProps> = ({
       handleSubmit()
       return
     }
-    // c2-42③：Esc 原来无效——数学浮层只能靠鼠标关。
+    // Esc 原来无效——数学浮层只能靠鼠标关。
     if (e.key === 'Escape') {
       e.preventDefault()
       e.stopPropagation()
@@ -140,7 +140,7 @@ const MathInputDialog: React.FC<MathInputDialogProps> = ({
   }
 
   return (
-    // c2-42③：浮层原来的语义是普通 div —— 没有对话框角色、没有可读名。
+    // 浮层原来的语义是普通 div —— 没有对话框角色、没有可读名。
     <div
       style={styles}
       ref={containerRef}

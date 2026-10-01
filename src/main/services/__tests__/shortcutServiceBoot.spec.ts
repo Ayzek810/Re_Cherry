@@ -1,5 +1,4 @@
 /**
- * v1 二轮审查 m2-10 的行为证据。
  *
  * 缺陷：boot 注册用一个模块级布尔 `isRegisterOnBoot` 记账，只在**第一次**
  * `createMainWindow` 时挂 `ready-to-show`。主窗可在运行期重建（托盘场景下窗口被系统回收、
@@ -74,7 +73,7 @@ function asWindow(fake: FakeWindow): BrowserWindow {
 const SHOW_APP_ACCELERATOR = 'CommandOrControl+Shift+A'
 const MINI_WINDOW_ACCELERATOR = 'CommandOrControl+Shift+M'
 
-describe('registerShortcuts boot registration (m2-10)', () => {
+describe('registerShortcuts boot registration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.spyOn(configManager, 'getShortcuts').mockReturnValue([

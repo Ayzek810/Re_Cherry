@@ -1,5 +1,5 @@
 /**
- * 跨区请求⑥ 的用户可见信号落地点：启动播种失败必须在应用页展示。
+ * 用户可见信号落地点：启动播种失败必须在应用页展示。
  *
  * `config/minapps.ts` 在渲染层启动期求值，此刻 `window.toast` 还没赋值（`TopView/index.tsx`
  * 在挂载 effect 里才设置）——当场弹 toast 会静默 no-op，失败就只剩一条日志。所以失败被记成
@@ -43,7 +43,7 @@ vi.mock('../MiniappSettings/MinappSettingsPopup', () => ({ default: { show: vi.f
 
 import MinAppsPage from '../MinAppsPage'
 
-describe('MinAppsPage 展示启动播种失败（r2-79/⑥）', () => {
+describe('MinAppsPage 展示启动播种失败', () => {
   beforeEach(() => {
     takeMock.mockReset()
     toastMocks.error.mockReset()

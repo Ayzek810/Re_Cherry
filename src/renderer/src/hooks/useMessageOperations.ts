@@ -58,7 +58,7 @@ export const selectNewDisplayCount = createSelector(
  * @returns 包含消息操作函数的对象。 / An object containing message operation functions.
  */
 /**
- * 单条消息 → 其“轮问题”锚点（v0.2.3 删除接线）：user 取自身 seq；
+ * 单条消息 → 其“轮问题”锚点（删除接线）：user 取自身 seq；
  * assistant 归一到其 askId 问题（store 查问后解析）—— 页内组落本页轮，
  * 并行卡组（copyQuestionId）天然落旁答子会话，引擎再按血统上溯定真正创建会话。
  */
@@ -77,7 +77,7 @@ function anchorOfMessage(state: RootState, message: Message, fallbackTopicId: st
 /**
  * 消息携带的附件（图片/文档）的 file 记录，供分支重发继承。
  * fork 的 seed 截到锚点轮之前——重发消息若不带这些 file，图片/附件会在分支里
- * 静默消失（分支看不到图，模型也无图可读：v0.3.1 识图通道真机验收发现的回归）。
+ * 静默消失（分支看不到图，模型也无图可读：识图通道真机验收发现的回归）。
  */
 function collectMessageFiles(state: RootState, message: Message): FileMetadata[] {
   const files: FileMetadata[] = []
@@ -147,7 +147,7 @@ export function useMessageOperations(topic: Topic) {
       try {
         await dispatch(loadTopicMessagesThunk(childTopic.id, true))
       } catch (error) {
-        // X9：子会话首次加载失败不应打断分叉流程（新话题尚无消息时内核侧也确实是空的）。
+        // 子会话首次加载失败不应打断分叉流程（新话题尚无消息时内核侧也确实是空的）。
         logger.warn(`useMessageOperations: failed to load fork child ${childTopic.id}`, error as Error)
       }
 
@@ -159,7 +159,7 @@ export function useMessageOperations(topic: Topic) {
   )
 
   // ---------------------------------------------------------------------------
-  // 消息级删除（v0.2.3 destroyTurns 引擎接线）：内核权威。
+  // 消息级删除（destroyTurns 引擎接线）：内核权威。
   // 渲染层只负责把消息归一成“轮问题锚点”后交给内核；受影响集合、物理
   // 截断/清盘、焦点推导全在内核一次算完，落地见 applyDestroyTurnsResult。
   // ---------------------------------------------------------------------------
@@ -265,8 +265,8 @@ export function useMessageOperations(topic: Topic) {
         }
       }
 
-      // 4) 半成功必须可见（k2-05 / k2-09）：内核已把会话从注册表删掉，但物理清库失败。
-      // 静默会让用户以为"已经彻底删除"，而数据其实还留在盘上——这是 §9「失败不能伪装成成功」的正面案例。
+      // 4) 半成功必须可见：内核已把会话从注册表删掉，但物理清库失败。
+      // 静默会让用户以为"已经彻底删除"，而数据其实还留在盘上——这是 「失败不能伪装成成功」的正面案例。
       if (result.purgeFailures.length > 0) {
         logger.warn(
           '[applyDestroyTurns] kernel removed the registry rows but failed to erase: ' + result.purgeFailures.join(', ')
@@ -371,7 +371,7 @@ export function useMessageOperations(topic: Topic) {
   )
 
   /**
-   * 清空话题 = 物理删除该页全部可见轮（v0.2.3 语义归一）：锚点取页内第一个可解析
+   * 清空话题 = 物理删除该页全部可见轮（语义归一）：锚点取页内第一个可解析
    * 用户轮；跨血统的牵连（祖先截断/子树清盘/焦点）全部由 destroyTurns 单次事务给出。
    * 本地Thunk 版只清 Redux、内核不落盘，换页即复活，已废弃。
    */
@@ -520,14 +520,14 @@ export function useMessageOperations(topic: Topic) {
         return false
       }
       const text = getMainTextContent(anchor)
-      // 旁答分支同修：重发消息继承锚点问题的图片/文档附件（v0.3.1 识图通道真机回归）。
+      // 旁答分支同修：重发消息继承锚点问题的图片/文档附件（识图通道真机回归）。
       const files = collectMessageFiles(store.getState(), anchor)
       if (text.trim().length === 0 && files.length === 0) {
         logger.warn('[startParallelAnswer] anchor question has no text or image content, skip')
         return false
       }
       // 工作模式激活（话题级开关，B6）时禁用旁答：旁答子会话共享前缀但拿不到本话题的工作模式状态，
-      // 且工具回合的卡片组语义与多模型旁答冲突（v0.3.0 计划书 §7 Step 5）。
+      // 且工具回合的卡片组语义与多模型旁答冲突（计划书 Step 5）。
       if (topic.workMode === true) {
         logger.warn('[startParallelAnswer] work mode is active on this topic, parallel answer is disabled')
         return false

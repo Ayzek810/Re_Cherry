@@ -1,5 +1,5 @@
 /**
- * 文档处理通道行为测试（§7.17 三轮：ocr_document 挂进文档处理通道）。
+ * 文档处理通道行为测试（三轮：ocr_document 挂进文档处理通道）。
  * - 注册表：配置投影 / 每轮服务商登记（webSearch 同构语义）；
  * - 路由：local-paddle → 本地 OCR 编排；未知 id 明错；时间预算（8 分钟默认，
  *   可传 Infinity）经 AbortController 打断在途工作；

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { AdvancedSettingsButton } from './PanelPrimitives'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/
-// AdvancedConfigToggle.tsx（2026-09-24，v0.3.4-1 批次4b）。逐字（motion/react fork 已装，
+// AdvancedConfigToggle.tsx（2026-09-24）。逐字（motion/react fork 已装，
 // package.json ^12.10.5）。
 
 /**

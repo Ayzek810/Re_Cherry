@@ -1,11 +1,11 @@
 /**
- * 二轮审查 f2-46：拖拽把手渲染出来但拖拽排序被 shim 丢弃。
+ * 拖拽把手渲染出来但拖拽排序被 shim 丢弃。
  *
  * `ReorderableList` 不实现拖拽（`void onReorder`、`dragging` 恒 false），卡片上却有一个
  * `cursor-grab` 的把手、`ConfigList` 也按 V2 形状消费 `dragging`——"渲染承诺了交互但语义为空"，
  * 用户按住把手拖动毫无反应，而且唯一的排序入口（"置顶"）只在 hover 时才出现。
  *
- * 二轮审查 f2-45：当前服务商卡片的模型名在"配置不匹配"时被替换成字面量「未知供应商」——
+ * 当前服务商卡片的模型名在"配置不匹配"时被替换成字面量「未知供应商」——
  * 选中卡片的第二行于是显示"我选的服务商 = 未知供应商"。
  *
  * 行为级断言：
@@ -79,7 +79,7 @@ function renderList(overrides: Partial<Parameters<typeof ConfigList>[0]> = {}) {
   return { onReorder, ...result }
 }
 
-describe('ConfigList（f2-46：去掉假拖拽通道 + 常显置顶；f2-45：模型名不再被替换）', () => {
+describe('ConfigList（去掉假拖拽通道 + 常显置顶：模型名不再被替换）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('matchMedia', (query: string) => ({
@@ -94,14 +94,14 @@ describe('ConfigList（f2-46：去掉假拖拽通道 + 常显置顶；f2-45：�
     }))
   })
 
-  it('f2-46：卡片上不再有 cursor-grab 拖拽把手（不承诺未实现的交互）', () => {
+  it('卡片上不再有 cursor-grab 拖拽把手（不承诺未实现的交互）', () => {
     const { container } = renderList()
 
     expect(container.querySelector('.cursor-grab')).toBeNull()
     expect(container.querySelector('.lucide-grip-vertical')).toBeNull()
   })
 
-  it('f2-46：“置顶”按钮常显，点击后 onReorder 拿到真正重排的数组', () => {
+  it('“置顶”按钮常显，点击后 onReorder 拿到真正重排的数组', () => {
     const { onReorder } = renderList()
 
     // 首项没有置顶按钮，故只有第二项有——但它必须是可见的（旧的 hover 才显示）。
@@ -114,13 +114,13 @@ describe('ConfigList（f2-46：去掉假拖拽通道 + 常显置顶；f2-45：�
     expect(onReorder.mock.calls[0][0].map((provider: Provider) => provider.id)).toEqual(['provider-2', 'provider-1'])
   })
 
-  it('f2-46：providerActionsDisabled 时不提供置顶入口（动作禁用语义不变）', () => {
+  it('providerActionsDisabled 时不提供置顶入口（动作禁用语义不变）', () => {
     renderList({ providerActionsDisabled: true })
 
     expect(screen.queryByLabelText('code.move_provider_to_top')).toBeNull()
   })
 
-  it('f2-45：当前服务商卡片的模型名来自 resolveMeta，不是「未知供应商」占位', () => {
+  it('当前服务商卡片的模型名来自 resolveMeta，不是「未知供应商」占位', () => {
     const { container } = renderList()
 
     expect(container.textContent).toContain('provider-1-model')

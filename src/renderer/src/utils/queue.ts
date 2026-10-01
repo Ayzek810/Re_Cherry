@@ -6,10 +6,10 @@ const requestQueues: { [topicId: string]: PQueue } = {}
 
 /**
  * 队列空闲后自动回收的延时。
- * 说明（audit2 r2-97）：`requestQueues` 原先只增不减，每个新 topicId 都会永久
+ * 说明：`requestQueues` 原先只增不减，每个新 topicId 都会永久
  * 驻留一个 PQueue（含 idle 监听器与内部任务历史）。这里在 idle 后延时回收，
  * 既保证紧接着的 `onIdle()` 调用仍能拿到同一个实例，也避免长期会话无界增长。
- * 真正删除话题时仍应显式调用 `disposeTopicQueue(topicId)`（见「跨区请求」）。
+ * 真正删除话题时仍应显式调用 `disposeTopicQueue(topicId)`（见「」）。
  */
 const QUEUE_EVICTION_DELAY_MS = 5 * 60 * 1000
 

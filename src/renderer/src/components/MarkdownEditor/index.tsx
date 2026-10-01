@@ -21,7 +21,7 @@ interface MarkdownEditorProps {
 }
 
 /**
- * c2-27：预览链上有 `rehypeRaw`（原始 HTML 会变成真实节点树），却没有任何 sanitize。
+ * 预览链上有 `rehypeRaw`（原始 HTML 会变成真实节点树），却没有任何 sanitize。
  * 这里用仓库既有的 `dompurify`（`utils/export.ts`、`Preview/utils.ts` 同款）在交给 ReactMarkdown
  * 之前先净化**含 HTML 的**源码；纯 Markdown（不含 `<`）原样透传，避免改动数学/表格等语法。
  */

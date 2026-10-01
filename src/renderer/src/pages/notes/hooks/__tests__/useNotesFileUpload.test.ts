@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-37：拖入文件夹时 `readEntries` 只调一次。
+ * 拖入文件夹时 `readEntries` 只调一次。
  *
  * `FileSystemDirectoryReader.readEntries()` 按规范分批返回（Chromium 每批 100 项），只有拿到
  * 空批次才代表读完。旧实现只取第一批：拖入 100+ 项的文件夹时后 100 项被静默丢弃，页面照常弹
@@ -50,7 +50,7 @@ function makeDropEvent(entry: FileSystemEntry): React.DragEvent {
   } as unknown as React.DragEvent
 }
 
-describe('useNotesFileUpload（f2-37：目录批次读取）', () => {
+describe('useNotesFileUpload（目录批次读取）', () => {
   const onUploadFiles = vi.fn()
   const setIsDragOverSidebar = vi.fn()
 

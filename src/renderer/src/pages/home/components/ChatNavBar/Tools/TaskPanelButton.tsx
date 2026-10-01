@@ -18,7 +18,7 @@ interface Props {
 }
 
 /**
- * 任务面板按钮（v0.4.6-1）：工作模式开启的话题在导航工具行显示入口（用户裁决：
+ * 任务面板按钮：工作模式开启的话题在导航工具行显示入口（用户裁决：
  * todo/goal 归工作模式作用域，面板随之）。数据 = 内核会话日志折叠
  * （services/sessionTaskState，todo/write + goal/change last-wins），重放 + 直播双通道。
  */

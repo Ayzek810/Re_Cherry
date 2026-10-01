@@ -1,5 +1,5 @@
 /**
- * fork 内容块扩展（v0.3.2 附件修复）：'document' 引用块经 dsh-llm 公开的
+ * fork 内容块扩展（附件修复）：'document' 引用块经 dsh-llm 公开的
  * merge-extensible 扩展点（ContentBlockMap，types.d.ts 明文契约："switch on
  * `type` and fall through unknowns"）并入内核内容块词表。
  *

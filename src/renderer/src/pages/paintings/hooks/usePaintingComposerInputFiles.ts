@@ -1,5 +1,5 @@
 /**
- * 参考图托盘状态 hook（v0.3.3 批次4，V2 usePaintingComposerInputFiles 重写）：
+ * 参考图托盘状态 hook（V2 usePaintingComposerInputFiles 重写）：
  * 页面自持 inputFiles: FileMetadata[] 状态 + window.api.file.select 图片选择。
  * V2 三动作语义保留（框架词汇替换：ComposerAttachment/FileEntry → FileMetadata）：
  * - SEED：painting 切换时把该画 inputFiles 投影进托盘（一次）。

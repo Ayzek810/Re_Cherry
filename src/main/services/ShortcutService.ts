@@ -29,7 +29,7 @@ let showAppAccelerator: string | null = null
 let showMiniWindowAccelerator: string | null = null
 
 /**
- * v1 二轮审查 m2-10：boot 注册此前用一个模块级布尔 `isRegisterOnBoot` 记账，只在
+ * boot 注册此前用一个模块级布尔 `isRegisterOnBoot` 记账，只在
  * **第一次** `createMainWindow` 时挂 `ready-to-show`。主窗可在运行期重建
  * （`WindowService.showMainWindow()` 在窗口已销毁时新建、`index.ts` 的 activate 分支同理），
  * 而新建窗口的 `isFocused()` 在重建瞬间通常为 false ⇒ show_app/mini_window 要等用户手动

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as TopicBranchModule from '../topicBranch'
 
 /**
- * v0.3.0-3 问题 C（`report.md` §1.4 的验C-1 / 验C-2 / 验C-3 / 验C-5）：
+ * / / /：
  * `kernelKnowsTopic` 的**启动窗口重试**。
  *
  * 背景：该查询服务于"拒绝复活"的判定（`ensureKernelTopic` 据此决定是否允许 upsert），而主进程
@@ -33,7 +33,7 @@ beforeEach(() => {
 })
 
 describe('kernelKnowsTopic（启动窗口重试）', () => {
-  it('验C-1：第一次拿不到、随后成功 → 判为"内核认识"，不误判', async () => {
+  it('第一次拿不到、随后成功 → 判为"内核认识"，不误判', async () => {
     const get = stubGet(
       vi.fn().mockRejectedValueOnce(new Error('No handler registered')).mockResolvedValue({ topic: KERNEL_ROW })
     )
@@ -43,7 +43,7 @@ describe('kernelKnowsTopic（启动窗口重试）', () => {
     expect(get).toHaveBeenCalledTimes(2)
   })
 
-  it('验C-2：内核明确回答"无此行" → **只问一次、不重试**（确定性否定不得拖满重试）', async () => {
+  it('内核明确回答"无此行" → **只问一次、不重试**（确定性否定不得拖满重试）', async () => {
     // 这条是本项最容易写错的地方：把 `topic === undefined` 也当成"暂时没问到"去重试，
     // 只会让每一次对已删话题的发送都白等 6 × 700ms。
     const get = stubGet(vi.fn().mockResolvedValue({}))
@@ -53,7 +53,7 @@ describe('kernelKnowsTopic（启动窗口重试）', () => {
     expect(get).toHaveBeenCalledTimes(1)
   })
 
-  it('验C-3：全部尝试耗尽 → 返回 null（三值语义不变，仍是"不知道"）', async () => {
+  it('全部尝试耗尽 → 返回 null（三值语义不变，仍是"不知道"）', async () => {
     const get = stubGet(vi.fn().mockRejectedValue(new Error('ipc down')))
     const { kernelKnowsTopic } = await load()
 
@@ -61,7 +61,7 @@ describe('kernelKnowsTopic（启动窗口重试）', () => {
     expect(get).toHaveBeenCalledTimes(FAST.attempts)
   })
 
-  it('验C-5：成功路径不引入固定延迟——不推进任何定时器也要能返回', async () => {
+  it('成功路径不引入固定延迟——不推进任何定时器也要能返回', async () => {
     // 若实现里存在"无条件先 sleep"，这条会挂到用例超时（红），而耗时断言这种弱信号发现不了它。
     stubGet(vi.fn().mockResolvedValue({ topic: KERNEL_ROW }))
     const { kernelKnowsTopic } = await load()

@@ -9,7 +9,7 @@ import * as path from 'path'
 import { ConfigKeys, configManager } from './ConfigManager'
 import { spanCacheService } from './SpanCacheService'
 
-// v0.3.1-2：上报器名改为本 fork 标识（原为上游 'CherryStudio'；此项仅出现在 trace 视图中，非功能标识）。
+// 上报器名改为本 fork 标识（原为上游 'CherryStudio'；此项仅出现在 trace 视图中，非功能标识）。
 export const TRACER_NAME = 'Re_Cherry'
 
 const logger = loggerService.withContext('NodeTraceService')
@@ -30,7 +30,7 @@ export class NodeTraceService {
   }
 
   /**
-   * 退出前冲刷并关闭 tracer（v1 二轮 k2-20）。
+   * 退出前冲刷并关闭 tracer。
    *
    * 为什么必须显式收尾：tracer 的批处理器持有在途 span，进程直接退出会把未导出的 span 丢掉；
    * 适配器已提供 `forceFlush/shutdown`，但此前没有任何调用点——等于能力悬空。
@@ -61,7 +61,7 @@ export function openTraceWindow(topicId: string, traceId: string, autoOpen = tru
     return
   }
 
-  // m2-12：窗口实例同时捕获进局部常量——下面的监听器与语言回调只认这一次创建的窗口，
+  // 窗口实例同时捕获进局部常量——下面的监听器与语言回调只认这一次创建的窗口，
   // 不再经模块级可变引用回读（`traceWin` 会在 closed 时置 null）。
   const win = new BrowserWindow({
     width: 600,
@@ -97,7 +97,7 @@ export function openTraceWindow(topicId: string, traceId: string, autoOpen = tru
     void win.loadFile(path.join(__dirname, '../renderer/traceWindow.html'))
   }
 
-  // v1 二轮审查 m2-12：语言回调捕获**本次**窗口实例（原来用模块级 `traceWin!`——
+  // 语言回调捕获**本次**窗口实例（原来用模块级 `traceWin!`——
   // 回调可能在窗口已 closed、`traceWin` 已置 null 的窗口期被同步调用，抛
   // `TypeError: Cannot read properties of null`；`ConfigManager.notifySubscribers` 是
   // 同步 forEach，该异常会中断同批后续订阅者，把「切语言」变成部分失效）。

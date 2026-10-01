@@ -34,7 +34,7 @@ const getToolDescription = (block?: ToolMessageBlock): string | undefined => {
 
 // ============ Styled Components ============
 
-// 组内行形态（唯一形态，v0.3.1：standalone 单卡随 ToolBlock 退役）：
+// 组内行形态（唯一形态：standalone 单卡随 ToolBlock 退役）：
 // 无边框/内边距，供 Collapse 头与组内行使用
 const LabelContainer = styled.div`
   display: flex;

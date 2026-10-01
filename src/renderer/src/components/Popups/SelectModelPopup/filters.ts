@@ -35,7 +35,7 @@ export function useModelTagFilter() {
       embedding: isEmbeddingModel,
       reasoning: isReasoningModel,
       function_calling: isFunctionCallingModel,
-      // r2-80：`isWebSearchModel` 现在是三值（`undefined` = provider 还不知道）。
+      // `isWebSearchModel` 现在是三值（`undefined` = provider 还不知道）。
       // 标签筛选只认**确定**答案，与改动前的 `false` 行为逐字一致。
       web_search: (m) => isWebSearchModel(m) === true,
       rerank: isRerankModel,

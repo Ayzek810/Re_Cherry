@@ -1,5 +1,5 @@
 // 通用工具组件 - 减少重复代码
-// v0.3.0 Step 2：流式输入/输出辅助件随死分支移除（统一卡由 ToolContent 承担），
+// Step 2：流式输入/输出辅助件随死分支移除（统一卡由 ToolContent 承担），
 // 这里保留卡片共用的状态类型与状态指示器。
 
 import { LoadingIcon } from '@renderer/components/Icons'

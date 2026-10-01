@@ -1,5 +1,5 @@
 /**
- * ImageViewer 的 `preview` 契约（v0.3.3-10）：
+ * ImageViewer 的 `preview` 契约：
  *   · `preview={false}`（画板 Artboard：图要 pan/zoom，不要灯箱）→ **裸 `<img>`**（V2 形态），
  *     调用方传的 `className`/`style` 必须落在 `<img>` 上——antd Image 的包裹层会把它们吃掉
  *     （rc-image 只把 COMMON_PROPS 交给 img），这正是"图片按宽度撑满 + 顶部对齐 + 被裁"的根因。

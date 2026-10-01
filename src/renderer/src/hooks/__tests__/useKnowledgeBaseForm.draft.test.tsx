@@ -1,5 +1,5 @@
 /**
- * r2-69 行为测试：`useKnowledgeBaseForm` 的「还没选模型」窗口是明确的未选择态。
+ * `useKnowledgeBaseForm` 的「还没选模型」窗口是明确的未选择态。
  *
  * 改动前初值写 `model: null as any`（绕过类型系统），于是
  *  1. `KnowledgeBase.model` 的消费方在"未选择"期间拿到 `null`，而不是可判定的缺省；
@@ -23,7 +23,7 @@ vi.mock('@renderer/services/ModelService', () => ({
 
 import { useKnowledgeBaseForm } from '../useKnowledgeBaseForm'
 
-describe('useKnowledgeBaseForm r2-69：未选择模型是明确的缺省', () => {
+describe('useKnowledgeBaseForm ：未选择模型是明确的缺省', () => {
   it('初值的 model 是 undefined（不是 null，也无 as any）', () => {
     const { result } = renderHook(() => useKnowledgeBaseForm())
 

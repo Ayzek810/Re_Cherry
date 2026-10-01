@@ -77,7 +77,7 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
         onError(error)
       } else {
         // 曾写作 `t('common.save_failed') || 'Failed to save'`——那是**无效兜底**：i18next 缺键时
-        // 返回键名本身（真值），`||` 永不生效，用户会看到裸键。v0.3.0-1 已补齐该键（两语），
+        // 返回键名本身（真值），`||` 永不生效，用户会看到裸键。已补齐该键（两语），
         // 故直接取文案即可。
         window.toast.error(t('common.save_failed'))
       }
@@ -121,7 +121,7 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
     }
   }, [saveEdit, isSaving])
 
-  // X8：返回值（含 inputProps）每次渲染都是新对象，会把消费方的 memo 全部打穿。
+  // 返回值（含 inputProps）每次渲染都是新对象，会把消费方的 memo 全部打穿。
   // 逐项依赖都是稳定引用/原语，故 memo 只在真实状态变化时换新对象。
   return useMemo(
     () => ({

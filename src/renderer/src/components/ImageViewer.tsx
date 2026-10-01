@@ -98,7 +98,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ src, style, ...props }) => {
     ]
   }
 
-  // fork 缝（v0.3.3-10）：`preview === false` 的调用方（画板 Artboard：图要 pan/zoom，明确不要灯箱）
+  // fork 缝：`preview === false` 的调用方（画板 Artboard：图要 pan/zoom，明确不要灯箱）
   // 渲染**裸 `<img>`** —— 这正是 V2 `components/ImageViewer.tsx:254-268` 的形态：`className`/`style`
   // 直接落在 `<img>` 上。走 antd Image 时它们落在 rc-image 的包裹 div 上（只有 `COMMON_PROPS`
   // 会到 img），于是调用方的 `max-h-full`/`max-w-full`/`object-contain` 与 `onLoad` 全部失效 ——

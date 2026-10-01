@@ -1,6 +1,6 @@
 /**
- * LocalPaddle OCR utility process 入口（v0.3.2 性能事故修复，2026-09-22；
- * v0.4.4 自 services/localModel/ocrWorker.ts 收编；v0.4.4-1 常驻化 + 页级并发）。
+ * LocalPaddle OCR utility process 入口（性能事故修复，2026-09-22；
+ * 自 services/localModel/ocrWorker.ts 收编；常驻化 + 页级并发）。
  *
  * 事故背景：一切 PDF → OCR 的路由下，1436 页 PDF 在主进程逐页推理 ≈ 数小时，
  * 主线程被独占 → 窗口整体冻结（真机实锤）。
@@ -8,7 +8,7 @@
  * 本进程承接全套重活：pdf-parse 逐页光栅化 → sharp 预处理 → ppu-paddle-ocr 推理。
  * 主进程（localOcr.ts）只做编排——OCR 结果一字不变。
  *
- * **v0.4.4-1 常驻 + 并发（用户裁定）**：
+ * ** 常驻 + 并发（用户裁定）**：
  * - **常驻**：本进程由主进程跨解析复用（热模型跨本保留，省 ~15s/本的权重冷加载）；
  *   5 分钟无消息自退（exit 0），主进程对空闲退出静默接管、下次解析重 fork。
  * - **页级并发**：信用窗（job.window = 并发数，发一页扣一信、主进程结算一页回一信
@@ -28,7 +28,7 @@
  * 禁止 @logger（winston 双进程写同一日志文件会互锁），日志一律经 postMessage
  * 交主进程落盘；模型路径由主进程经消息传入。编译产物 out/main/localOcrWorker.js。
  *
- * 安装版运行时依赖（v0.4.4 实证）：sharp / ppu-paddle-ocr / ppu-ocv /
+ * 安装版运行时依赖（实证）：sharp / ppu-paddle-ocr / ppu-ocv /
  * onnxruntime-node 必须进包且原生件解包——electron-builder.yml asarUnpack +
  * optionalDependencies + scripts/after-pack.js 断言守门。
  */
@@ -103,7 +103,7 @@ function loadService(modelPaths: OcrWorkerJob['modelPaths'], gpuEnabled: boolean
 }
 
 /**
- * GPU 加速（v0.4.4-1 研究结论，真模型实测）：DirectML 上 det 25×/rec 8× 于 CPU
+ * GPU 加速（研究结论，真模型实测）：DirectML 上 det 25×/rec 8× 于 CPU
  * （det 1078→42ms、rec 82→10ms），DirectML.dll 随 onnxruntime-node 自带且已被
  * asarUnpack 解包到位；ppu 补丁版 createSessionWithFallback 在 DML 创建失败
  * （无 DX12 GPU / 驱动问题）时**自动落回 CPU** 并触发 onSessionFallback（此处

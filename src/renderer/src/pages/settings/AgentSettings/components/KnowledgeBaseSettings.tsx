@@ -14,7 +14,7 @@ interface Props {
   updateAssistantSettings: (settings: AssistantSettings) => void
 }
 
-/** v0.3.2 自 CS_V1 移植（助手级知识库关联面板）。 */
+/** 自 CS_V1 移植（助手级知识库关联面板）。 */
 const AssistantKnowledgeBaseSettings: React.FC<Props> = ({ assistant, updateAssistant }) => {
   const { t } = useTranslation()
 

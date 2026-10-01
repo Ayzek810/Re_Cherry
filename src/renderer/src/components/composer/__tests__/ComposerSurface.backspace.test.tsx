@@ -1,7 +1,7 @@
 /**
  * 作曲条（`ComposerSurface`）的键盘交互契约测试。
  *
- * 行为级验证（§4.18）：V2 `components/composer/ComposerSurfaceRuntime.tsx:1503-1512` ——
+ * 行为级验证：V2 `components/composer/ComposerSurfaceRuntime.tsx:1503-1512` ——
  * 「提示框为空 + 有附件」时按 Backspace 摘掉最后一个附件并吞掉删除。fork 此前声明了
  * `filesCount` 却不消费它，键盘删除参考图的路径整条不存在（P1）。
  */

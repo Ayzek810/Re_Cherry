@@ -111,7 +111,7 @@ export function getFileType(ext: string): FileType {
 /**
  * 下载落盘的文件名与后缀解析（纯函数，便于单测）。
  *
- * 背景（v0.3.3-2 修"AI 生成的图片没被文件页纳入"）：`downloadFile` 原先在 `preferContentType`
+ * 背景（修"AI 生成的图片没被文件页纳入"）：`downloadFile` 原先在 `preferContentType`
  * 为真时**无条件把 Content-Type 推出的后缀追加**到文件名尾部。URL 已带 `.png`、响应头却是
  * `application/octet-stream`（→ `.bin`）时，文件名成了 `xxx.png.bin`、`path.extname` 取到 `.bin`、
  * `getFileType('.bin')` = `FILE_TYPE.OTHER` —— 真机上就是"出图了，但文件页「图片」里看不到"。
@@ -164,7 +164,7 @@ export interface ParsedGeneratedImageSource {
 /**
  * 生成图字符串 → 落盘所需形状（纯函数，便于单测）。
  *
- * v0.3.3-2：聊天页 `generate_image` 的 `images[]` 是三种形态之一——data URL、裸 base64
+ * 聊天页 `generate_image` 的 `images[]` 是三种形态之一——data URL、裸 base64
  * （OpenAI 兼容面的 `b64_json`）、或 http(s) URL；这三种都要能落成 `<id><ext>` 进文件仓。
  * 认不出来就返回 undefined（调用方跳过，不猜）。
  */

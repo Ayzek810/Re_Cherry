@@ -1,5 +1,5 @@
 /**
- * 生图模型目录 hook（v0.3.3 批次4，V2 usePaintingModelCatalog 重写 ~40 行）：
+ * 生图模型目录 hook（V2 usePaintingModelCatalog 重写 ~40 行）：
  * selectImageGenerationModels 扁平化 + 按 provider 分组（antd Select optGroup
  * 形态）；V2 的 SWR/ensureCatalog 异步目录在 fork 无此概念（模型表就在 redux
  * providers 里，同步可读），只保留选择与展示所需的派生面。

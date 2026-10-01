@@ -1,5 +1,5 @@
 /**
- * 标签页固定（v0.3.3 用户点名功能）的语义契约，逐条对齐 V2：
+ * 标签页固定（用户点名功能）的语义契约，逐条对齐 V2：
  * - `isPinned` 的标签页进"固定区"，**固定区恒在普通区之前**；
  * - 固定 → 追加到固定区**末尾**，取消固定 → 追加到普通区**末尾**（V2 `pinTab`/`unpinTab`）；
  * - **批量关闭只作用于普通区**：`closeOtherTabs` 保留目标 + 全部固定标签页，并在当前激活页被关掉时改指目标页；
@@ -134,7 +134,7 @@ describe('tabs slice · 固定标签页', () => {
     expect(state.activeTabId).toBe('b')
   })
 
-  describe('restorePinnedTabs（跨重启恢复，v0.3.3-1 持久化）', () => {
+  describe('restorePinnedTabs（跨重启恢复，持久化）', () => {
     it('补回缺失的固定页并置 isPinned，首页仍在最前', () => {
       let state = stateOf([tab('home', '/')], 'home')
 

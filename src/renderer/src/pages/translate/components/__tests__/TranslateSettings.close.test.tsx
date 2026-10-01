@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-31：翻译自定义指令只在 `onBlur` 落库。
+ * 翻译自定义指令只在 `onBlur` 落库。
  *
  * 缺陷形态：`savePrompt` 只挂在 `Input.TextArea` 的 `onBlur` 上，而抽屉是 antd `Drawer`
  * （默认 `destroyOnClose=false`）——Esc / 点遮罩关闭时子节点不卸载，`blur` 不会触发。结果是：
@@ -48,7 +48,7 @@ vi.mock('@renderer/components/Avatar/ModelAvatar', () => ({ default: () => <span
 
 import TranslateSettings from '../TranslateSettings'
 
-describe('TranslateSettings 关闭抽屉时提交指令（f2-31）', () => {
+describe('TranslateSettings 关闭抽屉时提交指令', () => {
   beforeEach(() => {
     drawerOnClose.current = undefined
     // 基线：库里没有自定义指令（= 用内置）。

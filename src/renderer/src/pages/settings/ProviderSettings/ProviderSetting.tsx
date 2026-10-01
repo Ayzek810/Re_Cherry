@@ -120,7 +120,7 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
     checking: false
   })
 
-  // v1 二轮审查 s2-38：API key 改为**失焦提交**。
+  // API key 改为**失焦提交**。
   // 旧实现走 150ms 防抖：连续输入时相邻字符间隔常常超过 150ms，于是每敲一位就是一次
   // `updateProvider`——main 进程加密落盘 + settings 切片整片持久化 + `syncList` 广播。
   // 同页的 apiHost / anthropicApiHost 本就是 blur 语义，这里与之对齐。
@@ -235,7 +235,7 @@ const ProviderSetting: FC<Props> = ({ providerId, isOnboarding = false }) => {
       return
     }
 
-    // v1 二轮审查 s2-08：取消现在交回 `null` 哨兵（旧实现排 300ms reject，弹窗卸载即被
+    // 取消现在交回 `null` 哨兵（旧实现排 300ms reject，弹窗卸载即被
     // clearAllTimers 清掉 → 永不 settle；未卸载时 rejection 又无人接收）。取消不是错误，
     // 这里静默返回，不再弹「请选择模型」。
     const model = await SelectProviderModelPopup.show({ provider })

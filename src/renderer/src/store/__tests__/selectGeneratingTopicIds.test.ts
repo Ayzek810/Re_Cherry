@@ -7,7 +7,7 @@ import { AssistantMessageStatus } from '@renderer/types/newMessage'
 import { describe, expect, it } from 'vitest'
 
 /**
- * 侧栏黄点的**家族折叠**（v0.3.1 第三轮）钉：
+ * 侧栏黄点的**家族折叠**（第三轮）钉：
  * 重发/旁答的回合在 fork 出的子会话 id 上记账（PENDING/PROCESSING 的 assistant 消息），
  * 侧栏只渲染根行——selectGeneratingTopicIds 的输出必须把子会话折叠成**根 id**，
  * 否则重发流"根行不知道子会话在打字"，黄点全灭（真机验收实证的缺陷）。

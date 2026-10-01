@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 文档处理页的选中值来源与缺失渲染（v1 二轮审查 s2-11）。
+ * 文档处理页的选中值来源与缺失渲染。
  *
  * 修改前页面把默认 provider 又镜像进一个本地 `useState`，而默认 provider 也被知识库表单等
  * 其他消费者修改，且没有任何 effect 回同步——别处改掉默认 provider 后，本页 Select 仍显示旧值，

@@ -1,5 +1,5 @@
 // fork 移植自 cherry-studio v2 src/main/services/HermesDashboardService.ts
-// （2026-09-24，v0.3.4-1）。启动互斥 / findAvailablePort / HERMES_HOME 钉住 / /api/status
+// （2026-09-24）。启动互斥 / findAvailablePort / HERMES_HOME 钉住 / /api/status
 // 探活（home 匹配 + realpath 兜底）/ 停止语义（SIGTERM→3s→SIGKILL→1s）/ 诊断卫生化逐字。
 // 缝点（行内标注 `// fork 缝：`）：
 // ① V2 生命周期容器（BaseService/@Injectable/@ServicePhase/onInit/onStop）→ fork 单例壳
@@ -8,8 +8,8 @@
 // ② V2 的 HermesDashboardStatus / HermesDashboardStartFailureReason 定义在
 //    @shared/ipc/schemas/hermesDashboard（zod 路由层，fork 不引入；本批清单只许改三个
 //    文件）→ 收进本文件导出，status 同形于 @shared/types/managedTool 的 ManagedToolStatus。
-// ③ BinaryManager.getToolSnapshots（definition/operation 安装态分支）→ 批次1 的 PATH
-//    探测 resolveBinary('hermes')，availability 收窄为 null 判定；批次2 安装器升级。
+// ③ BinaryManager.getToolSnapshots（definition/operation 安装态分支）→ 的 PATH
+// 探测 resolveBinary('hermes')，availability 收窄为 null 判定；安装器升级。
 // ④ CacheService.setShared('feature.hermes_dashboard.status') → 全窗口事件广播
 //    （publishStatus，逐窗 webContents.send）。
 // ⑤ V2 的 hermes home 经 application.getPath(...)（pathRegistry）→ getHermesHome()
@@ -75,7 +75,7 @@ export class HermesDashboardService {
   private readonly operationMutex = new Mutex()
   private readonly startupAbortControllers = new Set<AbortController>()
   private child: ChildProcess | null = null
-  // v1 二轮审查 m2-21：V2 用 onStop 置位的 `isLifecycleStopping` 与它守护的早退分支已删除——
+  // V2 用 onStop 置位的 `isLifecycleStopping` 与它守护的早退分支已删除——
   // fork 没有生命周期容器，该字段自始至终恒 false，那条 `reason: 'cancelled'` 是不可达路径。
   // 「退出窗口期拒绝启动」的真守卫在下面那条 `signal.aborted` 检查里（可实际触发）。
   private status: HermesDashboardStatus = 'stopped'
@@ -92,7 +92,7 @@ export class HermesDashboardService {
     return { status: this.status, ...(this.url ? { url: this.url } : {}) }
   }
 
-  /** 批次5：before-quit 同步杀进程用（同 DeepSeekHarnessService.runningPid）。 */
+  /** before-quit 同步杀进程用（同 DeepSeekHarnessService.runningPid）。 */
   get runningPid(): number | undefined {
     return this.child?.pid ?? undefined
   }
@@ -202,14 +202,14 @@ export class HermesDashboardService {
   }
 
   // fork 缝③⑤：V2 走 BinaryManager 快照并按 snapshot.availability（definition/operation）
-  // 分支；批次1 只有 PATH 探测——availability 收窄为 resolveBinary 的 null 判定，
+  // 分支；只有 PATH 探测——availability 收窄为 resolveBinary 的 null 判定，
   // executablePath 免 parse（AbsoluteFilePathSchema 未移植）。HERMES_HOME 钉住逻辑逐字。
   private async resolveRuntime(): Promise<HermesDashboardRuntime> {
     const binary = await resolveBinary('hermes')
     if (!binary) {
       throw new HermesDashboardStartError('not_installed', 'Hermes is not installed')
     }
-    // 批次5 真机加固：PATH 命中 ≠ 可用——hermes 若装的时候没带 [web] extras（没有
+    // 真机加固：PATH 命中 ≠ 可用——hermes 若装的时候没带 [web] extras（没有
     // dashboard 子命令）或为损坏/旧版安装，`--version` 探针都可能过不了；启动前显式
     // 拒绝并指引导向受管安装，不再放行到 "exited before it was ready" 哑弹。
     if (!binary.runnable) {

@@ -1,5 +1,5 @@
 /**
- * web_fetch 内核 builtin 工具（v0.4.6，roadmap「从V2寻找潜在的值得增加为工具的功能」）。
+ * web_fetch 内核 builtin 工具（roadmap「从V2寻找潜在的值得增加为工具的功能」）。
  *
  * V2 WebFetchTool 同构物：模型拿已知 URL（用户给的或 web_search 命中的）取可读正文。
  * fork 后端已就绪——services/webSearchProviders/webFetch.ts 的三级抓取链（net.fetch →
@@ -184,7 +184,7 @@ export function apply(ctx: Context): void {
             })
           }
         }
-        // 每一页都失败 ⇒ 这是失败，不是"空结果"（CLAUDE.md §9 第一条硬规则）。
+        // 每一页都失败 ⇒ 这是失败，不是"空结果"。
         // 旧写法把它们当普通条目返回，主句是"Fetched pages"，模型读到的是一次成功的取回。
         if (failures.length === urls.length) {
           throw new Error(`web_fetch: every page failed (${urls.length}): ${failures.join('; ')}`)

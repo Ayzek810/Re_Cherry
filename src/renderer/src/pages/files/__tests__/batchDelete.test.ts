@@ -1,10 +1,10 @@
 /**
- * 二轮审查 f2-39：文件页批量删除的结果契约。
+ * 文件页批量删除的结果契约。
  *
  * 旧实现 `await Promise.all(validFiles.map((file) => handleDelete(file.id, t)))`：
  * 任一删除 reject 就整体抛出，`setSelectedFileIds([])` 不再执行，Popconfirm 的 onConfirm 也
  * 没人接住这个 rejection——界面停在选中态且没有任何提示；成功/失败还从不计数
- * （§9「A batch deletion reports "N succeeded / M failed" as a real signal」）。
+ * 「A batch deletion reports "N succeeded / M failed" as a real signal」。
  *
  * 行为级断言：① 一个文件的失败不取消其余文件的删除；② 结局可分辨地分成成功/失败两组。
  */
@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { runBatchDelete } from '../batchDelete'
 
-describe('runBatchDelete（f2-39：批量删除收全结果）', () => {
+describe('runBatchDelete（批量删除收全结果）', () => {
   it('全部成功：succeededIds 覆盖全部，failures 为空', async () => {
     const deleteOne = vi.fn().mockResolvedValue(undefined)
 

@@ -7,7 +7,7 @@ import type { WebSearchHttpOptions, WebSearchProviderResponse, WebSearchRuntimeS
 const logger = loggerService.withContext('ZhipuProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 ZhipuProvider.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 ZhipuProvider.ts）：
  * 上游本就是裸 fetch，原样移植——POST '{apiHost}'（智谱 web_search 端点整体作 apiHost），
  * Bearer + Content-Type + defaultHeaders，body {search_query, search_engine:'search_std',
  * search_intent:false}；非 2xx 取响应文本明错，取 search_result[].{title,content,link}。

@@ -1,5 +1,5 @@
 /**
- * r2-02 行为回归：快捷助手发送失败的**任何**路径都必须收敛终态。
+ * 快捷助手发送失败的**任何**路径都必须收敛终态。
  *
  * 缺陷：`handleSendMessage` 的终态收敛（`finishError` → 消息/块落 ERROR + `setIsOutputted(true)`）
  * 声明在 try 内，catch 只走 `handleError`（`setIsLoading(false)` + `setError`）。而「未配置快捷助手
@@ -83,7 +83,7 @@ const renderWindow = () =>
     </Provider>
   )
 
-describe('HomeWindow · r2-02 发送失败必收敛终态', () => {
+describe('HomeWindow · 发送失败必收敛终态', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     store.dispatch(setQuickAssistantModel({ model: undefined }))

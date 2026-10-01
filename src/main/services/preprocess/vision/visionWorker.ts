@@ -1,5 +1,5 @@
 /**
- * 视觉模型文档处理的光栅化 utility process 入口（v0.4.4）。
+ * 视觉模型文档处理的光栅化 utility process 入口。
  *
  * 定位：文档处理通道 vision-model 条目的**本机光栅化腿**——pdf-parse 逐页
  * getScreenshot（PNG）→ 转 JPEG q80 → base64 回主进程，主进程把页图交给用户配置的视觉模型
@@ -10,7 +10,7 @@
  *   主进程在该页的模型调用结束（成功或失败）后才放行，任意时刻只有一页图在内存里
  *   （整本预光栅化在几百页书上会把页图堆成 GB 级）。
  * - **为什么是 utilityProcess**：与 localOcrWorker 同因——pdf.js 逐页同步解析会打满
- *   承载进程的事件循环（§7.20「直读 PDF 卡窗口」的机制），且原生崩溃被隔离在子进程。
+ * 承载进程的事件循环（「直读 PDF 卡窗口」的机制），且原生崩溃被隔离在子进程。
  * - **禁止 __dirname 依赖 / 禁 @logger**：日志一律经 postMessage 交主进程落盘
  *   （winston 双进程写同一文件会互锁）；本文件对 electron 的使用仅限
  *   `process.parentPort`（d.ts 的模块导出 parentPort 在 utility 宿主不存在）。

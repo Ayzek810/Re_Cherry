@@ -27,16 +27,16 @@ const SERVICE_CONFIG = {
   DEGRADATION_CACHE: {
     MAX_SIZE: 500, // 最大记录数量
     TTL: 1000 * 60 * 60 * 12, // 12 小时自动过期（毫秒）
-    /** 降级冷却（p2-15）：worker 失败后只把该 callerId 钉在主线程这么久，到期后重新尝试 worker。
+    /** 降级冷却：worker 失败后只把该 callerId 钉在主线程这么久，到期后重新尝试 worker。
      *  此前是一次失败即"永久降级"（存活到 12 小时 TTL），一次超时就让该块所有后续 delta
-     *  全在主线程 tokenize，与 p2-09 的每帧重解析叠加成"单条消息越流越卡"。 */
+     * 全在主线程 tokenize，与每帧重解析叠加成"单条消息越流越卡"。 */
     COOLDOWN: 1000 * 60 * 5
   },
 
   // Worker 初始化配置
   WORKER: {
     MAX_INIT_RETRY: 2, // 最大初始化重试次数
-    /** 空闲回收窗口（p2-12）：无 pending 请求且无新请求达该时长 ⇒ terminate worker。
+    /** 空闲回收窗口：无 pending 请求且无新请求达该时长 ⇒ terminate worker。
      *  只有代码块高亮会创建 worker；用户看完代码块后它不该常驻到窗口关闭。
      *  重建成本由 MAX_INIT_RETRY + 惰性 init 承担（下次高亮自动重建）。 */
     IDLE_TERMINATE_MS: 60_000,
@@ -104,7 +104,7 @@ class ShikiStreamService {
     }
   >()
   private requestId = 0
-  /** 空闲回收定时器（p2-12）。null = 未排程。 */
+  /** 空闲回收定时器。null = 未排程。 */
   private workerIdleTimer: ReturnType<typeof setTimeout> | null = null
   /** 重建 worker 时重放的初始化表（与 initWorker 入参一致；worker 侧自建 highlighter——
    *  highlighter 对象经 postMessage 不可结构化克隆，且 worker 的代价面是 `import('shiki')`
@@ -112,7 +112,7 @@ class ShikiStreamService {
   private workerLanguages: readonly string[] = DEFAULT_LANGUAGES
   private workerThemes: readonly string[] = DEFAULT_THEMES
 
-  // 降级策略相关变量，用于记录调用 worker 失败过的 callerId 及其冷却截止时间（p2-15）
+  // 降级策略相关变量，用于记录调用 worker 失败过的 callerId 及其冷却截止时间
   private workerDegradationCache = new LRUCache<string, number>({
     max: SERVICE_CONFIG.DEGRADATION_CACHE.MAX_SIZE,
     ttl: SERVICE_CONFIG.DEGRADATION_CACHE.TTL
@@ -159,7 +159,7 @@ class ShikiStreamService {
         this.worker.onmessage = (event) => {
           const { id, type, result, error } = event.data
 
-          // 资产请求（p2-04）：worker 不再自带 shiki 语言/主题表，改为按需向主线程索取。
+          // 资产请求：worker 不再自带 shiki 语言/主题表，改为按需向主线程索取。
           // 这条分支必须在 pendingRequests 查找**之前**：资产请求有它自己的 id 空间
           // （worker 侧独立自增），与 highlight/init 的请求 id 无关联。
           if (type === 'assets-request') {
@@ -190,7 +190,7 @@ class ShikiStreamService {
           themes: [...this.workerThemes]
         })
         this.workerInitRetryCount = 0
-        // p2-12：创建后即排空闲回收（worker 生命周期 = 最后一次高亮 + IDLE_TERMINATE_MS）
+        // 创建后即排空闲回收（worker 生命周期 = 最后一次高亮 + IDLE_TERMINATE_MS）
         this.scheduleWorkerIdleTerminate()
       } catch (error) {
         // 初始化失败：与空闲回收同路径收尾（terminate + 清 pending），再记一次重试
@@ -206,12 +206,12 @@ class ShikiStreamService {
   }
 
   /**
-   * 应答 worker 的资产请求（p2-04）。
+   * 应答 worker 的资产请求。
    *
    * worker 不再 `import('shiki')`（那会让它的独立模块图再编译一份 286 个语言 chunk 的语言表，
    * 产物重复 4.15 MB），改为向主线程索取语法/主题注册数据——这些数据是 JSON，可结构化克隆。
    *
-   * 失败语义按家规"失败不得伪装成空结果"：解析失败回包 `error` ⇒ worker 侧 `requestAsset`
+   * 失败语义：解析失败回包 `error` ⇒ worker 侧 `requestAsset`
    * reject ⇒ `ensureLanguageAndThemeLoaded` 走既有回退（语言退 `text`、主题退 `one-light`），
    * 而不是让 tokenizer 拿着空语法静默出错。
    *
@@ -248,7 +248,7 @@ class ShikiStreamService {
   }
 
   /**
-   * 排程 worker 空闲回收（p2-12）。
+   * 排程 worker 空闲回收。
    *
    * 语义：只在"无 pending 请求"时计时。任意请求入队即取消计时（`cancelWorkerIdleTerminate`），
    * 请求结算后（队列排空时）再排；到期若仍无 pending ⇒ `terminateWorker()`。高亮器引用
@@ -277,7 +277,7 @@ class ShikiStreamService {
   }
 
   /**
-   * 终结 worker 并结算其剩余请求（p2-12 / p2-13）。
+   * 终结 worker 并结算其剩余请求。
    * terminate 后不会有任何回包，未结算的 Promise 必须显式 reject——否则调用方永久悬挂。
    */
   private terminateWorker(): void {
@@ -300,7 +300,7 @@ class ShikiStreamService {
   /**
    * 向 Worker 发送消息并等待回复
    *
-   * p2-13：结算只走 `settle`（一次结算 ⇒ clearTimeout + 从 pendingRequests 摘除）。
+   * 结算只走 `settle`（一次结算 ⇒ clearTimeout + 从 pendingRequests 摘除）。
    * `postMessage` 抛错时此前调**原始 reject**：绕过 settled 门禁、不清定时器、不删条目，
    * 于是 postMessage 持续抛错时每个 delta 都留下一个存活到超时的条目 + 定时器，并在超时
    * 时二次触发降级标记。现统一走 settle。
@@ -503,7 +503,7 @@ class ShikiStreamService {
    * @returns ThemedToken 行
    */
   /**
-   * 该 callerId 当前是否处于 fallback 冷却期（p2-15）。
+   * 该 callerId 当前是否处于 fallback 冷却期。
    *
    * 存的是"冷却截止时间戳"：到点即删条目 ⇒ 下次请求重新尝试 worker。过期条目由
    * LRUCache 的 TTL 兜底清理，但正常路径靠这里的惰性删除自愈。
@@ -550,7 +550,7 @@ class ShikiStreamService {
         })
         return result
       } catch (error) {
-        // Worker 处理失败：记一次**有期限**的降级（p2-15）。此前写死 `true` 且 TTL 12 小时，
+        // Worker 处理失败：记一次**有期限**的降级。此前写死 `true` 且 TTL 12 小时，
         // 等于"一次超时 ⇒ 该块此后所有 delta 都在主线程 tokenize"；现在冷却
         // DEGRADATION_CACHE.COOLDOWN 后自动重试 worker，超长代码块不再永久污染该 caller。
         this.workerDegradationCache.set(callerId, Date.now() + SERVICE_CONFIG.DEGRADATION_CACHE.COOLDOWN)
@@ -591,7 +591,7 @@ class ShikiStreamService {
         recall: result.recall
       }
     } catch (error) {
-      // r2-09：不得伪造「看起来合法」的高亮结果。旧实现把整段 chunk 塞进一行 token 并
+      // 不得伪造「看起来合法」的高亮结果。旧实现把整段 chunk 塞进一行 token 并
       // `recall: 0` 返回，调用方（useCodeHighlight）既不撤回已渲染的 unstable 行、又把这行当
       // 正常高亮追加 → 代码被挤进一行且可能重复，而失败只落一条 error 日志、UI 无任何信号。
       // 现在原样上抛：调用方把该块降级为未高亮纯文本并给出可见提示（见 useCodeHighlight）。
@@ -672,7 +672,7 @@ class ShikiStreamService {
    */
   dispose() {
     if (this.worker) {
-      // r2-64：此前先 `postMessage({type:'dispose'})` 再 `terminateWorker()`——terminate 在同一
+      // 此前先 `postMessage({type:'dispose'})` 再 `terminateWorker()`——terminate 在同一
       // tick 终止线程，dispose 的回执永远到不了，反而由 terminateWorker 的显式 reject 触发上面的
       // `.catch` 打出一条虚假的 "Failed to dispose worker" warn（每次 dispose 一条假告警）。
       // teardown 的确定性由 terminateWorker() 独自提供：它 reject 全部在途请求（settle 会清掉

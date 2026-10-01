@@ -3,7 +3,7 @@ import { determineTargetLanguage, validateCustomLanguage } from '@renderer/utils
 import { describe, expect, it } from 'vitest'
 
 /**
- * 翻译页偏好项回补（v0.4.7）单测：
+ * 翻译页偏好项回补单测：
  *   ① 自定义语言校验（空名/空码/内置码/重复码/正常）；
  *   ② determineTargetLanguage 放宽后：自定义码直通、内置配对语义不变；
  *   ③ 翻译偏好 action 的合并语义（Partial 覆盖，未提及字段不动）。
@@ -38,7 +38,7 @@ describe('determineTargetLanguage（AnyTranslateLangCode 放宽）', () => {
     expect(determineTargetLanguage('auto', 'tlh')).toEqual({ ok: true, source: 'auto', target: 'tlh' })
   })
 
-  it('内置配对语义不变：同语言拒绝、auto 保持 auto（v0.3.3 既有语义，对向解析留给模型）', () => {
+  it('内置配对语义不变：同语言拒绝、auto 保持 auto（既有语义，对向解析留给模型）', () => {
     expect(determineTargetLanguage('zh-cn', 'zh-cn')).toEqual({ ok: false, reason: 'same_language' })
     expect(determineTargetLanguage('auto', 'zh-cn')).toEqual({ ok: true, source: 'auto', target: 'zh-cn' })
   })

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { withDetail } from '../utils/errorDetail'
 import { usePaperAgentStatus } from './useCodeCliStatus'
 
-// v0.4.5（fork 原创）：Paper-Agent 受管 Web UI 控制器——照 useHermesDashboardController 同构
+// （fork 原创）：Paper-Agent 受管 Web UI 控制器——照 useHermesDashboardController 同构
 // （状态订阅 + 弹窗 + epoch 守卫），差别两处：
 // ① 无 onConfigMayHaveChanged 面：它的模型供应商/检索密钥由自身 Web UI 的系统设置页写入
 //    （home/paper-agent/config/model.json），没有"Cherry 侧配置文件随运行态失效"这条链。

@@ -41,7 +41,7 @@ const TranslatePage = () => {
   const { t } = useTranslation()
   const dispatch = useAppDispatch()
   const translateModel = useAppSelector((state) => state.llm.translateModel)
-  // v0.4.7 偏好项回补（V2 feature.translate.page.* 的 fork redux 对位）
+  // 偏好项回补（V2 feature.translate.page.* 的 fork redux 对位）
   const translateAutoCopy = useAppSelector((state) => state.settings.translateAutoCopy)
   const translateCustomPrompt = useAppSelector((state) => state.settings.translateCustomPrompt)
   const translateCustomLanguages = useAppSelector((state) => state.settings.translateCustomLanguages)
@@ -57,7 +57,7 @@ const TranslatePage = () => {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [history, setHistory] = useState<TranslateRecord[]>([])
-  /** 历史读取失败原因（null = 没有失败）。见 f2-24：失败不得伪装成"暂无记录"。 */
+  /** 历史读取失败原因（null = 没有失败）。见 ：失败不得伪装成"暂无记录"。 */
   const [historyError, setHistoryError] = useState<string | null>(null)
 
   const cancelledRef = useRef(false)
@@ -78,7 +78,7 @@ const TranslatePage = () => {
       setHistory(records)
       setHistoryError(null)
     } catch (error) {
-      // 二轮审查 f2-24：Dexie 打不开/表结构不符时不能只落一条 warn——抽屉会渲染成官方的
+      // Dexie 打不开/表结构不符时不能只落一条 warn——抽屉会渲染成官方的
       // "暂无翻译记录"空态，误导用户以为没有记录（本地历史是唯一副本），进而重复翻译或误判数据丢失。
       logger.error('load translate history failed', error as Error)
       setHistoryError(error instanceof Error ? error.message : String(error))
@@ -91,7 +91,7 @@ const TranslatePage = () => {
 
   const languageLabel = useCallback(
     (code: AnyTranslateLangCode | 'auto') => {
-      // v0.4.7 自定义语言优先（其 value 即展示名），内置走 i18n 键族。
+      // 自定义语言优先（其 value 即展示名），内置走 i18n 键族。
       const custom = translateCustomLanguages.find((lang) => lang.langCode === code)
       if (custom !== undefined) return `${custom.emoji} ${custom.value}`.trim()
       const key = langCodeToI18nKey.get(code)
@@ -134,7 +134,7 @@ const TranslatePage = () => {
         {
           provider: translateModel.provider,
           model: translateModel.id,
-          // v0.4.7 偏好项回补：自定义翻译指令（空 = 内置 TRANSLATE_PROMPT）
+          // 偏好项回补：自定义翻译指令（空 = 内置 TRANSLATE_PROMPT）
           messages: [
             {
               role: 'user',
@@ -158,7 +158,7 @@ const TranslatePage = () => {
         }
       )
       if (!cancelledRef.current && accumulated.trim().length > 0) {
-        // v0.4.7 偏好项回补（V2 feature.translate.page.auto_copy 同语义）：翻译成功即复制。
+        // 偏好项回补（V2 feature.translate.page.auto_copy 同语义）：翻译成功即复制。
         if (translateAutoCopy) {
           navigator.clipboard.writeText(accumulated).catch((error: unknown) => {
             logger.warn('translate auto-copy failed', error instanceof Error ? error : new Error(String(error)))
@@ -184,7 +184,7 @@ const TranslatePage = () => {
         window.toast.error(`${t('translate.error.failed')}: ${error instanceof Error ? error.message : String(error)}`)
       }
     } finally {
-      // 二轮审查 f2-32：卸载守卫此前只覆盖事件回调与成功/失败分支，漏了 `finally`——
+      // 卸载守卫此前只覆盖事件回调与成功/失败分支，漏了 `finally`——
       // 翻译中切走路由（懒加载页面，卸载很常见）后仍在已卸载组件上 `setTranslating(false)`。
       if (!cancelledRef.current && requestId === requestIdRef.current) {
         setTranslating(false)

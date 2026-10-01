@@ -1,5 +1,5 @@
 /**
- * knowledge_read 内核 builtin 工具（v0.4.6）。
+ * knowledge_read 内核 builtin 工具。
  *
  * V2 kb_read 同构物：knowledge_search 命中只给片段（且文档级合并截 1200 字符），
  * 模型需要整读命中文档或在其内部精确查找。fork 侧文档全文 = 摄取 chunk 的有序拼接

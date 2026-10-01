@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { useCommittedInput } from '../useCommittedInput'
 
 /**
- * 输入框草稿的提交时机（v1 二轮审查 s2-14）。
+ * 输入框草稿的提交时机。
  *
  * `settings` 切片是 redux-persist 持久化的且没有节流：`onChange` 里直接 dispatch 等于每敲一个
  * 字符就整片序列化 + 写 localStorage。这个 hook 是四处同步面板（Joplin / Notion / Siyuan / Yuque）

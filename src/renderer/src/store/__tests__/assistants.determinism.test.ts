@@ -5,13 +5,13 @@ import { describe, expect, it } from 'vitest'
 import assistants, { addAssistant, addTopic, updateTopic, updateTopicUpdatedAt } from '../assistants'
 
 /**
- * r2-31 / r2-70：`assistants/` 在 `store/index.ts` 的 syncList 里，因此同一条 action 会被
+ * `assistants/` 在 `store/index.ts` 的 syncList 里，因此同一条 action 会被
  * `src/main/services/StoreSyncService.ts` **原样广播**给 mini 窗，两个窗口各跑一次 reducer。
  * reducer 内 `new Date()` / `new Date().toISOString()` 会让两窗算出不同的 createdAt/updatedAt
  * （侧栏排序、familyRowSignature 都吃 updatedAt）。非确定性值必须在 action 创建时定妥
  * （`prepare`），reducer 只做赋值。
  *
- * 同时钉住 r2-70：updateTopic 不再就地改 action payload，messages 口径与 updateTopics 对齐。
+ * 同时钉住 ：updateTopic 不再就地改 action payload，messages 口径与 updateTopics 对齐。
  */
 const ASSISTANT_ID = 'assistant-a'
 
@@ -37,7 +37,7 @@ const newTopic = (id: string, extra: Partial<Topic> = {}): Topic =>
 
 const payloadTopic = (action: { payload: unknown }): Topic => (action.payload as { topic: Topic }).topic
 
-describe('assistants reducers — 跨窗口确定性（r2-31）', () => {
+describe('assistants reducers — 跨窗口确定性', () => {
   it('addTopic：时间戳在 action 创建时定妥，两窗执行同一 action 结果一致', () => {
     const action = addTopic({ assistantId: ASSISTANT_ID, topic: newTopic('t1') })
     const stamped = payloadTopic(action)
@@ -103,7 +103,7 @@ describe('assistants reducers — 跨窗口确定性（r2-31）', () => {
   })
 })
 
-describe('updateTopic — messages 口径对齐 updateTopics（r2-70）', () => {
+describe('updateTopic — messages 口径对齐 updateTopics', () => {
   it('不碰无关行：不带 messages 的旁行保留原引用，不被加上 messages: []', () => {
     let state = seed()
     state = assistants(

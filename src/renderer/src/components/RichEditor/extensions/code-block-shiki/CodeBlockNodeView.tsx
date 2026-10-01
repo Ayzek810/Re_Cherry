@@ -50,7 +50,7 @@ const CodeBlockNodeView: FC<ReactNodeViewProps> = (props) => {
   )
 
   // Handle copy code block content
-  // c2-29：原来把剪贴板失败完全吞掉（catch 里连日志都没有），成功也没有任何反馈——
+  // 原来把剪贴板失败完全吞掉（catch 里连日志都没有），成功也没有任何反馈——
   // 失败与成功不可区分。对照 `CodeBlockView/view.tsx:142-147` 的既有范式：记日志 + 双信号。
   const handleCopy = useCallback(async () => {
     const codeText = props.node.textContent || ''

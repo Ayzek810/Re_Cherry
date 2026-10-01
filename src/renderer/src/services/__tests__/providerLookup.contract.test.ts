@@ -2,7 +2,7 @@ import type { Model, Provider } from '@renderer/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * r2-42：`getProviderByModel` 的三值契约（家规 §9）。
+ * `getProviderByModel` 的三值契约。
  *
  * 旧契约：查不到时静默回落到 `defaultProvider || providers[0]`，并声明返回 `Provider`——
  * 调用方无法区分「没有 provider」与「有 provider」，会把请求发到
@@ -51,7 +51,7 @@ const createProvider = (overrides: Partial<Provider> = {}): Provider =>
 const openai = createProvider()
 const anthropic = createProvider({ id: 'anthropic', type: 'anthropic', name: 'Anthropic' })
 
-describe('getProviderByModel three-valued contract (r2-42)', () => {
+describe('getProviderByModel three-valued contract', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getStoreProvidersMock.mockReturnValue([openai, anthropic])
@@ -84,7 +84,7 @@ describe('getProviderByModel three-valued contract (r2-42)', () => {
   })
 
   it('exposes the same single implementation from both service modules', () => {
-    // 去重钉子：两份实现曾经语义相反（一份纯查表、一份静默回落），家规要求只留一份。
+    // 去重钉子：两份实现曾经语义相反（一份纯查表、一份静默回落），因此只留一份。
     expect(getProviderByModelFromAssistantService).toBe(getProviderByModelFromProviderService)
   })
 

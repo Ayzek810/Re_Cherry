@@ -2,7 +2,7 @@ import type { Model, Provider } from '@renderer/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * r2-42：`ApiService` 的三个 `getProviderByModel` 调用点不再依赖静默回落。
+ * `ApiService` 的三个 `getProviderByModel` 调用点不再依赖静默回落。
  *
  * 旧行为：查不到 provider 时 `getProviderByModel` 回落到 `defaultProvider || providers[0]`，
  * 于是请求被发到「外来 model.id + 任意 provider」上——用户看到「无 API 密钥」之类的
@@ -71,7 +71,7 @@ const liveProvider = {
   models: []
 } as Provider
 
-describe('ApiService provider lookup failures (r2-42)', () => {
+describe('ApiService provider lookup failures', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     lightCompleteMock.mockResolvedValue({ text: 'ok' })

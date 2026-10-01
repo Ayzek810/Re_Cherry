@@ -1,5 +1,5 @@
 /**
- * 绘画生成执行与落盘（v0.3.3 批次4，② 薄适配）：GenerationResult 联合 +
+ * 绘画生成执行与落盘（② 薄适配）：GenerationResult 联合 +
  * aiErrorDetail→错误码映射保留；resolvePaintingFiles 改为 fork 缝——base64 结果
  * 调 window.api.file.saveBase64Image 得 FileMetadata[]，url 结果调
  * window.api.file.download 后 FileManager.addFile 入库，返回 FileMetadata[]。

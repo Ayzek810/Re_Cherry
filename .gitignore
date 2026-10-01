@@ -1,6 +1,8 @@
-# Logs
+# Logs（注意：不能用 `*.log*`——它会连 `.../NewAppButton.logoReadError.test.tsx`
+# 这类名字里含 `.log` 的源码文件一起吞掉，且被吞的文件在 `git status` 里完全不显示）
 logs
-*.log*
+*.log
+*.log.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -79,14 +81,6 @@ vitest.config.*.timestamp-*
 playwright-report
 test-results
 
-# scratch 探针运行时生成物（工具源码随仓；模型/伪 userData/产物不入库）
-tools/scratch-verify/models/
-tools/scratch-verify/probe-userdata/
-tools/scratch-verify/probe-*.pdf
-tools/scratch-verify/probe-*.png
-probe-*.bundle.cjs
-
 YOUR_MEMORY_FILE_PATH
 
 .sessions/
-/probe-*.pdf

@@ -1,6 +1,6 @@
 /**
- * v0.3.2 自 CS_V1 移植（联网搜索 QuickPanel 面板管理器）。
- * 批次2（接线）改动点：
+ * 自 CS_V1 移植（联网搜索 QuickPanel 面板管理器）。
+ * （接线）改动点：
  * - 搜索可用性判据换 WebSearchService.isWebSearchEnabled 全量语义（local- 恒可用 /
  *   key 型看 apiKey / host 型看 apiHost），未就绪项不进面板；
  * - 提供商 logo 已随 SVGIcon 逐字移植（Bing/SearXNG/Tavily/Exa/Bocha/Zhipu/Querit +

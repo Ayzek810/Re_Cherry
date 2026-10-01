@@ -55,9 +55,9 @@ const BlacklistSettings: FC = () => {
 
   const dispatch = useAppDispatch()
 
-  /** 卸载守卫：解析是网络往返，卸载后不再写状态（s2-01/s2-20）。 */
+  /** 卸载守卫：解析是网络往返，卸载后不再写状态。 */
   const isMountedRef = useRef(true)
-  /** s2-20：并发/慢请求竞态守卫——只有最新一次 updateSubscribe 的结果可以落地。 */
+  /** 并发/慢请求竞态守卫——只有最新一次 updateSubscribe 的结果可以落地。 */
   const updateSeqRef = useRef(0)
   useEffect(() => {
     return () => {
@@ -144,7 +144,7 @@ const BlacklistSettings: FC = () => {
     try {
       const outcome = await parseSelectedSubscribeSources(selectedSources, parseSubscribeContent)
 
-      // s2-20：迟到的旧请求不得覆盖新请求的结果，也不得复位新请求的进行态。
+      // 迟到的旧请求不得覆盖新请求的结果，也不得复位新请求的进行态。
       if (!isMountedRef.current || seq !== updateSeqRef.current) return
 
       // 逐条失败只报警，不参与合并；整批失败必须在下面走失败态，不能弹成功。
@@ -169,7 +169,7 @@ const BlacklistSettings: FC = () => {
       }
 
       // 按 key 合并：未选中的订阅源与其已解析黑名单必须原样保留。
-      // 旧实现整片替换为 outcome.updated，未选中源连同 blacklist 一起消失（s2-01）。
+      // 旧实现整片替换为 outcome.updated，未选中源连同 blacklist 一起消失。
       const { sources, updatedCount } = mergeSubscribeSources(websearch.subscribeSources ?? [], outcome.updated)
       setSubscribeSources(sources)
       setSubscribeValid(true)

@@ -29,7 +29,7 @@ const CollapsibleSearchBar = ({
   const [searchVisible, setSearchVisible] = useState(false)
   const [searchText, setSearchText] = useState('')
   const inputRef = useRef<InputRef>(null)
-  // c2-26：默认值原来经默认单例 `i18n.t(...)` 在默认参数里求值；组件被 `memo()` 包住且
+  // 默认值原来经默认单例 `i18n.t(...)` 在默认参数里求值；组件被 `memo()` 包住且
   // 三个消费点都不传这两个 prop，于是文案只在父组件恰好重渲染时才刷新。改用 `useTranslation()`，
   // 组件订阅语言变化，默认值在渲染期取。
   const { t } = useTranslation()

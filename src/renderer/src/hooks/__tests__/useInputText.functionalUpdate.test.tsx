@@ -1,5 +1,5 @@
 /**
- * r2-68 行为测试：`useInputText` 的函数式更新走 React 的 updater 语义。
+ * `useInputText` 的函数式更新走 React 的 updater 语义。
  *
  * 改动前 `const newText = typeof value === 'function' ? value(text) : value` 读渲染期闭包：
  * 同一 tick 的两次函数式更新都基于同一个旧 `text` 计算，第二次覆盖第一次（丢更新）。
@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { useInputText } from '../useInputText'
 
-describe('useInputText r2-68：React updater 语义', () => {
+describe('useInputText ：React updater 语义', () => {
   it('同一 tick 的两次函数式更新依次作用（不再丢更新）', () => {
     const { result } = renderHook(() => useInputText({ initialValue: 'a' }))
 

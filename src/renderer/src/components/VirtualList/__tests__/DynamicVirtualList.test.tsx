@@ -320,7 +320,7 @@ describe('DynamicVirtualList', () => {
   })
 
   describe('scroll region accessibility', () => {
-    // c2-10：`aria-hidden` 原先绑在「滚动条要不要显示」上。一旦调用方使用 `autoHideScrollbar`，
+    // `aria-hidden` 原先绑在「滚动条要不要显示」上。一旦调用方使用 `autoHideScrollbar`，
     // 停止滚动 2 秒后整块列表（内含可聚焦内容）会被 `aria-hidden` —— 这是 WCAG 4.1.2 违规。
     // 新契约：滚动条显隐只走 `$autoHide`/`$show` 样式，列表对辅助技术始终可见。
     it('never hides the list from assistive technology when autoHideScrollbar is false', () => {
@@ -372,8 +372,8 @@ describe('DynamicVirtualList', () => {
     })
   })
 
-  describe('header placement (c2-32)', () => {
-    // c2-32：header 原先渲染在滚动容器内、测量容器外，高度不参与 `virtualItem.start`，
+  describe('header placement', () => {
+    // header 原先渲染在滚动容器内、测量容器外，高度不参与 `virtualItem.start`，
     // 第一条虚拟行会落在 header 之下（重叠），滚到顶时第 0 行藏在 header 后面。
     it('renders the header outside the scroll container so row offsets stay correct', () => {
       render(<DynamicVirtualList {...defaultProps} header={<div data-testid="list-header">header</div>} />)

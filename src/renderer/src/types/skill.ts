@@ -2,7 +2,7 @@
  * Skill types shared between main and renderer processes.
  *
  * Zod schemas serve as both runtime validators and TypeScript type source.
- * （v0.3.2 自 CS_V1 移植；启用粒度 fork 改为按助手——见 Assistant.enabledSkills。）
+ * 自 CS_V1 移植；启用粒度 fork 改为按助手——见 Assistant.enabledSkills。
  */
 
 import * as z from 'zod'
@@ -86,7 +86,7 @@ export const ClawhubSearchResponseSchema = z.object({
   results: z.array(ClawhubSearchItemSchema)
 })
 
-// ClawhubSkillDetailSchema / ClawhubSkillDetail（clawhub 详情接口）在 r2-108 中删除：
+// ClawhubSkillDetailSchema / ClawhubSkillDetail（clawhub 详情接口）在 中删除：
 // 全仓零消费者，`services/SkillSearchService.ts` 只导入三个 Search 响应 schema。
 // 接线详情接口时再加回。
 

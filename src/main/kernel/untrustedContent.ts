@@ -1,5 +1,5 @@
 /**
- * 不可信文本进受信提示边界前的规范化（V2 untrustedContent.ts 逐字移植，v0.4.6）。
+ * 不可信文本进受信提示边界前的规范化（V2 untrustedContent.ts 逐字移植）。
  *
  * 应用面（本仓）：ensureAgent 组装快照节时插入的模型/用户可写文本——技能名/描述、
  * 附件文档名、memory FACT.md 正文。这些值进入 system prompt 上下文节，若携带
@@ -21,7 +21,7 @@ export function defangSystemReminderTags(text: string): string {
 /**
  * 不可信文本进受信边界的**唯一**入口：先归一，再拆解真标签。
  *
- * 为什么必须两步（v1 二轮审查 k2-08）：`sanitizeUntrustedText` 会把全角
+ * 为什么必须两步：`sanitizeUntrustedText` 会把全角
  * `＜/system-reminder＞` 归一成**真正的** `</system-reminder>`——只做这一步，等于把
  * 攻击者的逃逸写法洗成有效标签，反而打开伪造系统提醒信封的路。两步合起来才封住。
  * `untrustedContent.test.ts` 的用例示范的正是这个组合。

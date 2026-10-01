@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingsItem, SettingsPanel } from './styles'
 
-// r2-69：面板操作的是**表单态**（`model` 允许空位 = 用户还没选），不是已提交的 `KnowledgeBase`。
+// 面板操作的是**表单态**（`model` 允许空位 = 用户还没选），不是已提交的 `KnowledgeBase`。
 interface AdvancedSettingsPanelProps {
   newBase: KnowledgeBaseForm
   selectedDocPreprocessProvider?: PreprocessProvider

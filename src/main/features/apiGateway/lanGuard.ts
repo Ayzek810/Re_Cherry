@@ -36,7 +36,7 @@ function readRemoteAddress(request: Request): string | undefined {
 
 /** Returns a 403 body for every non-loopback request. */
 export function screenLanRequest(request: Request, _pathname: string): { error: string } | undefined {
-  // 批次5 真机 403 事故修复：V2 原文（lanGuard.ts L40-44）的顺序是「回环放行 → LAN
+  // 真机 403 事故修复：V2 原文（lanGuard.ts L40-44）的顺序是「回环放行 → LAN
   // enabled 检查只管非回环 peer」。3b 裁掉 remote 分支时把 enabled 检查提到了回环检查
   // 之前——LAN 开关关闭（默认）时连 127.0.0.1 上的 dsh 请求都被 403（"LAN access is
   // disabled"），网关完全不可用。按 V2 原序恢复：回环无条件放行。

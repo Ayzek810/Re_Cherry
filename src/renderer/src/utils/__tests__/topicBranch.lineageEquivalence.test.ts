@@ -3,7 +3,7 @@ import { collectSubtreeIds, familyRowSignature, rootTopicOf } from '@renderer/ut
 import { describe, expect, it } from 'vitest'
 
 /**
- * r2-71 对拍：血缘闭包的**索引版**必须与改动前的逐轮全表扫描版**同值**。
+ * 对拍：血缘闭包的**索引版**必须与改动前的逐轮全表扫描版**同值**。
  *
  * 改动只允许是性能改动（O(n·血缘深度) → O(n)），所以这里把改动前的两份实现原样保留为
  * 参考基准，在确定性伪随机森林上逐例比对：单值签名、删除闭包、根行对象。
@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest'
 const TS = '2026-09-01T00:00:00.000Z'
 
 // ---------------------------------------------------------------------------
-// 参考基准：改动前的实现（逐字抄自 r2-71 之前的 `utils/topicBranch.ts` 与 `store/assistants.ts`）
+// 参考基准：改动前的实现（逐字抄自 之前的 `utils/topicBranch.ts` 与 `store/assistants.ts`）
 // ---------------------------------------------------------------------------
 
 function legacyRootTopicOf(topic: Topic, allTopics: Topic[]): Topic {
@@ -116,7 +116,7 @@ function randomForest(random: () => number): Topic[] {
   })
 }
 
-describe('r2-71 血缘闭包：索引版与旧的逐轮扫描版逐字同值', () => {
+describe('血缘闭包：索引版与旧的逐轮扫描版逐字同值', () => {
   it('400 个随机森林 × 全部探针：签名 / 删除闭包 / 根行对象全部一致', () => {
     const random = makeRandom(0x71_7157)
     let comparisons = 0

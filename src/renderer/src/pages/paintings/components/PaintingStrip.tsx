@@ -1,5 +1,5 @@
 /**
- * 历史缩略条（v0.3.3 批次4，② 薄适配）：缩略图/删除交互原样；数据源 → 传 props
+ * 历史缩略条（② 薄适配）：缩略图/删除交互原样；数据源 → 传 props
  * （页面从 Dexie 读，组件内不直接碰 db）。ConfirmDialog → antd Modal.confirm 形态
  * （受控 Modal）。paintingClasses 从 ① paintingPrimitives import。
  */
@@ -160,7 +160,7 @@ const PaintingStrip: FC<PaintingStripProps> = ({
             deleteLabel={t('paintings.button.delete.image.label')}
           />
         ))}
-        {/* 三态（二轮审查 f2-15）：失败不得与"没有历史"同形，也不得让 hasMore 停在 true 转圈。 */}
+        {/* 三态：失败不得与"没有历史"同形，也不得让 hasMore 停在 true 转圈。 */}
         {error ? (
           <div
             data-testid="painting-history-error"
@@ -174,7 +174,7 @@ const PaintingStrip: FC<PaintingStripProps> = ({
             </button>
           </div>
         ) : isLoading && items.length === 0 ? (
-          // 首帧骨架（§9 Rendering：每个状态都要有骨架或占位）。只画纯色占位，不启用
+          // 首帧骨架（Rendering：每个状态都要有骨架或占位）。只画纯色占位，不启用
           // PaintingSkeletonSurface 的逐格动画——缩略条里放三份 ResizeObserver + 动画循环不值当。
           <div className="flex w-full shrink-0 flex-col gap-2" data-testid="painting-history-skeleton">
             {Array.from({ length: 3 }).map((_, index) => (

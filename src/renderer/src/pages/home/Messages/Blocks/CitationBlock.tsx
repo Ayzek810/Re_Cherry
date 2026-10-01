@@ -6,8 +6,8 @@
  * （文档名/序号/复制/摘录）。正文药丸 + 悬浮胶囊（Markdown/Link/CitationSup）
  * 与本卡同源（同一 formatCitationsFromBlock），互不依赖。
  *
- * v0.3.2 验收裁决回顾：3779666 回收的是"专属工具标题卡"机制；本卡是用户明确
- * 要求恢复的独立引用清单（0a8e3ff 误判为不要卡，见 §6.11 验收修复）。旧版的
+ * 验收裁决回顾：3779666 回收的是"专属工具标题卡"机制；本卡是用户明确
+ * 要求恢复的独立引用清单（0a8e3ff 误判为不要卡，见 验收修复）。旧版的
  * PROCESSING 旋转文案（runtime.websearch.activeSearches）属已删除的 streaming
  * 层，内核路径载体直接以 SUCCESS 建立，不再有处理中形态。
  */

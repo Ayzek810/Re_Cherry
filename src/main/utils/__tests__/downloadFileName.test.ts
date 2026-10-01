@@ -1,9 +1,9 @@
 /**
- * 下载落盘的文件名/后缀解析（v0.3.3-2 修"AI 生成的图片没被文件页纳入"）。
+ * 下载落盘的文件名/后缀解析（修"AI 生成的图片没被文件页纳入"）。
  *
  * 现场：`downloadFile(url, true)` 原先无条件把 Content-Type 推出的后缀**追加**到文件名尾部——
  * URL 已带 `.png`、响应头是 `application/octet-stream`（→ `.bin`）时落成 `xxx.png.bin`、`ext=.bin`、
- * `FILE_TYPE.OTHER`，文件页「图片」分类里看不到这张图。这里钉住四条口径（真机取证见报告 §1）。
+ * `FILE_TYPE.OTHER`，文件页「图片」分类里看不到这张图。这里钉住四条口径（真机取证见报告）。
  */
 import { describe, expect, it, vi } from 'vitest'
 

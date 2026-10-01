@@ -9,10 +9,10 @@ import { CliIcon } from './CliIcon'
 import { Scrollbar } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/CodeCliSidebar.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，工具行渲染（图标/选中态/安装态标签/概要行）逐字：
+//（2026-09-24）。缝点三处，工具行渲染（图标/选中态/安装态标签/概要行）逐字：
 // ① sidebarShortcuts 段不搬：isSidebarPinned/onToggleSidebar props、CommandContextMenu/
 //   CommandPopupMenu/SidebarShortcutIcon 与行尾"更多"菜单按钮整体裁掉（fork 未建侧栏快捷方式
-//   面，批次 5 父代理挂）。
+// 面，父代理挂）。
 // ② 状态面缝：fork VersionStatus 无 operation（移除中旋转态）——SidebarStatusTag 收敛为
 //   busy 安装态与未安装标签两臂。
 // ③ UI 面缝：@cherrystudio/ui 的 Scrollbar → 本页 shim（fork Scrollbar 复用）、CliIcon → 本页

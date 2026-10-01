@@ -4,7 +4,7 @@ import { rootTopicIdOf, rootTopicOf } from '@renderer/utils/topicBranch'
 import { describe, expect, it } from 'vitest'
 
 /**
- * 家族根解析（v0.3.1 第三轮）钉：
+ * 家族根解析（第三轮）钉：
  * - rootTopicIdOf（id 场景：selector/事件投影——起查行必须在表内）
  * - rootTopicOf（对象在手场景：HomePage/Topics——行不在清单也能从对象自身上溯）
  *

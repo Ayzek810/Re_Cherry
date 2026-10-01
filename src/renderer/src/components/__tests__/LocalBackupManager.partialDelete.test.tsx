@@ -1,9 +1,9 @@
 /**
- * c2-18 行为测试：侧栏小程序弹窗的批量删除必须报「N 成功 / M 失败」。
+ * 侧栏小程序弹窗的批量删除必须报「N 成功 / M 失败」。
  *
  * 原状：串行 `await` 落在同一个 `try` 里，第 k 条失败即跳出循环 —— 前 k-1 条已经真删了、
  * 剩下的没删，却只弹一条通用错误，用户无法知道到底删掉了几个；`selectedRowKeys` 也只在
- * 全成功路径才清空。正面违反家规「批量删除要报 N 成功 / M 失败」。
+ * 全成功路径才清空，批量删除不报 N 成功 / M 失败。
  *
  * 注意：本文件**不** mock `react-i18next`。`@renderer/i18n` 会 `.use(initReactI18next)`，
  * 与「异步工厂里 await importOriginal」互相等待，vitest 会在收集阶段死锁。这里让真实 i18n 跑，
@@ -62,7 +62,7 @@ const FILES = [{ fileName: 'a.zip' }, { fileName: 'b.zip' }, { fileName: 'c.zip'
 
 const confirmCalls: { onOk?: () => Promise<void> }[] = []
 
-describe('LocalBackupManager batch delete reporting (c2-18)', () => {
+describe('LocalBackupManager batch delete reporting', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     confirmCalls.length = 0

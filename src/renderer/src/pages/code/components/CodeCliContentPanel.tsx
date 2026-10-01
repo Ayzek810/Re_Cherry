@@ -12,7 +12,7 @@ import { Button, SearchInput } from './shadcn'
 import { VersionStatusCard } from './VersionStatusCard'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/CodeCliContentPanel.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，版本卡装配/供应商搜索/添加提示脚位逐字：
+//（2026-09-24）。缝点三处，版本卡装配/供应商搜索/添加提示脚位逐字：
 // ① Gemini 臂删除：gemini_cli_discontinued Alert 与 add_provider_hint 的 claude/codex/gemini
 //   分支随工具集裁剪（getAddProviderHintKey 收敛为恒 'code.add_provider_hint'）。
 // ② 导航缝：openSettingsTab('/settings/provider') → fork window.navigate 同路径（fork 既有
@@ -35,16 +35,16 @@ interface CodeCliContentPanelProps {
   upgradingTools: Set<string>
   /** Failure message of the last install attempt for the selected tool (from the main-process install-state map). */
   installError?: string
-  /** v0.3.4-2：首探窗口（快照未返回）——版本卡显示「检查中」而非可点击的「安装」。 */
+  /** 首探窗口（快照未返回）——版本卡显示「检查中」而非可点击的「安装」。 */
   snapshotsLoading?: boolean
   /**
    * 安装进度（共享契约 `InstallProgressPayload`，仅当前工具的安装中有值）。
    *
-   * v0.4.5-1：原来是三个平行 prop（step/detail/fraction），加一个字段就要改三层——正是共享
+   * 原来是三个平行 prop（step/detail/fraction），加一个字段就要改三层——正是共享
    * 词汇表要消掉的那种漂移。现在整份载荷透传：载荷加字段，这里不用动。
    */
   installProgress?: InstallProgressPayload
-  /** v0.4.5：手动检查更新（三个工具页共用）。 */
+  /** 手动检查更新（三个工具页共用）。 */
   onCheckUpdates?: () => void
   checkingUpdates?: boolean
   providerState: {
@@ -106,7 +106,7 @@ export const CodeCliContentPanel: FC<CodeCliContentPanelProps> = ({
   const { t } = useTranslation()
   const [providerSearch, setProviderSearch] = useState('')
   const [showInstallError, setShowInstallError] = useState(false)
-  // v0.4.5：paper-agent 不吃 Cherry 供应商——它的模型供应商与检索密钥由自身 Web UI 的
+  // paper-agent 不吃 Cherry 供应商——它的模型供应商与检索密钥由自身 Web UI 的
   // 系统设置页配置（home/paper-agent/config/model.json），因此不渲染供应商区。
   const isPaperAgent = selectedCliTool === CodeCli.PAPER_AGENT
 

@@ -1,6 +1,6 @@
 /**
- * v0.3.2 自 CS_V1 移植（文档预处理服务商）。
- * 批次1 为静态默认表桩；本次接真：读写 store/preprocess 切片（随 rootReducer 持久化）。
+ * 自 CS_V1 移植（文档预处理服务商）。
+ * 为静态默认表桩；本次接真：读写 store/preprocess 切片（随 rootReducer 持久化）。
  * 三个 hook 照上游形状：列表读写 / 单个读写（apiKey/apiHost/model 变更时双写
  * knowledge 切片 syncPreprocessProvider，同步进所有引用该 provider 的知识库内嵌副本）/
  * 默认服务商。设置页（/settings/docprocess）负责编辑，知识库弹窗经

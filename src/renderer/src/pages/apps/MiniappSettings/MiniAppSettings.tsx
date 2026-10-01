@@ -72,7 +72,7 @@ const MiniAppSettings: FC = () => {
     const temp = visibleMiniApps
     setVisibleMiniApps(disabledMiniApps)
     setDisabledMiniApps(temp)
-    // 交换必须落库（f2-55）：只改本地 state 的话，任何触发上面同步 effect 的 store 变化
+    // 交换必须落库：只改本地 state 的话，任何触发上面同步 effect 的 store 变化
     // （切地区、拖一个图标）都会把界面弹回原样——用户操作静默丢失。写入路径与
     // `MiniAppIconsManager.handleListUpdate` 一致：两个列表都写，并让固定项不再指向被禁用的应用。
     updateMinapps(disabledMiniApps)

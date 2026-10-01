@@ -15,7 +15,7 @@ export interface SpanDecoratorOptions {
  * return values can be large (`FileSystemService.readFile` returns a `Buffer`).
  * `JSON.stringify(Buffer)` expands to `{"type":"Buffer","data":[0,1,…]}` — about
  * five characters per byte — so an unbounded serialization allocated tens of
- * megabytes on a synchronous path and pushed it into span attributes (k2-15).
+ * megabytes on a synchronous path and pushed it into span attributes .
  *
  * Binary payloads are summarized, and every string is capped. `TraceConfig` used
  * to reserve a `maxAttributesPerSpan` field that nothing read; the cap below is

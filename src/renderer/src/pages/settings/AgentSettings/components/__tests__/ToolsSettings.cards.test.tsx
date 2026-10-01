@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import ToolsSettings from '../ToolsSettings'
 
 /**
- * 工具页方形卡片的版式与交互契约（v0.4.7 起：第一排 i18n 名 + 开关，第二排工具原版名，
+ * 工具页方形卡片的版式与交互契约（起：第一排 i18n 名 + 开关，第二排工具原版名，
  * 下面是介绍）。
  *
  * 断言锚点用**工具原版名**而不是本地化名：原版名是标识符、不随语言变，测试不会因为

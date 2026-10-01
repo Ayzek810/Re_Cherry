@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/resolvers.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/resolvers.ts（2026-09-24）。
 // fork 缝：函数面按 hermes 依赖闭包裁剪——OpenCode/Pi/Claude/Codex/OpenAI/MiniMax 的
 // resolver 与 OpenCodeNpmInfo/PiApi/MinimaxApi/modelSupportsReasoningEffort 随对应 adapter
 // 整块删除；hermes 段（HERMES_API_MODES/HermesProviderInfo/resolveHermesProviderInfo）与

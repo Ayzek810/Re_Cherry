@@ -1,5 +1,5 @@
 /**
- * ThinkingButton 契约测试（v0.3.0 设计：思考档位与模型无关，常驻六项）。
+ * ThinkingButton 契约测试（设计：思考档位与模型无关，常驻六项）。
  *
  * ⚠️ 教训（本文件 25 个用例整片失败的根因）：
  * 此前这里用 `vi.mock('@renderer/config/models', () => ({...}))` 把该模块**整体替换**，且漏掉了
@@ -413,8 +413,8 @@ describe('ThinkingButton', () => {
         { option: 'none', expectedTestId: 'mdi-lightbulb-off-outline' },
         { option: 'default', expectedTestId: 'mdi-lightbulb-question' },
         // 'max' 是 REASONING_UI_OPTIONS 里的最高档，与 xhigh 同图标（满档）。
-        // 记录：v0.3.0 引入常驻档位时漏了 ThinkingIcon 的 'max' case，'满'档曾落到 default 分支
-        // 显示问号（"未知"）图标；v0.3.0-1 后续修复产品代码后，本行由 question 改为 on。
+        // 记录：引入常驻档位时漏了 ThinkingIcon 的 'max' case，'满'档曾落到 default 分支
+        // 显示问号（"未知"）图标；后续修复产品代码后，本行由 question 改为 on。
         { option: 'max', expectedTestId: 'mdi-lightbulb-on' }
       ]
 
@@ -428,7 +428,7 @@ describe('ThinkingButton', () => {
     })
   })
 
-  describe('reasoning option list (model-independent, v0.3.0)', () => {
+  describe('reasoning option list (model-independent)', () => {
     it('keeps the isReasoningModel control point effective', () => {
       // guard：若 reasoningKernel 先被 importOriginal 的模块图实例化（见文件头第二个坑），
       // 这里会拿到真实的 isReasoningModel，mock 静默失效，本用例立即失败。
@@ -479,7 +479,7 @@ describe('ThinkingButton', () => {
     })
 
     it('should turn thinking off in one click when it is already enabled', () => {
-      // v0.3.0-1 恢复的交互：档位表里有"关"（none）时，已开启状态点一下**直接关闭**，不再打开面板。
+      // 恢复的交互：档位表里有"关"（none）时，已开启状态点一下**直接关闭**，不再打开面板。
       // （此前该分支要求"非多档模型"，而常驻六项下含 none 必含 low/medium/high → 条件恒不成立，
       //  这个交互实际消失、disableThinking 沦为死代码。）
       const mockOpen = vi.fn()
@@ -679,7 +679,7 @@ describe('ThinkingButton', () => {
 
     it('should show "Reasoning Effort" for non-reasoning models even with an enabled level', () => {
       // 非推理模型的档位表为空 → 不含 'none' 项 → 无法一键关闭 → 标签为 "Reasoning Effort"，
-      // **与点击行为一致**（点击打开面板）。v0.3.0-1 修正了此前"标签说 Close、点击却开面板"的不符。
+      // **与点击行为一致**（点击打开面板）。修正了此前"标签说 Close、点击却开面板"的不符。
       renderComponent({
         isReasoningModel: false,
         reasoningEffort: 'high'

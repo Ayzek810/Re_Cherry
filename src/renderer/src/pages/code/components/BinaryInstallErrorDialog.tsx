@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { Button, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/components/BinaryInstallErrorDialog.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点两处，三件套（持久失败行 / 安装提示 / 详情对话框）逻辑逐字：
+//（2026-09-24）。缝点两处，三件套（持久失败行 / 安装提示 / 详情对话框）逻辑逐字：
 // ① UI 面缝：@cherrystudio/ui Dialog 族/Button → 本页 shim（antd Modal；DialogHeader 与
 //   DialogTitle 的纵向排布由 shim 容器类承担）；toast → fork window.toast。
 // ② 视觉缝：V2 复合状态色令牌（error-border/error-subtle 族）→ fork 的 error 透明度修饰（见
@@ -110,7 +110,7 @@ export const BinaryInstallErrorDialog: FC<{
             )}
           </DialogDescription>
         </DialogHeader>
-        {/* 二轮审查 f2-49（§9 Rendering）：容器同时声明 overflow 与 max-height 时必须两个轴都声明。
+        {/* （Rendering）：容器同时声明 overflow 与 max-height 时必须两个轴都声明。
             这里的安装日志可能含极长的无空格路径/URL，只写 `overflow-auto` 时横向滚动条一出现就会
             改变内容宽度 → 改变换行高度 → 与 max-h-72 形成宽度重排↔高度的循环。 */}
         <pre className="max-h-72 select-text overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all rounded-lg bg-muted p-3 font-mono text-muted-foreground text-xs leading-5 [scrollbar-gutter:stable]">

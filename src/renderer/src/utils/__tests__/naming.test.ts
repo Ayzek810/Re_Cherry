@@ -404,7 +404,7 @@ describe('naming', () => {
     })
 
     it('should truncate at ending punctuation, not comma', () => {
-      // When no complete sentence fits, should find ending punctuation (。！？；) not comma
+      // When no complete sentence fits, should find ending punctuation 。！？) not comma
       const text = '这是一段很长的文字，里面有逗号，但是没有句号直到最后才有句号。'
       const result = truncateText(text, { minLength: 10, maxLength: 25 })
       // Should truncate at word boundary since no ending punctuation within range

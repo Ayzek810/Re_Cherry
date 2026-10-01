@@ -7,7 +7,7 @@ import type { WebSearchHttpOptions, WebSearchProviderResponse, WebSearchRuntimeS
 const logger = loggerService.withContext('BochaProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 BochaProvider.ts + utils/bocha.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 BochaProvider.ts + utils/bocha.ts）：
  * - 上游本就是裸 fetch，请求构造原样保留：POST '{apiHost}/v1/web-search'，Bearer 头 +
  *   defaultHeaders，body {query, count, exclude, freshness, summary, page}；响应 code!==200
  *   明错，取 data.webPages.value 的 name/summary||snippet/url。

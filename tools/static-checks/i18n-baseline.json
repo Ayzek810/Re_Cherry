@@ -1,0 +1,8 @@
+{
+  "generatedAt": "2026-09-25T11:14:05.333Z",
+  "note": "手动刷新",
+  "misses": [
+    "src/main/features/apiGateway/adapters/stream/AiSdkToOpenAiSse.ts:chat.completion",
+    "src/main/features/apiGateway/adapters/stream/AiSdkToOpenAiSse.ts:chat.completion.chunk"
+  ]
+}

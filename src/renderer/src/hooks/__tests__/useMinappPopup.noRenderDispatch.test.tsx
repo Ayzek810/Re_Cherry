@@ -1,5 +1,5 @@
 /**
- * r2-37 行为测试：`useMinappPopup` 的缓存重建不得在渲染期 dispatch。
+ * `useMinappPopup` 的缓存重建不得在渲染期 dispatch。
  *
  * 改动前：「缓存数量大小发生了改变」这段在渲染期执行，重建会用 `minAppsCache.set()`
  * 回填旧条目 → LRU 的 `onInsert` 同步 `dispatch(setOpenedKeepAliveMinapps(...))`
@@ -58,7 +58,7 @@ beforeEach(() => {
   renderPhaseDispatches.length = 0
 })
 
-describe('useMinappPopup r2-37：渲染期不更新 store', () => {
+describe('useMinappPopup ：渲染期不更新 store', () => {
   it('容量变化的重建只发生在 effect 中，渲染期零 dispatch 且条目保留', () => {
     const { rerender } = render(<Probe max={3} />)
     expect(latest!.minAppsCache.max).toBe(3)

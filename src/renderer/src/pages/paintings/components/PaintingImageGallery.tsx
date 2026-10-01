@@ -1,14 +1,14 @@
 /**
- * 生成结果图托盘（v0.3.3 批次4，V2 PaintingImageGallery 重写为 antd 版）：
+ * 生成结果图托盘（V2 PaintingImageGallery 重写为 antd 版）：
  * 页面状态托盘（生成结果图列表）+ antd Image 预览 + 下载/保存按钮。
  * 布局参考 V2 HorizontalScrollContainer（fork 既有同名组件）。
  * 另含参考图托盘（编辑输入）：V2 同文件 PaintingImageAddButton 语义。
  *
- * 二轮审查 f2-29：默认导出的「生成结果托盘」与它的
+ * 默认导出的「生成结果托盘」与它的
  * `GalleryWrap`/`ResultTile`/`ResultImage`/`DownloadButton` 在全仓库无引用者
  * （`components/composer/variants/painting/PaintingImageGallery.tsx` 只取
  * `PaintingImageAddButton` 与 `PaintingInputTray`；唯一测试也只引 `PaintingInputTray`）——
- * 按 §5.1 六形态核对后属真死码：`styled.div`/`styled(Image)`/`styled(Button)` 是模块顶层求值，
+ * 按 六形态核对后属真死码：`styled.div`/`styled(Image)`/`styled(Button)` 是模块顶层求值，
  * 不会随未使用导出被摇掉，还会额外拉入 `antd Image` 与 `@renderer/utils/download`。已删除。
  */
 import { PlusOutlined } from '@ant-design/icons'

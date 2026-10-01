@@ -1,5 +1,5 @@
 /**
- * r2-72: the reconciliation effect keeps a narrowed dependency, not the whole assistant object.
+ * the reconciliation effect keeps a narrowed dependency, not the whole assistant object.
  * The line is part of the reconciliation umbrella contract (same gate style as
  * services/__tests__/topicAuthorityGate.test.ts), so it is pinned at the source level and the
  * behavioural outcome stays covered by useTopic.authority.test.ts.
@@ -22,7 +22,7 @@ function reconcileEffectDependencies(): string {
   return deps![1]
 }
 
-describe('useActiveTopic reconciliation effect dependencies (r2-72)', () => {
+describe('useActiveTopic reconciliation effect dependencies', () => {
   it('depends on assistant?.topics, not the whole assistant object', () => {
     const deps = reconcileEffectDependencies()
     expect(deps).toContain('assistant?.topics')

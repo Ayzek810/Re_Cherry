@@ -43,7 +43,7 @@ const logger = loggerService.withContext('MessageThunk')
 
 const finishTopicLoading = async (topicId: string) => {
   await waitForTopicQueue(topicId)
-  // v0.3.1 第三轮：fulfilled 的 true 不在这里设——queue 排空≠回合结束（内核流还在打），
+  // 第三轮：fulfilled 的 true 不在这里设——queue 排空≠回合结束（内核流还在打），
   // 旧位置会让侧栏绿点提前亮然后被"看没了"。真源在 kernelChat.finishTurn（回合成功 + 用户
   // 未在观看时才置 true）。loading:false 本身保留：它服务"加载等待"语义（加载中禁点）。
   store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
@@ -263,7 +263,7 @@ const fetchAndProcessAssistantResponseImpl = async (
     if (triggeringUserMessage) {
       await kernelChat.ensureKernelTopic(topicId, assistant)
       const text = kernelChat.extractTextFromUserMessage(triggeringUserMessage)
-      // v0.3.1 识图通道：图片块规范化为附件载荷（canvas 解码/EXIF/压预算），随发送参数上行。
+      // 识图通道：图片块规范化为附件载荷（canvas 解码/EXIF/压预算），随发送参数上行。
       // 准入（数量/字节/容器校验）在内核附件仓库，失败整轮拒绝并上抛。
       const images = await kernelChat.extractImagesFromUserMessage(triggeringUserMessage)
       if (text.length === 0 && images.length === 0) {
@@ -271,14 +271,14 @@ const fetchAndProcessAssistantResponseImpl = async (
       }
       // 能力状态随发送参数现算（类 buildToolsForSession，拨动下一轮生效）：
       // 内置工具 = 助手开关；外置工具 = 话题工作模式开关（宏）× 助手外置开关；档位 = 助手权限配置
-      // v0.3.1 识图通道补全：主模型（本 assistant.model，@提及轮经 assistantForThisMention
+      // 识图通道补全：主模型（本 assistant.model，@提及轮经 assistantForThisMention
       // 已是实际发送模型）无视觉且已配置转述模型 → 追加 describe_images。不进工具设置页
       //（用户裁决：开关由"是否是视觉模型"自动决定）；视觉路由永不挂载，模型直读，
       // 执行侧防线保留拒Call。
       const describerModel = getState().llm.imageDescriberModel
       const wantsDescriber =
         assistant.model !== undefined && !isVisionModel(assistant.model) && describerModel !== undefined
-      // 批次2 网络搜索：助手开启（webSearchProviderId 或 enableWebSearch）且提供商就绪
+      // 网络搜索：助手开启（webSearchProviderId 或 enableWebSearch）且提供商就绪
       // → 追加 web_search 工具并上行提供商；就绪判定与设置页/面板共用同一判据
       //（services/WebSearchService.isWebSearchEnabled）。提供商缺省用全局默认提供商。
       const webSearchProviderId = assistant.webSearchProviderId ?? getState().websearch.defaultProvider
@@ -286,11 +286,11 @@ const fetchAndProcessAssistantResponseImpl = async (
         (assistant.webSearchProviderId !== undefined || assistant.enableWebSearch === true) &&
         webSearchProviderId !== undefined &&
         isWebSearchEnabled(webSearchProviderId)
-      // 批次5 技能：助手启用技能（enabledSkills ∩ 切片元数据）→ 追加 skill 工具并
+      // 技能：助手启用技能（enabledSkills ∩ 切片元数据）→ 追加 skill 工具并
       // 上行本轮可读技能清单（索引进内核快照节，SKILL.md 由工具按需读）。
       const enabledSkills = assistant.enabledSkills ?? []
       const skillsActive = enabledSkills.length > 0
-      // 批次6 文档阅读：触发消息 FILE 附件块（非图片）→ read_document 登记载荷
+      // 文档阅读：触发消息 FILE 附件块（非图片）→ read_document 登记载荷
       //（展示名 + 绝对路径，主进程直读做文本层抽取；扫描件诚实诊断见主进程服务）。
       const documentFiles = (triggeringUserMessage.blocks ?? [])
         .map((blockId) => getState().messageBlocks.entities[blockId])
@@ -303,24 +303,24 @@ const fetchAndProcessAssistantResponseImpl = async (
       // ocr_document 进了助手工具页注册表（稀疏缺省 = 开）：附件门 + 开关双门控。
       const ocrEnabled = assistant.builtinTools?.ocr_document !== false
       const documentToolIds = documentsActive ? ['read_document', ...(ocrEnabled ? ['ocr_document'] : [])] : []
-      // 批次5 聊天生图（V2 PaintingTool.applies 双门语义）：助手开关开 + 绘画模型已配置。
+      // 聊天生图（V2 PaintingTool.applies 双门语义）：助手开关开 + 绘画模型已配置。
       const paintingModel = getState().llm.paintingModel
       const generateImageActive = assistant.enableGenerateImage === true && paintingModel !== undefined
       const builtinTools = [
-        // 附件门（§7.17）：read_document/ocr_document 只在触发消息带文件附件的轮挂载
-        //（无附件时 schema 是纯噪音）；ask_user_question 受助手工具页开关。v0.4.6 用户裁决：
+        // 附件门：read_document/ocr_document 只在触发消息带文件附件的轮挂载
+        //（无附件时 schema 是纯噪音）；ask_user_question 受助手工具页开关。用户裁决：
         // memory/todo/goal 归外置（工作模式作用域），不再进本清单。
         ...BUILTIN_TOOL_IDS.filter((toolId) => toolId !== 'ocr_document' && assistant.builtinTools?.[toolId] !== false),
         ...(wantsDescriber ? ['describe_images'] : []),
         ...(webSearchActive ? ['web_search', 'web_fetch'] : []),
-        // 批次4 知识检索：助手挂知识库即追加（每轮登记见 options.knowledgeBases）。
-        // v0.4.6：knowledge_read 同门挂载（kb_search 命中文档的整读/grep 取回键）。
+        // 知识检索：助手挂知识库即追加（每轮登记见 options.knowledgeBases）。
+        // knowledge_read 同门挂载（kb_search 命中文档的整读/grep 取回键）。
         ...((assistant.knowledge_bases?.length ?? 0) > 0 ? ['knowledge_search', 'knowledge_read'] : []),
         ...(skillsActive ? ['skill'] : []),
         ...(generateImageActive ? ['generate_image'] : []),
         ...documentToolIds
       ]
-      // 批次3 MCP：助手 mcpMode 派生挂载单元清单（`mcp:<serverId>`）。manual = 勾选集
+      // MCP：助手 mcpMode 派生挂载单元清单（`mcp:<serverId>`）。manual = 勾选集
       //（assistant.mcpServers ∩ 活跃）；auto = 全部活跃服务器（fork 无上游 hub 服务器，
       // auto 语义就地降级为全量，交付注记有记）；disabled/空 = 无。服务器配置本身经
       // useAppInit 的 Dsh_SyncMcpServers 同步进主进程，内核桥挂载时按 id 反查。
@@ -346,7 +346,7 @@ const fetchAndProcessAssistantResponseImpl = async (
         tier: assistant.workMode?.approval,
         images,
         ...(webSearchActive ? { webSearch: { providerId: webSearchProviderId } } : {}),
-        // 批次4 知识检索：本轮可检索库清单（嵌入引用只含 id，主进程自解析密钥）。
+        // 知识检索：本轮可检索库清单（嵌入引用只含 id，主进程自解析密钥）。
         ...((assistant.knowledge_bases?.length ?? 0) > 0
           ? {
               knowledgeBases: (assistant.knowledge_bases ?? []).map((base) => ({
@@ -360,14 +360,14 @@ const fetchAndProcessAssistantResponseImpl = async (
                   modelId: base.model.id,
                   dimensions: base.dimensions
                 },
-                // 批次2 rerank 实装：库配置了重排模型则随登记上行（主进程 lightRerank 精排）。
+                // rerank 实装：库配置了重排模型则随登记上行（主进程 lightRerank 精排）。
                 ...(base.rerankModel
                   ? { rerank: { providerId: base.rerankModel.provider, modelId: base.rerankModel.id } }
                   : {})
               }))
             }
           : {}),
-        // 批次5 技能：本轮可读技能清单（enabledSkills ∩ 切片元数据，id = folderName）。
+        // 技能：本轮可读技能清单（enabledSkills ∩ 切片元数据，id = folderName）。
         ...(skillsActive
           ? {
               skills: enabledSkills
@@ -385,7 +385,7 @@ const fetchAndProcessAssistantResponseImpl = async (
                 }))
             }
           : {}),
-        // 批次6 文档阅读：本轮附件文档清单（展示名 + 绝对路径）。
+        // 文档阅读：本轮附件文档清单（展示名 + 绝对路径）。
         ...(documentsActive
           ? {
               documents: documentFiles.map((file) => ({
@@ -393,16 +393,16 @@ const fetchAndProcessAssistantResponseImpl = async (
                 path: file.path,
                 ext: file.ext
               })),
-              // §7.17 三轮 文档处理通道：本轮 ocr_document 的服务商 = 设置 → 文档处理
+              // 文档处理通道：本轮 ocr_document 的服务商 = 设置 → 文档处理
               // 的默认服务商（配置本体经 Dsh_SyncPreprocess 整体投影，这里只上行 id）。
               preprocess: { providerId: getState().preprocess.defaultProvider }
             }
           : {}),
-        // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
+        // 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
         ...(generateImageActive && paintingModel
           ? { generateImage: { providerId: paintingModel.provider, modelId: paintingModel.id } }
           : {}),
-        // v0.4.6 持久记忆（外置）：工作模式开 + 助手外置开关开时上行助手 id（内核主进程
+        // 持久记忆（外置）：工作模式开 + 助手外置开关开时上行助手 id（内核主进程
         // 派生受控目录，渲染层不上行路径）；payload 门与外置挂载门严格同条件。
         ...(topic?.workMode === true && assistant.externalTools?.memory !== false
           ? { memory: { assistantId: assistant.id } }
@@ -418,10 +418,10 @@ const fetchAndProcessAssistantResponseImpl = async (
       error: error,
       modelName: assistant.model?.name
     })
-    // r2-40：V1 回调编排（callbacks/* + BlockManager）已整树删除——它除 `onError` 外没有任何
+    // V1 回调编排（callbacks/* + BlockManager）已整树删除——它除 `onError` 外没有任何
     // 调用者。发送路径（会话建册 / 附件规范化 / dshTopicSend）抛错时内核不会发 turn/end，
     // 所以 kernelChat.finishTurn 的终态收尾（错误块 + 消息状态 + loading）不会发生。
-    // 这里就地补齐**等价且可见**的终态，绝不静默（CLAUDE.md §9）：消息会一直停在 PENDING 且
+    // 这里就地补齐**等价且可见**的终态，绝不静默：消息会一直停在 PENDING 且
     // 零块，渲染出来就是一条「空回复」——失败伪装成空结果。
     try {
       const errorBlock = createErrorBlock(assistantMsgId, serializeError(error))
@@ -492,7 +492,7 @@ export const sendMessage =
         dispatch(upsertManyBlocks(userMessageBlocks))
       }
       dispatch(updateTopicUpdatedAt({ topicId }))
-      // 活动浮顶（v0.3.1 验收轮）：发送即写数组序，侧栏立刻反映；只动位置，updatedAt 已由上行负责
+      // 活动浮顶（验收轮）：发送即写数组序，侧栏立刻反映；只动位置，updatedAt 已由上行负责
       dispatch(moveTopicToHead({ topicId }))
 
       const queue = getTopicQueue(topicId)
@@ -969,7 +969,7 @@ export const loadTopicMessagesThunk =
           blockCount: kernelData.blocks.length
         })
       } else if (isRestoredTopicRow(topicId)) {
-        // X9：恢复行却读不出来 = 失败，不是"空历史"——如实抛出，由消费方渲染错误态与重试。
+        // 恢复行却读不出来 = 失败，不是"空历史"——如实抛出，由消费方渲染错误态与重试。
         throw new Error(`kernel has no readable session for restored topic ${topicId}`)
       } else {
         // 本进程内新建、尚未首发建册：内核本来就没有它的会话，"没有历史"是正常状态而不是失败
@@ -978,7 +978,7 @@ export const loadTopicMessagesThunk =
       }
     } catch (error) {
       logger.error(`Failed to load messages for topic ${topicId}:`, error as Error)
-      // X9：失败必须能被消费方看见（失败不得伪装成"确实没有消息"）。调用方按 rejection 决定错误态。
+      // 失败必须能被消费方看见（失败不得伪装成"确实没有消息"）。调用方按 rejection 决定错误态。
       throw error
     } finally {
       dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))

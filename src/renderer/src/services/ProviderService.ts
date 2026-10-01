@@ -13,9 +13,9 @@ export function getProviderName(model?: Model) {
 }
 
 /**
- * 按模型解析 provider。**本函数是唯一的查找实现**（r2-42）。
+ * 按模型解析 provider。**本函数是唯一的查找实现**。
  *
- * 三值契约（家规 §9）：
+ * 三值契约：
  * - 命中 `model.provider` ⇒ 返回该 `Provider`；
  * - 未命中（provider 未配置、已被删除，或 `model` 为空）⇒ 返回 `undefined`。
  *

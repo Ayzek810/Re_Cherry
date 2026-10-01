@@ -76,7 +76,7 @@ function findElementByLine(editorDom: HTMLElement, lineNumber: number, lineConte
 }
 
 /**
- * 当前浮层在滚动容器上的 cleanup。c2-35①：旧浮层是被 `remove()` 直接摘掉的，
+ * 当前浮层在滚动容器上的 cleanup。：旧浮层是被 `remove()` 直接摘掉的，
  * 它的 `animationend` 永不触发，于是 `container.removeEventListener` 从不执行 ——
  * scroll 监听器被永久留在长生命周期的编辑器滚动容器上（同时保留已移除的 DOM 节点）。
  */

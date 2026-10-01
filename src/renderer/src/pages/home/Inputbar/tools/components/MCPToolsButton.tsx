@@ -1,8 +1,8 @@
 /**
- * v0.3.2 自 CS_V1 移植（MCP 模式/服务器 QuickPanel 按钮）。
- * 批次1（UI）改动点：
- * - Prompts/Resources 面板未移植（依赖 window.api.mcp.*，批次3 恢复）；
- * - Gemini/url-context 冲突检查未移植（批次2/3 按内核语义重写）；
+ * 自 CS_V1 移植（MCP 模式/服务器 QuickPanel 按钮）。
+ * （UI）改动点：
+ * - Prompts/Resources 面板未移植（依赖 window.api.mcp.*，恢复）；
+ * - Gemini/url-context 冲突检查未移植（按内核语义重写）；
  * - 'mcp-server-select' 事件中转改为直接调用（本面板自身即是唯一入口）。
  */
 import { ActionIconButton } from '@renderer/components/Buttons'

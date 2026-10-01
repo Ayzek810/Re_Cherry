@@ -1,5 +1,5 @@
 /**
- * v0.4.3 引擎包装层契约：maxResults 终审截断（防个别提供商内部不截断响应——
+ * 引擎包装层契约：maxResults 终审截断（防个别提供商内部不截断响应——
  * Bocha/Querit 直接映射服务端返回）+ 黑名单两路并行过滤保持。
  */
 import { describe, expect, it, vi } from 'vitest'
@@ -40,7 +40,7 @@ const makeEngine = async (
 
 const result = (url: string) => ({ title: url, url, content: 'c' })
 
-describe('maxResults 终审截断（v0.4.3）', () => {
+describe('maxResults 终审截断', () => {
   it('提供商返回超量 → 截到 runtime.maxResults（设置权威上限的兜底）', async () => {
     const results = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => result(`https://a.example/${i}`))
     const engine = await makeEngine(results, runtime({ maxResults: 3 }))

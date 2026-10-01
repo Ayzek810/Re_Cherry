@@ -102,7 +102,7 @@ const DataSettings: FC = () => {
         {menu === 'data' && <BasicDataSettings />}
         {menu === 'webdav' && <WebDavSettings />}
         {menu === 'nutstore' && <NutstoreSettings />}
-        {/* v1 二轮审查 s2-10：此前没有 `s3` 分支——点「S3」右侧是永久空白面板（无占位、无说明）。
+        {/* ：此前没有 `s3` 分支——点「S3」右侧是永久空白面板（无占位、无说明）。
             S3 的配置面在 fork 里没有编辑器（`settings.s3` 只有类型 + 初始值 + migrate 分支，
             `init.ts` 启动时仍会读 `s3.autoSync`），故这里如实说明「本版没有该界面」，
             而不是继续用空白面板暗示「这里什么都没有」。 */}
@@ -121,7 +121,7 @@ const DataSettings: FC = () => {
   )
 }
 
-/** S3 条目的显式占位（见 s2-10 注释）：如实说明本版没有该界面，而不是渲染空白。 */
+/** S3 条目的显式占位（见 注释）：如实说明本版没有该界面，而不是渲染空白。 */
 const S3SettingsPlaceholder: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()

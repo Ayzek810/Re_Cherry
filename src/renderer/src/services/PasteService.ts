@@ -129,7 +129,7 @@ export const getLastFocusedComponent = (): ComponentType => {
 /**
  * 注册组件的粘贴处理函数
  *
- * r2-58：原先还有一个 `init()` 在 document 上挂全局 `paste` 监听并路由到这里的 handler。
+ * 原先还有一个 `init()` 在 document 上挂全局 `paste` 监听并路由到这里的 handler。
  * 那条路径**不可达**：唯一的初始化点是 inputbar，而 inputbar 的活跃元素恒为 textarea，
  * `handleGlobalPaste` 开头的守卫（INPUT/TEXTAREA/contenteditable ⇒ 直接 return false）
  * 让路由与兜底分支永远拿不到事件；真正的粘贴入口是各组件自己的 `onPaste`

@@ -26,8 +26,8 @@ import MCPResourcesSection from './McpResource'
 import MCPToolsSection from './McpTool'
 
 /**
- * v0.3.2 自 CS_V1 移植（MCP 服务器详情页）。主进程 MCP 通道由 @renderer/services/mcpApi
- * 批次1 替身承载：列举类返回空、配置类本地落库、无进程参与。
+ * 自 CS_V1 移植（MCP 服务器详情页）。主进程 MCP 通道由 @renderer/services/mcpApi
+ * 替身承载：列举类返回空、配置类本地落库、无进程参与。
  */
 const logger = loggerService.withContext('McpSettings')
 
@@ -52,7 +52,7 @@ interface MCPFormValues {
 }
 
 interface Registry {
-  /** i18n 键（v1 二轮审查 s2-40：用户可见的单选标签此前是硬编码中文，en-US 下会露出来）。 */
+  /** i18n 键（用户可见的单选标签此前是硬编码中文，en-US 下会露出来）。 */
   labelKey: string
   url: string
 }
@@ -180,7 +180,7 @@ const McpSettings: React.FC = () => {
       logoUrl: server.logoUrl || '',
       tags: server.tags || []
     })
-    // v1 二轮审查 s2-17：依赖从 `server`（对象身份）改为 `server.id`。
+    // 依赖从 `server`（对象身份）改为 `server.id`。
     // `useMCPServer` 对该 id 做 find、`updateMCPServer` 整行替换——页面内自己就会换掉这一行的
     // 身份（工具页的 `handleToggleTool` / `handleToggleAutoApprove` 都 dispatch）。改之前：
     // 在「常规」页改了 name/args/env，切到「工具」页关一个工具 → 本 effect 重跑，
@@ -205,7 +205,7 @@ const McpSettings: React.FC = () => {
         const localTools = await mcpApi.listTools(server)
         setTools(localTools)
       } catch (error) {
-        // v1 二轮审查 s2-18：这里此前是 `setLoadingServer(server.id)` 的复制粘贴笔误——
+        // 这里此前是 `setLoadingServer(server.id)` 的复制粘贴笔误——
         // 既不记日志也不清状态，随即被 finally 抹掉，等于 catch 里什么都没做。
         // 不清空的话，切到服务器 B 探测失败时界面显示的是服务器 A 的工具集挂在 B 名下。
         logger.warn('Failed to list MCP tools', error as Error)
@@ -299,7 +299,7 @@ const McpSettings: React.FC = () => {
     }
   }, [server.id])
 
-  // v1 二轮审查 s2-18：切换服务器时清空上一次服务器的列举结果（旧实现只重置了 logs）。
+  // 切换服务器时清空上一次服务器的列举结果（旧实现只重置了 logs）。
   // 不过期数据比空数据危险：界面会把 A 的工具集显示在 B 名下。
   useEffect(() => {
     setLogs([])
@@ -446,7 +446,7 @@ const McpSettings: React.FC = () => {
         content: t('settings.mcp.deleteServerConfirm'),
         centered: true,
         onOk: async () => {
-          // v1 二轮审查 s2-22：`onOk` 的 rejection 不会冒泡到外面的 try/catch（antd 内部
+          // `onOk` 的 rejection 不会冒泡到外面的 try/catch（antd 内部
           // `setLoading(false, true); return Promise.reject(e)`），删除失败会零用户可见信号。
           try {
             await mcpApi.removeServer(server)

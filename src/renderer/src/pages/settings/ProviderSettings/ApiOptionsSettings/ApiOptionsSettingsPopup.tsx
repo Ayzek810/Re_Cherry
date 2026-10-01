@@ -29,7 +29,7 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
     resolve({})
   }
 
-  // v1 二轮审查 s2-43：不在渲染期给静态类写属性（严格模式下执行两次；卸载后该引用仍指向
+  // 不在渲染期给静态类写属性（严格模式下执行两次；卸载后该引用仍指向
   // 旧闭包，外部调 hide() 会 setState 已卸载组件，且不再执行真正的 TopView.hide）。
   // 关闭路径由 show() 内的 TopView.hide 与 `static hide()` 覆盖。
 

@@ -8,7 +8,7 @@ import { fetchWebContent, noContent } from './webFetch'
 const logger = loggerService.withContext('SearxngProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 SearxngProvider.ts +
+ * 自 CS_V1 移植 + 适配点清单（源：上游 SearxngProvider.ts +
  * @agentic/searxng 7.3.3）：
  * - SearxngClient(@agentic/searxng) + ky → 等价裸 fetch：GET '{apiHost}/search?
  *   q=<query>&engines=<a,b>&language=auto&format=json'（与 agentic 客户端 searchParams

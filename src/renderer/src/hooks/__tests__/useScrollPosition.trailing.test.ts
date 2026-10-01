@@ -1,5 +1,5 @@
 /**
- * r2-35 行为测试：`useScrollPosition` 的 trailing 保存在消费方反复重渲染后仍然落盘。
+ * `useScrollPosition` 的 trailing 保存在消费方反复重渲染后仍然落盘。
  *
  * 改动前 `throttle(...)` 每次渲染都新建，cleanup effect 依赖这个新函数，于是每次渲染都
  * 跑一次 `handleScroll.cancel()`。聊天流式期间 `Messages.tsx` 逐帧重渲染，用户停下滚动时
@@ -26,7 +26,7 @@ beforeEach(() => {
   keyvSet.mockClear()
   keyvGet.mockClear()
   ;(window as unknown as { keyv: unknown }).keyv = { get: keyvGet, set: keyvSet, remove: vi.fn() }
-  // rAF 同步执行：断言与帧时序无关（家规：不以计时作为回归信号）
+  // rAF 同步执行：断言与帧时序无关
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
     callback(0)
     return 1
@@ -38,7 +38,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('useScrollPosition r2-35：trailing 保存不被重渲染取消', () => {
+describe('useScrollPosition ：trailing 保存不被重渲染取消', () => {
   it('消费方连续重渲染后，trailing 仍以最终 scrollTop 落盘', () => {
     vi.useFakeTimers()
     const { result, rerender } = renderHook(() => useScrollPosition('chat', 100))

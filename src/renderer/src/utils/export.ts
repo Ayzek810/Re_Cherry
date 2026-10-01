@@ -30,11 +30,9 @@ const setExportingState = (isExporting: boolean) => {
 /**
  * 导出后端（Notion / 语雀 / Obsidian / Joplin / 思源 / 笔记截图）的懒加载口。
  *
- * v1 二轮性能审计 p2-03/p2-04/p2-07：这些后端的闭包（`@notionhq/client` +
- * `@tryfabric/martian` + `notion-helper` + `dompurify` + `utils/image` 的
- * `html-to-image`/`UPNG`/`browser-image-compression`）此前经本文件的顶层 import
- * 整包进首屏 store chunk。改为函数内 `await import()` 后 rollup 将其切成懒 chunk
- * （实测首屏 −0.318MB，见 `reports/audit2-fixes/performance.md`）。
+ * 这些后端的闭包（`@notionhq/client` + `@tryfabric/martian` + `notion-helper` + `dompurify` +
+ * `utils/image` 的 `html-to-image`/`UPNG`/`browser-image-compression`）此前经本文件的顶层 import
+ * 整包进首屏 store chunk。改为函数内 `await import()` 后 rollup 将其切成懒 chunk（实测首屏 −0.318MB）。
  *
  * 上面的 `import * as exportBackendsModule` 只用于取**类型**（`typeof exportBackendsModule`），
  * 不产生运行时边——所有值访问都走 `loadExportBackends()` 的动态 import。
@@ -516,7 +514,7 @@ export const exportMessageAsMarkdown = async (
 }
 
 // ---------------------------------------------------------------------------
-// 外部后端导出入口（v1 二轮性能审计 p2-03/p2-04/p2-07：闭包懒加载）。
+// 外部后端导出入口（闭包懒加载）。
 // 签名与旧实现逐字一致——调用方（Topics.tsx / MessageMenubar.tsx / ObsidianExportDialog.tsx）
 // 只 import 本文件即为纯文本能力；后端闭包只在真正调用时解析。
 // ---------------------------------------------------------------------------
@@ -555,8 +553,8 @@ export const exportMarkdownToSiyuan = async (title: string, content: string): Pr
 }
 
 // ---------------------------------------------------------------------------
-// 笔记导出（v0.3.3-2 笔记移植，V1 原样；obsidian 一路随 ObsidianExportDialog/Popup
-// 链的移植（v0.4.7）补回——内容经剪贴板 + obsidian:// deep link 交给 Obsidian 本体）
+// 笔记导出（笔记移植，V1 原样；obsidian 一路随 ObsidianExportDialog/Popup
+// 链的移植补回——内容经剪贴板 + obsidian:// deep link 交给 Obsidian 本体）
 // 后端实现在 utils/exportBackends.ts（懒 chunk），本入口只做分派。
 // ---------------------------------------------------------------------------
 

@@ -1,11 +1,11 @@
-// fork 移植自 cherry-studio v2 src/shared/types/codeCli.ts（2026-09-24，v0.3.4-1）。
+// fork 移植自 cherry-studio v2 src/shared/types/codeCli.ts（2026-09-24）。
 // 改动仅两处裁剪，均已标 `// fork 缝`。
 
 import { WORK_MODE_APPROVAL_TIERS, type WorkModeApprovalTier } from '../config/workMode'
 
 export enum CodeCli {
   // fork 缝：内置项按用户裁决裁剪为 deepseek-harness + hermes 两项（原 14 项）。
-  // v0.4.5：paper-agent 并入同一工具列表（fork 自有增量，非 V2 移植）——源码分发，
+  // paper-agent 并入同一工具列表（fork 自有增量，非 V2 移植）——源码分发，
   // 非 npm/PyPI 注册表包，install:'source'。
   DEEPSEEK_HARNESS = 'deepseek-harness',
   HERMES = 'hermes',
@@ -15,7 +15,7 @@ export enum CodeCli {
 export const DEEPSEEK_HARNESS_AGENT_PRESETS = ['inherit', 'standard', 'code', 'minimal'] as const
 export type DeepSeekHarnessAgentPreset = (typeof DEEPSEEK_HARNESS_AGENT_PRESETS)[number]
 
-// 档位词表**单一事实源**（k2-16）：与工作模式审批档位（沙箱模式名）逐字同源，
+// 档位词表**单一事实源**：与工作模式审批档位（沙箱模式名）逐字同源，
 // 不再各写一份手工同步的字面量数组。给 workMode 加第四档时这里自动跟上。
 export const DEEPSEEK_HARNESS_PERMISSION_MODES = WORK_MODE_APPROVAL_TIERS
 export type DeepSeekHarnessPermissionMode = WorkModeApprovalTier

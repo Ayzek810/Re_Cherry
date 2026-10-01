@@ -1,10 +1,10 @@
 /**
- * 二轮审查 f2-33：notes 页全部写操作失败只落日志，用户看不到任何信号。
+ * notes 页全部写操作失败只落日志，用户看不到任何信号。
  *
  * 本文件钉住服务层那两条被点名的契约，页面侧的 toast 由 `NotesPage` 的 catch 承担：
  *   ① `renameNode` 把"重名"当**业务结果**返回（`ok:false` + `reason:'conflict'`），不再 `throw`——
  *      旧实现抛 `Target name already exists`，页面只能落日志，用户看到的是"点了没反应"；
- *   ② `delNode` 按 §9 删除纪律返回 `Promise<boolean>`，调用方能区分成败；真实失败仍原样抛出。
+ * ② `delNode` 按 删除纪律返回 `Promise<boolean>`，调用方能区分成败；真实失败仍原样抛出。
  */
 import type { NotesTreeNode } from '@renderer/types/note'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,7 +30,7 @@ function node(overrides: Partial<NotesTreeNode> = {}): NotesTreeNode {
   }
 }
 
-describe('NotesService 写路径的结果契约（f2-33）', () => {
+describe('NotesService 写路径的结果契约', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(window as unknown as { api: unknown }).api = {

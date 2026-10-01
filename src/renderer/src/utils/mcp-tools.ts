@@ -1,7 +1,7 @@
 /**
- * v0.3.2 自 CS_V1 utils/mcp-tools.ts 移植（批次1 MCPSettings 页面依赖）。
+ * 自 CS_V1 utils/mcp-tools.ts 移植（MCPSettings 页面依赖）。
  * fork 改动点：暂不移植 callMCPTool——它依赖主进程 window.api.mcp.callTool 通道
- * （批次3 接线）；getMcpServerByTool / isToolAutoApproved 为纯逻辑，原样保留。
+ * （接线）；getMcpServerByTool / isToolAutoApproved 为纯逻辑，原样保留。
  */
 import store from '@renderer/store'
 import { hubMCPServer } from '@renderer/store/mcp'

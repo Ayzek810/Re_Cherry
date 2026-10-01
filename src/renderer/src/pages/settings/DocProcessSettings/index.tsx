@@ -1,5 +1,5 @@
 /**
- * v0.3.2 自 CS_V1 移植（设置 → 文档处理，/settings/docprocess）。
+ * 自 CS_V1 移植（设置 → 文档处理，/settings/docprocess）。
  *
  * fork 裁剪：上游页由两个 SettingGroup 组成——OcrSettings（OCR 服务，system/
  * tesseract/ppocr/OV 等后端表单）+ PreprocessSettings（文档处理 provider）。

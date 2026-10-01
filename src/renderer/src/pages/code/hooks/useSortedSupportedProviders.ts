@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { Provider } from '../cliConfig/providerView'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useSortedSupportedProviders.ts
-//（2026-09-24，v0.3.4-1 批次4a）。逐字；import 面对号（Provider ← providerView 投影，
+//（2026-09-24）。逐字；import 面对号（Provider ← providerView 投影，
 // CodeCliToolState ← @shared/types/codeCliState）。
 
 interface UseSortedSupportedProvidersOptions {

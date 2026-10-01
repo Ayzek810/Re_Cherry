@@ -333,7 +333,7 @@ describe('lightStream', () => {
     expect(() => abortLightStream('req-2')).not.toThrow()
   })
 
-  // v0.3.3-2「图片不落盘」：快捷助手声明 ephemeralImages 时，整轮必须包在附件仓的临时作用域里
+  // 「图片不落盘」：快捷助手声明 ephemeralImages 时，整轮必须包在附件仓的临时作用域里
   //（准入前进入、流真正结束后才退出——读字节发生在流式过程中，提前退出会丢图）。
   it('ephemeralImages：整轮包在"不落盘"作用域内；未声明时完全不碰附件仓', async () => {
     const calls: string[] = []

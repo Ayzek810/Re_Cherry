@@ -43,7 +43,7 @@ interface PopupContainerProps {
 }
 
 // 转换文件信息数组为树形结构
-// c2-47：`t` 由调用方传入，静态配置里不再对默认单例求值一次就永久固定。
+// `t` 由调用方传入，静态配置里不再对默认单例求值一次就永久固定。
 const convertToTreeData = (files: FileInfo[], t: TFunction) => {
   const treeData: any[] = [
     {
@@ -147,7 +147,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   rawContent
 }) => {
   const defaultObsidianVault = store.getState().settings.defaultObsidianVault
-  // c2-47：统一走 `useTranslation()` —— 组件订阅语言变化，渲染期取词，
+  // 统一走 `useTranslation()` —— 组件订阅语言变化，渲染期取词，
   // 与同目录其他组件一致（原来混用默认单例 `i18n.t`，语言切换后弹窗停在旧语言）。
   const { t } = useTranslation()
   const [state, setState] = useState({

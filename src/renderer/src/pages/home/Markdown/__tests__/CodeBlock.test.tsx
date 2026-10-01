@@ -78,7 +78,7 @@ vi.mock('@renderer/store/messageBlock', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => ({
   useSettings: () => mocks.useSettings(),
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   useSetting: (key: string) => (mocks.useSettings() as Record<string, unknown>)[key]
 }))
 

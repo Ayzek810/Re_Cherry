@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { defangSystemReminderTags, sanitizeUntrustedText, stripInvisibleCharacters } from '../untrustedContent'
 
 /**
- * untrustedContent 机测（v0.4.6 V2 移植）：不可见字符剥离 + 伪造 system-reminder 闭合
+ * untrustedContent 机测（V2 移植）：不可见字符剥离 + 伪造 system-reminder 闭合
  * 标签 defang——进受信提示边界前的模型/用户可写文本清洗语义。
  */
 describe('sanitizeUntrustedText', () => {

@@ -1,5 +1,5 @@
 /**
- * v0.3.1-1 空回复案投影守门测试（历史还原路径 projectEventsToMessages）。
+ * 空回复案投影守门测试（历史还原路径 projectEventsToMessages）。
  *
  * 锁定语义：
  *   1. turn/end kind=error → ERROR 块投影进该轮回答消息（直播 finishTurn 与此同构）；
@@ -22,7 +22,7 @@ vi.mock('@renderer/services/kernelEventStream', () => ({
   subscribeKernelSessionEvents: vi.fn(() => () => {})
 }))
 
-// 图片回放同步（r2-24）：本文件把它钉成"失败"（返回 null），用于验证失败占位块的结构信号。
+// 图片回放同步：本文件把它钉成"失败"（返回 null），用于验证失败占位块的结构信号。
 vi.mock('@renderer/services/kernelImages', () => ({
   syncKernelImageAttachment: vi.fn(async () => null),
   encodeImageFileForKernel: vi.fn(),
@@ -61,7 +61,7 @@ function errorBlocksOf(blocks: unknown[]): ErrorMessageBlock[] {
   return blocks.filter((b) => (b as { type?: string }).type === MessageBlockType.ERROR) as ErrorMessageBlock[]
 }
 
-describe('kernelChat turn 投影（v0.3.1-1 空回复案）', () => {
+describe('kernelChat turn 投影（空回复案）', () => {
   it('UNKNOWN_MODEL 失败轮（无 assistant/message）补承载消息并投影 ERROR 块', async () => {
     const { messages, blocks } = await project([
       userMsg(2, '你好'),
@@ -148,7 +148,7 @@ describe('kernelChat turn 投影（v0.3.1-1 空回复案）', () => {
   })
 })
 
-describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
+describe('generate_image 工具结果投影', () => {
   const toolCall = (seq: number): SessionEvent =>
     ev(seq, 'tool/call', { callId: 'c1', name: 'generate_image', arguments: '{"prompt":"a cat"}' })
 
@@ -208,11 +208,11 @@ describe('generate_image 工具结果投影（v0.3.3 批次5）', () => {
 })
 
 /**
- * r2-24：图片附件同步失败时投影的占位文本块必须带**结构可分的失败信号**。
+ * 图片附件同步失败时投影的占位文本块必须带**结构可分的失败信号**。
  * 旧实现用 `status: SUCCESS` 承载失败占位——任何按 status 统计/过滤的消费方（导出、复制、
  * 用量）都会把它当作正常正文（与"真的有一段这样的文字"不可区分）。可见文本保持不变。
  */
-describe('图片附件回放失败占位的结构信号（r2-24）', () => {
+describe('图片附件回放失败占位的结构信号', () => {
   const userImageMsg = (seq: number, attachmentId: string): SessionEvent =>
     ev(seq, 'user/message', {
       content: [
@@ -256,10 +256,10 @@ describe('图片附件回放失败占位的结构信号（r2-24）', () => {
 })
 
 /**
- * r2-22 / r2-23：tool/result 回填走"块索引（id → 下标）+ 新对象替换"，不再就地改块。
+ * tool/result 回填走"块索引（id → 下标）+ 新对象替换"，不再就地改块。
  * 行为必须与旧实现一致：同一 callId 只有一份块，内容/状态被完整填充。
  */
-describe('工具结果回填的块索引与不可变替换（r2-22 / r2-23）', () => {
+describe('工具结果回填的块索引与不可变替换', () => {
   const toolRun = (seqCall: number, isError: boolean): SessionEvent[] => [
     userMsg(2, '跑工具'),
     asstMsg(3, [{ type: 'tool-call', id: 'c1', name: 'read_file', arguments: '{}' }]),

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 运行时命令探测的第三态（v1 二轮审查 s2-26）。
+ * 运行时命令探测的第三态。
  *
  * `probeMcpRuntimeCommands` 把「IPC 探测失败」与「命令确实不在 PATH」都折叠成 `null`，
  * 而 UI 之前只保留后者：探测无应答被渲染成红框「依赖缺失」，用户会去重装已装好的工具。

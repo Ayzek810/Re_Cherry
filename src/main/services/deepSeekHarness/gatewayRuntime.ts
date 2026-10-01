@@ -1,8 +1,8 @@
-// fork 缝：统一网关的 CodeMate 接入点（2026-09-24，v0.3.4-1；批次3b 填充，批次5 修正）。
+// fork 缝：统一网关的 CodeMate 接入点（2026-09-24；填充，修正）。
 // V2 语义（DeepSeekHarnessService 网关分支 L102 原文）：`await gateway.start()`——完整意图
 // 启动（先持久化 enabled=true 再收敛拉起服务器）。用户在 CodeMate 里显式选择"统一网关"
 // 供应商即是同意，走 ensureRunning（只收敛不写 intent）会在 enabled=false 默认值下抛
-// "API Gateway is disabled"（真机事故，批次5 修复）。key 保证存在 + 读当前端口。
+// "API Gateway is disabled"（真机事故，修复）。key 保证存在 + 读当前端口。
 // 经 apiGatewayService 单例（同 deepSeekHarnessService 先例），非 V2 的容器 app-service 插件。
 
 import { apiGatewayService } from '@main/features/apiGateway/ApiGatewayService'

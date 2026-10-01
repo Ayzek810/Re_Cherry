@@ -51,7 +51,7 @@ interface ProgressData {
 }
 
 /**
- * v1 二轮审查 m2-14：WebDAV 两条路径此前绕开了本地侧的 `resolveAndValidatePath`，
+ * WebDAV 两条路径此前绕开了本地侧的 `resolveAndValidatePath`，
  * 直接把渲染层给的 `webdavConfig.fileName` 交给 `path.join(this.backupDir, filename)`
  * 与 `webdavClient.putFileContents(filename, ...)`。`fileName = '../../../Documents/x.zip'`
  * 可让写盘/读出落在 `backupDir` 之外（`restoreFromWebdav` 会**覆盖**目标路径）。
@@ -74,7 +74,7 @@ export function assertSafeRemoteBackupFileName(fileName: string): string {
 
 class BackupManager {
   /**
-   * 「重置数据」要一并清空的 userData 根条目（v0.3.1-2 补齐）。
+   * 「重置数据」要一并清空的 userData 根条目（补齐）。
    * 它们都不在 `Data/` 目录里，所以原来会整体存活：`provider-keys.json`＝provider key 的加密真源
    * （`ProviderKeyStore`，safeStorage 密文）、`config.json`＝应用配置（`ConfigManager` 的 electron-store
    * 默认名）、`kernel/`＝内核会话库 `sessions.db`、话题注册表 `topics.json`、pi-ai 路由 `settings.json`、
@@ -85,7 +85,7 @@ class BackupManager {
   /**
    * 每次备份/还原调用的**独占**临时根。
    *
-   * v1 二轮审查 m2-11：此前 `tempDir` 是实例字段（`.../backup/temp`），`backup()` 结尾
+   * 此前 `tempDir` 是实例字段（`.../backup/temp`），`backup()` 结尾
    * `fs.remove(this.tempDir)`、`restore()` 开头 `ensureDir(this.tempDir)` 共用同一目录，
    * 主进程侧没有任何互斥。渲染层两个入口（设置页「备份」/「还原」、WebDAV 定时备份）在一次
    * 长拷贝未结束时触发另一次，第二次的 `ensureDir`/`remove` 会把第一次正在拷贝的中间目录删掉
@@ -114,7 +114,7 @@ class BackupManager {
    * Handle backup restoration on app startup
    * Called after window is created but before renderer is loaded
    *
-   * 目录还原顺序（v1 二轮审查 m2-02 修复）：**先挪开旧目录 → 再放入新目录 → 成功后才删旧目录**。
+   * 目录还原顺序（修复）：**先挪开旧目录 → 再放入新目录 → 成功后才删旧目录**。
    * 旧实现是「先 remove(旧) 再 rename(新)」，而 Windows 上 `kernel/sessions.db` 可能仍被上一进程
    * 或杀软持有——remove 成功、rename 失败时旧数据已删、`.restore` 又被 catch 清掉，用户两份都没有。
    * 本实现任一步失败都把旧目录改回原名，并保留 `.restore` 供下次启动重试。
@@ -154,7 +154,7 @@ class BackupManager {
     const localStorageDest = path.join(userDataPath, 'Local Storage')
     const dataDest = getDataPath()
 
-    // v0.3.1-2：重置时 userData 根下这几样也要清（详见 RESET_ROOT_ENTRIES 的说明）
+    // 重置时 userData 根下这几样也要清（详见 RESET_ROOT_ENTRIES 的说明）
     const pendingRootEntries: Array<{ name: string; staged: string; dest: string }> = []
     for (const name of BackupManager.RESET_ROOT_ENTRIES) {
       const staged = path.join(userDataPath, `${name}.restore`)
@@ -193,7 +193,7 @@ class BackupManager {
 
       // Restore userData 根目录下的重置目标（内核数据 / provider key / 应用配置）
       // 逐条独立处理：某一条失败（如 kernel/sessions.db 仍被占）不影响其余条目，
-      // 也不清掉失败条目的 `.restore`——保留它供下次启动重试（v1 m2-02）。
+      // 也不清掉失败条目的 `.restore`——保留它供下次启动重试。
       for (const entry of pendingRootEntries) {
         try {
           logger.info(`[handleStartupRestore] Found ${entry.name}.restore, completing restoration...`)
@@ -209,7 +209,7 @@ class BackupManager {
       logger.info('[handleStartupRestore] Restoration completed successfully')
     } catch (error) {
       logger.error('[handleStartupRestore] Failed to complete restoration:', error as Error)
-      // 有意不清 `.restore`（v1 m2-02）：还原失败时它们是用户数据的唯一副本，
+      // 有意不清 `.restore`：还原失败时它们是用户数据的唯一副本，
       // 保留让下次启动重试；清掉才会造成"原库已删、备份已清"的双失。
       logger.warn('[handleStartupRestore] .restore directories were kept for a retry on the next start')
     }
@@ -252,7 +252,7 @@ class BackupManager {
     skipBackupFile: boolean = false
   ): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
-    // m2-11：本次调用独占的暂存目录（并发备份/还原互不共享路径）。
+    // 本次调用独占的暂存目录（并发备份/还原互不共享路径）。
     const tempDir = await this.createTempDir()
 
     try {
@@ -309,7 +309,7 @@ class BackupManager {
         await fs.promises.mkdir(path.join(tempDir, 'Data'))
       }
 
-      // v0.2.4 K6：provider key 随备份流转（明文允许出现在低频迁移产物；恢复时经 main 加密写回）
+      // provider key 随备份流转（明文允许出现在低频迁移产物；恢复时经 main 加密写回）
       const vaultKeys = providerKeyStore.getAll()
       if (Object.keys(vaultKeys).length > 0) {
         await fs.writeJson(path.join(tempDir, 'provider-keys.json'), vaultKeys)
@@ -318,7 +318,7 @@ class BackupManager {
       onProgress({ stage: 'compressing', progress: 80, total: 100 })
 
       // Step 5: Create ZIP archive
-      // v1 二轮审查 m2-14：落点统一过 resolveAndValidatePath（本地/WebDAV 两套入口
+      // 落点统一过 resolveAndValidatePath（本地/WebDAV 两套入口
       // 此前口径不一致——本地还原侧已有校验，写盘侧没有）。
       const backupedFilePath = resolveAndValidatePath(destinationPath, fileName)
       const output = fs.createWriteStream(backupedFilePath)
@@ -372,7 +372,7 @@ class BackupManager {
     skipBackupFile: boolean = false
   ): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
-    // m2-11：独占暂存目录。
+    // 独占暂存目录。
     const tempDir = await this.createTempDir()
 
     try {
@@ -417,7 +417,7 @@ class BackupManager {
       }
 
       // Create output file stream
-      // v1 二轮审查 m2-14：同 backupDirect，落点过 resolveAndValidatePath。
+      // 同 backupDirect，落点过 resolveAndValidatePath。
       const backupedFilePath = resolveAndValidatePath(destinationPath, fileName)
       const output = fs.createWriteStream(backupedFilePath)
 
@@ -547,7 +547,7 @@ class BackupManager {
    * @returns Result from WebDAV upload operation
    */
   async backupToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    // v1 二轮审查 m2-14：远端文件名先过结构化断言（本地落盘侧再由 backup() 内的
+    // 远端文件名先过结构化断言（本地落盘侧再由 backup() 内的
     // resolveAndValidatePath 兜住根目录），非法即明确报错而不是写到 backupDir 之外。
     const filename = assertSafeRemoteBackupFileName(webdavConfig.fileName || 'cherry-studio.backup.zip')
     const backupedFilePath = await this.backup(_, filename, undefined, webdavConfig.skipBackupFile)
@@ -582,7 +582,7 @@ class BackupManager {
 
   async restore(_: Electron.IpcMainInvokeEvent, backupPath: string): Promise<string | void> {
     const onProgress = this.onProgress(IpcChannel.RestoreProgress, true)
-    // m2-11：独占暂存目录，解包结果交给 restoreDirect/restoreLegacy 使用（原来经实例字段传递）。
+    // 独占暂存目录，解包结果交给 restoreDirect/restoreLegacy 使用（原来经实例字段传递）。
     const tempDir = await this.createTempDir()
 
     try {
@@ -696,7 +696,7 @@ class BackupManager {
         logger.debug('[restoreDirect] No Data directory to restore')
       }
 
-      // v0.2.4 K6：恢复备份中的 provider key（明文经 main 加密写回 provider-keys.json，重启后 K4 回填即生效）
+      // 恢复备份中的 provider key（明文经 main 加密写回 provider-keys.json，重启后 回填即生效）
       const vaultSource = path.join(tempDir, 'provider-keys.json')
       if (await fs.pathExists(vaultSource)) {
         try {
@@ -716,7 +716,7 @@ class BackupManager {
 
       logger.info('[restoreDirect] Restore staged successfully, relaunching app to apply...')
 
-      // v0.3.2：与 ipc.ts 的 relaunch 处理器同理——runner 的 node 语义已按子进程注入
+      // 与 ipc.ts 的 relaunch 处理器同理——runner 的 node 语义已按子进程注入
       // （dsh-subprocess-local 补丁），内核不再设 ambient 变量；此剥除保留为对外部
       // 环境同名变量的防御，否则重启后应用会以 node 而非 Electron 启动。
       delete process.env.ELECTRON_RUN_AS_NODE
@@ -824,7 +824,7 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    // v1 二轮审查 m2-14：与 backupToWebdav 同一断言；本地落点再经 resolveAndValidatePath
+    // 与 backupToWebdav 同一断言；本地落点再经 resolveAndValidatePath
     // 钉在 backupDir 内（restoreFromWebdav 会覆盖目标路径，此前可被 `../..` 带出根目录）。
     const filename = assertSafeRemoteBackupFileName(webdavConfig.fileName || 'cherry-studio.backup.zip')
     const webdavClient = this.getWebDavInstance(webdavConfig)
@@ -958,7 +958,7 @@ class BackupManager {
    * Stage an empty Data directory; handleStartupRestore swaps it in on next launch.
    * Avoids races with libsql / KnowledgeService recreating files before relaunch.
    *
-   * v0.3.1-2：`Data/` 之外的三样也一并预备（内核数据 / provider key / 应用配置）——它们都在 userData 根，
+   * `Data/` 之外的三样也一并预备（内核数据 / provider key / 应用配置）——它们都在 userData 根，
    * 原来不在重置范围内，导致"重置后 key、会话历史、应用配置全都还在"。目录预备成空目录，文件预备成
    * 对应的空 store（`{ keys: {} }` / `{}`），由下次启动的 handleStartupRestore 顶掉真身。
    */

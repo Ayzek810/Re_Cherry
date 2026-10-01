@@ -203,7 +203,7 @@ const Messages: React.FC<MessagesProps> = ({
 
   // 历史 token / 上下文计数做速率限制（leading + trailing，最多 2 次/秒）。
   // estimateHistoryTokens 会逐条 await getMessageParam 并拼接全文，而 messages 引用每个流式 delta 都换：
-  // 不设限等于每帧全量重算（CLAUDE.md §12 渲染饥饿的第二组成本）。
+  // 不设限等于每帧全量重算。
   // 不用"只在条数/末条变化时算"的取舍：那会让生成期间计数冻结，属可见行为变更。
   const estimateTokensThrottledRef = useRef<ReturnType<typeof throttle> | null>(null)
   useEffect(() => {

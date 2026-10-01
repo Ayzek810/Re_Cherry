@@ -1,5 +1,5 @@
 /**
- * LocalPaddle 模型状态轮询（v0.4.4 收编自 useLocalModel：本地模型系统并入文档
+ * LocalPaddle 模型状态轮询（收编自 useLocalModel：本地模型系统并入文档
  * 处理子系统，hook 归位文档处理服务商面板；进度轮询 getStatus 而非事件订阅——
  * 主进程下载服务无事件广播面）。挂载即轮询（1s），下载中与就绪态开销可忽略
  * （一次轻量 IPC + existsSync）。

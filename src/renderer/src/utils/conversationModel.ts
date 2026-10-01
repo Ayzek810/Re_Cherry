@@ -52,7 +52,7 @@ export type CMOriginId = string // 形如 sessionId:index
  *
  * 注入消息：内核注入的插件源 user 消息（RuntimeContextProjection 的工具面快照、档位标注等）
  * 已由内核在 UI 出口统一剔除（`src/main/kernel/sessionEventView.ts`），本模块只收 UI 视界的
- * 事件，故不再需要可见性判据——v0.3.0 曾在此单独拦截，v0.3.0-1 起改由结构保证。
+ * 事件，故不再需要可见性判据—— 曾在此单独拦截，起改由结构保证。
  */
 export function parseSessionEvents(events: ReadonlyArray<{ seq: number; type: string; data?: unknown }>): {
   turns: CMUserTurn[]

@@ -42,12 +42,12 @@ export type InlineHtmlPreviewMode = 'generating' | 'ready'
 /**
  * 数学渲染插件按引擎懒加载。
  *
- * MathJax 自 v1 首轮起懒加载；KaTeX 自 v1 二轮性能审计 p2-01 起同样懒加载——它此前是顶层
+ * MathJax 自 v1 首轮起懒加载；KaTeX 自 起同样懒加载——它此前是顶层
  * 静态导入，实测把约 573KB 的 KaTeX 引擎钉进首屏 store chunk（而同一引擎另有一份懒副本）。
  * 两个引擎共用同一套异步接线：插件就绪前该引擎的公式按原文渲染，就绪后由 state 更新重渲染；
  * 加载结果模块级缓存（跨消息块只付一次解析成本）。
  *
- * p2-02 续：KaTeX 的**两个 contrib**（`copy-tex` 复制公式为 LaTeX 源码、`mhchem` 化学式扩展）
+ * 续：KaTeX 的**两个 contrib**（`copy-tex` 复制公式为 LaTeX 源码、`mhchem` 化学式扩展）
  * 此前仍是本文件的顶层副作用导入，而它们是 `katex` 包的消费者 ⇒ 整份 KaTeX 实体（产物里
  * 443KB 的 `katex-*.js`）照样被钉在首屏静态导入闭包里。现在两个 contrib 与引擎插件一起
  * 在同一段动态导入里加载，且 contrib **先于**插件就绪（它们往 katex 实例注册宏/钩子，
@@ -79,7 +79,7 @@ const ALLOWED_ELEMENTS =
 const DISALLOWED_ELEMENTS = ['iframe', 'script']
 
 // ---------------------------------------------------------------------------
-// 流式尾块切分（v1 二轮性能审计 p2-09；CLAUDE.md §12 E1 渲染侧）
+// 流式尾块切分：稳定前缀 + 增长尾部。
 //
 // 此前流式期每帧把**累积全文**交给一个 ReactMarkdown：unified 管线（remark-gfm / alert /
 // cjk-friendly / math → remark-rehype → rehype-raw/scalableSvg/headingIds/katex → React 元素）
@@ -265,7 +265,7 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
 
   const prevContentRef = useRef(block.content)
   const prevBlockIdRef = useRef(block.id)
-  /** 稳定前缀元素缓存（实例级 LRU，p2-09）：前缀源串未变即复用，管线不执行。 */
+  /** 稳定前缀元素缓存（实例级 LRU）：前缀源串未变即复用，管线不执行。 */
   const prefixCacheRef = useRef<Map<string, PrefixCacheEntry>>(new Map())
 
   const { addChunk, reset } = useSmoothStream({
@@ -417,7 +417,7 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     return defaultUrlTransform(value)
   }, []) // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
   // position 的 end 外推一个围栏长度，让 isOpenFenceBlock 恒判"已闭合"（V2 语境等价）。
-  // 流式尾块切分（p2-09）：只在**落定前**切分；落定后整条消息由单一实例渲染，与改动前逐字节一致。
+  // 流式尾块切分：只在**落定前**切分；落定后整条消息由单一实例渲染，与改动前逐字节一致。
   //
   // 注意：流式中的 assistant 块必然带 `status !== 'success'` ⇒ `effectiveHtmlPreviewMode`
   // 恒为 `'generating'`，因此这里的判据**不能**要求"非工件预览模式"——否则切分在生产路径上

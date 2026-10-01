@@ -10,6 +10,7 @@ import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { getThemeModeLabel, getTitleLabel } from '@renderer/i18n/label'
+import UpdateAppButton from '@renderer/pages/home/components/UpdateAppButton'
 import tabsService from '@renderer/services/TabsService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import type { Tab } from '@renderer/store/tabs'
@@ -81,7 +82,7 @@ const getTabIcon = (
     case 'settings':
       return <Settings size={14} />
     case 'notes':
-      // v0.3.3-2 笔记复活：标签页图标（V1 同图标）
+      // 笔记复活：标签页图标（V1 同图标）
       return <NotepadText size={14} />
     default:
       return null
@@ -92,7 +93,7 @@ const DEFAULT_SETTINGS_PATH = '/settings/provider'
 const specialTabs = ['launchpad', 'settings']
 
 /**
- * c2-22：顶栏的图标按钮原本是裸 `styled.div` —— 不可聚焦、不响应 Enter/Space、没有可读名。
+ * 顶栏的图标按钮原本是裸 `styled.div` —— 不可聚焦、不响应 Enter/Space、没有可读名。
  * 这里沿用本仓既定写法（`CodeToolbar/button.tsx`、`composer/ComposerSurface.tsx`）：
  * `role="button"` + `tabIndex={0}` + `aria-label` + Enter/Space 处理。
  */
@@ -114,7 +115,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
   const { minapps } = useMinapps()
   const { useSystemTitleBar } = useSettings()
   const { t } = useTranslation()
-  // c2-43：模块级可变变量是跨实例、跨挂载周期的隐式全局状态，语义上已不是「本次会话的路径」。
+  // 模块级可变变量是跨实例、跨挂载周期的隐式全局状态，语义上已不是「本次会话的路径」。
   // 它只服务于「设置按钮记住上次的设置子页」，属组件内记忆，改用 ref。
   const lastSettingsPathRef = useRef(DEFAULT_SETTINGS_PATH)
 
@@ -323,6 +324,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children }) => {
           </AddTabButton>
         </HorizontalScrollContainer>
         <RightButtonsContainer style={{ paddingRight: isLinux && useSystemTitleBar ? '12px' : undefined }}>
+          <UpdateAppButton />
           <Tooltip
             title={t('settings.theme.title') + ': ' + getThemeModeLabel(settedTheme)}
             mouseEnterDelay={0.8}

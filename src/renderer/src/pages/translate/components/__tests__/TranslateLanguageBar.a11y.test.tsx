@@ -1,7 +1,7 @@
 /**
  * 语言栏（`TranslateLanguageBar`）的可访问名契约测试。
  *
- * 行为级验证（§4.18）：V2 `components/TranslateLanguageBar.tsx:166/222` 在源语言/目标语言的
+ * 行为级验证：V2 `components/TranslateLanguageBar.tsx:166/222` 在源语言/目标语言的
  * 取值渲染里各带一个 `sr-only` 标签（"Source Language" / "Target Language"）。fork 的两个
  * antd Select 此前都没有名字（`TranslateLanguageBar.tsx:55` 两处），屏读时只有"组合框"。
  */
@@ -50,7 +50,7 @@ describe('TranslateLanguageBar · 可访问名', () => {
     const source = container.querySelector('[data-testid="select-auto"]')
     const target = container.querySelector('[data-testid="select-zh-cn"]')
 
-    // 两语的 `translate.source_language` / `translate.target_language` 已补齐（v0.3.3-7），
+    // 两语的 `translate.source_language` / `translate.target_language` 已补齐，
     // 故两个控件都拿 V2 同名键当可访问名，不再退化成"组合框"。
     expect(source?.getAttribute('data-aria-label')).toBe('translate.source_language')
     expect(target?.getAttribute('data-aria-label')).toBe('translate.target_language')

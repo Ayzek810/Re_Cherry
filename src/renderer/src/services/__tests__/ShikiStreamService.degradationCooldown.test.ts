@@ -1,10 +1,10 @@
 /**
- * p2-15 行为测试：worker 高亮失败后的降级必须是**有期限**的。
+ * worker 高亮失败后的降级必须是**有期限**的。
  *
  * 缺陷原状：`highlightCodeChunk` 的 catch 分支与 `sendWorkerMessage` 的超时分支都写
  * `workerDegradationCache.set(callerId, true)`，而该 LRU 的 TTL 是 12 小时、`updateAgeOnGet`
  * 未开 ⇒ 一次 worker 超时（例如某个超长代码块）就把该 callerId **永久**钉在主线程路径上，
- * 之后该块所有 delta 都在主线程做 shiki tokenize，与 p2-09 的每帧重解析叠加成
+ * 之后该块所有 delta 都在主线程做 shiki tokenize，与每帧重解析叠加成
  * "某条消息越流越卡而其他消息正常"。
  *
  * 修复后：存"冷却截止时间戳"，到点惰性删除 ⇒ 重新尝试 worker。
@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { shikiStreamService } from '../ShikiStreamService'
 
-describe('ShikiStreamService worker degradation cooldown (p2-15)', () => {
+describe('ShikiStreamService worker degradation cooldown', () => {
   beforeEach(() => {
     shikiStreamService.dispose()
   })
@@ -77,7 +77,7 @@ describe('ShikiStreamService worker degradation cooldown (p2-15)', () => {
     await shikiStreamService.highlightCodeChunk('const a = 2', 'typescript', 'one-light', callerId)
     expect(sendSpy).not.toHaveBeenCalled()
 
-    // 冷却过期后：重新尝试 worker（p2-15 的核心：降级是有期限的，不是永久）
+    // 冷却过期后：重新尝试 worker（的核心：降级是有期限的，不是永久）
     // @ts-ignore: access private
     shikiStreamService.workerDegradationCache.set(callerId, Date.now() - 1)
     await shikiStreamService.highlightCodeChunk('const a = 3', 'typescript', 'one-light', callerId)

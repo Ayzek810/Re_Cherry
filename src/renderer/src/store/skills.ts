@@ -1,7 +1,7 @@
 /**
- * v0.3.2 新增（fork 自有切片）：已安装技能的渲染层状态。
- * V1 的技能真源在主进程 SQLite（agents 子系统），fork 无该子系统——批次1 由本切片承载 UI 状态，
- * 批次5 接线时若改为磁盘目录扫描为真源，本切片降级为缓存投影（届时同步更新本注释）。
+ * 新增（fork 自有切片）：已安装技能的渲染层状态。
+ * V1 的技能真源在主进程 SQLite（agents 子系统），fork 无该子系统—— 由本切片承载 UI 状态，
+ * 接线时若改为磁盘目录扫描为真源，本切片降级为缓存投影（届时同步更新本注释）。
  */
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'

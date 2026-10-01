@@ -104,7 +104,7 @@ export const messagesSlice = createSlice({
   reducers: {
     setCurrentTopicId(state, action: PayloadAction<string | null>) {
       state.currentTopicId = action.payload
-      // 刻意不播种 messageIdsByTopic（v0.3.0-5）：播种空数组 = "没加载"与"加载完的空历史"
+      // 刻意不播种 messageIdsByTopic：播种空数组 = "没加载"与"加载完的空历史"
       // 在 loadTopicMessagesThunk 的短路判定里不可区分——一次瞬时加载失败后该话题会被
       // 空数组卡住，重进也不再重拉（真机"点进话题偶发空白直到重启"的一半根源）。
       // 所有消费方对 undefined 都已容错（?? [] / 显式判 undefined）。
@@ -334,7 +334,7 @@ export const selectMessagesForTopic = createSelector(
 )
 
 // ---------------------------------------------------------------------------
-// 话题进行中/完成的**回合口径**信号（v0.3.1 第三轮）。
+// 话题进行中/完成的**回合口径**信号（第三轮）。
 //
 // 历史锚错：loadingByTopic 由发送任务队列驱动——queue 排空（内核流还远没结束）即被清
 // （useMessageOperations.useTopicGenerating 的注释自证）；fulfilled 的 true 也挂在同一错
@@ -350,7 +350,7 @@ export const selectMessagesForTopic = createSelector(
  * 进行中回合的话题集合（发送到 turn/end 全程覆盖；PENDING = 尚未收到首字节）。
  * memoized：Set 内容不变则同引用——流式 delta 高频 dispatch 不会让侧栏白重渲染。
  *
- * **家族折叠（v0.3.1 第三轮）**：重发/旁答的回合在 fork 出的子会话 id 上记账，
+ * **家族折叠（第三轮）**：重发/旁答的回合在 fork 出的子会话 id 上记账，
  * 侧栏只渲染根行——输出统一折叠为**根 id**（`rootTopicIdOf`，Redux 行链同步上溯），
  * 侧栏按根行 id 查询即中。这修复了"重发流黄点全灭"（子会话在打字，根行不知道）。
  */

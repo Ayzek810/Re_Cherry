@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次1（UI）：自上游 Cherry Studio v1.9.11 移植 SkillsSettings 页面。
+ * （UI）：自上游 Cherry Studio v1.9.11 移植 SkillsSettings 页面。
  *
  * fork 适配点（其余与上游逐字一致）：
  * - TipTap 富文本编辑器已随编辑器整体移除 → Markdown 文件用只读 <pre> 呈现原文；
@@ -222,7 +222,7 @@ SearchResultRow.displayName = 'SearchResultRow'
 const SkillsSettings: FC = () => {
   const { t } = useTranslation()
   const { skills, loading, uninstall, refresh } = useInstalledSkills()
-  // v1 二轮审查 s2-12：此前丢掉了 hook 已经算好的 `error`，三个注册表（含网络）全失败时
+  // 此前丢掉了 hook 已经算好的 `error`，三个注册表（含网络）全失败时
   // 下拉里显示的是「没有结果」——一个权威的「市场上没有这个技能」结论。
   const { results, searching, error: searchError, search, clear } = useSkillSearch()
   const { isInstalling, install, installFromZip, installFromDirectory } = useSkillInstall()
@@ -256,16 +256,16 @@ const SkillsSettings: FC = () => {
   const [previewResult, setPreviewResult] = useState<SkillSearchResult | null>(null)
 
   // 挂载即触发一次磁盘扫描投影（W4-2）。
-  // 为什么必须由页面触发：hook 的 `loading` 初值是 `true`（r2-38 让"扫描失败"不再伪装成
+  // 为什么必须由页面触发：hook 的 `loading` 初值是 `true`（让"扫描失败"不再伪装成
   // "未安装"），而页面此前只在安装/卸载回调里调 `refresh()`，挂载时一处都没有 ⇒ 首次进入
   // 技能页 `loading` 永远为真，那个 Spin 永远转下去，列表与空态都轮不到渲染。
-  // 契约：hook 只报状态，调用方负责在挂载时触发扫描（见 useSkills.ts 的 r2-38 注释）。
+  // 契约：hook 只报状态，调用方负责在挂载时触发扫描（见 useSkills.ts 的 注释）。
   useEffect(() => {
     void refresh()
   }, [refresh])
 
   // Load file tree when a skill is selected
-  // Fork: 技能文件列举的主进程 IPC 尚未接线（批次1 UI-only）——文件树保持为空，
+  // Fork: 技能文件列举的主进程 IPC 尚未接线（UI-only）——文件树保持为空，
   // 详情页如实显示“选择文件”空状态；接线批次恢复上游 promise 逻辑。
   useEffect(() => {
     if (!selectedSkill) {
@@ -369,7 +369,7 @@ const SkillsSettings: FC = () => {
       title: t('settings.skills.confirmBatchUninstall', { count: toDelete.length }),
       centered: true,
       onOk: async () => {
-        // v1 二轮审查 s2-13：`uninstall` 以 boolean 表达逐条结果，此前返回值被丢弃 →
+        // `uninstall` 以 boolean 表达逐条结果，此前返回值被丢弃 →
         // 单条失败弹了 error toast，紧接着又弹「已卸载 N 个」的成功 toast，两个信号互相矛盾，
         // 且失败项已退出多选、用户不知道哪条没删掉。现在按「N 成功 / M 失败」如实报告，
         // 失败项保留选中态，让用户看得见还剩哪几条。
@@ -518,7 +518,7 @@ const SkillsSettings: FC = () => {
               </ListHeader>
               <FileTreeContainer>
                 {fileTree.length === 0 ? (
-                  // v1 二轮审查 s2-45：技能文件列举的主进程 IPC 尚未接线（批次1 UI-only）。
+                  // 技能文件列举的主进程 IPC 尚未接线（UI-only）。
                   // 「功能未接线」与「这个技能没有文件」在 UI 上必须可区分，不能都画成空列表。
                   <DropdownEmpty>
                     {t('settings.skills.fileBrowserUnavailable', {
@@ -704,7 +704,7 @@ const SkillsSettings: FC = () => {
                           <Spin size="small" />
                         </DropdownLoading>
                       ) : null}
-                      {/* v1 二轮审查 s2-12：搜索失败与「没有结果」必须分开，否则网络/注册表
+                      {/* ：搜索失败与「没有结果」必须分开，否则网络/注册表
                           不可达会被读成「市场上没有这个技能」。 */}
                       {!searching && searchQuery && searchError ? (
                         <DropdownEmpty>
@@ -752,7 +752,7 @@ const SkillsSettings: FC = () => {
                 )
               ) : (
                 <EmptyStateContainer>
-                  {/* v1 二轮审查 s2-45：文件区未接线时不能提示「选择文件」——那是做不到的事。 */}
+                  {/* ：文件区未接线时不能提示「选择文件」——那是做不到的事。 */}
                   <Empty
                     description={
                       selectedFile
@@ -1210,7 +1210,7 @@ const MarkdownContainer = styled.div`
   }
 `
 
-/* Fork: TipTap 富文本编辑器已移除，批次1 用只读 <pre> 呈现 Markdown 原文
+/* Fork: TipTap 富文本编辑器已移除，用只读 <pre> 呈现 Markdown 原文
    （视觉降级可接受，接线批次可换专用只读 Markdown 组件）。 */
 const MarkdownPre = styled.pre`
   margin: 0;

@@ -1,14 +1,22 @@
 # Re_Cherry
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](https://github.com/Ayzek810/Re_Cherry/blob/main/LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.4-orange.svg)](https://github.com/Ayzek810/Re_Cherry/blob/main/package.json)
+[![Version](https://img.shields.io/badge/version-1.0.0-orange.svg)](https://github.com/Ayzek810/Re_Cherry/blob/main/package.json)
 
-> 一个基于 [Cherry Studio](https://github.com/CherryHQ/cherry-studio) 修改而来的个人化 AI 助手客户端。
-> 当前版本（v0.2.4）基于 Cherry Studio v1.9.11 精简改造，消息路径已统一到内嵌的 DSH（DeepSeek Harness）内核。
+![alt text](build/logo.png)
+
+> 一个基于 [Cherry Studio](https://github.com/CherryHQ/cherry-studio)v1.9.11修改而来的现代化AI集成化前台。
 
 ## 项目介绍
 
 Re_Cherry 是一个 **AI 对话与 Agent 前端客户端**，在保留 Cherry Studio 核心操作习惯的基础上，移除了部分扩展功能，使项目更加轻量、集成度更高，并提供更加个人化的使用体验。
+
+## 所以，我们增加了什么
+
+- 简陋但确实实现了的基于DSH的Chat和Agent的整合化，可在对话中一键切换纯聊天和工作模式
+- 图片转述，让纯文本模型也能读图，以及通用的聊天内绘图
+- 基于[Dsh Desktop](https://github.com/dataelement/dsh-desktop)的，自带插件市场的完整版DSH
+- [Paper-Agent](https://github.com/Tswoen/Paper-Agent)现已加入编码助手全家桶！
 
 ## 与 Cherry Studio 的关系
 

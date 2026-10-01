@@ -1,14 +1,14 @@
 /**
- * p2-10 行为测试：`useSmoothStream` 的队列/回调改造不改变对外行为。
+ * `useSmoothStream` 的队列/回调改造不改变对外行为。
  *
- * 覆盖三条不变量（家规 §9 渲染：热路径改动需行为级证据）：
+ * 覆盖三条不变量：
  *  1. **不丢字**：无论输入怎样分块，收尾后显示文本 === 累积输入全文（顺序一致）；
  *  2. **回调频率钳制 ≤30Hz**：排放阶段相邻两次 `onUpdate` 的真实间隔不小于 1000/30 ms
  *     （改动前 `minDelay = 10` 允许 100Hz，每帧把整段累积全文推给 ReactMarkdown）；
  *  3. **队列上界**：一次性灌入的量远大于 MAX_BACKLOG(400) 时也不丢失内容。
  *
  * 时序用真实 rAF 驱动 + `performance.now` 打点（jsdom 的 rAF 约 16ms 一帧），
- * 与生产路径一致；断言只看不变量，不比较具体帧数（家规：不以计时作为回归信号）。
+ * 与生产路径一致；断言只看不变量，不比较具体帧数。
  */
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
@@ -22,7 +22,7 @@ interface Recorder {
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/** 轮询等待条件成立（避免用固定时长赌机器负载；家规：不以计时作为回归信号）。 */
+/** 轮询等待条件成立（避免用固定时长赌机器负载）。 */
 const waitUntil = async (predicate: () => boolean, timeoutMs = 8000): Promise<boolean> => {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -50,7 +50,7 @@ const mountRecorder = (done = false) => {
   return { recorder, ...rendered }
 }
 
-describe('useSmoothStream（p2-10 行为不变量）', () => {
+describe('useSmoothStream（行为不变量）', () => {
   it('排放阶段回调间隔不小于 33ms（≤30Hz），收尾后内容全量显示', async () => {
     const { recorder, result, rerender } = mountRecorder()
 
@@ -87,7 +87,7 @@ describe('useSmoothStream（p2-10 行为不变量）', () => {
 
   it('积压（未触 MAX_BACKLOG 上限）收尾后全量显示，超限时按既有语义加速追赶', async () => {
     // 1) 队列未触顶（48 字 << MAX_BACKLOG=400）：全部内容最终都会显示
-    //    —— p2-10 的"原地 push / 只塌陷头部"改造不得丢字
+    // —— 的"原地 push / 只塌陷头部"改造不得丢字
     const withinCap = mountRecorder()
     const burst = 'A'.repeat(48)
     withinCap.result.current.addChunk(burst)

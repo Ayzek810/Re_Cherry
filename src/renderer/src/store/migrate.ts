@@ -47,7 +47,7 @@ import { DEFAULT_TOOL_ORDER, DEFAULT_TOOL_ORDER_BY_SCOPE } from './inputTools'
 import { initialState as llmInitialState, moveProvider } from './llm'
 import { initialState as settingsInitialState } from './settings'
 import { initialState as shortcutsInitialState } from './shortcuts'
-// r2-12：WebSearch 切片**没有**被删除（批次5 只是把执行机制换成内核工具），真正的默认
+// WebSearch 切片**没有**被删除（只是把执行机制换成内核工具），真正的默认
 // provider 表就在 websearch 切片里。此前这里放了一个 `any[] = []` 的空桩，导致下面
 // 8 处补种调用（'77'/'96?'/'98?'/'139'/'201'）全部静默 no-op：老用户持久化的
 // `websearch.providers` 数组永远缺这些默认条目。方向安全（websearch 切片不 import migrate），
@@ -57,7 +57,7 @@ import { defaultWebSearchProviders } from './websearch'
 const logger = loggerService.withContext('Migrate')
 
 /**
- * r2-73 迁移层纪律（**未闭环，登记在案**）：
+ * 迁移层纪律（**未闭环，登记在案**）：
  *
  * ## 失败语义（写分支前必须知道的两件事）
  *
@@ -86,7 +86,7 @@ const logger = loggerService.withContext('Migrate')
  * 在把「迁移失败」升级为「启动失败」之前，需要先给出可回滚的落盘策略（备份 + 明确用户提示），
  * 那是独立一轮的工作。因此本文件把该缺口显式登记，而不是在 catch 里假装成功。
  *
- * ## 本轮计数（r2-73 复核，可复现：按 `^  '\d+':` 数分支头、按 `catch (` 数 catch）
+ * ## 本轮计数（复核，可复现：按 `^ '\d+':` 数分支头、按 `catch (` 数 catch）
  *
  * | 项 | before | after |
  * |----|--------|-------|
@@ -110,9 +110,8 @@ const logger = loggerService.withContext('Migrate')
  * 输入形状**。因此它们的失败可以（也应当）吞掉：吞掉的后果最多是某个默认值没补上，远小于
  * 「整份持久化丢失」。没有任何一支需要「失败即中断」。
  *
- * 后续若要真正闭环，必须与 `store/index.ts` 的 `version` 一起改（家规 §7：两者恒等），
- * 例如新增一个 > 229 的「迁移失败对账」键并在 `store/index.ts` 挂失败哨兵——
- * 该改动跨越本工作区的写权限，见 `reports/audit2-fixes/_stage/G.md` 的「跨区请求」。
+ * 后续若要真正闭环，必须与 `store/index.ts` 的 `version` 一起改（两者恒等），
+ * 例如新增一个 > 229 的「迁移失败对账」键并在 `store/index.ts` 挂失败哨兵。
  */
 
 // remove logo base64 data to reduce the size of the state
@@ -146,7 +145,7 @@ function addMiniApp(state: RootState, id: string) {
     const app = allMinApps.find((app) => app.id === id)
     if (app) {
       if (!state.minapps.enabled.find((app) => app.id === id)) {
-        // r2-29：`{ ...app }` 副本是必需的——`allMinApps` 是 `config/minapps.ts` 的模块表，
+        // `{ ...app }` 副本是必需的——`allMinApps` 是 `config/minapps.ts` 的模块表，
         // push 同一引用会让持久化状态与配置模板共用元素（同文件 removeMiniAppIconsFromState
         // 早已用 `map((app) => ({ ...app, logo: undefined }))` 克隆，addMiniApp 是漏网的那半）。
         state.minapps.enabled.push({ ...app })
@@ -155,11 +154,11 @@ function addMiniApp(state: RootState, id: string) {
   }
 }
 
-/** r2-81：把默认表的 provider **克隆**进 state（models 数组与元素一并克隆）。
+/** 把默认表的 provider **克隆**进 state（models 数组与元素一并克隆）。
  *  `SYSTEM_PROVIDERS` / `SYSTEM_PROVIDERS_CONFIG` 的值是 `config/providers.ts` 的模块单例；
  *  同一迁移链里后面的分支会就地改写 provider（`provider.anthropicApiHost = …`、
  *  `provider.type = …`），共享引用会让改写落到模块默认表上，被 `store/llm.ts` 的 initialState
- *  继承（同 r2-28/r2-29；websearch 侧 addWebSearchProvider 已用 `{ ...provider }`）。 */
+ * 继承（同 ；websearch 侧 addWebSearchProvider 已用 `{ ...provider }`）。 */
 function cloneProvider(provider: Provider): Provider {
   return {
     ...provider,
@@ -198,7 +197,7 @@ function updateProvider(state: RootState, id: string, provider: Partial<Provider
   }
 }
 
-/** r2-12：按 id 把默认 websearch provider 补进持久化数组（老用户数组里没有这些条目）。
+/** 按 id 把默认 websearch provider 补进持久化数组（老用户数组里没有这些条目）。
  *  `{ ...provider }` 副本是必需的：默认表与 `store/websearch.ts` 的 initialState 是同一批对象，
  *  就地 push 同一引用会让 Redux/migrate 的后续就地改写污染模块级默认表。 */
 function addWebSearchProvider(state: RootState, id: string) {
@@ -722,7 +721,7 @@ const migrateConfig = {
   },
   '34': (state: RootState) => {
     // Dexie 已废弃 + 旧数据政策：该版本原为旧话题补 assistantId（读写 Dexie），置空保留版本号
-    // （r2-73 补齐：空分支也包 try/catch，让「无保护分支」归零；这里没有失败面，行为逐字不变）
+    // 补齐：空分支也包 try/catch，让「无保护分支」归零；这里没有失败面，行为逐字不变
     try {
       return state
     } catch (error) {
@@ -825,7 +824,7 @@ const migrateConfig = {
     }
   },
   '44': (state: RootState) => {
-    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
     // 分支体逐字不变——这里没有失败面。
     try {
       return state
@@ -844,7 +843,7 @@ const migrateConfig = {
     }
   },
   '46': (state: RootState) => {
-    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
     // 分支体逐字不变——这里没有失败面。
     try {
       return state
@@ -1086,7 +1085,7 @@ const migrateConfig = {
     }
   },
   '65': (state: RootState) => {
-    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
     // 分支体逐字不变——这里没有失败面。
     try {
       return state
@@ -1170,7 +1169,7 @@ const migrateConfig = {
         appIds.forEach((id) => {
           const app = allMinApps.find((app) => app.id === id)
           if (app) {
-            // r2-29 同类：不 push `config/minapps` 的模块对象（addMiniApp 已改克隆，此处同步）。
+            // 同类：不 push `config/minapps` 的模块对象（addMiniApp 已改克隆，此处同步）。
             state.minapps.enabled.push({ ...app })
           }
         })
@@ -1767,7 +1766,7 @@ const migrateConfig = {
   },
   '110': (state: RootState) => {
     try {
-      // v0.2.4-1: settings.testPlan 随“测试计划/Beta 通道”功能移除，不再写入历史默认值
+      // settings.testPlan 随“测试计划/Beta 通道”功能移除，不再写入历史默认值
       return state
     } catch (error) {
       logger.error('migrate 110 error', error as Error)
@@ -1775,7 +1774,7 @@ const migrateConfig = {
     }
   },
   '111': (state: RootState) => {
-    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
     // 分支体逐字不变——这里没有失败面。
     try {
       return state
@@ -1876,7 +1875,7 @@ const migrateConfig = {
         // @ts-ignore eslint-disable-next-line
         delete (state as any).websearch.contentLimit
       }
-      // v0.2.4-1: settings.testChannel 随测试通道功能移除，不再写入历史默认值
+      // settings.testChannel 随测试通道功能移除，不再写入历史默认值
 
       return state
     } catch (error) {
@@ -2106,7 +2105,7 @@ const migrateConfig = {
 
       addProvider(state, 'aws-bedrock')
 
-      // v0.2.4-1: llm.settings.awsBedrock 随 aws-bedrock provider 移除，不再写入历史默认值
+      // llm.settings.awsBedrock 随 aws-bedrock provider 移除，不再写入历史默认值
 
       return state
     } catch (error) {
@@ -2116,7 +2115,7 @@ const migrateConfig = {
   },
   '125': (state: RootState) => {
     try {
-      // v0.2.4-1: settings.apiServer 随 apiServer 后端移除，不再写入历史默认值
+      // settings.apiServer 随 apiServer 后端移除，不再写入历史默认值
       return state
     } catch (error) {
       logger.error('migrate 125 error', error as Error)
@@ -2329,7 +2328,7 @@ const migrateConfig = {
     }
   },
   '137': (state: RootState) => {
-    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
     // 分支体逐字不变——这里没有失败面。
     try {
       return state
@@ -2519,7 +2518,7 @@ const migrateConfig = {
     }
   },
   '152': (state: RootState) => {
-    // r2-73 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
+    // 补齐：空的占位分支（只保留版本号）。包 try/catch 让「无保护分支」归零，
     // 分支体逐字不变——这里没有失败面。
     try {
       return state
@@ -2671,7 +2670,7 @@ const migrateConfig = {
       // Ensure aws-bedrock provider exists
       addProvider(state, 'aws-bedrock')
 
-      // v0.2.4-1: llm.settings.awsBedrock 随 aws-bedrock provider 移除，不再写入历史默认值
+      // llm.settings.awsBedrock 随 aws-bedrock provider 移除，不再写入历史默认值
       return state
     } catch (error) {
       logger.error('migrate 171 error', error as Error)
@@ -2942,7 +2941,7 @@ const migrateConfig = {
   },
   '186': (state: RootState) => {
     try {
-      // v0.2.4-1: settings.apiServer 随 apiServer 后端移除，不再写回 host
+      // settings.apiServer 随 apiServer 后端移除，不再写回 host
       // @ts-expect-error
       if (state.settings.openAI.summaryText === 'undefined') {
         state.settings.openAI.summaryText = undefined
@@ -2996,7 +2995,7 @@ const migrateConfig = {
   // 1.7.7
   '189': (state: RootState) => {
     try {
-      // @ts-ignore 全局记忆已于 v0.4.7 整体废弃（见 migrate 228）：历史分支保留可达性，
+      // @ts-ignore 全局记忆已于 整体废弃（见 migrate 228）：历史分支保留可达性，
       // 通道不再存在时走本分支 try/catch 的既定失败路径，状态原样返回。
       void window.api.memory?.migrateMemoryDb()
       // @ts-ignore
@@ -3320,7 +3319,7 @@ const migrateConfig = {
   '209': (state: RootState) => {
     try {
       // v2-trim: purge sidebar icons and tabs for removed subsystems
-      // r2-11：白名单必须与 DEFAULT_SIDEBAR_ICONS 同源。这里原本硬编码
+      // 白名单必须与 DEFAULT_SIDEBAR_ICONS 同源。这里原本硬编码
       // ['assistants','minapp','files']，把当时**仍在发行**的图标（notes 等）一起从
       // visible/disabled 里剥掉——'141' 排在 209 之前早已跑过，此后再没有任何分支补
       // 'notes'，升级账号的笔记入口永久消失（新装默认表里却有它）。本分支只允许删
@@ -3402,7 +3401,7 @@ const migrateConfig = {
   },
   '213': (state: RootState) => {
     try {
-      // v0.2.4: 移除内核不支持协议族的全部历史行——
+      // 移除内核不支持协议族的全部历史行——
       // ① 系统提供商预设（id = gemini/azure-openai/vertexai/aws-bedrock，SystemProviderIdSchema 同步删除）；
       // ② 历史遗留的自定义 provider（id 为随机值但 type 属不可路由协议：内核 PROTOCOL_BY_TYPE 无映射，
       //    留着只会静默失败）。type 级枚举本身保留（migrate 历史依赖其存在）。
@@ -3419,7 +3418,7 @@ const migrateConfig = {
   },
   '214': (state: RootState) => {
     try {
-      // v0.3.1 识图通道补全：llm 切片新增 imageDescriberModel（转述模型）字段。
+      // 识图通道补全：llm 切片新增 imageDescriberModel（转述模型）字段。
       // 旧持久化态没有此字段；显式落 undefined = 通道关闭。rehydrate 后 reducer 照常可写。
       if (state.llm !== undefined) {
         state.llm.imageDescriberModel = undefined
@@ -3432,7 +3431,7 @@ const migrateConfig = {
   },
   '215': (state: RootState) => {
     try {
-      // v0.3.1-2：关停上游遥测。历史来源有三处会把 data collection 置为开——
+      // 关停上游遥测。历史来源有三处会把 data collection 置为开——
       // 早期迁移（'208' 等）、渲染层缺省值、以及隐私政策更新弹卡对 '20260531' 版的一次性强制重置；
       // 一旦为开，主进程 config 也会被推成开。这里把存量状态一次性翻为关，使设置页显示与实际一致
       // （服务层另有硬性关闭，见 AnalyticsService 的 FORK_ANALYTICS_ENABLED）。
@@ -3440,7 +3439,7 @@ const migrateConfig = {
         state.settings.enableDataCollection = false
         logger.info('migrate 215 success: data collection disabled in this fork')
       }
-      // v0.3.1-2：预设系统整链移除，清掉持久化里的死键（无写入方，留着只会一直跟着用户数据走）
+      // 预设系统整链移除，清掉持久化里的死键（无写入方，留着只会一直跟着用户数据走）
       if (state.assistants !== undefined) {
         delete (state.assistants as unknown as Record<string, unknown>).presets
       }
@@ -3452,7 +3451,7 @@ const migrateConfig = {
   },
   '216': (state: RootState) => {
     try {
-      // v0.3.2 批次1：加回四功能的状态切片（websearch / mcp / knowledge / skills）。
+      // 加回四功能的状态切片（websearch / mcp / knowledge / skills）。
       // 全部是新增顶层切片，旧持久化态缺 key 时由 reducer initialState 缺省合并，无需变换；
       // 本分支仅作为版本推进的显式记账，不做任何字段改写。
       return state
@@ -3463,7 +3462,7 @@ const migrateConfig = {
   },
   '217': (state: RootState) => {
     try {
-      // v0.3.2 批次1：knowledge 侧栏图标回归。旧持久化态里 sidebarIcons.visible 是存量
+      // knowledge 侧栏图标回归。旧持久化态里 sidebarIcons.visible 是存量
       // 快照，不含 'knowledge'，必须补位，否则老用户看不到知识库入口（DEFAULT_SIDEBAR_ICONS
       // 只作用于全新安装）。disabled 列表不动（用户显式停用的语义不受升级影响）。
       const visible = state.settings?.sidebarIcons?.visible
@@ -3478,7 +3477,7 @@ const migrateConfig = {
   },
   '218': (state: RootState) => {
     try {
-      // v0.3.2 LocalPaddle：preprocess.providers 是持久化数组，回水时整体覆盖
+      // LocalPaddle：preprocess.providers 是持久化数组，回水时整体覆盖
       // initialState——新增的默认条目（local-paddle）永远不会出现在老安装的下拉里。
       // 按 id 合并补缺：用户已改的 apiKey/apiHost 保留，缺失的默认条目追加
       //（defaultProvider 不动——用户的选择不被升级改写）。
@@ -3497,7 +3496,7 @@ const migrateConfig = {
   },
   '220': (state: RootState) => {
     try {
-      // v0.3.3 批次3+4：翻译页与绘画页回归。四件事：
+      // +4：翻译页与绘画页回归。四件事：
       // ① llm 切片新增 translateModel（翻译模型）字段——旧持久化态没有此字段，
       //    显式落 undefined = 未配置（照 '214' imageDescriberModel 先例）。
       // ② llm 切片新增 paintingModel（绘画模型）字段，同上。
@@ -3525,7 +3524,7 @@ const migrateConfig = {
   },
   '221': (state: RootState) => {
     try {
-      // v0.3.4：内置小程序按用户裁决裁剪（59 → 12）+ 新增 3 个（scnet/ark/openrouter）。
+      // 内置小程序按用户裁决裁剪（59 → 12）+ 新增 3 个（scnet/ark/openrouter）。
       // ① 清掉被移除的 47 个内置应用的持久化残留（enabled/disabled/pinned 三列表），
       //    否则 getAllApps 的 mapApps 找不到模板数据、旧对象原样透出成幽灵磁贴。
       //    （用户自建 Custom 应用不在内置 id 表里，不受影响。）
@@ -3591,7 +3590,7 @@ const migrateConfig = {
   },
   '222': (state: RootState) => {
     try {
-      // v0.3.4-1 编码助手：侧栏图标补位（照 '220' translate/paintings 先例——
+      // 编码助手：侧栏图标补位（照 '220' translate/paintings 先例——
       // 存量 sidebarIcons.visible 快照不含新图标，不补位老用户看不到入口）。
       const visible = state.settings?.sidebarIcons?.visible
       if (Array.isArray(visible) && !visible.includes('code')) {
@@ -3605,7 +3604,7 @@ const migrateConfig = {
   },
   '223': (state: RootState) => {
     try {
-      // v0.3.4-1 编码助手：codeCliConfigs 字段回填（真机事故修复——redux-persist 的
+      // 编码助手：codeCliConfigs 字段回填（真机事故修复——redux-persist 的
       // settings 切片整片来自存量持久化，initialState 的新字段对老用户是 undefined，
       // useCodeCli 读 configs[toolId] 直接 TypeError。照 '220' 显式落字段先例）。
       if (state.settings) {
@@ -3643,7 +3642,7 @@ const migrateConfig = {
   },
   '225': (state: RootState) => {
     try {
-      // v0.4.4 视觉模型文档处理：preprocess 默认表新增 vision-model 条目——
+      // 视觉模型文档处理：preprocess 默认表新增 vision-model 条目——
       // providers 是持久化数组，redux-persist 回水整体覆盖 initialState，新增默认
       // 条目只对全新安装生效（migrate 218 local-paddle / 224 同一坑），故按 id 补缺。
       // 条目缺失即补；用户已改的 apiKey/apiHost/visionModel 原样保留，defaultProvider 不动。
@@ -3662,7 +3661,7 @@ const migrateConfig = {
   },
   '226': (state: RootState) => {
     try {
-      // v0.4.7 翻译页偏好项回补：settings 新增三键——持久化切片回水整体覆盖
+      // 翻译页偏好项回补：settings 新增三键——持久化切片回水整体覆盖
       // initialState（migrate 218/224/225 同一坑），旧用户无新键，逐一补缺省。
       if (state.settings) {
         if (state.settings.translateAutoCopy === undefined) state.settings.translateAutoCopy = false
@@ -3677,7 +3676,7 @@ const migrateConfig = {
   },
   '227': (state: RootState) => {
     try {
-      // v0.4.7 Obsidian 集成移植：settings 新增 defaultObsidianVault——持久化切片回水
+      // Obsidian 集成移植：settings 新增 defaultObsidianVault——持久化切片回水
       // 整体覆盖 initialState（migrate 218/224/225/226 同一坑），旧用户无新键，补缺省 null。
       if (state.settings && state.settings.defaultObsidianVault === undefined) {
         state.settings.defaultObsidianVault = null
@@ -3690,7 +3689,7 @@ const migrateConfig = {
   },
   '228': (state: RootState) => {
     try {
-      // v0.4.7 用户裁决：全局记忆（V1 遗产：libsql 记忆库 + 工具制召回）整体废弃——
+      // 用户裁决：全局记忆（V1 遗产：libsql 记忆库 + 工具制召回）整体废弃——
       // 工具制召回存在「模型不调工具就看不见记忆」的结构性缺陷；仅保留 V2 式
       // 文件记忆（work-mode memory 工具，FACT.md 每轮注入上下文）。持久化切片
       // memory 随之移除，旧存档的 memory 键在此显式清除（combineReducers 本也会
@@ -3704,7 +3703,7 @@ const migrateConfig = {
   },
   '229': (state: RootState) => {
     try {
-      // r2-11 侧栏图标对账：'209'（v2-trim）曾把 sidebarIcons 白名单硬编码成
+      // 侧栏图标对账：'209'（v2-trim）曾把 sidebarIcons 白名单硬编码成
       // ['assistants','minapp','files']。**本分支要修的老账号正是已经跑过 '209' 的那批**：
       // 迁移链不重跑，209 之后才补位的图标（'217' knowledge / '220' translate+paintings /
       // '222' code / '141' notes）里，只有 '141' 排在 209 之前，所以那批账号按下述顺序
@@ -3726,7 +3725,7 @@ const migrateConfig = {
         }
       }
 
-      // r2-50 settings.pinnedTabs 回填：pinnedTabs 是后加的持久化字段，`tabs` 切片在 persist
+      // settings.pinnedTabs 回填：pinnedTabs 是后加的持久化字段，`tabs` 切片在 persist
       // blacklist 里，固定标签页跨重启只能靠 settings 这个键。老账号的持久化 settings 里没有
       // 这个键（redux-persist 整片回水覆盖 initialState，initialState 永不到达老用户），
       // 于是 restorePinnedTabs 的 `?? []` 把"字段缺失"静默呈现成"用户没固定过标签页"。

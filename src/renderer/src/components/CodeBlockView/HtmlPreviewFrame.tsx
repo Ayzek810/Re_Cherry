@@ -6,7 +6,7 @@ export const HTML_PREVIEW_DEFAULT_BASE_URL = 'about:srcdoc'
 
 // Fully-restricted sandbox: an empty `sandbox` applies every restriction — no scripts, no forms,
 // opaque origin — while still rendering static HTML/CSS, and it is the **default** here because
-// the fork (v0.3.3) removed HTML-artifact screenshot capture: nothing needs `allow-same-origin`
+// the fork removed HTML-artifact screenshot capture: nothing needs `allow-same-origin`
 // any more, so the permissive value must not be reachable by omission.
 // Running NO scripts is the deliberate choice: the main window sets `webSecurity: false`
 // (WindowService.ts), which disables the same-origin policy, so merely dropping

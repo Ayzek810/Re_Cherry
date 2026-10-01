@@ -1,5 +1,5 @@
 /**
- * 绘画图像服务（v0.3.3 批次6，V2 参数来源移植后的薄适配层）：AI 通路 = 轻量 AI
+ * 绘画图像服务（V2 参数来源移植后的薄适配层）：AI 通路 = 轻量 AI
  * 服务面 lightGenerateImage/lightEditImage（LightLLM，OpenAI 兼容平面直连）——
  * 不自配 fetch 旁路（红线1）。错误归一为 PaintingGenerateError。
  *

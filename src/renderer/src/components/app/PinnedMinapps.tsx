@@ -20,7 +20,7 @@ export const SidebarOpenedMinappTabs: FC = () => {
   const { minappShow, openedKeepAliveMinapps, currentMinappId } = useRuntime()
   const { openMinappKeepAlive, hideMinappPopup, closeMinapp, closeAllMinapps } = useMinappPopup()
   const navigate = useNavigate()
-  // 批次5（用户裁决）：打开区右键菜单补「固定到启动台」——打开中的小程序（含 code-mate
+  // （用户裁决）：打开区右键菜单补「固定到启动台」——打开中的小程序（含 code-mate
   // 受管 Web UI）可钉进启动台的小程序区，关掉侧栏图标入口后仍可从 + 页直达。
   const { pinned, updatePinnedMinapps } = useMinapps()
   const { showOpenedMinappsInSidebar } = useSettings() // 获取控制显示的设置
@@ -29,7 +29,7 @@ export const SidebarOpenedMinappTabs: FC = () => {
   const { isLeftNavbar } = useNavbarPosition()
 
   const handleOnClick = (app: MinAppType) => {
-    // fork 缝（v0.3.4-2）：code-mate 受管 Web UI 的磁贴是"快捷方式"——点击进 /code 管理
+    // fork 缝：code-mate 受管 Web UI 的磁贴是"快捷方式"——点击进 /code 管理
     // 页做全新启动，而不是按 url 开 webview（transient 应用的 url 是上次会话的陈旧端口）。
     if (app.id.startsWith('code-mate-')) {
       navigate('/code')
@@ -151,7 +151,7 @@ export const SidebarPinnedApps: FC = () => {
               <Icon
                 theme={theme}
                 onClick={() => {
-                  // fork 缝（v0.3.4-2）：code-mate 磁贴 = /code 管理页快捷方式（同 SidebarOpenedMinappTabs）。
+                  // fork 缝：code-mate 磁贴 = /code 管理页快捷方式（同 SidebarOpenedMinappTabs）。
                   if (app.id.startsWith('code-mate-')) {
                     navigate('/code')
                     return

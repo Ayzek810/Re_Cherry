@@ -19,7 +19,7 @@ import { renderToolFields } from './toolFieldRenderer'
 import type { OwnLoginConfigPanelProps } from './types'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/
-// OwnLoginConfigPanel.tsx（2026-09-24，v0.3.4-1 批次4b）。缝点三处，受管/原文两态与保存门逐字：
+// OwnLoginConfigPanel.tsx（2026-09-24）。缝点三处，受管/原文两态与保存门逐字：
 // ① Props 缝：OwnLoginConfigPanelProps 自 fork 4a 前移的 ./types 引用（4a 缝注：V2 定义在本
 //   UI 件，4a 前移至 types，4b 挂组件时回指）并 re-export 对齐消费点。
 // ② 主题缝：useTheme/SettingContainer 的 theme 面不搬（见 SettingsPrimitives 缝）。

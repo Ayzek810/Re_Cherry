@@ -23,7 +23,7 @@ const CLAUDE_SUPPORTED_WEBSEARCH_REGEX = new RegExp(
   'i'
 )
 
-// r2-83：唯一的图片护栏原本是字面量 `-image-preview`，而现行生图 id 是 `-image`
+// 唯一的图片护栏原本是字面量 `-image-preview`，而现行生图 id 是 `-image`
 // 与 `-preview-image-generation`（`vision.ts:125-126`、`tooluse.ts:57-58` 都把它们当生图/非函数调用模型），
 // 于是 `gemini-2.5-flash-image` / `gemini-2.0-flash-preview-image-generation` 命中本正则而被标成可联网。
 // 现在 2.x 与 3.x 两个分支都排除 `-image`（`\b` 以免误伤 `imagen`）；
@@ -42,16 +42,16 @@ export const PERPLEXITY_SEARCH_MODELS = [
 ]
 
 /**
- * 三值契约（家规 §9 / 不变式 6）：
+ * 三值契约：
  * - `true` / `false` = **确定**答案（能 / 不能联网）；
  * - `undefined` = 「还不知道」——provider 尚未可知，调用方**必须稍后重试**，
  *   且**不得**据此写回任何持久化开关（`assistant.enableWebSearch`）。
  *
- * r2-80：此前 provider 查不到就 `return false`。冷启动时 redux-persist 还没回填，`providers`
+ * 此前 provider 查不到就 `return false`。冷启动时 redux-persist 还没回填，`providers`
  * 为空 ⇒ 启动窗口内一律得到「确定不支持」，调用方把 `false` 写进 `assistant.enableWebSearch`
  * 落盘，用户开关被静默关掉。
  *
- * r2-42：`getProviderByModel` 已改为三值契约——查不到返回 `undefined`，不再静默回落到
+ * `getProviderByModel` 已改为三值契约——查不到返回 `undefined`，不再静默回落到
  * `defaultProvider || providers[0]`。下面 `!provider` 分支就是本调用点的显式处理：
  * 「provider 未知」⇒ 返回 `undefined`，绝不折成确定性的 `false`。
  */
@@ -144,9 +144,9 @@ export function isWebSearchModel(model: Model): boolean | undefined {
   return false
 }
 
-// r2-110：`isOpenAIWebSearchChatCompletionOnlyModel`（判 `gpt-4o(-mini)-search-preview`）经全仓
+// `isOpenAIWebSearchChatCompletionOnlyModel`（判 `gpt-4o(-mini)-search-preview`）经全仓
 // 两法确认零生产引用（只被 `config/models/__tests__/utils.test.ts` 的一句 vi.mock 登记），
-// 且其判据已被下面的 `isOpenAIWebSearchModel` 完全覆盖。按 §5.1 删除。
+// 且其判据已被下面的 `isOpenAIWebSearchModel` 完全覆盖。按 删除。
 
 export function isOpenAIWebSearchModel(model: Model): boolean {
   const modelId = getLowerBaseModelName(model.id)

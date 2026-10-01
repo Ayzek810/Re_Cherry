@@ -1,10 +1,10 @@
-// fork 缝（原创，v0.4.5）：源码型受管工具的获取原语——GitHub 源码树（codeload）下载、
+// fork 缝（原创）：源码型受管工具的获取原语——GitHub 源码树（codeload）下载、
 // 解压归位、pyproject 依赖解析、前端产物部署、用户态播种。
 // 设计来源：runtimeDownloader.ts 的下载/解压/重试模式（同盘 rename、.part 先写后改名、
 // EPERM/EBUSY 退避——杀软扫描窗口）。
 // 与注册表型工具（npm/PyPI）的差别：**无镜像等价物**——任意 GitHub 仓库没有 npmmirror
 // 对应物，所以源码获取只可能走 GitHub 本身或**GitHub 加速前缀**。
-// v0.4.5-1：加速前缀内置（用户裁决 2026-09-29：`https://ghfast.top/https://github.com`），
+// 加速前缀内置（用户裁决 2026-09-29：`https://ghfast.top/https://github.com`），
 // 官方 codeload 作为回退保留；两种 URL 形态都做过实测，见 `DEFAULT_GITHUB_MIRROR` 的注释。
 // 取回的内容仍要过"顶层目录名 = <Repo>-<完整 SHA>"校验——它挡的是"代理给了别的提交/别的东西"，
 // 但**挡不住**"代理按正确目录名塞了改过的内容"：经第三方加速取源码，等于把该代理放进信任面，
@@ -56,7 +56,7 @@ class TerminalApiError extends Error {}
  * 解析分支 HEAD 的 commit SHA。这是源码型工具唯一的版本判据——上游
  * Tswoen/Paper-Agent 无任何 tag/release，pyproject 版本号恒定 0.1.0。
  *
- * v0.4.5-1：加了源内重试与限流可言明失败。匿名 GitHub API 是 60 次/时/IP——共享出口下
+ * 加了源内重试与限流可言明失败。匿名 GitHub API 是 60 次/时/IP——共享出口下
  * "查不到 SHA"是常态而非异常，旧实现一次失败就把整个安装判死，且原因是英文哑弹。
  */
 export async function resolveHeadSha(repo: string, branch: string): Promise<string> {
@@ -171,7 +171,7 @@ export function sourceArchiveUrls(repo: string, sha: string, env: NodeJS.Process
 
 /**
  * 按 SHA 下载源码 zip（内容固定，避免"分支在检查后又被推进"的漂移）。
- * v0.4.5-1：走 downloadFile 原语（流式落盘 + 空闲超时 + 断点续传 + 源内重试）——旧实现
+ * 走 downloadFile 原语（流式落盘 + 空闲超时 + 断点续传 + 源内重试）——旧实现
  * 对这类第三方/自建网络路径没有重试，抖动一次就整个安装失败；候选源见
  * {@link sourceArchiveUrls}（加速前缀在前、官方 codeload 回退在后）。
  */
@@ -222,7 +222,7 @@ export function selectSourceTreeEntry(entries: readonly string[], repoName: stri
   const [entry] = entries as [string]
   const expected = sha ? `${repoName}-${sha}` : undefined
   if (expected ? entry !== expected : !entry.startsWith(repoName)) {
-    // v0.4.5-1（O8）：镜像/代理取回的内容要能被证伪——顶层目录带着我们钉的 SHA，
+    // （）：镜像/代理取回的内容要能被证伪——顶层目录带着我们钉的 SHA，
     // 对不上说明拿到的不是那一个提交（旧版、串档、或被代理换过内容），一律拒绝。
     throw new Error(
       `Unexpected source archive content: expected the directory "${expected ?? `${repoName}-<sha>`}", got "${entry}"`
@@ -235,7 +235,7 @@ export function selectSourceTreeEntry(entries: readonly string[], repoName: stri
  * 把 codeload zip 的源码树归位到 targetDir：zip 顶层是 `<RepoName>-<sha>/` 包裹层
  * （GitHub 固定布局）→ 整体 rename。
  *
- * v0.4.5-1：改走原子替换——旧源码树先留作备份，切换失败就放回去。旧实现是"先删旧树再
+ * 改走原子替换——旧源码树先留作备份，切换失败就放回去。旧实现是"先删旧树再
  * 改名"，删成功、改名失败（Windows 杀软/占用）就是"源码树没了、工具也起不来"。
  * 同时校验顶层目录名 = `<RepoName>-<sha>`（见 {@link selectSourceTreeEntry}）。
  */
@@ -333,7 +333,7 @@ export async function seedUserConfig(sourceDir: string, homeDir: string): Promis
  * 伺服 `front/dist`（src/api/app.py `_mount_frontend`），而进程 cwd 是 home（用户态
  * 与源码树分离的关键，见 PaperAgentService）。
  *
- * v0.4.5-1：改走"复制到 staging → 原子替换"。旧实现是"先删 dist 再 cp"，且**丢弃了删除
+ * 改走"复制到 staging → 原子替换"。旧实现是"先删 dist 再 cp"，且**丢弃了删除
  * 结果**：删不掉（被杀软/进程占用）时 cp 会覆盖到旧产物之上，新旧 chunk 混杂，而快照仍判
  * applied——用户看到的是"升级成功了但界面还是旧的"。
  */

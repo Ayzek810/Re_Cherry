@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { formatCitationsFromBlock, hostnameOf } from '../messageBlock'
 
 /**
- * r2-51：`formatCitationsFromBlock` 的 AISDK 分支曾裸用 `new URL(result.url).hostname`，
+ * `formatCitationsFromBlock` 的 AISDK 分支曾裸用 `new URL(result.url).hostname`，
  * 而同函数的 GROK/OPENROUTER/OPENAI/ANTHROPIC 四条兄弟分支都包了 try/catch 并回落成原始 url。
  * 相对路径或畸形 url 会抛 TypeError，整个引用 selector（`selectFormattedCitationsByBlockId`）
  * 抛错 → 引用药丸整块不渲染。现在所有分支共用一个 `hostnameOf`。
@@ -16,7 +16,7 @@ const blockOf = (source: string, results: unknown[]) =>
     response: { source, results }
   }) as any
 
-describe('hostnameOf（r2-51）', () => {
+describe('hostnameOf', () => {
   it('正常 url 取 hostname；畸形/相对串回落为原串，不抛错', () => {
     expect(hostnameOf('https://example.com/a/b?q=1')).toBe('example.com')
     expect(hostnameOf('/relative/path')).toBe('/relative/path')
@@ -25,7 +25,7 @@ describe('hostnameOf（r2-51）', () => {
   })
 })
 
-describe('formatCitationsFromBlock — 畸形 url 不再打穿引用选择器（r2-51）', () => {
+describe('formatCitationsFromBlock — 畸形 url 不再打穿引用选择器', () => {
   it('AISDK：相对路径 url 不抛错，title 回落为原始 url', () => {
     const citations = formatCitationsFromBlock(blockOf(WEB_SEARCH_SOURCE.AISDK, [{ url: '/relative/path' }]))
 

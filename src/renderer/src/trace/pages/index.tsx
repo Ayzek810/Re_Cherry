@@ -94,7 +94,7 @@ export const TracePage: React.FC<TracePageProp> = ({ topicId, traceId, modelName
     const nodes = getRootSpan(datas)
     updatePercentAndStart(nodes)
     setSpans((prev) => mergeTraceModals(prev, nodes))
-    // k2-23：`isEnd` 是内核侧 `ReadableSpan.ended` 的显式投影，替代 `endTime <= 0` 这个启发式
+    // `isEnd` 是内核侧 `ReadableSpan.ended` 的显式投影，替代 `endTime <= 0` 这个启发式
     //（未结束的 span 以前会被算成 1970，只能靠猜）。
     return nodes.every((node) => node.isEnd)
   }, [topicId, traceId, modelName, updatePercentAndStart, mergeTraceModals])

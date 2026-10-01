@@ -138,6 +138,54 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
+    Re_Cherry 1.0.0 - the first release
+
+    Re_Cherry 1.0.0 finishes what the plan asked for: the internal documents, the cleanup of the
+    development leftovers, and the release itself. It also brings back an update channel that this
+    fork removed in 0.2.1 - this time a self-contained one, built on this repository's own releases.
+    Every fix of the 0.5.x rounds is included as well; those blocks follow below.
+
+    🔄 Updates
+    - The app checks this repository's releases, downloads the installer, verifies it and starts it. A prompt appears in the top bar (in the left sidebar when the sidebar layout is active) as soon as a version is available.
+    - Settings → About holds the manual check, the download progress, the checksum result, the install action and the ignore action.
+    - The checksum comes from the release asset (sha256). When the source gives no checksum, the app reports the download as unverified instead of claiming a verified one.
+    - A portable build cannot replace itself. It reports the new version and links to the release page.
+    - Nothing downloads on its own. The switch in About turns that on; by default the download starts when you ask for it.
+    - The release-notes page in About reads this repository now. It used to read the upstream repository.
+
+    📚 Documents
+    - CLAUDE.md describes the current structure only. Decision logs, version history and references to documents outside the repository are gone.
+    - Seven documents under docs/ cover the architecture, the kernel seams, the data layout, the IPC contract, the quality gates, the release process and the known limits.
+
+    🧹 Cleanup
+    - Comments no longer restate the development rules or cite an audit round. Those rules have one home now.
+    - The development tools live in the repository under tools/. The installer ships neither tools/ nor docs/.
+    - Build output, TypeScript build info, a stale audit-closure script and the notes of an old round are gone.
+
+    <!--LANG:zh-CN-->
+    Re_Cherry 1.0.0 —— 正式版
+
+    1.0.0 收尾了规划里的三件事：编制内部文档、清理开发遗产、正式上线。同时把 0.2.1 移除的更新通道
+    接了回来——这次是自研的，直接读本仓自己的发布。0.5.x 各轮的修复也都在，对应块在下面。
+
+    🔄 应用内更新
+    - 应用自己查本仓的发布、下载安装包、校验摘要并拉起安装器。发现有新版本时，顶栏会出现提示（左侧导航布局下落在侧栏底部）。
+    - 设置 → 关于里集中放：手动检查、下载进度、摘要校验结论、安装、忽略此版本。
+    - 摘要来自发布资产自带的 sha256。源没给摘要时，应用会如实标成"未校验"，不谎报已校验。
+    - 便携版不能自替换：它只报出新版本，并给出发布页入口。
+    - 不会自己下载。自动下载由关于页的开关控制；默认是你点了才开始。
+    - 关于页的"更新日志"页现在读本仓的发布，此前读的是上游仓库。
+
+    📚 内部文档
+    - CLAUDE.md 只描述当前结构：决策日志、版本史诗、以及指向仓外文档的引用都去掉了。
+    - docs/ 下 7 份文档分别说明架构、内核缝、数据布局、IPC 契约、质量门禁、发布流程与已知限制。
+
+    🧹 清理
+    - 注释不再复述开发规定、也不再引用审计轮次；规定只有一处出处。
+    - 开发工具收进仓库的 tools/；安装包既不带 tools/ 也不带 docs/。
+    - 构建产物、TypeScript 构建信息、失效的审计闭环脚本、上一轮的笔记都已删除。
+
+    <!--LANG:en-->
     Re_Cherry 0.5.3 - Fixes after the 0.5.2 cleanup round
 
     This round closes one boot-path defect and four defects that users reported.

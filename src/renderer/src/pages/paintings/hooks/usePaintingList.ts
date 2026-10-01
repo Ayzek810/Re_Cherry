@@ -1,5 +1,5 @@
 /**
- * 绘画列表写侧（v0.3.3 批次4，② 薄适配）：add/remove/select 保留；saveCurrent →
+ * 绘画列表写侧（② 薄适配）：add/remove/select 保留；saveCurrent →
  * db.paintings.put（V2 DataApi updatePainting → Dexie 行）。V2 deletePainting →
  * db.paintings.delete + 引用文件 FileManager.deleteFile。
  */

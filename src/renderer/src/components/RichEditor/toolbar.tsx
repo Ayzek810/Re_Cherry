@@ -19,7 +19,7 @@ interface ToolbarItemInternal {
   type?: 'divider'
   /**
    * 动态命令自己的执行体（`Command.handler`）。
-   * c2-20：原实现把它包成 `() => cmd.handler` 存在 `handler` 字段里，而**没有任何地方读取它**，
+   * 原实现把它包成 ` => cmd.handler` 存在 `handler` 字段里，而**没有任何地方读取它**，
    * 于是「注册了工具栏命令、但没给 `formattingCommand`」的命令点下去什么也不做。
    */
   run?: (editor: Editor) => void
@@ -96,7 +96,7 @@ export const Toolbar: React.FC<ToolbarProps> = memo(function Toolbar({
   const { t } = useTranslation()
   const [showImageUploader, setShowImageUploader] = useState(false)
   const [showMathInput, setShowMathInput] = useState(false)
-  // c2-21：命令注册表是模块级可变的，工具栏条目按注册表版本号记忆化——
+  // 命令注册表是模块级可变的，工具栏条目按注册表版本号记忆化——
   // 没有它时每次按键重渲染都会重建整排按钮（约 24 个按钮 + 19 个 Tooltip）。
   const [registryVersion, setRegistryVersion] = useState(0)
   const [placeholderCallbacks, setPlaceholderCallbacks] = useState<{
@@ -141,7 +141,7 @@ export const Toolbar: React.FC<ToolbarProps> = memo(function Toolbar({
 
   useEffect(() => subscribeCommandRegistry(() => setRegistryVersion((version) => version + 1)), [])
 
-  // c2-21：命令注册表是模块级可变的，工具栏条目按注册表版本号记忆化。
+  // 命令注册表是模块级可变的，工具栏条目按注册表版本号记忆化。
   // 这个 useMemo 必须在下面那条 `if (!editor)` 早退**之前**：放在早退之后就变成条件 Hook，
   // editor 从 null 变为实例时 Hook 数量变化，React 直接抛「Rendered more hooks than during
   // the previous render」。回调体不读 registryVersion，它只是失效键。

@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 import { Button, CodeEditor, Tooltip } from '../shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/CliConfigEditor.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，文件 tab 切换/格式化/编辑器体逐字：
+//（2026-09-24）。缝点三处，文件 tab 切换/格式化/编辑器体逐字：
 // ① 字号缝：V2 usePreference('chat.message.font_size') → fork useSettings().fontSize（同语义面）。
 // ② 主题缝：useCmTheme 不搬——fork CodeEditor 内部经 CodeStyleProvider 自取主题（EditorBody 的
 //   theme 入参随 shim 的 CodeEditor theme 形参接收不消费）。

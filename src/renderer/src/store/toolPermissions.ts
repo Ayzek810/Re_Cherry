@@ -51,7 +51,7 @@ export type ToolPermissionEntry = ToolPermissionRequestPayload & {
 }
 
 /**
- * `resolvedInputs` 的条目上限（r2-49）：审批放行写入的"已改写入参"只有**该工具结果**
+ * `resolvedInputs` 的条目上限：审批放行写入的"已改写入参"只有**该工具结果**
  * 才需要（`toolCallbacks.onToolCallComplete` 读一次即删）。直播 `tool/result` 与
  * `removeByToolCallId` 都会删；回合被中断、或结果从未到达时条目会留存，故加一层
  * 按录入顺序的 FIFO 上限，使这张表（含完整工具入参）不会随审批次数无限增长。
@@ -62,9 +62,9 @@ export interface ToolPermissionsState {
   requests: Record<string, ToolPermissionEntry>
   /** `toolCallId` → 审批放行后的改写入参。读取点：`toolCallbacks.onToolCallComplete`。 */
   resolvedInputs: Record<string, Record<string, unknown>>
-  /** r2-49：`resolvedInputs` 的录入顺序（FIFO 淘汰用；不参与渲染）。 */
+  /** `resolvedInputs` 的录入顺序（FIFO 淘汰用；不参与渲染）。 */
   resolvedInputOrder: string[]
-  /** r2-49：`toolCallId` → 归属话题，使 `clearByTopic` 能清掉该话题的已放行入参。 */
+  /** `toolCallId` → 归属话题，使 `clearByTopic` 能清掉该话题的已放行入参。 */
   resolvedInputTopics: Record<string, string>
 }
 
@@ -75,7 +75,7 @@ const initialState: ToolPermissionsState = {
   resolvedInputTopics: {}
 }
 
-/** 写入一条已放行入参并按 FIFO 上限淘汰最旧条目（r2-49）。 */
+/** 写入一条已放行入参并按 FIFO 上限淘汰最旧条目。 */
 function setResolvedInput(
   state: ToolPermissionsState,
   toolCallId: string,
@@ -99,7 +99,7 @@ function setResolvedInput(
   }
 }
 
-/** 删除一条已放行入参及其归属索引（r2-49）。 */
+/** 删除一条已放行入参及其归属索引。 */
 function deleteResolvedInput(state: ToolPermissionsState, toolCallId: string): void {
   if (toolCallId in state.resolvedInputs) {
     delete state.resolvedInputs[toolCallId]
@@ -162,7 +162,7 @@ const toolPermissionsSlice = createSlice({
     /**
      * 回合结束/话题删除时作废该话题的未决审批（abort 路径的兜底清理）。
      *
-     * r2-49：同时清掉该话题**已放行**的入参投影。历史投影路径（kernelChat 回放）不调用
+     * 同时清掉该话题**已放行**的入参投影。历史投影路径（kernelChat 回放）不调用
      * `removeByToolCallId`，因此只重开一次历史话题就会留下永久条目；这些条目的归属只能在
      * 写入时按 `requestReceived.topicId` 记录（`resolvedInputTopics`），所以这里按同一话题清。
      * `topicId` 缺失的未决审批无法归属到话题（`entry.topicId === undefined`），维持原有语义不动。

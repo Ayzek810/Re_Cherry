@@ -7,7 +7,7 @@ import { createRoot } from 'react-dom/client'
 
 import App from './App'
 
-// v1 二轮 k2-20：窗口卸载前冲刷 web 侧在途 span。批处理器不冲刷的话，这些 span 会随窗口关闭丢掉。
+// 窗口卸载前冲刷 web 侧在途 span。批处理器不冲刷的话，这些 span 会随窗口关闭丢掉。
 // pagehide 不可 await，故 fire-and-forget（适配器内部已保证 flush/shutdown 不抛）。
 window.addEventListener('pagehide', () => {
   void WebTracer.forceFlush()

@@ -28,7 +28,7 @@ const BIDIRECTIONAL_PAIRS: Array<[TranslateLangCode, TranslateLangCode]> = [
 /**
  * V2 determineTargetLanguage 移植：auto 源语言按目标语言的对向解析；同语言与
  * 非配对两种失败态（V2 same_language / not_pair 同语义）。
- * v0.4.7：源/目标放宽为 AnyTranslateLangCode（自定义语言码无内置配对，走
+ * 源/目标放宽为 AnyTranslateLangCode（自定义语言码无内置配对，走
  * "无对向 = 保持 auto/直通" 分支，与内置未配对语言同语义）。
  */
 export function determineTargetLanguage(

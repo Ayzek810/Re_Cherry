@@ -36,7 +36,7 @@ import UsageSettings from './UsageSettings/UsageSettings'
 import WebSearchSettings from './WebSearchSettings'
 
 /**
- * 设置内部再分割（v1 二轮审查 s2-21）。
+ * 设置内部再分割。
  *
  * v1 已做路由级懒加载（`Router.tsx` 的 `./pages/settings/SettingsPage`），但设置内部再无切分：
  * 打开「设置 → 通用」会同时求值技能页（1253 行）、12 个 DataSettings 面板、全部 ProviderSettings

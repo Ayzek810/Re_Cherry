@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import assistants, { addAssistant, addTopic, moveTopicToHead } from '../assistants'
 
 /**
- * 发送浮顶（v0.3.1 验收轮）action 钉：
+ * 发送浮顶（验收轮）action 钉：
  * ① 子行请求搬的是**家族根**（侧栏只显示根行）；
  * ② 其余行保持相对顺序（数组序写入，不整组洗牌）；
  * ③ 只动位置：字段/家族签名前后不变（位置不是"活动"——同 updateTopicName 的免 bump 教义）；

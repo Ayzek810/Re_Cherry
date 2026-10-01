@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/shared/types/managedTool.ts（2026-09-24，v0.3.4-1，逐字）。
+// fork 移植自 cherry-studio v2 src/shared/types/managedTool.ts（2026-09-24，逐字）。
 
 export type ManagedToolStatus = 'stopped' | 'starting' | 'running' | 'error'
 

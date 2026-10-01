@@ -24,7 +24,7 @@ const BasicDataSettings: React.FC = () => {
   const { t } = useTranslation()
   const [appInfo, setAppInfo] = useState<AppInfo>()
   const [cacheSize, setCacheSize] = useState<string>('')
-  // v1 二轮审查 s2-34：两个读取此前都没有 catch —— 拒绝时路径字段渲染成空文本、
+  // 两个读取此前都没有 catch —— 拒绝时路径字段渲染成空文本、
   // 「打开」按钮失去目标、缓存大小整行消失（失败伪装成空）。
   const [appInfoFailed, setAppInfoFailed] = useState(false)
   const [cacheSizeFailed, setCacheSizeFailed] = useState(false)

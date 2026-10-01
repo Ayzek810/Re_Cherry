@@ -71,7 +71,7 @@ const KnowledgeSitemaps: FC<KnowledgeContentProps> = ({ selectedBase }) => {
     })
 
     if (url) {
-      // 二轮审查 f2-21：非法 URL 此前只落一条日志（用户侧零信号），而"已存在"却弹
+      // 非法 URL 此前只落一条日志（用户侧零信号），而"已存在"却弹
       // `message.success(sitemap_added)`——语义反向（明明是"已添加过"却提示"添加成功"）。
       // 这里统一走同一个 add 入口的两种真实结果：非法 → 可见告警；已存在 → 语义正确的提示。
       try {

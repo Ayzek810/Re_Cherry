@@ -98,7 +98,7 @@ const PaintingImageSkeleton: FC<{
   // next (never upscaled past its own resolution). Falls back to the
   // declared-ratio box below when dimensions aren't known yet (`container`
   // unmeasured, or the reveal hasn't decoded the natural size).
-  // fork 缝（v0.3.3-9）：算术抽到 `computeContainedImageBox`（与 Artboard 同一实现、同一组测试），
+  // fork 缝：算术抽到 `computeContainedImageBox`（与 Artboard 同一实现、同一组测试），
   // 保证"完整展示"这条不变量只有一处定义。
   const lockedSize = computeContainedImageBox(
     naturalWidth && naturalHeight ? { width: naturalWidth, height: naturalHeight } : null,

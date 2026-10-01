@@ -57,13 +57,13 @@ describe('buildParallelAnswerMap（旁答归并 = v1 卡片组数据源）', () 
 })
 
 /**
- * f2-01：hook 的订阅粒度与返回引用稳定性。
+ * hook 的订阅粒度与返回引用稳定性。
  *
  * 订阅面从 `state.messages`（切片根，任何 messages reducer 都会换引用）收窄为
  * `entities` + `messageIdsByTopic`；并保证旁答集合内容不变时返回**同一个 Map 引用**——
  * 它是 `Messages.tsx` 里 `groupedMessages` 的 useMemo 依赖，换引用就会让消息区整棵重渲。
  */
-describe('selectParallelAnswerMap（f2-01：细粒度订阅 + 内容稳定引用）', () => {
+describe('selectParallelAnswerMap（细粒度订阅 + 内容稳定引用）', () => {
   const children: ParallelChildInfo[] = [{ id: 'C', anchorQuestionId: 'kernel-P-2', copyQuestionId: 'kernel-C-3' }]
 
   it('无 parallel 子会话时短路成模块级空 Map（引用恒定）', () => {

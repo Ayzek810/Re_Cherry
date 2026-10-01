@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/builders.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/builders.ts（2026-09-24）。
 // fork 缝：builder 面按 hermes 依赖闭包裁剪——buildClaude/Codex/OpenCode/Gemini/Qwen/Kimi/Pi
 // 及其私有 helper（openCodeProviderRequestOptions/openCodeModelLimit/buildOpenCodeModelOptions/
 // resolveCodexProviderDisplayName/hasRestorableCodexChatgptAuth）与 managedKeys/permissionModes/

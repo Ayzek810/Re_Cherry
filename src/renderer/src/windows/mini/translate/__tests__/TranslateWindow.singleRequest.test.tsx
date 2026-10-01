@@ -1,5 +1,5 @@
 /**
- * r2-01 行为回归：mini 翻译窗口一轮翻译**只发一次**请求。
+ * mini 翻译窗口一轮翻译**只发一次**请求。
  *
  * 缺陷链条（修复前）：`useSmoothStream({ streamDone: !isTranslating })` 的 `reset` 依赖
  * `streamDone`，而 `streamDone` 由 `isTranslating` 推导 → 请求结束 `finally { setIsTranslating(false) }`
@@ -56,7 +56,7 @@ const flush = () =>
     await Promise.resolve()
   })
 
-describe('TranslateWindow · r2-01 单次请求', () => {
+describe('TranslateWindow · 单次请求', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     store.dispatch(setTranslateModel({ model: MODEL }))

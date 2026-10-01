@@ -76,7 +76,7 @@ class PowerMonitorService {
 
   /**
    * 系统从休眠恢复。仅日志：恢复时间戳是排障取证点——活跃流式传输在会话日志
-   * dt 数组里的空洞可与系统睡眠窗口对齐（配合 v0.4.6-1 的 streaming stall 取证钩子）。
+   * dt 数组里的空洞可与系统睡眠窗口对齐（配合 的 streaming stall 取证钩子）。
    */
   private onResume(): void {
     logger.info('System resume detected', { platform: process.platform })

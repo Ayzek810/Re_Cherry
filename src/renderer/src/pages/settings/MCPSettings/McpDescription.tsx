@@ -19,7 +19,7 @@ const MCPDescription: FC<McpDescriptionProps> = ({ searchKey }) => {
   const { shikiMarkdownIt } = useCodeStyle()
   const [loading, setLoading] = useState(false)
   const [mcpInfo, setMcpInfo] = useState<string>('')
-  // v1 二轮审查 s2-25：npxFinder 失败（离线 / npm 不可达）此前无 rejection handler：
+  // npxFinder 失败（离线 / npm 不可达）此前无 rejection handler：
   // 未处理拒绝 + 一张空白 Card ——「这个包没有 README」与「查询失败」不可区分。
   const [loadFailed, setLoadFailed] = useState(false)
 

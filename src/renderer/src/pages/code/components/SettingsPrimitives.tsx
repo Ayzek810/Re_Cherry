@@ -1,11 +1,11 @@
 import { cn } from '@renderer/utils/style'
 import type { FC, HTMLAttributes } from 'react'
 
-// fork 缝（批次4b 原创缝模块）：V2 @renderer/components/SettingsPrimitives 的本页消费子集
+// fork 缝（原创缝模块）：V2 @renderer/components/SettingsPrimitives 的本页消费子集
 //（SettingContainer/SettingGroup/SettingTitle —— ConfigEditDialogBody/OwnLoginConfigPanel 两处）。
 // V2 的 theme prop（ThemeMode → data-theme-mode）与 SettingGroup 的 card/plain 变体底色在本页
 // 消费点全为 variant="plain" + transparent 背景，fork 无该主题面——theme 接收不消费，plain 形状
-// 固化（视觉保真度批次 5 视真机效果再调）。
+// 固化（视觉保真度 视真机效果再调）。
 
 export const SettingContainer: FC<HTMLAttributes<HTMLDivElement> & { theme?: unknown }> = ({
   className,

@@ -1,4 +1,4 @@
-/** v0.3.2 自 CS_V1 移植（网络搜索 provider 读写 hooks；为通过严格模式的隐式 any 检查，参数类型显式化）。 */
+/** 自 CS_V1 移植（网络搜索 provider 读写 hooks；为通过严格模式的隐式 any 检查，参数类型显式化）。 */
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   addSubscribeSource as _addSubscribeSource,

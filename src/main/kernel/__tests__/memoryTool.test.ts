@@ -16,7 +16,7 @@ afterAll(async () => {
 })
 
 /**
- * memory 工具机测（v0.4.6 V2 memoryTools 同构）：FACT.md 原子覆写、JOURNAL.jsonl
+ * memory 工具机测（V2 memoryTools 同构）：FACT.md 原子覆写、JOURNAL.jsonl
  * 追加/查询（真实文件系统，不用 mock 文件层）。
  */
 describe('memoryUpdate', () => {

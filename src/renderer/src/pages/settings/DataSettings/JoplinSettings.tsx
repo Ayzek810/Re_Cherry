@@ -25,7 +25,7 @@ const JoplinSettings: FC = () => {
   const joplinUrl = useSelector((state: RootState) => state.settings.joplinUrl)
   const joplinExportReasoning = useSelector((state: RootState) => state.settings.joplinExportReasoning)
 
-  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片（此前 token / url 是 onChange 直接 dispatch，
+  // 打字只改本地草稿，失焦才写 redux-persist 切片（此前 token / url 是 onChange 直接 dispatch，
   // 每个字符一次整片持久化，且 token 还挂了 onChange + onBlur 两次提交同一个值）。
   // URL 的既有规范化（补结尾 /）保留在提交回调里。
   const tokenField = useCommittedInput(joplinToken, (next) => dispatch(setJoplinToken(next)))
@@ -65,7 +65,7 @@ const JoplinSettings: FC = () => {
   const handleJoplinHelpClick = () => {
     openSmartMinapp({
       id: 'joplin-help',
-      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
+      // `name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
       name: t('settings.data.joplin.title'),
       url: 'https://joplinapp.org/help/apps/clipper',
       logo: AppLogo

@@ -1,5 +1,5 @@
 /**
- * 平滑流式 playout（v0.4.6-1 完成移植：此前 fork 只搬了 115 行朴素版——每帧吐
+ * 平滑流式 playout（完成移植：此前 fork 只搬了 115 行朴素版——每帧吐
  * queue/5 的固定比例释放，burst 输入表现为"一段一段跳"，streamDone 翻转瞬间
  * 清空队列（"一口气输出剩下"）。本文件为 V2 原版逐字移植：自适应抖动缓冲器，
  * 按最近持续入站速率释放（bursty、IPC-coalesced 输入的官方解法），API 兼容
@@ -88,7 +88,7 @@ const MAX_BACKLOG = 400
 const MAX_FRAME_DT_MS = 100
 const MIN_STEP = 1
 /**
- * 回调频率上限（v1 二轮性能审计 p2-09 修法 3）。
+ * 回调频率上限（修法 3）。
  *
  * 上游每帧把**累积全文**交给 `onUpdate`（`Markdown` 每次 setState ⇒ 全文 ReactMarkdown
  * 重解析）。60fps 下那是每秒 60 份全文；把回调钳到 ≤30Hz 后，同一段文本的解析次数减半，
@@ -117,10 +117,10 @@ export const useSmoothStream = ({
   /** Decaying peak of observed stall lengths (seconds) → adaptive cushion. */
   const stallEstRef = useRef<number>(0)
   /** 最近 inter-arrival gap（ms）的固定容量环，**保持升序**：中位数按需读取。
-   *  p2-10：此前每个 delta 都 `[...gaps].sort()`（O(32 log 32) + 一次数组分配），
+   * 此前每个 delta 都 `[...gaps].sort()`（O(32 log 32) + 一次数组分配），
    *  现在插入有序环（二分定位 + splice，O(32)、零分配），排序成本从每 delta 降为每帧一次读取。 */
   const gapsRef = useRef<number[]>([])
-  /** 上一次主动 `onUpdate` 的时间戳（p2-09：回调频率钳制）。 */
+  /** 上一次主动 `onUpdate` 的时间戳（回调频率钳制）。 */
   const lastNotifyTRef = useRef<number>(0)
   /** 上一次已通知出去的文本（收尾兜底用：只在真的有变化时才补发最后一发）。 */
   const lastNotifiedTextRef = useRef<string>(initialText)
@@ -139,7 +139,7 @@ export const useSmoothStream = ({
   const streamDone = externalStreamDone ?? internalStreamDone
 
   /**
-   * r2-34：`streamDone` 只经 ref 进入渲染循环。旧结构里 `renderLoop` 依赖 `streamDone`
+   * `streamDone` 只经 ref 进入渲染循环。旧结构里 `renderLoop` 依赖 `streamDone`
    * → `ensureLoop` 换 identity → 挂载 effect 依赖变化 → 每次流终态翻转都
    * `cancelAnimationFrame` + 重新 `requestAnimationFrame`。ref 在提交后的 effect 内同步；
    * 即使某一帧读到旧值，循环仍会继续（`loopContinues` 含 `!streamDone`）并在下一帧按
@@ -147,7 +147,7 @@ export const useSmoothStream = ({
    */
   const streamDoneRef = useRef<boolean>(streamDone)
   /** 外部 `streamDone` 是否传入：`reset`/`update` 经 ref 读取，使它们 identity 恒定
-   *  （旧实现依赖该 prop，翻转即换 identity —— r2-01 死循环链条的结构侧共犯）。 */
+   * （旧实现依赖该 prop，翻转即换 identity —— 死循环链条的结构侧共犯）。 */
   const externalStreamDoneRef = useRef(externalStreamDone)
   const onUpdateRef = useRef(onUpdate)
   useEffect(() => {
@@ -160,7 +160,7 @@ export const useSmoothStream = ({
     const chars = Array.from(segmenter.segment(chunk)).map((s) => s.segment)
     if (chars.length === 0) return
     const now = performance.now()
-    // p2-10：原地 push（此前 `[...queue, ...chars]` 每个 delta 整份数组重建）。
+    // 原地 push（此前 `[...queue, ...chars]` 每个 delta 整份数组重建）。
     // 上界在 push 处裁剪：队列只由渲染帧消费，delta 到达快于帧率时旧写法在同一帧内
     // 反复全量复制同一数组，形成"越流越忙→帧率越低→队列越长"的正反馈。
     const queue = chunkQueueRef.current
@@ -181,7 +181,7 @@ export const useSmoothStream = ({
       // recurring stalls, but a single huge TTFT in a near-empty ring would
       // poison it). All later gaps feed the median.
       if (sawFirstChunkRef.current) {
-        // 升序环插入（p2-10：替代每 delta 的 [...gaps].sort()）
+        // 升序环插入（替代每 delta 的 [...gaps].sort()）
         let lo = 0
         let hi = gaps.length
         while (lo < hi) {
@@ -263,7 +263,7 @@ export const useSmoothStream = ({
 
   const renderLoop = useCallback(() => {
     const queue = chunkQueueRef.current
-    // r2-34：从 ref 读取终态（identity 不随 `streamDone` 翻转变化）。
+    // 从 ref 读取终态（identity 不随 `streamDone` 翻转变化）。
     const streamDone = streamDoneRef.current
 
     // Empty queue: finalize + stop if the stream ended, else idle one frame.
@@ -288,7 +288,7 @@ export const useSmoothStream = ({
     }
 
     // 流已结束：把剩余队列一次吐完（不留尾巴、不丢字）。回调仍受同一 ≤30Hz 窗口
-    // 约束（p2-09：本函数的每一次 onUpdate 都会让整段累积文本走一遍 ReactMarkdown），
+    // 约束（本函数的每一次 onUpdate 都会让整段累积文本走一遍 ReactMarkdown），
     // 但队列排空后必然再进一次本函数 ⇒ 上面的收尾兜底保证最终文本一定送达。
     if (streamDone) {
       displayedTextRef.current += queue.join('')
@@ -367,7 +367,7 @@ export const useSmoothStream = ({
 
     count = Math.min(count, queue.length)
 
-    // 只塌陷被消费的头部（p2-10：`queue.slice(count)` 每帧整个剩余队列重建；
+    // 只塌陷被消费的头部（`queue.slice(count)` 每帧整个剩余队列重建；
     // 只吐 count 个 grapheme 时那是无谓的 O(队列) 拷贝）。
     if (count > 0) {
       let consumed = ''
@@ -376,7 +376,7 @@ export const useSmoothStream = ({
       queue.splice(0, count)
     }
 
-    // p2-09：回调钳制 ≤30Hz。displayedTextRef 仍按帧累积（不丢字），只是把
+    // 回调钳制 ≤30Hz。displayedTextRef 仍按帧累积（不丢字），只是把
     // "全文 → setState → ReactMarkdown 全量重解析"的通知降频；窗口内的内容会在
     // 下一个窗口的帧上一次性显示。
     const loopContinues = chunkQueueRef.current.length > 0 || !streamDone

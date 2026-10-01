@@ -103,7 +103,7 @@ const MessageGroupMenuBar: FC<Props> = ({
       }
     }
 
-    // 批量写动作必须报真实结果（CLAUDE.md §9）：旧实现逐条吞错，全部失败时界面与"点了没反应"同形
+    // 批量写动作必须报真实结果：旧实现逐条吞错，全部失败时界面与"点了没反应"同形
     const result = { success: succeeded, failed }
     if (failed > 0) {
       window.toast.error(t('message.group.retry_all_result', result))

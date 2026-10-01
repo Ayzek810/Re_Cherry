@@ -55,7 +55,7 @@ export class ExportService {
         switch (token.type) {
           case 'link_open':
             insideLink = true
-            // v1 二轮审查 m2-16：`attrs` 在自动链接（`<https://x>`）等形态下可能为 null，
+            // `attrs` 在自动链接（`<https://x>`）等形态下可能为 null，
             // 无 `href` 时 `find` 返回 undefined——两处 `[1]` 都会抛 TypeError，用户点导出
             // 却什么都得不到。空 href/空文本退化，不崩。
             linkUrl = token.attrs?.find((attr: [string, string]) => attr[0] === 'href')?.[1] ?? ''
@@ -371,7 +371,7 @@ export class ExportService {
    * 导出为 Word。返回值：写出成功 = 落盘绝对路径；用户在保存对话框里取消 = `null`
    * （取消**不是**失败，不抛错）。
    *
-   * v1 二轮审查 m2-17：此前用 `dialog.showSaveDialogSync`——同步模态对话框把主进程消息
+   * 此前用 `dialog.showSaveDialogSync`——同步模态对话框把主进程消息
    * 循环连同全部 IPC 一起冻住，用户不点「保存/取消」就永久冻住（导出本身还是
    * markdown→docx 打包的慢操作）。`FileStorage.save` 已立异步规则（FileStorage.ts:1508
    * 注释同款理由），此处补齐。

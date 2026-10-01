@@ -1,4 +1,4 @@
-// fork 缝：CodeMate 的路径注册（2026-09-24，v0.3.4-1）。
+// fork 缝：CodeMate 的路径注册（2026-09-24）。
 // V2 用 pathRegistry（application.getPath('external.deepseek_harness.config') 等）；
 // fork 全部钉进数据目录的 CodeMate 子树——随"设置 › 数据目录"迁移、portable 版随
 // 应用目录走、卸载=删子树（无残留）。
@@ -27,7 +27,7 @@ export function hermesHome(): string {
 }
 
 /**
- * v0.4.5：受管工具的通用用户态根 `home/<tool>`（dsh/hermes 的既有两处等价于此命名）。
+ * 受管工具的通用用户态根 `home/<tool>`（dsh/hermes 的既有两处等价于此命名）。
  * 卸载不删（dsh home 先例）——源码型工具的用户态（config/data/logs/前端产物）钉在此，
  * 与 tools/<tool> 的代码树分离，升级整树替换源码也不碰用户数据。
  */
@@ -35,13 +35,13 @@ export function codeMateToolHome(tool: string): string {
   return path.join(codeMateRoot(), 'home', tool)
 }
 
-/** 受管 CLI 工具的安装根（批次2 安装器使用）。 */
+/** 受管 CLI 工具的安装根（安装器使用）。 */
 export function codeMateToolsRoot(): string {
   return path.join(codeMateRoot(), 'tools')
 }
 
 // ---------------------------------------------------------------------------
-// 批次2：portable 受管 CLI 安装器的运行时 / 缓存布局（fork 缝（原创）：V2 为 mise
+// portable 受管 CLI 安装器的运行时 / 缓存布局（fork 缝（原创）：V2 为 mise
 // 驱动（运行时与工具都在 mise 管理目录），本组路径为 portable 等价实现——一切钉在
 // CodeMate 子树：runtime/node|python/<ver>、tools/<tool>、cache/{npm,pip,downloads}；
 // 不改系统 PATH、不写用户全局配置，卸载 = 删子树。设计来源：V2 BinaryManager/

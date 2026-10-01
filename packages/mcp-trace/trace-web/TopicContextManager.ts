@@ -15,7 +15,7 @@ export class TopicContextManager implements ContextManager {
   startContextForTopic(topicId, context: Context) {
     const currentContext = this.getCurrentContext(topicId)
     this._topicContexts.set(topicId, context)
-    // k2-24: `get` 在 `has` 为真时必然有值，旧写法 `!has && !get` 等价于 `!has`（形似 || 笔误）。
+    // `get` 在 `has` 为真时必然有值，旧写法 `!has && !get` 等价于 `!has`（形似 || 笔误）。
     if (!this.topicContextStack.has(topicId)) {
       this.topicContextStack.set(topicId, [currentContext])
     } else {
@@ -71,7 +71,7 @@ export class TopicContextManager implements ContextManager {
   }
 
   disable() {
-    // k2-24: 只清 _topicContexts 会把每个 topic 的历史上下文栈留在内存里，
+    // 只清 _topicContexts 会把每个 topic 的历史上下文栈留在内存里，
     // 下一次 endContextForTopic 会把上一轮的残留当成历史弹回（状态串味 + 常驻内存）。
     this.topicContextStack.clear()
     this._topicContexts.clear()

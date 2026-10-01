@@ -111,9 +111,9 @@ const SidebarIconsManager: FC<SidebarIconsManagerProps> = ({
         knowledge: <BookOpen size={16} />,
         translate: <Languages size={16} />,
         paintings: <Palette size={16} />,
-        // v0.3.3-2 笔记复活（V1 同图标）
+        // 笔记复活（V1 同图标）
         notes: <NotepadText size={16} />,
-        // v0.3.4-1 编码助手（Code Mate）
+        // 编码助手（Code Mate）
         code: <Code size={16} />
       }) satisfies Record<SidebarIcon, ReactNode>,
     []

@@ -1,5 +1,5 @@
 /**
- * r2-66 行为回归：在途流的查找与取消只有一份实现。
+ * 在途流的查找与取消只有一份实现。
  *
  * 缺陷：`clearConversation` 用「状态 = PROCESSING」找在途助手消息，`handlePause` 用
  * 「askId/id 命中本轮提问」找。两套判据各自演化。只改一处，另一条路径就漏掉真取消，旧流继续计费。
@@ -48,7 +48,7 @@ vi.mock('@renderer/services/lightLlm', () => ({
   lightStreamAbort: vi.fn().mockResolvedValue(undefined)
 }))
 
-/** 探针：ChatWindow 原本渲染整棵 Messages 树；r2-02 只关心驱动加载动画的 `isOutputted`。 */
+/** 探针：ChatWindow 原本渲染整棵 Messages 树； 只关心驱动加载动画的 `isOutputted`。 */
 vi.mock('../../chat/ChatWindow', () => ({
   default: ({ isOutputted }: { isOutputted: boolean }) => (
     <div data-testid="chat-window" data-outputted={String(isOutputted)} />
@@ -102,7 +102,7 @@ beforeAll(() => {
   })
 })
 
-describe('HomeWindow · r2-66 在途流取消收敛', () => {
+describe('HomeWindow · 在途流取消收敛', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     store.dispatch(setQuickAssistantModel({ model: undefined }))

@@ -215,7 +215,7 @@ describe('model utils', () => {
         expect(isSupportTemperatureModel(qwenMt)).toBe(false)
       })
 
-      it('returns false for Kimi K2.5+ and K3+ models', () => {
+      it('returns false for Kimi .5+ and + models', () => {
         expect(isSupportTemperatureModel(createModel({ id: 'kimi-k2.5' }))).toBe(false)
         expect(isSupportTemperatureModel(createModel({ id: 'Kimi-K2.5' }))).toBe(false)
         expect(isSupportTemperatureModel(createModel({ id: 'moonshot/kimi-k2.5' }))).toBe(false)
@@ -268,7 +268,7 @@ describe('model utils', () => {
         expect(isSupportTopPModel(qwenMt)).toBe(false)
       })
 
-      it('returns false for Kimi K2.5+ and K3+ models', () => {
+      it('returns false for Kimi .5+ and + models', () => {
         expect(isSupportTopPModel(createModel({ id: 'kimi-k2.5' }))).toBe(false)
         expect(isSupportTopPModel(createModel({ id: 'Kimi-K2.5' }))).toBe(false)
         expect(isSupportTopPModel(createModel({ id: 'moonshot/kimi-k2.5' }))).toBe(false)
@@ -299,7 +299,7 @@ describe('model utils', () => {
       })
     })
 
-    describe('isSupportSamplingParam (r2-103)', () => {
+    describe('isSupportSamplingParam', () => {
       // 两个旧名字必须是同一个实现的薄包装：同一输入下逐条一致
       it('keeps temperature and top_p in lockstep through the shared implementation', () => {
         const cases: Model[] = [
@@ -566,7 +566,7 @@ describe('model utils', () => {
         expect(isGemini31ProModel(createModel({ id: 'gemini-3-flash-preview' }))).toBe(false)
       })
 
-      it('returns false when the version separator is not a literal dot (r2-84)', () => {
+      it('returns false when the version separator is not a literal dot', () => {
         // `.` 未转义时这两条会命中，与同文件 `gemini-3\.1-flash-lite` 的写法不一致
         expect(isGemini31ProModel(createModel({ id: 'gemini-3x1-pro' }))).toBe(false)
         expect(isGemini31ProModel(createModel({ id: 'gemini-3-1-pro' }))).toBe(false)
@@ -683,7 +683,7 @@ describe('model utils', () => {
       })
     })
 
-    describe('isChatCandidateModel（r2-110：agentModelFilter 别名已删除，测试直接指向真身）', () => {
+    describe('isChatCandidateModel（agentModelFilter 别名已删除，测试直接指向真身）', () => {
       it('accepts a plain chat model', () => {
         const model = createModel()
         expect(isChatCandidateModel(model)).toBe(true)

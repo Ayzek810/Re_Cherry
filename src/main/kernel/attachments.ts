@@ -18,7 +18,7 @@ import { loggerService } from '@logger'
 const logger = loggerService.withContext('KernelAttachments')
 
 /**
- * 内容寻址图片附件仓库：`ctx.attachments` 服务缝的宿主实现（v0.3.1 识图通道的地基）。
+ * 内容寻址图片附件仓库：`ctx.attachments` 服务缝的宿主实现（识图通道的地基）。
  *
  * 设计要点：
  * - **规范化在渲染进程完成**（canvas 解码 + EXIF 摆正 + 尺寸/体积压到默认请求预算内），
@@ -265,7 +265,7 @@ export class CherryAttachmentStore extends AttachmentStore {
   readonly imageLimits = IMAGE_ATTACHMENT_LIMITS
   private readonly root: string
   /**
-   * 「图片不落盘」作用域（v0.3.3-2）：深度计数 + 本轮临时字节。
+   * 「图片不落盘」作用域：深度计数 + 本轮临时字节。
    * 快捷助手的语义是**不写任何持久化存储**（它不建会话、消息不留存），可它粘贴的图片原先仍会
    * 经 `saveImage` 落到 `<kernelDir>/attachments/<sha256>.<ext>` —— 结果是一堆查不到、删不掉、
    * 也永远不会被引用的孤儿字节。现在由调用方（lightLlm 的轻通路）在整轮请求外包一层作用域，

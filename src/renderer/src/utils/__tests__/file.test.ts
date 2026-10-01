@@ -48,7 +48,7 @@ describe('file', () => {
       expect(result).toBe('.png')
     })
 
-    it('should return empty string for file without extension (audit2 r2-92)', () => {
+    it('should return empty string for file without extension', () => {
       // 原先返回 '.'，与「扩展名就是一个点」不可区分
       expect(getFileExtension('noextension')).toBe('')
       expect(getFileExtension('C:\\a\\b')).toBe('')

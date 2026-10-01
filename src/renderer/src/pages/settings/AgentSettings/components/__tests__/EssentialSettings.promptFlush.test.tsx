@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 提示词草稿的卸载兜底（v1 二轮审查 s2-09）。
+ * 提示词草稿的卸载兜底。
  *
  * 提示词编辑区只有区内那个「保存」键会提交，弹窗底部的「确认」只关窗（`BaseSettingsPopup`
  * 的 `handleConfirm` 不提交任何东西）。用户在编辑器里改完提示词直接按「确认」→ 组件卸载

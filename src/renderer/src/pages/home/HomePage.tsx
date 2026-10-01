@@ -41,7 +41,7 @@ const HomePage: FC = () => {
   const state = location.state
   const settings = useSettings()
 
-  // 启动落点记忆（v0.3.0-5）：退出时在哪个助手/话题，重启就回到哪里。
+  // 启动落点记忆：退出时在哪个助手/话题，重启就回到哪里。
   // PersistGate 保证 rehydrate 完成后才挂载本组件——初始化器里读 settings 是安全的。
   // 显式导航（state.assistant/state.topic）优先于记忆。
   const rememberedAssistant =
@@ -108,9 +108,9 @@ const HomePage: FC = () => {
 
   // 家族浏览记忆：把"正在看哪个分支"记到根话题行上（进分支记分支 id，回主分支清掉，
   // 同值跳过）。恢复点：侧栏点击 / 切助手 / useTopic 兜底（recallLastViewedBranch）。
-  // **助手隔离适配（v0.3.0-5）**：派发目标必须是"实际持有该家族行的助手"，不能信行上的
+  // **助手隔离适配**：派发目标必须是"实际持有该家族行的助手"，不能信行上的
   // assistantId 字段——隔离对账前的历史行该字段可能是旧归属，派发到错误的助手 = 更新落空 = 记忆丢失。
-  // **v0.3.3 修复（"重进话题落回报错分支"）**：血缘/归属/落点全部由 `resolveTopicViewMemory`
+  // ** 修复（"重进话题落回报错分支"）**：血缘/归属/落点全部由 `resolveTopicViewMemory`
   // 从 store 现读（不用闭包里的 activeAssistant.topics）——理由与真机证据见该函数的文档。
   const recordTopicView = useCallback(
     (viewed: Topic, assistantId?: string) => {
@@ -146,11 +146,11 @@ const HomePage: FC = () => {
 
   const setActiveTopic = useCallback(
     (newTopic: Topic) => {
-      // 话题切换是用户 initiated 的紧急更新：不能用 startTransition 包裹——真机实测（v0.3.0-4 排障）
+      // 话题切换是用户 initiated 的紧急更新：不能用 startTransition 包裹——真机实测（排障）
       // transition 渲染被并发 urgent 更新（redux persist 刷写、行对象更换）饿死后永不 commit，
       // 表现为"点了分支但界面纹丝不动"。此处保持同步 urgent 语义。
       _setActiveTopic((prev) => (newTopic.id === prev.id ? prev : newTopic))
-      // v0.3.1 第三轮：fulfilled 清除与写入端同域（**根 id 投影**）——kernelChat.finishTurn
+      // 第三轮：fulfilled 清除与写入端同域（**根 id 投影**）——kernelChat.finishTurn
       // 把"完成"记在根行上（侧栏灯的粒度=家族），进话题清的是根投影，否则子分支的未读
       // 在侧栏永远消不掉/提前消掉。rootTopicOf 用行对象上溯：newTopic 尚未入本帧
       // assistant.topics 也能经由 parentTopicId 找到根。

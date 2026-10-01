@@ -49,7 +49,7 @@ const SCRAPE_DOM_READY_POLL_MS = 100
 
 /**
  * 等页面把内容渲染进 DOM。就绪即返回；到上限仍未就绪也返回（调用方照常刮一次）。
- * v1 二轮审查 m2-24：替换原来的无条件 `setTimeout(500)` 定值等待。
+ * 替换原来的无条件 `setTimeout(500)` 定值等待。
  */
 async function waitForScrapeContent(contents: Electron.WebContents): Promise<void> {
   const deadline = Date.now() + SCRAPE_DOM_READY_TIMEOUT_MS
@@ -88,7 +88,7 @@ export class SearchService {
       webPreferences: {
         // 刮取窗口只经 executeJavaScript 读 `document.documentElement.outerHTML`，不需要任何
         // Node 能力。此前为 `nodeIntegration: true` + `contextIsolation: false`（上游 V1 同形），
-        // 等于把「打开一个被投毒的搜索结果页」变成宿主机任意代码执行（v1 二轮审查 m2-01）。
+        // 等于把「打开一个被投毒的搜索结果页」变成宿主机任意代码执行。
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: true,
@@ -116,7 +116,7 @@ export class SearchService {
   }
 
   /**
-   * v0.3.2 批次2 自 CS_V1 移植（上游主进程 SearchService.closeSearchWindow 同款实现）：
+   * 自 CS_V1 移植（上游主进程 SearchService.closeSearchWindow 同款实现）：
    * 按 uid 关闭并摘除刮取窗口——修复 openUrlInSearchWindow 只建不关、窗口按 uid
    * 无限累积的泄漏；与 createNewSearchWindow 的登记/摘除形态对称。
    */
@@ -146,7 +146,7 @@ export class SearchService {
       logger.error(`search window load failed for ${url}`, error instanceof Error ? error : new Error(String(error)))
       throw new Error(`search window page load failed: ${error instanceof Error ? error.message : String(error)}`)
     }
-    // 结果渲染等待（v1 二轮审查 m2-24）：原来是无条件 `setTimeout(500)`，作为纯延迟成本加在
+    // 结果渲染等待：原来是无条件 `setTimeout(500)`，作为纯延迟成本加在
     // 每个搜索请求上。改成轮询「结果节点是否已进 DOM」——就绪即返回，上限
     // SCRAPE_DOM_READY_TIMEOUT_MS（超时也照常取一次 outerHTML：宁可读到半渲染，也不无限等）。
     await waitForScrapeContent(window.webContents)

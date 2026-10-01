@@ -1,5 +1,5 @@
 /**
- * c2-06 行为测试：CodeViewer 的 300ms 防抖高亮必须在卸载时取消。
+ * CodeViewer 的 300ms 防抖高亮必须在卸载时取消。
  *
  * 缺陷原状：`debouncedHighlightLines` 从不 cancel（同文件的 100ms selection 防抖是 cancel 的），
  * 卸载后定时器照常到点，走到 useCodeHighlight 的 setTokenLines（已卸载实例 setState），
@@ -27,7 +27,7 @@ vi.mock('@renderer/context/CodeStyleProvider', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { fontSize: 14, codeShowLineNumbers: true, codeEditor: { keymap: true } }
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   return { useSettings: () => settings, useSetting: (key: string) => settings[key] }
 })
 

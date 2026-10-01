@@ -35,10 +35,10 @@ import { useSortedSupportedProviders } from './useSortedSupportedProviders'
 import { useToolUpdateCheck } from './useToolUpdateCheck'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useCodeCliPageViewProps.ts
-//（2026-09-24，v0.3.4-1 批次4b）。缝点八处，装配数据流（summaries/prependedProviders/sorted
+//（2026-09-24）。缝点八处，装配数据流（summaries/prependedProviders/sorted
 // providers/gateway 兜底配置/canLaunch/handleRemove 清理链）逐字：
 // ① sidebarShortcuts 段不搬：useSidebarShortcuts/isCliSidebarPinned/toggleCliSidebarShortcut 与
-//   sidebarProps.isSidebarPinned/onToggleSidebar 整体裁掉（fork 未建侧栏快捷方式面，批次 5 父代理挂）。
+// sidebarProps.isSidebarPinned/onToggleSidebar 整体裁掉（fork 未建侧栏快捷方式面，父代理挂）。
 // ② Gemini 臂删除：visibleTools 过滤与选种重定向 effect 随 GEMINI_CLI 裁剪（fork 工具集无该项）。
 // ③ OpenClaw 臂删除：useOpenClawGatewayController 未移植（fork 工具集无 OPENCLAW），launching/
 //   running/stopping 合成与 onLaunch/onStop/onOpenDashboard 分流收敛到 hermes/deepseek 两臂。
@@ -186,12 +186,12 @@ export function useCodeCliPageViewProps(
     })
 
   const { statuses, resolved } = useCliVersionStatuses(CLI_TOOL_IDS)
-  // v0.4.5：手动检查更新 + paper-agent 生命周期控制器（版本状态合并需要前者，故先于此声明）。
+  // 手动检查更新 + paper-agent 生命周期控制器（版本状态合并需要前者，故先于此声明）。
   const updateCheck = useToolUpdateCheck()
   const paperAgent = usePaperAgentController(selectedCliTool)
   // fork 缝②（续）：无 GEMINI_CLI 可见性过滤与选种重定向（fork 工具集恒显 2 项）；statuses 的
   // resolved 标志随重定向 effect 一并裁掉。
-  // v0.3.4-2（用户裁决）：resolved 不再裁掉——首探窗口（3-5s）期间版本卡要显示"检查中"
+  // （用户裁决）：resolved 不再裁掉——首探窗口（3-5s）期间版本卡要显示"检查中"
   // 而非可点击的「安装」（用户担心误点重装）。
   const snapshotsLoading = !resolved
   const visibleTools = CLI_TOOLS
@@ -223,9 +223,9 @@ export function useCodeCliPageViewProps(
     source: 'none',
     canUpgrade: false
   }
-  // v0.4.5：手动检查更新的结论注入（只看选中工具）。结论带"它当时比对的当前版本"——装/
+  // 手动检查更新的结论注入（只看选中工具）。结论带"它当时比对的当前版本"——装/
   // 升级后当前版本变了，旧结论自动不适用，回落到快照真值（无需清除广播，也无竞态）。
-  // v0.4.5-1（O1）：只注入 **managed** 结论——系统来源/未安装根本没有"当前版本"可比，
+  // （）：只注入 **managed** 结论——系统来源/未安装根本没有"当前版本"可比，
   // 其结论不得覆盖版本卡（否则 canUpgrade:false 会把卡片压成"最新"）。
   const manualCheck = updateCheck.results[CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable]
   const manualCheckApplies =
@@ -244,7 +244,7 @@ export function useCodeCliPageViewProps(
       ? versionStatus.installed
       : (isProviderlessTool || isOwnLoginSelected || !!enabledProvider) &&
         (!isDeepSeekHarnessTool || !!enabledProviderConfig?.modelId)
-  // v0.4.5-1（O7）：失败原因来自主进程（快照的 lastFailure），不再是恒 undefined 的占位——
+  // （）：失败原因来自主进程（快照的 lastFailure），不再是恒 undefined 的占位——
   // 失败行/失败对话框因此真的会出现，并且刷新页面后仍在。
   const installError: string | undefined = versionStatus.lastFailure
   // The synthetic own-login entry is always available, so nudge to "select a provider" only when a
@@ -301,7 +301,7 @@ export function useCodeCliPageViewProps(
     isDeepSeekHarnessTool && (deepSeekHarness.running || deepSeekHarness.starting || deepSeekHarness.stopping)
   const hermesDashboardActionsDisabled =
     isHermesDashboardTool && (hermesDashboard.running || hermesDashboard.starting || hermesDashboard.stopping)
-  // v0.4.5：paper-agent 同款——运行/启动/停止窗口内不放开变更类动作（卸载、配置编辑）。
+  // paper-agent 同款——运行/启动/停止窗口内不放开变更类动作（卸载、配置编辑）。
   const paperAgentActionsDisabled =
     isPaperAgentTool && (paperAgent.running || paperAgent.starting || paperAgent.stopping)
   const providerActionsDisabled =
@@ -381,7 +381,7 @@ export function useCodeCliPageViewProps(
               : snapshotOperation?.progress?.tool === selectedExecutable
                 ? snapshotOperation.progress
                 : undefined,
-          // v0.4.5：手动检查更新按钮（三个工具页共用）。
+          // 手动检查更新按钮（三个工具页共用）。
           onCheckUpdates: () => void updateCheck.checkForUpdates(selectedCliTool),
           checkingUpdates: updateCheck.checkingTools.has(CODE_CLI_TOOL_PRESET_MAP[selectedCliTool].executable),
           providerState: {
@@ -391,8 +391,8 @@ export function useCodeCliPageViewProps(
           supportedProviders,
           providerConfigs,
           currentProviderId,
-          // 二轮审查 f2-45：此处原为 `currentCliConfigConnection ? t('code.cli_config.unknown_provider')
-          // : undefined`。但 `currentCliConfigConnection` 非 null 的语义是"磁盘上的 CLI 配置文件
+          // 此处原为 `currentCliConfigConnection ? t('code.cli_config.unknown_provider')
+          // undefined`。但 `currentCliConfigConnection` 非 null 的语义是"磁盘上的 CLI 配置文件
           // **不属于**当前选中的服务商"（useCurrentCliConfigConnection.ts:107-112 只在"不匹配"时赋值），
           // 把它当模型名注入，选中卡片的第二行就显示成"我选的服务商 = 未知供应商"。
           // 外来配置的信息由配置面板的警示块承担（useConfigEditPanelBodyProps.tsx:86），
@@ -408,7 +408,7 @@ export function useCodeCliPageViewProps(
             versionStatus.applicationStatus === 'applied' || versionStatus.applicationStatus === 'broken'
               ? () => removeDialog.requestRemove(selectedCliTool)
               : undefined,
-          // v0.4.5：paper-agent 无供应商/模型选择面——启动即拉起受管 uvicorn；dsh/hermes 走
+          // paper-agent 无供应商/模型选择面——启动即拉起受管 uvicorn；dsh/hermes 走
           // 各自控制器，其余（无此集）走启动对话框。
           onLaunch: () =>
             isPaperAgentTool

@@ -24,7 +24,7 @@ import { PROVIDERLESS_CLI_TOOLS } from '../constants/cliTools'
 import type { ApiGatewayProviderBundle } from './useApiGatewayProvider'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useLaunchDialogController.ts
-//（2026-09-24，v0.3.4-1 批次4b）。缝点四处，launch 前置校验（目录/provider 门）、网关复核
+//（2026-09-24）。缝点四处，launch 前置校验（目录/provider 门）、网关复核
 //（re-verify + reconcile + writeCliConfigDraft）与 modelById/gatewayModelsById 解析逐字：
 // ① 外部终端面不搬：useAvailableTerminals/selectedTerminal/effectiveTerminal/setTerminal 与
 //   run 载荷的 `terminal` 字段整体裁掉（dsh/hermes 为受管 Web UI，不消费外部终端——见

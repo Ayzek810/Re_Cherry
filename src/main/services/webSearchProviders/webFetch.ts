@@ -8,8 +8,8 @@ import type { WebSearchHttpOptions, WebSearchProviderResult } from './types'
 const logger = loggerService.withContext('WebSearchFetch')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 src/renderer/src/utils/fetch.ts 的
- * noContent / isValidUrl / fetchWebContent；fetchWebContents 于 v0.4.3 删除——唯一
+ * 自 CS_V1 移植 + 适配点清单（源：上游 src/renderer/src/utils/fetch.ts 的
+ * noContent / isValidUrl / fetchWebContent；fetchWebContents 于 删除——唯一
  * 消费者 processWebsearch 零调用方死码）：
  * - DOM 解析（DOM Parser）+ Readability + turndown 主进程不可用（turndown 的 Node DOM 依赖 jsdom
  *   为 devDep，打包闭包不含），正文抽取改为轻量 HTML→纯文本（去 script/style、剥标签、
@@ -17,8 +17,8 @@ const logger = loggerService.withContext('WebSearchFetch')
  * - 抓取链（规则 c）：优先主进程直 fetch（30s 超时，与上游一致），非 abort 失败回退
  *   SearchService 隐藏窗口刮取；usingBrowser=true 直接走刮取。刮取窗口按 uid 用后即关
  *   （SearchService.closeSearchWindow 为本批次补齐）。
- * - **抓取用 net.fetch（v0.3.2 用户反馈修复）**：上游在渲染进程 fetch，走 Chromium
- *   网络栈（含系统代理）；批次2 用 Node undici 全局 fetch 不认系统代理——代理用户的
+ * - **抓取用 net.fetch（用户反馈修复）**：上游在渲染进程 fetch，走 Chromium
+ * 网络栈（含系统代理）；用 Node undici 全局 fetch 不认系统代理——代理用户的
  *   结果页抓取全部超时/被重置（本地 bing 搜索"直接失败"的根因之一）。net.fetch 与
  *   渲染层行为对齐。signal 合并语义不变。
  * - 渲染层 searchService 桥（searchService.*）→ 直接函数调用 ../SearchService；nanoid → crypto.randomUUID。
@@ -202,7 +202,7 @@ function decodeBody(buffer: ArrayBuffer, contentType: string | null): string {
 
 /**
  * 主进程直抓（两级）：net.fetch（Chromium 栈，代理感知——上游渲染层 fetch 同栈）
- * 失败回退 Node 全局 fetch（undici，不走代理）。v0.3.2 真机事故：个别机器的
+ * 失败回退 Node 全局 fetch（undici，不走代理）。真机事故：个别机器的
  * Chromium 网络服务失效（隐藏窗口与 net.fetch 同栈同灭，ERR_FAILED (-2)），而
  * Node 直连可用——两级取先成功者，各自落 debug/warn 日志。
  */
@@ -280,7 +280,7 @@ export async function fetchWebContent(
 
 /**
  * SERP 抓取（local-* 引擎专用，三级回退链）：隐藏窗口（上游形态，JS 渲染后取
- * DOM）→ net.fetch → Node 直连。v0.3.2 真机事故：隐藏窗口 loadURL 全量
+ * DOM）→ net.fetch → Node 直连。真机事故：隐藏窗口 loadURL 全量
  * ERR_FAILED (-2)（Chromium 网络服务失效的机器），而 Node 直连探针可用——
  * 上游单级窗口路径在这类机器上整体死路。每级失败落 warn，最终失败向上抛。
  */

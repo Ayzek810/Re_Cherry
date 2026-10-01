@@ -37,7 +37,7 @@ interface HighlightChunkResult {
 }
 
 // ---------------------------------------------------------------------------
-// 语法/主题资产改由主线程下发（v1 二轮性能审计 p2-04）
+// 语法/主题资产改由主线程下发
 //
 // 此前本 worker 自己 `await import('shiki')` 取 `createHighlighter` / `bundledLanguages` /
 // `bundledThemes`。worker 是**一份独立的 rollup 模块图**：它 import shiki 会让整张
@@ -50,7 +50,7 @@ interface HighlightChunkResult {
 // 这样产物里不再出现 worker 侧语言表，双份随之消失。
 // ---------------------------------------------------------------------------
 
-// 后两个是 worker → 主线程的**资产协议**消息（p2-04），不属于 `WorkerRequest`：
+// 后两个是 worker → 主线程的**资产协议**消息，不属于 `WorkerRequest`：
 // worker 不再自带 shiki 语言/主题表，改为按需向主线程索取注册数据。
 type WorkerInboundMessage = WorkerRequest | { id: number; type: 'assets-result'; result?: unknown[]; error?: string }
 
@@ -118,7 +118,7 @@ const tokenizerMap = new LRUCache<string, ShikiStreamTokenizer>({
 
 // 初始化高亮器
 async function initHighlighter(_themes: string[], _languages: string[]): Promise<void> {
-  // p2-04：拿 `shiki/core`（核心 + 构造器，**不带**任何语言/主题表）与 js 引擎，注册数据由主线程
+  // 拿 `shiki/core`（核心 + 构造器，**不带**任何语言/主题表）与 js 引擎，注册数据由主线程
   // 按需下发。引擎与主图 `shiki/bundle/web` 用的是同一个（`@shikijs/engine-javascript`），
   // token 输出与旧的 `createHighlighter` 一致；区别只是 worker 图里不再出现语言表。
   // 入口写成 `shiki/core` + `shiki/dist/engine-javascript.mjs`：后者是 `shiki` 的公开
@@ -268,7 +268,7 @@ declare const self: DedicatedWorkerGlobalScope
 self.onmessage = async (e: MessageEvent<WorkerInboundMessage>) => {
   const { id, type } = e.data
 
-  // 资产回包（p2-04）：不是请求，是主线程对 `assets-request` 的应答
+  // 资产回包：不是请求，是主线程对 `assets-request` 的应答
   if (type === 'assets-result') {
     const payload = e.data as { result?: unknown[]; error?: string }
     settleAssetRequest(id, payload.result, payload.error)

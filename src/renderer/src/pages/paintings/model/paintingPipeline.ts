@@ -1,5 +1,5 @@
 /**
- * 绘画生成管线（v0.3.3 批次6，V2 移植）：createDefaultPainting 原样；V2 的
+ * 绘画生成管线（V2 移植）：createDefaultPainting 原样；V2 的
  * DataApi prefetch `image-generation-support` 段改为读
  * `@shared/lightLlm/imageGenerationCatalog` 的静态目录（同序：provider override
  * → creator 默认），`requirePrompt` / `effectiveMode` / `support` 三者的推导与
@@ -64,7 +64,7 @@ export async function paintingGenerate(input: GenerateInput): Promise<LightImage
 
   if (modelId) {
     // fork 缝：V2 在此 try/catch 包 DataApi prefetch；fork 的目录是同步静态数据，
-    // 无失败面。目录未收录时 `resolveImageGenerationSupport` 给通用兜底（v0.3.3-9）：
+    // 无失败面。目录未收录时 `resolveImageGenerationSupport` 给通用兜底：
     // 未登记的 provider/模型（用户自建 OpenAI 兼容 provider 等）照旧能生成。
     support = resolveImageGenerationSupport(input.provider.id, modelId).support
     const modes = support?.modes

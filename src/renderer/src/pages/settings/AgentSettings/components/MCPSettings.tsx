@@ -24,7 +24,7 @@ interface Props {
   updateAssistantSettings: (settings: AssistantSettings) => void
 }
 
-/** v0.3.2 自 CS_V1 移植（助手级 MCP 设置面板）。 */
+/** 自 CS_V1 移植（助手级 MCP 设置面板）。 */
 const AssistantMCPSettings: React.FC<Props> = ({ assistant, updateAssistant }) => {
   const { t } = useTranslation()
   const { mcpServers: allMcpServers } = useMCPServers()

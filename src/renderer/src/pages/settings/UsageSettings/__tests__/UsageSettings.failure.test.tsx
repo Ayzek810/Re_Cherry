@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 用量面板的失败渲染（v1 二轮审查 s2-06）。
+ * 用量面板的失败渲染。
  *
  * 修改前读取失败会被画成「0 用量 + 暂无数据」：数字 0 与空图看起来是结论而不是错误，
  * 用户据此认为统计坏了却找不到原因。现在失败必须显式可见，且不得画出 0。

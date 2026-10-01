@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { filterUsageRecords, summarizeUsage, usageDateKey, usageRangeForPreset, type UsageRecord } from '../usageStats'
 
 /**
- * 用量统计纯函数层（services/usageStats.ts，v0.4.7）单测：
+ * 用量统计纯函数层（services/usageStats.ts）单测：
  * 预设范围边界（含端/本地零点）、日期键本地时区、过滤、聚合（总量/按日/按模型排序）。
  */
 function record(partial: Partial<UsageRecord>): UsageRecord {

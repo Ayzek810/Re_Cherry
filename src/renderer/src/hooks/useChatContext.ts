@@ -14,7 +14,7 @@ import { useDispatch, useSelector, useStore } from 'react-redux'
 const logger = loggerService.withContext('useChatContext')
 
 /**
- * 多选导出/复制的正文组装（r2-32）：逐消息取块文本 → 消息内换行 → 消息间 `---` 分隔。
+ * 多选导出/复制的正文组装：逐消息取块文本 → 消息内换行 → 消息间 `---` 分隔。
  * 抽取只为消除 save/copy 两条分支的逐字重复；行为与两条分支原先的实现一致。
  */
 const buildSelectedMessagesText = (
@@ -161,7 +161,7 @@ export const useChatContext = (activeTopic: Topic) => {
           const contentToSave = buildSelectedMessagesText(messages, messageIds, messageBlocks)
           const fileName = `chat_export_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.md`
           try {
-            // r2-32：主进程 `file.save` 在**用户取消**保存对话框时 reject（FileStorage.save），
+            // 主进程 `file.save` 在**用户取消**保存对话框时 reject（FileStorage.save），
             // 写盘失败同样 reject。成功 toast 必须在真实结果之后——否则用户看到"保存成功"
             // 而磁盘上没有文件（失败伪装成成功）。取消不算失败，不提示。
             await window.api.file.save(fileName, contentToSave)
@@ -183,7 +183,7 @@ export const useChatContext = (activeTopic: Topic) => {
           if (assistantMessages.length === 0) break
           const contentToCopy = buildSelectedMessagesText(messages, messageIds, messageBlocks)
           try {
-            // r2-32：`clipboard.writeText` 在权限被拒/非安全上下文时会 reject；此前 `void` +
+            // `clipboard.writeText` 在权限被拒/非安全上下文时会 reject；此前 `void` +
             // 立即成功 toast 会在复制失败时仍报告"已复制"。
             await navigator.clipboard.writeText(contentToCopy)
             window.toast.success(t('message.copied'))

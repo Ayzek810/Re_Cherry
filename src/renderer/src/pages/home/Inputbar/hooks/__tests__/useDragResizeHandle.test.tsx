@@ -51,7 +51,7 @@ describe('useDragResizeHandle', () => {
     expect(onHeightChange).toHaveBeenNthCalledWith(2, DRAG_RESIZE_MAX_HEIGHT)
   })
 
-  it('removes the document listeners on unmount while the handle is still held (f2-12)', () => {
+  it('removes the document listeners on unmount while the handle is still held', () => {
     const onHeightChange = vi.fn()
     const { result, unmount } = renderHook(() =>
       useDragResizeHandle({ enabled: true, getStartHeight: () => 100, onHeightChange })

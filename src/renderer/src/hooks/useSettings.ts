@@ -105,7 +105,7 @@ export function useSettings() {
  * re-rendered the whole message tree, including every streaming text block.
  *
  * Use this hook on a hot path. Keep `useSettings()` for a page-level consumer that renders once.
- * v1 second-pass review s2-04.
+ * v1 second-pass review .
  */
 export function useSetting<K extends keyof SettingsState>(key: K): SettingsState[K] {
   return useAppSelector((state) => state.settings[key])

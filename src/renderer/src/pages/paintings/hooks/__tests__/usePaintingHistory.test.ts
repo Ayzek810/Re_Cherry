@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-15：绘画历史加载失败 → 永久转圈的空缩略条。
+ * 绘画历史加载失败 → 永久转圈的空缩略条。
  *
  * 缺陷形态：`loadPage` 的 catch 只写日志——`items` 保持 `[]`、`hasMore` 保持 `true`。
  * `PaintingStrip` 消费侧是 `{hasMore && <Loader2 className="animate-spin" />}`，于是
@@ -46,7 +46,7 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-describe('usePaintingHistory（f2-15：失败不得停成永久转圈）', () => {
+describe('usePaintingHistory（失败不得停成永久转圈）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -126,7 +126,7 @@ describe('usePaintingHistory（f2-15：失败不得停成永久转圈）', () =>
     expect(result.current.items).toHaveLength(30)
   })
 
-  it('分页在途时的 reload() 不被丢弃：落地后补跑首页，新画作出现在条里（f2-22）', async () => {
+  it('分页在途时的 reload() 不被丢弃：落地后补跑首页，新画作出现在条里', async () => {
     toArray.mockResolvedValueOnce(Array.from({ length: 30 }, (_, index) => row(index)))
 
     const { result } = renderHook(() => usePaintingHistory())

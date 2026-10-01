@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/index.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/index.ts（2026-09-24）。
 // fork 缝：出口面按 hermes 依赖闭包收窄——claudeModels/permissionModes/ownLogin 相关出口与
 // sanitize 面随对应文件整块移除（barrel 仅 re-export，无逻辑，V2 同则）。
 

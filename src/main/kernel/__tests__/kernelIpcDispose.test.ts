@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 /**
- * k2-29 结构钉板：内核 IPC handler 必须与 `stopKernel()` 配对撤销。
+ * 结构钉板：内核 IPC handler 必须与 `stopKernel()` 配对撤销。
  *
  * 缺陷原状：`registerKernelIpc()` 注册约 30 个 `dsh:*` handler，`stopKernel()` 只拆 fiber
  * （`ipcMain.removeHandler` 全仓只有 `LoggerService` 清理自己那一条）。后果不是"脏 handler"
@@ -42,7 +42,7 @@ function registerKernelIpcBody(source: string): string {
   return nextTopLevel === -1 ? rest : rest.slice(0, nextTopLevel)
 }
 
-describe('内核 IPC handler 与停机配对（k2-29）', () => {
+describe('内核 IPC handler 与停机配对', () => {
   it('handler 注册面全部经 handle(...) 记账，没有裸 ipcMain.handle', () => {
     const body = registerKernelIpcBody(kernelSource())
     // 唯一的 `ipcMain.handle(` 出现在包装器里——任何直连调用都会在这里多出一条。

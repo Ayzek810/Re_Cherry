@@ -101,7 +101,7 @@ function injectLineNumber(token: any, openTag: string): string {
 
 // 行号注入在下方 defaultBlockRules 覆写里逐规则完成（injectLineNumber）。
 // 这里不放 render 级覆写：原实现在此绑定了 defaultRender 后原样透传同一组参数，
-// 不注入任何东西，只是把 md.renderer.render 换成一个等价函数（audit2 r2-98）。
+// 不注入任何东西，只是把 md.renderer.render 换成一个等价函数。
 
 // Override default rendering rules to add line numbers
 const defaultBlockRules = [

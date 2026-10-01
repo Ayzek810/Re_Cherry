@@ -21,7 +21,7 @@ import {
 const logger = loggerService.withContext('EditKnowledgeBasePopup')
 
 /**
- * r2-69：把表单态窄化为提交态。表单允许 `model` 为空位（`undefined` = 还没选），
+ * 把表单态窄化为提交态。表单允许 `model` 为空位（`undefined` = 还没选），
  * 提交路径必须先校验再构造 `KnowledgeBase` —— 旧实现用 `model: null as any` 绕过类型系统。
  * 返回 `undefined` 表示还没选模型，调用方负责提示（不抛异常，便于在两种入口共用）。
  */
@@ -73,7 +73,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({ base: _base, resolve })
     }
   }, [newBase, migrateBase, resolve, t])
 
-  // 二轮审查 f2-19：这里曾是 render 体内的 `if (!base) { resolve(null); return null }`。
+  // 这里曾是 render 体内的 `if (!base) { resolve(null); return null }`。
   // `resolve` → `this.hide()` → TopView 容器 setState，等于在一个组件渲染期间更新另一个组件
   // （React 报 "Cannot update a component while rendering a different component"；并发/StrictMode 下
   // 还可能重复 hide/resolve）。渲染分支只 `return null`，副作用挪进 effect 且只结算一次。

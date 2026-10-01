@@ -42,7 +42,7 @@ const SIZE_CLASSES: Record<CherryButtonSize, string> = {
  * `@cherrystudio/ui` Button → **原生 button** + 变体/尺寸类。
  * fork 缝：早期这里映射到 antd `Button`，但 antd 的 `.ant-btn`（CSS-in-JS 运行时注入，
  * 晚于 Tailwind 层）会**覆盖 V2 写在按钮上的尺寸/形状类**（h-7 / size-7.5 / h-11…），
- * 表现为控件缩水、卡片塌成默认尺寸（v0.3.3-4 模板轮播卡事故）。V2 的 shadcn Button
+ * 表现为控件缩水、卡片塌成默认尺寸（模板轮播卡事故）。V2 的 shadcn Button
  * 本就是"原生 button + 类名"，故这里对齐原生，antd 只留 Popover。
  * fork 缝：A8 —— V2 的 shadcn Button 带 `focus-visible:ring-2 focus-visible:ring-ring`；fork 只剩
  * `focus-visible:outline-none`，键盘聚焦时没有任何可见反馈（WCAG 2.4.7）。补回 ring（`--color-ring` 已在

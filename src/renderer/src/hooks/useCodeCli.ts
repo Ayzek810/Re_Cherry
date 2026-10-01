@@ -5,7 +5,7 @@ import { CLI_OWN_LOGIN_PROVIDER_ID, CodeCli, isApiGatewayProviderId } from '@sha
 import type { CliProviderConfig, CodeCliConfigs, CodeCliId, CodeCliToolState } from '@shared/types/codeCliState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-// fork 移植自 cherry-studio v2 src/renderer/hooks/useCodeCli.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/hooks/useCodeCli.ts（2026-09-24）。
 // 缝点两处，已标 `// fork 缝`：
 // ① 持久化缝：V2 `usePreference('feature.code_cli.configs')` → fork redux settings 切片
 //   （useAppSelector + dispatch(setCodeCliConfigs(next))；键名常量随 preference 面移除）。

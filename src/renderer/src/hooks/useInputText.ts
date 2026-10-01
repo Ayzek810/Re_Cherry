@@ -44,7 +44,7 @@ export function useInputText(options: UseInputTextOptions = {}): UseInputTextRet
   })
 
   /**
-   * r2-68：函数式更新必须交给 React 求值。旧实现
+   * 函数式更新必须交给 React 求值。旧实现
    * `const newText = typeof value === 'function' ? value(text) : value` 读的是渲染期闭包：
    * 同一 tick 的两次函数式更新都基于同一个旧 `text` 计算，第二次覆盖第一次（丢更新）——
    * 这不是 `React.SetStateAction<string>` 的语义。

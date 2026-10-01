@@ -149,7 +149,7 @@ describe('websearch helpers', () => {
     })
 
     it('returns undefined (unknown, retry later) when the provider cannot be determined', () => {
-      // r2-80：provider 未知 ⇒ 三值契约里的「还没有答案」，绝不能折成确定性的 false——
+      // provider 未知 ⇒ 三值契约里的「还没有答案」，绝不能折成确定性的 false——
       // 调用方（Chat.tsx / SelectModelButton.tsx）只在拿到 true/false 时才可写回
       // assistant.enableWebSearch，undefined 必须保持开关不动。
       providerMock.mockReturnValueOnce(undefined as any)
@@ -319,7 +319,7 @@ describe('websearch helpers', () => {
       })
 
       it('should not match gemini image models (any image suffix, not only -image-preview)', () => {
-        // r2-83：旧护栏只有字面量 `-image-preview`，下列现行生图 id 因此被判为可联网。
+        // 旧护栏只有字面量 `-image-preview`，下列现行生图 id 因此被判为可联网。
         // 这些 id 在 `vision.ts:125-126` / `tooluse.ts:57-58` 里都被列为生图 / 非函数调用模型。
         expect(GEMINI_SEARCH_REGEX.test('gemini-2.5-flash-image-preview')).toBe(false)
         expect(GEMINI_SEARCH_REGEX.test('gemini-2.0-pro-image-preview')).toBe(false)

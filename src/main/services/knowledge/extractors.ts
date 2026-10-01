@@ -1,5 +1,5 @@
 /**
- * 文档处理系统抽取器（批次4 建立为知识库摄取；v0.3.2 验收轮起为共用引擎）：
+ * 文档处理系统抽取器（建立为知识库摄取；验收轮起为共用引擎）：
  * 知识库条目摄取（KnowledgeService.processItem）与聊天读文件
  *（KnowledgeService.readTurnDocument ← read_document 工具）双入口共用本层——
  * file（pdf/doc/docx/txt/md/html 族）+ url（网页正文）+ note（直取）。
@@ -69,7 +69,7 @@ function loadPdfSupport(): Promise<void> {
 /**
  * PDF 文本层读取：与其他格式**同层同进程、一次读完整本**（v1 统一）。
  *
- * 历史：v0.4.4-2 曾把 PDF 抽取拆进常驻 utility 子进程（理由写作"pdf.js 逐页解析打满
+ * 历史：曾把 PDF 抽取拆进常驻 utility 子进程（理由写作"pdf.js 逐页解析打满
  * 主进程事件循环"），并为此长出一整套可插拔缝、启动注入、退出释放、构建入口与打包断言。
  * 2026-10-01 整条删除：那条路不仅多一份实现，还落在 pdfjs 判定"非 Node"的环境里（见上）。
  * 实测 178MB / 530 页扫描书一次读完 **116ms**，一次性同步解析在真实体量上不构成问题。
@@ -172,7 +172,7 @@ function rowsToGfmTable(rows: string[][]): string {
 
 /**
  * xlsx → Markdown：SheetJS（@e965/xlsx，V1 同款 fork）逐工作表 `## 表名` + GFM
- * 管道表（首行表头）。**结构化抽取失败回退 officeparser 纯文本**（v0.3.2 时代的
+ * 管道表（首行表头）。**结构化抽取失败回退 officeparser 纯文本**（时代的
  * 可用路径；真实世界 xlsx 变体远多于合成样本，保底不比报废强）——失败落 warn。
  */
 async function extractXlsxToMarkdown(filePath: string): Promise<string> {
@@ -395,7 +395,7 @@ export async function extractFromBuffer(buffer: Buffer, filename: string): Promi
   return { text, source: filename }
 }
 
-/** 网页正文（复用批次2 管线：直 fetch 失败回退隐藏窗口刮取，纯文本输出）。 */
+/** 网页正文（复用 管线：直 fetch 失败回退隐藏窗口刮取，纯文本输出）。 */
 export async function extractFromUrl(url: string, signal?: AbortSignal): Promise<ExtractedContent> {
   const result = await fetchWebContent(url, 'text', false, { signal })
   const text = result.content ?? ''

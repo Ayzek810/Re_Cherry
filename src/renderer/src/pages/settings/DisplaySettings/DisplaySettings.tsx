@@ -155,7 +155,7 @@ const DisplaySettings: FC = () => {
   )
 
   useEffect(() => {
-    // 初始化获取所有系统字体（v1 二轮审查 s2-28：两个初始请求此前没有 catch —— 失败时
+    // 初始化获取所有系统字体（两个初始请求此前没有 catch —— 失败时
     // fontList / currentZoom 静默停在默认值，无占位无提示）
     void window.api
       .getSystemFonts()
@@ -176,7 +176,7 @@ const DisplaySettings: FC = () => {
         logger.warn('Failed to read zoom factor', error as Error)
       })
 
-    // v1 二轮审查 s2-28：拖窗口边缘时 resize 以每帧频率触发，此前每次都打一次 IPC + setState。
+    // 拖窗口边缘时 resize 以每帧频率触发，此前每次都打一次 IPC + setState。
     // 用 requestAnimationFrame 合并到一帧一次。
     let resizeFrame: number | null = null
     const handleResize = () => {

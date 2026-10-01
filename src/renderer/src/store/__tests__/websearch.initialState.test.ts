@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import websearch, { initialState, updateWebSearchProvider } from '../websearch'
 
 /**
- * r2-28：`initialState.providers` 曾直接别名 `config/webSearchProviders.ts` 的模块级数组
+ * `initialState.providers` 曾直接别名 `config/webSearchProviders.ts` 的模块级数组
  * `WEB_SEARCH_PROVIDERS`（元素对象也是同一批）。模块表同时是「切片初值」与「配置模板」，
  * 任何落到它上面的写入都会污染同会话后续的初值/reset。这里钉住两条不变量：
  * ① 初值数组与每个元素都不是模块常量的同一对象；
@@ -12,7 +12,7 @@ import websearch, { initialState, updateWebSearchProvider } from '../websearch'
  * 提示：本测试对 `initialState` 恒等（模块单例）做断言，所以第二个用例故意从
  * `websearch(undefined, …)` 起跑（reducer 的 undefined 分支就是 initialState）。
  */
-describe('websearch slice — 初值不与配置模块常量共享对象（r2-28）', () => {
+describe('websearch slice — 初值不与配置模块常量共享对象', () => {
   it('初值数组与每个 provider 都是副本（值相等、引用不同）', () => {
     expect(initialState.providers).not.toBe(WEB_SEARCH_PROVIDERS)
     expect(initialState.providers).toHaveLength(WEB_SEARCH_PROVIDERS.length)

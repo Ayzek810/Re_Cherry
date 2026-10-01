@@ -17,7 +17,7 @@ export interface UploadResult {
   fileCount: number
   folderCount: number
   /**
-   * 写入失败的文件数（r2-43）。`0` 才是"全部成功"；主进程批量接口对单文件失败只记日志
+   * 写入失败的文件数。`0` 才是"全部成功"；主进程批量接口对单文件失败只记日志
    * 并把它排除在 `fileCount` 之外，旧实现把这个差额丢掉了——用户看到的是"上传成功"。
    */
   failedFiles: number
@@ -151,7 +151,7 @@ export async function resolveNotesPath(parentPath: string): Promise<ResolvedNote
 /**
  * 删除节点。
  *
- * 删除纪律（CLAUDE.md §9 / 二轮审查 f2-33）：返回 `Promise<boolean>`，调用方必须能区分成败。
+ * 删除纪律：返回 `Promise<boolean>`，调用方必须能区分成败。
  * 旧签名是 `Promise<void>`，页面结构上无法给出"删除失败"的信号，只能靠异常冒泡——而异常在
  * 页面 catch 里也只落日志。
  *
@@ -173,7 +173,7 @@ export async function delNode(node: NotesTreeNode): Promise<boolean> {
 /**
  * 重命名节点的结果。
  *
- * `conflict` 是**业务结果**而非异常（二轮审查 f2-33）：改成已存在的名字是最常见的用户输入分支，
+ * `conflict` 是**业务结果**而非异常：改成已存在的名字是最常见的用户输入分支，
  * 旧实现把它 `throw new Error('Target name already exists')`，页面只能落一条日志，用户看到的是
  * "对话框关了、列表没变、什么都没有"。
  */
@@ -248,7 +248,7 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
       const result = await window.api.file.batchUploadMarkdown(filePaths, basePath)
       const failedFiles = Math.max(0, totalFiles - result.skippedFiles - result.fileCount)
 
-      // r2-43：主进程按批 `allSettled`，成功数与总数/跳过数的差额就是失败数。旧实现把它丢掉，
+      // 主进程按批 `allSettled`，成功数与总数/跳过数的差额就是失败数。旧实现把它丢掉，
       // 于是"3 成功 / 2 失败"在 UI 上与"5 成功"同形。
       if (failedFiles > 0) {
         logger.warn(
@@ -277,7 +277,7 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
       await window.api.file.resumeFileWatcher()
     }
   } catch (error) {
-    // r2-43：批量接口整体失败（mkdir / 读取中断 / IPC 断链）时才走兼容路径。此时主进程一个
+    // 批量接口整体失败（mkdir / 读取中断 / IPC 断链）时才走兼容路径。此时主进程一个
     // 文件都没写成功（`fileCount` 只在成功返回时才有值），因此重传不会产生 `name (1).md` 副本。
     // 旧实现在 **任何** reject 上都无条件回退，且两条路径都不上报失败计数。
     logger.error('Batch upload failed as a whole, falling back to legacy method:', error as Error)

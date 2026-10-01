@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 模型选择弹窗的取消语义（v1 二轮审查 s2-08 / s2-43）。
+ * 模型选择弹窗的取消语义。
  *
  * 旧实现 `onCancel` 里排了一个 300ms 的 `reject`，而 `useTimer` 在卸载时会 `clearAllTimers()`：
  * 弹窗关闭即卸载 → 定时器被清 → 外层 `await SelectProviderModelPopup.show(...)` 永不 settle

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { syncAi302Servers } from '../302ai'
 
 /**
- * 302.AI 同步结果的收集完整性（v1 二轮审查 s2-05）。
+ * 302.AI 同步结果的收集完整性。
  *
  * 修改前 `allServers` 声明后从未 `push`：`success: true` + 「获取成功」是假成功，
  * 消费方拿到的始终是空数组，面板恒空，还会用空数组覆盖上一次成功拉取的缓存。

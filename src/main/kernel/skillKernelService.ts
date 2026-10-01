@@ -1,5 +1,5 @@
 /**
- * skill 工具每轮登记缝（ctx.skills，批次5 skills 接线；knowledge/webSearch 同先例）。
+ * skill 工具每轮登记缝（ctx.skills，skills 接线；knowledge/webSearch 同先例）。
  *
  * 状态本体在主进程 SkillService（工具执行直读单例，SKILL.md 磁盘真相源新鲜读取），
  * 本缝只承担 cordis 声明制落位与转发。

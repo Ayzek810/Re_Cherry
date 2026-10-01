@@ -1,5 +1,5 @@
 /**
- * c2-20 行为测试：动态工具栏命令必须真的能执行。
+ * 动态工具栏命令必须真的能执行。
  *
  * 原状：`getToolbarItems()` 把 `Command.handler` 包成 `() => cmd.handler` 存进 `handler` 字段，
  * 而**没有任何地方读取它**；渲染侧只认 `item.command`（由 `formattingCommand` 强转而来）。
@@ -25,9 +25,9 @@ vi.mock('../components/MathInputDialog', () => ({ default: () => null }))
 
 const formattingState = {} as FormattingState
 
-const COMMAND_ID = 'c2-20-probe-command'
+const COMMAND_ID = 'probe-command'
 
-describe('RichEditor toolbar dynamic commands (c2-20)', () => {
+describe('RichEditor toolbar dynamic commands', () => {
   afterEach(() => {
     unregisterCommand(COMMAND_ID)
   })

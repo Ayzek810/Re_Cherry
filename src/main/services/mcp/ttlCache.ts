@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次3 自 CS_V1 移植 + 裁剪清单。
+ * 自 CS_V1 移植 + 裁剪清单。
  *
  * CS_V1 的 MCPService 依赖全局 CacheService 做工具/提示词/资源列表的 TTL 缓存；
  * fork 无该服务，此处内置一个进程内最小 TTL 缓存（has/get/set/remove）替代，

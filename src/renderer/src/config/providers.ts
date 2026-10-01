@@ -676,7 +676,7 @@ export const NOT_SUPPORTED_RERANK_PROVIDERS = ['ollama', 'lmstudio'] as const sa
 export const ONLY_SUPPORTED_DIMENSION_PROVIDERS = ['ollama', 'infini'] as const satisfies SystemProviderId[]
 
 /**
- * r2-81：`SYSTEM_PROVIDERS` 与 `SYSTEM_PROVIDERS_CONFIG` 必须是**两批对象**。
+ * `SYSTEM_PROVIDERS` 与 `SYSTEM_PROVIDERS_CONFIG` 必须是**两批对象**。
  * 导出名与形状不变（`SystemProvider[]`），但每个 provider 都是新对象（`models` 数组另建），
  * 于是 Redux 初始态 / `store/migrate.ts` 的就地改写（`provider.anthropicApiHost = …`、
  * `provider.type = 'openai-response'`）只能写进 state，写不回模块级默认表。

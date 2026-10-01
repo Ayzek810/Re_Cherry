@@ -25,7 +25,7 @@ function initKeyv() {
 }
 initKeyv()
 
-// r2-03：小窗只读 + 只收（不与主窗口争抢同一个 localStorage persistor）。必须在任何渲染之前执行：
+// 小窗只读 + 只收（不与主窗口争抢同一个 localStorage persistor）。必须在任何渲染之前执行：
 // persistStore 的 rehydrate 是异步的，这里同步 pause 之后本窗口不会有任何回写。
 configureMiniWindowStoreRole(persistor, storeSyncService)
 

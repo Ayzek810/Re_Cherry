@@ -1,5 +1,5 @@
 /**
- * v1 二轮审查 m2-24 的行为证据（刮取窗口的结果渲染等待）。
+ * 刮取窗口的结果渲染等待。
  *
  * 原来是 `await new Promise(resolve => setTimeout(resolve, 500))`——无条件把 500ms 纯延迟加在
  * 每个搜索请求上（`fetchSerpPage` 一级路径对每个请求都付一次）。改成轮询「正文节点是否已进
@@ -70,7 +70,7 @@ function installProbe(answers: boolean[], finalHtml = PAGE_HTML): number[] {
   return callTimes
 }
 
-describe('SearchService 刮取渲染等待 (m2-24)', () => {
+describe('SearchService 刮取渲染等待', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     fakeContents.isDestroyed = () => false

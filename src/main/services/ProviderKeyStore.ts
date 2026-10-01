@@ -1,13 +1,13 @@
 /**
- * Provider API key 加密存储（K1）。
+ * Provider API key 加密存储（）。
  *
  * key 的持久化真源从 renderer localStorage 挪到 main：用 electron-store（独立文件 provider-keys.json）
- * 落盘 safeStorage 加密后的密文（base64），renderer 不再持久化明文（K3 从 persist 剥离，K4 启动回填）。
+ * 落盘 safeStorage 加密后的密文（base64），renderer 不再持久化明文（从 persist 剥离，启动回填）。
  *
- * 按 v0.2.4 定稿：不为 safeStorage 不可用写降级明文机制（用户裁决，无老用户）；
+ * 按 定稿：不为 safeStorage 不可用写降级明文机制（用户裁决，无老用户）；
  * Linux basic_text 后端由 OS 决定，代码只调 encryptString/decryptString。
  *
- * **v0.3.3-1 修复（"更新后 key 消失要重填"）**：electron-store 在**构造时**取
+ * ** 修复（"更新后 key 消失要重填"）**：electron-store 在**构造时**取
  * `app.getPath('userData')` 当 cwd，而打包产物把本模块切进共享 chunk、由入口在最前面 require
  * —— 于是单例构造发生在 `initAppDataDir()`（把 userData 重定向到用户配置的目录）**之前**，
  * key 文件因此长期落在 Electron 默认目录（`%APPDATA%\Re_Cherry`），与应用其余数据（Chromium 档案、
@@ -223,7 +223,7 @@ export class ProviderKeyStore {
     return plain.length > 0 ? plain : undefined
   }
 
-  /** 返回全部 providerId -> 明文 key（启动回填 K4 用）。 */
+  /** 返回全部 providerId -> 明文 key（启动回填 用）。 */
   getAll(): Record<string, string> {
     const result: Record<string, string> = {}
     const keys = this.store.get('keys') ?? {}

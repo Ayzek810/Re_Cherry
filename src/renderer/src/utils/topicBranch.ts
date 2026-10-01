@@ -17,7 +17,7 @@ export function listRootTopics(topics: Topic[]): Topic[] {
  * 沿 Redux 行链（parentTopicId）上溯到**家族根 id**（同步、无 IPC、无内核往返）。
  * 起查行必须在表内——不在则返回自身 id（只有 id、行又尚未物化时的无害降级）。
  *
- * 侧栏信号折叠（v0.3.1 第三轮）的唯一根解析器：重发/旁答的回合记账都发生在
+ * 侧栏信号折叠（第三轮）的唯一根解析器：重发/旁答的回合记账都发生在
  * fork 出的**子会话** id 上，而侧栏只渲染根行——两个域之间必须有一层统一的
  * 折叠，否则"子会话在生成/完成"永远照不亮根行（重发流灯全灭的真根因）。
  */
@@ -150,7 +150,7 @@ export interface TopicViewMemory {
 }
 
 /**
- * 由"正在看哪个话题行"解析出该写进哪一行、哪个助手的浏览记忆（v0.3.3 修复
+ * 由"正在看哪个话题行"解析出该写进哪一行、哪个助手的浏览记忆（修复
  * "重进话题落回报错分支"）。
  *
  * 为什么非要有这个纯函数：血缘与归属必须**从 store 现读**，不能用调用方闭包里的
@@ -169,7 +169,7 @@ export function resolveTopicViewMemory(
   const rootId = rootTopicIdOf(viewed.id, rows.length > 0 ? rows : [viewed])
   const root = rows.find((row) => row.id === rootId) ?? viewed
   const owner = assistants.find((assistant) => (assistant.topics ?? []).some((row) => row.id === root.id))
-  // 行上的 `assistantId` 字段**不作依据**：它可能是隔离对账前的旧归属（v0.3.0-5 教训），
+  // 行上的 `assistantId` 字段**不作依据**：它可能是隔离对账前的旧归属（教训），
   // 而 `updateTopic` 对"不在该助手清单里的行"是静默 no-op——宁可回落到调用方给的助手，
   // 也不按一个可能过期的字段派发。
   const assistantId = owner?.id ?? fallbackAssistantId
@@ -308,10 +308,10 @@ export async function materializeKernelTopicRow(params: {
 }
 
 // ---------------------------------------------------------------------------
-// 话题成员资格：**内核是唯一权威**（v0.3.0-2 目标 B）
+// 话题成员资格：**内核是唯一权威**
 //
 // 本版退役的做法是"渲染层用自己那份 persist 推断内核那份的可见性"（BOOT_TIME 时间戳启发式）——
-// 那是 v0.3.0-1 在事件层刚消灭过的同一个反模式，只是换了轴。替代方案是：成员资格一律问内核
+// 那是 在事件层刚消灭过的同一个反模式，只是换了轴。替代方案是：成员资格一律问内核
 // （`dshTopicList`），渲染层只做字段合并与补齐。
 // ---------------------------------------------------------------------------
 

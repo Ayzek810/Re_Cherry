@@ -1,5 +1,5 @@
 /**
- * 生成结果回灌 hook（v0.3.3 批次4，② 薄适配）：V2 DataApi 订阅 → 生成 promise
+ * 生成结果回灌 hook（② 薄适配）：V2 DataApi 订阅 → 生成 promise
  * 回调（同进程 await 即回填，逻辑简化）。保留"只同步 files、只增不减、幂等"
  * 三条不变量——后台完成的生成经 PaintingSessionContext 镜像对账。
  */

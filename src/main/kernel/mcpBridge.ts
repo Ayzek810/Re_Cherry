@@ -1,5 +1,5 @@
 /**
- * MCP 桥模块工厂（批次3 MCP 接线）。
+ * MCP 桥模块工厂（MCP 接线）。
  *
  * 形态（a）每服务器一个外置挂载单元：渲染层 messageThunk 把 `mcp:<serverId>` 并入
  * externalTools 随发送参数上行；topics.setup 对该类 id 经主进程 MCPService 查配置、
@@ -15,7 +15,7 @@
  *
  * MVP 边界：`server.disabledAutoApproveTools` 中的工具不挂载（上游语义是"调时弹
  * 确认"，fork 内核无单工具审批粒度——不挂载比静默放行严格，无静默执行风险）；
- * OAuth/DXT/hub 服务器不在批次3（见主进程 MCPService 头注释）；复杂 JSON Schema
+ * OAuth/DXT/hub 服务器不在（见主进程 MCPService 头注释）；复杂 JSON Schema
  * 经有界转换映射到 dsh 参数 DSL，无法表达的节点回退 {type:'json'} 无约束节点。
  */
 import type { Context } from '@deepseek-ai/cordis'

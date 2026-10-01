@@ -1,5 +1,5 @@
 /**
- * r2-36 行为测试：`useMetaDataParser` 的解析门槛与 link 归属。
+ * `useMetaDataParser` 的解析门槛与 link 归属。
  *
  * 改动前：`parseMetadata` 的 guard 是 `if (!link || !isLoading) return`，消费方
  * （`OGCard`）的门槛是 `if (show && isLoading)`。首次解析完成后 `isLoading === false`，
@@ -35,7 +35,7 @@ beforeEach(() => {
   isCancelMock.mockReturnValue(false)
 })
 
-describe('useMetaDataParser r2-36：link 归属与可重解析', () => {
+describe('useMetaDataParser ：link 归属与可重解析', () => {
   it('首次解析后仍能解析新 link，且不展示旧 link 的元数据', async () => {
     getMock.mockResolvedValueOnce({ data: htmlWithTitle('A 标题') })
 

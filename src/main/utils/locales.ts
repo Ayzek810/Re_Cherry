@@ -1,7 +1,7 @@
 import { configManager } from '@main/services/ConfigManager'
 import { defaultLanguage } from '@shared/config/constant'
 
-// v0.2.4-1：机翻语言包已整体移除，只保留 zh-CN / en-US
+// 机翻语言包已整体移除，只保留 zh-CN / en-US
 import EnUs from '../../renderer/src/i18n/locales/en-us.json'
 import ZhCn from '../../renderer/src/i18n/locales/zh-cn.json'
 

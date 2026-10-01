@@ -1,5 +1,5 @@
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游
+ * 自 CS_V1 移植 + 适配点清单（源：上游
  * src/renderer/src/providers/WebSearchProvider/{LocalGoogleProvider,LocalBingProvider,LocalBaiduProvider}.ts）。
  *
  * - 主进程无 DOM：上游三引擎的 DOM 解析查询改为正则/字符串扫描等价实现，

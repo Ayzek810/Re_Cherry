@@ -39,6 +39,15 @@ export enum IpcChannel {
   App_SetDisableHardwareAcceleration = 'app:set-disable-hardware-acceleration',
   App_SetUseSystemTitleBar = 'app:set-use-system-title-bar',
 
+  App_Update_GetState = 'app:update:get-state',
+  App_Update_GetPrefs = 'app:update:get-prefs',
+  App_Update_SetPrefs = 'app:update:set-prefs',
+  App_Update_Check = 'app:update:check',
+  App_Update_Download = 'app:update:download',
+  App_Update_Cancel = 'app:update:cancel',
+  App_Update_Install = 'app:update:install',
+  App_Update_State = 'app:update:state',
+
   Notification_Send = 'notification:send',
 
   Webview_SetOpenLinkExternal = 'webview:set-open-link-external',
@@ -86,7 +95,7 @@ export enum IpcChannel {
   File_Clear = 'file:clear',
   File_Read = 'file:read',
   File_ReadExternal = 'file:readExternal',
-  // 二轮审查 r2-79/⑥：按 id 读文件仓成员并要求区分「不存在」与「读失败」。
+  // /⑥：按 id 读文件仓成员并要求区分「不存在」与「读失败」。
   // `File_Read` 对任何失败都抛同一个通用错误（消费方无法区分），本通道返回
   // `FileReadByIdResult` 判别式，供 `config/minapps.ts` 正确播种自定义小应用。
   File_ReadById = 'file:readById',
@@ -104,7 +113,7 @@ export enum IpcChannel {
   File_Mkdir = 'file:mkdir',
   File_Write = 'file:write',
   File_WriteWithId = 'file:writeWithId',
-  // v0.3.3-2：聊天页 generate_image 出图的内容寻址落盘（id 由渲染层按源串 sha256 给出，
+  // 聊天页 generate_image 出图的内容寻址落盘（id 由渲染层按源串 sha256 给出，
   // 同一张图重复投影只落一份——原先这批图只进 IMAGE 块元数据，文件页看不到）
   File_SaveGeneratedImage = 'file:saveGeneratedImage',
   File_SaveImage = 'file:saveImage',
@@ -114,7 +123,7 @@ export enum IpcChannel {
   File_Download = 'file:download',
   File_Copy = 'file:copy',
   File_BinaryImage = 'file:binaryImage',
-  /** 文件仓变更事件（主 → 渲染）：迁移前是枚举外裸字面量（v1 二轮 k2-07）。 */
+  /** 文件仓变更事件（主 → 渲染）：迁移前是枚举外裸字面量。 */
   File_Change = 'file-change',
   File_Base64File = 'file:base64File',
   File_GetPdfInfo = 'file:getPdfInfo',
@@ -125,7 +134,7 @@ export enum IpcChannel {
   File_IsDirectory = 'file:isDirectory',
   File_ListDirectory = 'file:listDirectory',
   File_GetDirectoryStructure = 'file:getDirectoryStructure',
-  // v0.3.3-2 笔记（V1 原样）：校验/补全用户自选的笔记目录（主进程侧 handler 一直在，只是通道被删过）
+  // 笔记（V1 原样）：校验/补全用户自选的笔记目录（主进程侧 handler 一直在，只是通道被删过）
   File_ValidateNotesDirectory = 'file:validateNotesDirectory',
   File_CheckFileName = 'file:checkFileName',
   File_StartWatcher = 'file:startWatcher',
@@ -218,7 +227,7 @@ export enum IpcChannel {
   // Analytics
   Analytics_TrackTokenUsage = 'analytics:track-token-usage',
 
-  // provider key 加密存储（v0.2.4 K 线）
+  // provider key 加密存储（K 线）
   ProviderKeys_GetAll = 'provider-keys:get-all',
   ProviderKeys_Set = 'provider-keys:set',
   ProviderKeys_Remove = 'provider-keys:remove',
@@ -226,16 +235,16 @@ export enum IpcChannel {
   // dsh kernel
   Dsh_SyncProviders = 'dsh:sync-providers',
   Dsh_SyncImageDescriber = 'dsh:sync-image-describer',
-  /** 网络搜索配置同步（批次2）：渲染层 websearch 切片 → 主进程 WebSearchService。 */
+  /** 网络搜索配置同步：渲染层 websearch 切片 → 主进程 WebSearchService。 */
   Dsh_SyncWebSearch = 'dsh:sync-web-search',
-  /** MCP 服务器配置同步（批次3）：渲染层 mcp 切片 → 主进程 MCPService（内存投影）。 */
+  /** MCP 服务器配置同步：渲染层 mcp 切片 → 主进程 MCPService（内存投影）。 */
   Dsh_SyncMcpServers = 'dsh:sync-mcp-servers',
   /**
-   * 文档处理通道配置同步（§7.17 三轮）：渲染层 preprocess 切片 providers（含 apiKey，
+   * 文档处理通道配置同步（三轮）：渲染层 preprocess 切片 providers（含 apiKey，
    * 只进主进程内存）→ preprocessChannel 配置表；ocr_document 工具与知识库摄取按此路由。
    */
   Dsh_SyncPreprocess = 'dsh:sync-preprocess',
-  /** MCP 设置页通道（批次3）：服务器生命周期与发现（上游 Mcp_* 命名子集）。 */
+  /** MCP 设置页通道：服务器生命周期与发现（上游 Mcp_* 命名子集）。 */
   Mcp_ListTools = 'mcp:list-tools',
   Mcp_ListPrompts = 'mcp:list-prompts',
   Mcp_ListResources = 'mcp:list-resources',
@@ -248,29 +257,29 @@ export enum IpcChannel {
   /** MCP 运行时依赖探测（v1）：PATH 中能否解析命令（fork 不托管 uv/bun 二进制，stdio
    *  服务器靠系统 PATH 的 npx/uvx——见 main/services/mcp/commandResolution.ts）。 */
   Mcp_CheckCommand = 'mcp:check-command',
-  /** DXT（.dxt）扩展安装（v0.4.7 自上游 Mcp_UploadDxt 移植）：ArrayBuffer + 文件名，返回解包结果。 */
+  /** DXT（.dxt）扩展安装（自上游 Mcp_UploadDxt 移植）：ArrayBuffer + 文件名，返回解包结果。 */
   Mcp_UploadDxt = 'mcp:upload-dxt',
   /** MCP 服务器日志事件（主 → 渲染，上游 Mcp_ServerLog 同语义）。 */
   Mcp_ServerLog = 'mcp:server-log',
-  /** 知识库通道（批次4）：库文件生命周期 + 条目处理 + 检索（上游 KnowledgeBase_* 命名子集）。 */
+  /** 知识库通道：库文件生命周期 + 条目处理 + 检索（上游 KnowledgeBase_* 命名子集）。 */
   KnowledgeBase_Create = 'knowledge-base:create',
   KnowledgeBase_Reset = 'knowledge-base:reset',
   KnowledgeBase_Delete = 'knowledge-base:delete',
   KnowledgeBase_Add = 'knowledge-base:add',
   KnowledgeBase_Remove = 'knowledge-base:remove',
   KnowledgeBase_Search = 'knowledge-base:search',
-  /** 文档处理通道 local-paddle 条目（v0.4.4 收编自 LocalModel_*）：OCR 权重下载生命周期（进度渲染层轮询 getStatus）。 */
+  /** 文档处理通道 local-paddle 条目（收编自 LocalModel_*）：OCR 权重下载生命周期（进度渲染层轮询 getStatus）。 */
   Preprocess_LocalPaddle_GetStatus = 'preprocess:local-paddle:get-status',
   Preprocess_LocalPaddle_Download = 'preprocess:local-paddle:download',
   Preprocess_LocalPaddle_Cancel = 'preprocess:local-paddle:cancel',
   Preprocess_LocalPaddle_Remove = 'preprocess:local-paddle:remove',
-  /** 技能通道（批次5）：zip/目录/URL 安装 + 卸载真删盘 + 库扫描（上游 Skill_* 命名子集）。 */
+  /** 技能通道：zip/目录/URL 安装 + 卸载真删盘 + 库扫描（上游 Skill_* 命名子集）。 */
   Skill_InstallFromZip = 'skill:install-from-zip',
   Skill_InstallFromDirectory = 'skill:install-from-directory',
   Skill_InstallFromUrl = 'skill:install-from-url',
   Skill_Uninstall = 'skill:uninstall',
   Skill_List = 'skill:list',
-  /** 网络搜索连通性检查（批次2）：'test query' 真跑一次（设置页「检查」按钮）。 */
+  /** 网络搜索连通性检查：'test query' 真跑一次（设置页「检查」按钮）。 */
   WebSearch_Check = 'web-search:check',
   Dsh_StreamSmoke = 'dsh:stream-smoke',
   Dsh_Complete = 'dsh:complete',
@@ -297,26 +306,26 @@ export enum IpcChannel {
   Dsh_QuestionAnswer = 'dsh:question-answer',
   Dsh_SearchMessages = 'dsh:search-messages',
   Dsh_SessionEvent = 'dsh:session-event',
-  /** 内核图片附件 → 渲染层文件仓的回放同步（v0.3.1 识图通道；读 ref、写字节、返回 FileMetadata）。 */
+  /** 内核图片附件 → 渲染层文件仓的回放同步（识图通道；读 ref、写字节、返回 FileMetadata）。 */
   Dsh_AttachmentSync = 'dsh:attachment-sync',
   /** 轻量图像模态（绘画页/生图工具的执行缝；OpenAI 兼容平面直连，实现 kernel/lightLlmModalities）。 */
   Dsh_LightImage = 'dsh:light-image',
   Dsh_LightImageAbort = 'dsh:light-image-abort',
 
-  // 编码助手（v0.3.4-1 自 CS_V2 Code Mate 移植）：受管 Web UI 工具的生命周期通道。
+  // 编码助手（自 CS_V2 Code Mate 移植）：受管 Web UI 工具的生命周期通道。
   CodeCli_DeepseekHarness_Start = 'code-cli:deepseek-harness:start',
   CodeCli_DeepseekHarness_Stop = 'code-cli:deepseek-harness:stop',
   /** 主 → 渲染状态广播（starting/running/stopped/error + url）。 */
   CodeCli_DeepseekHarness_Status = 'code-cli:deepseek-harness:status',
-  /** 立即拉当前状态（批次4a：渲染层订阅缝 useCodeCliStatus 的初值通道；载荷同 Status）。 */
+  /** 立即拉当前状态（渲染层订阅缝 useCodeCliStatus 的初值通道；载荷同 Status）。 */
   CodeCli_DeepseekHarness_GetStatus = 'code-cli:deepseek-harness:get-status',
   CodeCli_HermesDashboard_Start = 'code-cli:hermes-dashboard:start',
   CodeCli_HermesDashboard_Stop = 'code-cli:hermes-dashboard:stop',
   /** 主 → 渲染状态广播（同 DeepseekHarness_Status 语义）。 */
   CodeCli_HermesDashboard_Status = 'code-cli:hermes-dashboard:status',
-  /** 立即拉当前状态（批次4a；载荷同 Status）。 */
+  /** 立即拉当前状态（载荷同 Status）。 */
   CodeCli_HermesDashboard_GetStatus = 'code-cli:hermes-dashboard:get-status',
-  /** v0.4.5：Paper-Agent（源码型受管工具）Web UI 生命周期。 */
+  /** Paper-Agent（源码型受管工具）Web UI 生命周期。 */
   CodeCli_PaperAgent_Start = 'code-cli:paper-agent:start',
   CodeCli_PaperAgent_Stop = 'code-cli:paper-agent:stop',
   /** 主 → 渲染状态广播（同 DeepseekHarness_Status 语义）。 */
@@ -326,26 +335,26 @@ export enum IpcChannel {
   /** hermes 配置文件读写（target 枚举 = 写白名单，渲染层永不传路径）。 */
   CodeCli_ReadConfig = 'code-cli:read-config',
   CodeCli_WriteConfig = 'code-cli:write-config',
-  /** 受管 CLI 工具安装器（批次2）：装卸/快照/版本（portable，{userData}/Data/CodeMate/）。 */
+  /** 受管 CLI 工具安装器：装卸/快照/版本（portable，{userData}/Data/CodeMate/）。 */
   CodeCli_Binary_Install = 'code-cli:binary:install',
   CodeCli_Binary_Remove = 'code-cli:binary:remove',
   CodeCli_Binary_Snapshots = 'code-cli:binary:snapshots',
   CodeCli_Binary_LatestVersions = 'code-cli:binary:latest-versions',
-  /** v0.4.5：手动检查更新（强制重探快照 + 现查最新版本；source 型走 GitHub HEAD SHA 对比）。 */
+  /** 手动检查更新（强制重探快照 + 现查最新版本；source 型走 GitHub HEAD SHA 对比）。 */
   CodeCli_Binary_CheckUpdates = 'code-cli:binary:check-updates',
   /** 安装/卸载/快照变化广播（无载荷，消费者重拉快照）。 */
   CodeCli_Binary_Changed = 'code-cli:binary:changed',
   /** 安装步骤进度广播（载荷 {tool, step}，step 为 i18n 键尾）。 */
   CodeCli_Binary_InstallProgress = 'code-cli:binary:install-progress',
-  /** 统一网关（批次3）：生命周期 + 状态广播 + 渲染层配置同步（enabled/port/host）。 */
+  /** 统一网关：生命周期 + 状态广播 + 渲染层配置同步（enabled/port/host）。 */
   CodeCli_ApiGateway_Start = 'code-cli:api-gateway:start',
   CodeCli_ApiGateway_Stop = 'code-cli:api-gateway:stop',
   CodeCli_ApiGateway_Restart = 'code-cli:api-gateway:restart',
   CodeCli_ApiGateway_LanSetEnabled = 'code-cli:api-gateway:lan:set-enabled',
   CodeCli_ApiGateway_Status = 'code-cli:api-gateway:status',
-  /** 立即拉当前运行态（批次4a；载荷 {running, lanRunning?, port?} 同 Status 广播）。 */
+  /** 立即拉当前运行态（载荷 {running, lanRunning?, port?} 同 Status 广播）。 */
   CodeCli_ApiGateway_GetStatus = 'code-cli:api-gateway:get-status',
-  /** 网关配置读取（批次5：host/port/apiKey——渲染层合成网关 provider 与 hermes 配置草稿用）。 */
+  /** 网关配置读取（host/port/apiKey——渲染层合成网关 provider 与 hermes 配置草稿用）。 */
   CodeCli_ApiGateway_GetConfig = 'code-cli:api-gateway:get-config',
   CodeCli_SyncGatewayConfig = 'code-cli:sync-gateway-config'
 }

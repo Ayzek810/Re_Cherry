@@ -82,9 +82,9 @@ function topicTree(ctx: Context): TopicTreeService {
 
 let kernelContext: Context | undefined
 let interactionHub: KernelInteractionHub | undefined
-/** k2-29：内核 IPC 的注销函数（`registerKernelIpc` 返回值；停机时逐 channel 撤销）。 */
+/** 内核 IPC 的注销函数（`registerKernelIpc` 返回值；停机时逐 channel 撤销）。 */
 let kernelIpcDispose: (() => void) | undefined
-/** k2-29：`ctx.userQuestions.registerProvider` 的注销函数（停机时配对调用）。 */
+/** `ctx.userQuestions.registerProvider` 的注销函数（停机时配对调用）。 */
 let interactionUnregister: (() => void) | undefined
 
 /** 已启动的内核上下文；未启动或已销毁时为 undefined。 */
@@ -101,7 +101,7 @@ export async function stopKernel(): Promise<void> {
   const ctx = kernelContext
   if (ctx === undefined) return
   kernelContext = undefined
-  // k2-29：先撤销 IPC handler 与问答 provider，再拆 fiber。内核 IPC 注册以前不撤销任何
+  // 先撤销 IPC handler 与问答 provider，再拆 fiber。内核 IPC 注册以前不撤销任何
   // channel，于是二次 `bootKernel()`（模块重载 / 测试宿主）会撞 Electron 的
   // "Attempted to register a second handler"。撤销后 `requireKernel()` 仍以
   // `kernel not booted` 拒绝，不会留下指向已销毁 ctx 的脏 handler。
@@ -159,29 +159,29 @@ export async function bootKernel(): Promise<Context> {
     })
     await ctx.plugin(CherryCredentialProvider)
 
-    // 附件仓库（v0.3.1 识图通道）：ctx.attachments 服务缝的宿主实现。内容寻址 blob 落
+    // 附件仓库（识图通道）：ctx.attachments 服务缝的宿主实现。内容寻址 blob 落
     // kernelDir/attachments；会话日志只存 ref，读回与请求版本按 ref 即时核验。
     // 位置在 LLM 层之前——dsh-tool-fs 的 read_image 工具按"attachments 已挂载"注册。
     await ctx.plugin(CherryAttachmentStore, { root: join(kernelDir, 'attachments') })
-    // 转述模型服务（v0.3.1 识图通道补全）：ctx.imageDescriber 服务缝（cordis Service
+    // 转述模型服务（识图通道补全）：ctx.imageDescriber 服务缝（cordis Service
     // 子类，super(ctx, 'imageDescriber')——直接给 ctx 赋属性会被声明制拒绝）。
     // 只持转述路由一份状态（Dsh_SyncImageDescriber 推送）；会话状态一概走日志真相源。
     await ctx.plugin(ImageDescriberService)
-    // 网络搜索服务缝（批次2）：ctx.webSearch——渲染层 websearch 切片同步投影
+    // 网络搜索服务缝：ctx.webSearch——渲染层 websearch 切片同步投影
     //（providers/blacklist/searchWithTime，Dsh_SyncWebSearch 推送）+ 每轮提供商登记。
     // apiKey 只进主进程内存（引擎单例 services/WebSearchService），不落内核 settings.json。
     await ctx.plugin(WebSearchKernelService)
-    // 知识检索每轮登记缝（批次4）：ctx.knowledge（webSearch 同构，状态本体在主进程
+    // 知识检索每轮登记缝：ctx.knowledge（webSearch 同构，状态本体在主进程
     // KnowledgeService，嵌入路由随 Dsh_SyncProviders 快照刷新）。
     await ctx.plugin(KnowledgeKernelService)
-    // 技能每轮登记缝（批次5）：ctx.skills（同构，状态本体在主进程 SkillService，
+    // 技能每轮登记缝：ctx.skills（同构，状态本体在主进程 SkillService，
     // SKILL.md 磁盘真相源新鲜读取）。
     await ctx.plugin(SkillKernelService)
-    // 文档阅读每轮登记缝（批次6）：ctx.documents（同构，状态本体在主进程
-    // knowledgeService——v0.3.2 起文档处理系统同时服务知识库摄取与聊天读文件，
+    // 文档阅读每轮登记缝：ctx.documents（同构，状态本体在主进程
+    // knowledgeService—— 起文档处理系统同时服务知识库摄取与聊天读文件，
     // 附件路径主进程直读）。
     await ctx.plugin(DocumentKernelService)
-    // 持久记忆每轮登记缝（v0.4.6）：ctx.memory（同构，状态本体在 memoryKernelService
+    // 持久记忆每轮登记缝：ctx.memory（同构，状态本体在 memoryKernelService
     // 模块单例；根目录由 topics.sendMessage 按助手 id 主进程派生并确保存在）。
     await ctx.plugin(MemoryKernelService)
 
@@ -193,14 +193,14 @@ export async function bootKernel(): Promise<Context> {
     // 补一层中性门（globalThis 钩子，门缺失 = 零行为差异），判定与剥离逻辑全在本仓
     // thinkingReplay.ts。必须在 piAiPlugin 装载后、首个请求前安装。
     installThinkingReplayTrim()
-    // 图片句柄短锚（v0.3.1 上下文净化 A'，见 imageHandleText.ts）：pi-ai 在 wire 上给每个
+    // 图片句柄短锚（上下文净化 A'，见 imageHandleText.ts）：pi-ai 在 wire 上给每个
     // image part 伴一条上游长句柄（hash+尺寸），经由同一补丁文件的第二个中性门
     // （globalThis.__recRequestImageHandleText）改写为中文短锚 `图片N (WxHpx)`；
     // 钩子缺失/形状不认识 = 上游原样（零行为差异）。
     installRequestImageHandleAnchor()
-    // 响应端工具调用修复（v0.3.0-1）：挂在 dsh 文档化的 `llm/stream` waterfall 上，
+    // 响应端工具调用修复：挂在 dsh 文档化的 `llm/stream` waterfall 上，
     // agent-loop 的 ctx.llm.stream / prepareCall().stream 两条路径都经此，恒开不受开关约束。
-    // DSML 修复自身不走补丁（v0.3.0-1 移除了当时的 dsh-llm-pi-ai 行为补丁）；内核包上现存的
+    // DSML 修复自身不走补丁（移除了当时的 dsh-llm-pi-ai 行为补丁）；内核包上现存的
     // 唯一补丁文件持有两个请求端中性门（思考剥离 + 图片句柄短锚，见 thinkingReplay.ts 头注
     // 与 imageHandleText.ts 头注），与 DSML 修复（响应端 waterfall）机制不同、互不替代。
     registerDsmlRepair(ctx)
@@ -244,7 +244,7 @@ export async function bootKernel(): Promise<Context> {
     // + 沙箱化 pwsh 执行器（ctx.shell，按会话 sandbox/mode 收敛）+ 进程内作业注册表（ctx.jobs）。
     await ctx.plugin(shellEnv, { dshHome: join(kernelDir) })
 
-    // v0.3.1-2 修复（v0.3.2 改机制）：Windows 沙箱 runner 的启动语义。
+    // 修复（改机制）：Windows 沙箱 runner 的启动语义。
     //
     // `dsh-sandbox-local.windowsAclRunnerInvocation()` 以 **`[process.execPath, runner.js]`** 前缀
     // 启动受限 runner，其注释假设"前缀是 `[node, runner, …]`"。但本内核跑在 Electron 里，
@@ -253,8 +253,8 @@ export async function bootKernel(): Promise<Context> {
     // 消息循环不退出 → 采集器等不到子进程结束 → **每次 pwsh 都在超时到点被判定
     // `[timed out after Nms]` + `[exit code: 1]`**（正文其实已经产出）。
     //
-    // v0.3.1-2 曾把该变量设到 ambient `process.env`（dsh childEnv 的父基底）——真机实锤
-    // （v0.3.2）Chromium 自身子进程同受其害：GPU 进程惰性重生时继承变量、以 node 模式
+    // 曾把该变量设到 ambient `process.env`（dsh childEnv 的父基底）——真机实锤
+    // Chromium 自身子进程同受其害：GPU 进程惰性重生时继承变量、以 node 模式
     // 启动、全部 Chromium 开关报 `bad option` 后退出（exit_code=9）。故改为
     // `patches/@deepseek-ai__dsh-subprocess-local@0.1.1-rc.2.patch`：spawnSubprocess 内按
     // `program === process.execPath` 逐子进程注入——runner 获得 node 语义，pwsh/ripgrep
@@ -268,7 +268,7 @@ export async function bootKernel(): Promise<Context> {
     await ctx.plugin(LocalJobRegistry, {})
 
     // 会话层：内存 store + SQLite 持久化。
-    // 话题标题服务（dsh-session-title）已移除（v0.3.1）：自动命名回归 V1 原理——
+    // 话题标题服务（dsh-session-title）已移除：自动命名回归 V1 原理——
     // 快速模型 + 用户设置项，经 renderer services/topicNaming.ts 调度（turn/end 触发），
     // 名称经 Dsh_TopicRename 落注册表；注册表 .name 只服务重启恢复（物化缺行）。
     await ctx.plugin(SessionStore)
@@ -279,7 +279,7 @@ export async function bootKernel(): Promise<Context> {
     // Agent 层：注册表 + 回合循环（工厂由 loop 注入注册表）
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(AgentLoop, { agents: [] })
-    // 目标域（v0.4.6 dsh 原生词表轻挂）：同会话目标状态服务（事件溯源）+ 自动续轮驱动；
+    // 目标域（dsh 原生词表轻挂）：同会话目标状态服务（事件溯源）+ 自动续轮驱动；
     // 模型面 goal 三件套（create/get/update）按助手开关在 topics.ts BUILTIN_MOUNTS 挂载。
     await ctx.plugin(GoalService)
     await ctx.plugin(goalRoundDriver)
@@ -297,7 +297,7 @@ export async function bootKernel(): Promise<Context> {
       else if (kind === 'question') broadcast(IpcChannel.Dsh_QuestionRequest, payload)
     })
     interactionHub = interaction.hub
-    // k2-29：把撤销函数一起存下来，`stopKernel()` 才能配对拆掉 handler 与问答 provider。
+    // 把撤销函数一起存下来，`stopKernel()` 才能配对拆掉 handler 与问答 provider。
     interactionUnregister = interaction.unregister
     kernelIpcDispose = registerKernelIpc()
 
@@ -314,7 +314,7 @@ export async function bootKernel(): Promise<Context> {
 function registerEventForwarding(ctx: Context): void {
   ctx.on('session/event', (session, event) => {
     // UI 视界判据的唯一落点之一（另两处：ctx.topicTree.uiEvents 与 searchSessions）：
-    // 注入快照只服务模型上下文，渲染层不该看见，也无需自己再判（v0.3.0-1 结构化）。
+    // 注入快照只服务模型上下文，渲染层不该看见，也无需自己再判（结构化）。
     const view = uiSessionEvent(event)
     if (view === undefined) return
     broadcast(IpcChannel.Dsh_SessionEvent, { topicId: session.id, event: view })
@@ -335,7 +335,7 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-/** 内核 IPC：provider 同步、冒烟、话题 CRUD 与聊天。返回值是逐 channel 撤销的注销函数（k2-29）。 */
+/** 内核 IPC：provider 同步、冒烟、话题 CRUD 与聊天。返回值是逐 channel 撤销的注销函数。 */
 function registerKernelIpc(): () => void {
   const requireKernel = (): Context => {
     const ctx = getKernel()
@@ -343,7 +343,7 @@ function registerKernelIpc(): () => void {
     return ctx
   }
 
-  // k2-29：注册即记账。handler 的注册面全在本函数内（29 处），统一经这个包装登记，
+  // 注册即记账。handler 的注册面全在本函数内（29 处），统一经这个包装登记，
   // 避免"加了新通道却忘了加进撤销清单"这种漏项。
   const registeredChannels: string[] = []
   const handle = (channel: string, listener: Parameters<typeof ipcMain.handle>[1]): void => {
@@ -353,16 +353,16 @@ function registerKernelIpc(): () => void {
 
   handle(IpcChannel.Dsh_SyncProviders, async (_event, providers: KernelProviderInput[]) => {
     await syncCherryProviders(requireKernel(), providers)
-    // 批次4 知识库：嵌入客户端复用同一路由快照（apiHost/apiKey 只进主进程内存）。
+    // 知识库：嵌入客户端复用同一路由快照（apiHost/apiKey 只进主进程内存）。
     knowledgeService.setProviders(providers)
     // 轻量 AI 服务面非 chat 模态（embed/rerank/image）共用同一路由快照。
     setLightLlmProviderRoutes(providers)
-    // 编码助手（v0.3.4-1）：dsh/hermes 配置投影与（批次3）网关五函数共用同一路由快照。
+    // 编码助手：dsh/hermes 配置投影与网关五函数共用同一路由快照。
     setCodeMateProviders(providers)
     return { ok: true }
   })
 
-  // 转述模型配置同步（v0.3.1 识图通道补全）：payload = { provider, model, prompt } 或 null（未配置）。
+  // 转述模型配置同步（识图通道补全）：payload = { provider, model, prompt } 或 null（未配置）。
   // prompt 为空字符串 = 内置默认提示词（@shared/config/imageDescriber）。
   // 内核不做路由存在性校验——provider 同步（Dsh_SyncProviders）才是路由的真相源，
   // 这里只落 ctx.imageDescriber；describe_images 执行时路由缺失自然明错。
@@ -396,7 +396,7 @@ function registerKernelIpc(): () => void {
     }
   )
 
-  // 网络搜索配置同步（批次2）：渲染层 websearch 切片整体投影（providers 含 apiKey /
+  // 网络搜索配置同步：渲染层 websearch 切片整体投影（providers 含 apiKey /
   // blacklist / searchWithTime）。只落 ctx.webSearch（引擎 setConfig），不做字段级校验
   // ——引擎执行时对缺失提供商自然明错；apiKey 仅存主进程内存。
   handle(IpcChannel.Dsh_SyncWebSearch, async (_event, config: KernelWebSearchConfig) => {
@@ -408,14 +408,14 @@ function registerKernelIpc(): () => void {
     return { ok: true }
   })
 
-  // 网络搜索连通性检查（批次2）：'test query' 真跑一次引擎（同一条真实执行路径，
+  // 网络搜索连通性检查：'test query' 真跑一次引擎（同一条真实执行路径，
   // 比上游渲染层侧测更诚实）。引擎未同步该提供商时按其就绪判定自然失败。
   handle(IpcChannel.WebSearch_Check, async (_event, providerId: string) => {
     const { webSearchService } = await import('../services/WebSearchService')
     return { ok: await webSearchService.check(providerId) }
   })
 
-  // MCP 服务器配置同步（批次3）：渲染层 mcp 切片整体投影进主进程 MCPService 内存
+  // MCP 服务器配置同步：渲染层 mcp 切片整体投影进主进程 MCPService 内存
   //（命令/args/env 可能含密钥，与 webSearch 同先例只进主进程内存，不落盘不进会话）。
   // 内核 MCP 桥（mcpBridge.ts）挂载时按 serverId 从这里反查配置。
   handle(IpcChannel.Dsh_SyncMcpServers, async (_event, servers: unknown) => {
@@ -425,10 +425,10 @@ function registerKernelIpc(): () => void {
     return { ok: true }
   })
 
-  // 文档处理通道配置同步（§7.17 三轮）：preprocess 切片 providers 整体投影
+  // 文档处理通道配置同步（三轮）：preprocess 切片 providers 整体投影
   //（apiKey 只进主进程内存，webSearch/MCP 同先例）。ocr_document 工具与知识库
   // 摄取的 PDF 路由按此配置表反查服务商（V2 对齐：配置即路由）。
-  // v0.4.4：投影按字段白名单收敛（渲染层输入一律校验）——vision-model 条目的
+  // 投影按字段白名单收敛（渲染层输入一律校验）——vision-model 条目的
   // 视觉模型引用取 { provider, model } 两个非空字符串，畸形即视为未配置。
   handle(IpcChannel.Dsh_SyncPreprocess, async (_event, providers: unknown) => {
     if (!Array.isArray(providers)) throw new Error('kernel: invalid preprocess sync payload')
@@ -589,7 +589,7 @@ function registerKernelIpc(): () => void {
 
   handle(IpcChannel.Dsh_TopicDelete, async (_event, id: string) => {
     // `ok` = 注册表行已删（话题从 UI 消失）；`purged` = 磁盘上的会话数据也清掉了。
-    // 旧写法无条件回 `{ ok: true }`，把"物理清盘失败"（k2-09）伪装成完全成功。
+    // 旧写法无条件回 `{ ok: true }`，把"物理清盘失败"伪装成完全成功。
     const purged = await topicTree(requireKernel()).delete(id)
     if (!purged) {
       logger.error(
@@ -637,8 +637,8 @@ function registerKernelIpc(): () => void {
         memory?: { assistantId?: unknown }
       }
     ) => {
-      // 白名单重建（v0.3.1 形态）+ 批次2/4/5/6 能力载荷（webSearch/knowledgeBases/
-      // skills/documents）。事故教训（v0.3.2）：白名单漏字段 = 静默剥离——工具挂载了
+      // 白名单重建（形态）+ 能力载荷（webSearch/knowledgeBases/
+      // skills/documents）。事故教训：白名单漏字段 = 静默剥离——工具挂载了
       // （builtinTools 在列）但每轮登记永远落空，真机表现为
       // "no web search provider is configured for this conversation turn"。
       // 新增字段必须三层同步：preload 声明 → 本 handler → topics.TopicSendOptions。
@@ -711,7 +711,7 @@ function registerKernelIpc(): () => void {
         }
         cleanOptions.knowledgeBases = options.knowledgeBases.map((base) => {
           // 只校验结构必需（id + 嵌入模型引用），其余字段（chunkSize/threshold/
-          // dimensions 等）按原样透传——v0.3.2 事故：dimensions 在
+          // dimensions 等）按原样透传—— 事故：dimensions 在
           // KnowledgeEmbeddingRef 里本就可选（旧 base 无此值），过严校验把整条
           // topic-send 炸掉，用户的知识库助手完全无法发消息。
           if (
@@ -793,17 +793,17 @@ function registerKernelIpc(): () => void {
         ) {
           throw new Error('kernel: invalid memory in topic send options')
         }
-        // 只上行助手 id：memory 根目录由主进程派生（路径权威在主进程，v0.4.6）。
+        // 只上行助手 id：memory 根目录由主进程派生（路径权威在主进程）。
         cleanOptions.memory = { assistantId: memory.assistantId }
       }
-      // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
+      // 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
       setTurnGenerateImageConfig(id, cleanOptions.generateImage)
       await topicTree(requireKernel()).send(id, text, cleanOptions)
       return { ok: true }
     }
   )
 
-  // 内核图片附件回放同步（v0.3.1 识图通道）：按 ref 从附件仓读回并核验字节，
+  // 内核图片附件回放同步（识图通道）：按 ref 从附件仓读回并核验字节，
   // 确定性落进渲染层文件仓（<attachmentId>.<ext>，同 id 同字节幂等），返回 FileMetadata。
   // 渲染层把它 upsert 进 Dexie 后即可按普通图片块渲染（file:// 直读）。
   handle(IpcChannel.Dsh_AttachmentSync, async (_event, ref: unknown) => {
@@ -904,7 +904,7 @@ function registerKernelIpc(): () => void {
     return { ok: interactionHub?.answerQuestion(answer) ?? false }
   })
 
-  // k2-29：停机时逐 channel 撤销。`removeHandler` 对未注册通道是安全的空操作。
+  // 停机时逐 channel 撤销。`removeHandler` 对未注册通道是安全的空操作。
   return () => {
     for (const channel of registeredChannels) {
       ipcMain.removeHandler(channel)

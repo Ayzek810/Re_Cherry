@@ -49,7 +49,7 @@ describe('generate_image 工具', () => {
         provider: 'p',
         model: 'm',
         prompt: 'a cat',
-        // v0.3.3 批次6：canonical 键名（V2 的 size/numImages）；上限随 numImages 声明放宽到 10
+        // canonical 键名（V2 的 size/numImages）；上限随 numImages 声明放宽到 10
         paramValues: { size: '512x512', numImages: 10 }
       }),
       exec.signal

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 用量读取的失败语义（v1 二轮审查 s2-06）。
+ * 用量读取的失败语义。
  *
  * 修改前 `queryUsage` 在 Dexie 读取失败时返回 `summarizeUsage([], range)` —— 一个合法的
  * 「空汇总」。调用方无法区分「读取失败」与「真的 0 条记录」，于是面板把数据库错误画成

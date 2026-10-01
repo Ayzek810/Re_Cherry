@@ -135,7 +135,7 @@ const SECRET_KEY_VALUE_PATTERN =
 // Bearer/Basic must run before the key=value pass — see the tests for why.
 const BEARER_SCHEME_PATTERN = /\b(Bearer|Basic)\s+("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s"',;}\]]+)/gi
 
-// Value-shape fallback (k2-26): provider error bodies echo the key itself
+// Value-shape fallback : provider error bodies echo the key itself
 // (`{"error":{"message":"Incorrect API key provided: sk-..."}}`), where no
 // `key: value` pair exists for SECRET_KEY_VALUE_PATTERN to anchor on. The
 // vendor prefixes below are self-identifying, so the shape is enough.

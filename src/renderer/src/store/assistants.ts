@@ -20,7 +20,7 @@ import { DEFAULT_CONTEXTCOUNT, DEFAULT_TEMPERATURE } from '@renderer/config/cons
 import { TopicManager } from '@renderer/hooks/useTopic'
 import { getDefaultAssistant, getDefaultTopic } from '@renderer/services/AssistantService'
 import type { Assistant, AssistantSettings, Model, Topic } from '@renderer/types'
-// r2-71：血缘闭包与父→子索引只存在一份（`utils/topicBranch`），本切片的删除路径直接复用。
+// 血缘闭包与父→子索引只存在一份（`utils/topicBranch`），本切片的删除路径直接复用。
 import { collectSubtreeIds } from '@renderer/utils/topicBranch'
 import { isEmpty, uniqBy } from 'lodash'
 
@@ -126,7 +126,7 @@ const assistantsSlice = createSlice({
         )
       },
       /**
-       * r2-31：`createdAt`/`updatedAt` 的缺省值必须在 **action 创建时**定妥，reducer 只做赋值。
+       * `createdAt`/`updatedAt` 的缺省值必须在 **action 创建时**定妥，reducer 只做赋值。
        * 同一 action 会被 StoreSync 原样广播给 mini 窗（`store/index.ts` 的 syncList 含
        * `'assistants/'`，见 `src/main/services/StoreSyncService.ts`），两个窗口各跑一次 reducer；
        * reducer 内 `new Date()` 会让同一条话题在两窗拿到不同的时间戳——侧栏按 updatedAt 排序、
@@ -161,7 +161,7 @@ const assistantsSlice = createSlice({
       )
     },
     /**
-     * 以内核结果**剪除**渲染层陈旧行（v0.3.0-2 目标 B）：按 id 删除这些根行及其全部 fork 后代。
+     * 以内核结果**剪除**渲染层陈旧行：按 id 删除这些根行及其全部 fork 后代。
      *
      * 与相邻 action 的语义边界（勿混用）：
      * - `updateTopics`：以根列表**替换**并保留血缘仍成立的后代行（侧栏只操作根）；
@@ -192,7 +192,7 @@ const assistantsSlice = createSlice({
             ? {
                 ...assistant,
                 topics: normalizeTopics(assistant.topics).map((topic) => {
-                  // r2-70：不再就地改 action payload（`newTopic` 会原样入 state）/不再无条件
+                  // 不再就地改 action payload（`newTopic` 会原样入 state）/不再无条件
                   // `messages = []`。口径与下面的 `updateTopics` 对齐：侧栏 topic 行是轻量投影，
                   // 带 messages 的才换新对象剔除之，否则保留引用。
                   const candidate = topic.id === newTopic.id ? newTopic : topic
@@ -203,7 +203,7 @@ const assistantsSlice = createSlice({
         )
       },
       /**
-       * r2-31：updatedAt 在 action 创建时盖章（reducer 内 `new Date()` 的同一条理由：本 action
+       * updatedAt 在 action 创建时盖章（reducer 内 `new Date()` 的同一条理由：本 action
        * 属于 `'assistants/'`，会被广播到 mini 窗，两窗必须算出同一个值）。语义与旧实现一致——
        * 旧实现是在 reducer 里无条件 `newTopic.updatedAt = new Date().toISOString()`。
        */
@@ -253,7 +253,7 @@ const assistantsSlice = createSlice({
     },
     updateTopicUpdatedAt: {
       reducer: (state, action: PayloadAction<{ topicId: string; updatedAt: string }>) => {
-        // 全持有者提升（v0.3.0-5）：隔离对账前的历史污染可能让多个助手持有同 id 行，
+        // 全持有者提升：隔离对账前的历史污染可能让多个助手持有同 id 行，
         // first-match 只提升污染副本会让归属助手的 familyRefreshKey（图/页码条的失效签名）
         // 停留不更新 → 陈旧家族缓存。每一份持有者都提升，幂等无副作用。
         const { topicId, updatedAt } = action.payload
@@ -265,20 +265,20 @@ const assistantsSlice = createSlice({
           }
         }
       },
-      /** r2-31：时间戳在 action 创建时定妥（本 action 同属 `'assistants/'`，会广播到 mini 窗）。 */
+      /** 时间戳在 action 创建时定妥（本 action 同属 `'assistants/'`，会广播到 mini 窗）。 */
       prepare: (payload: { topicId: string }) => ({
         payload: { topicId: payload.topicId, updatedAt: new Date().toISOString() }
       })
     },
     updateTopicName: (state, action: PayloadAction<{ topicId: string; name: string }>) => {
-      // 全持有者写入（与 updateTopicUpdatedAt 同理由，v0.3.0-5）：隔离对账前的历史污染
+      // 全持有者写入（与 updateTopicUpdatedAt 同理由）：隔离对账前的历史污染
       // 可能让多个助手持有同 id 行，只写 first-match 会让污染副本维持旧名。
       //
       // 与通用 updateTopic 的关键差异：**不 bump updatedAt**。updatedAt 在
       // familyRowSignature（页码条/分支图的家族缓存失效签名）里，而名字落定时
       // 结构/活动都没变——用 updateTopic 落名会把每次命名都变成一次全家族重取，
       // 表现为对话树数字连跳（真机 2026-09-17：dsh session/title 事件首次持续
-      // 流动后暴露；v0.3.1 起调用方为 services/topicNaming.ts 的自动命名，规则
+      // 流动后暴露；起调用方为 services/topicNaming.ts 的自动命名，规则
       // 不变）。名字是标签不是活动；真活动（发送/回合结束）由
       // updateTopicUpdatedAt 专门负责。
       for (const assistant of state.assistants) {
@@ -290,10 +290,10 @@ const assistantsSlice = createSlice({
       }
     },
     /**
-     * 发送时刻的"活动浮顶"写入（v0.3.1 验收轮，用户反馈：底层话题发消息后应浮到侧栏顶部）。
+     * 发送时刻的"活动浮顶"写入（验收轮，用户反馈：底层话题发消息后应浮到侧栏顶部）。
      *
      * - 这是**数组序的写入**，不是显示时排序：显示时排序会把拖拽/置顶的序再吞一次
-     *   （v0.3.1 刚修的病根），写数组序才是唯一不被吞的落点；
+     * （刚修的病根），写数组序才是唯一不被吞的落点；
      * - 只动位置，不碰任何字段（updatedAt 由成对的 updateTopicUpdatedAt 负责）——同
      *   updateTopicName 的教义：位置也不是"活动"，familyRowSignature（页码条/分支图缓存
      *   失效签名）不因本 action 变化；
@@ -378,7 +378,7 @@ export const selectTopicsMap = createSelector([selectAllTopics], (topics) => {
 })
 
 /**
- * 话题行归属的**唯一权威判定**（v0.3.0-5）：返回实际持有该话题行的助手。
+ * 话题行归属的**唯一权威判定**：返回实际持有该话题行的助手。
  *
  * 为什么不能信行上的 `assistantId` 字段：隔离对账前的历史污染行、以及任何没经过
  * `recordTopicView` 归一的行，该字段都可能指向别的助手。按字段找助手会拿到**错误的话题

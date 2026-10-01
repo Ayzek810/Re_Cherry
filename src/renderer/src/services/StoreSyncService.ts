@@ -25,7 +25,7 @@ export class StoreSyncService {
   }
   private broadcastSyncRemover: (() => void) | null = null
   /**
-   * `beforeunload` 处理器（v1 二轮性能审计 p2-14）。必须有稳定引用，`unsubscribe()`
+   * `beforeunload` 处理器。必须有稳定引用，`unsubscribe()`
    * 才能 `removeEventListener` 摘掉它；否则每次 `subscribe()` 都会多挂一个监听器，
    * 旧的还一直持有本 service 引用。
    */
@@ -99,7 +99,7 @@ export class StoreSyncService {
    * Sets up IPC listener and registers cleanup on window close
    */
   public subscribe(): void {
-    // 幂等入口（v1 二轮性能审计 p2-14）：重复 subscribe 前先摘干净上一轮，
+    // 幂等入口：重复 subscribe 前先摘干净上一轮，
     // 否则每次都会多挂一个 beforeunload 监听器。
     this.unsubscribe()
 
@@ -120,7 +120,7 @@ export class StoreSyncService {
 
     void window.api.storeSync.subscribe()
 
-    // p2-14：handler 存成实例字段，`unsubscribe()` 才能摘掉它。此前传的是匿名箭头函数，
+    // handler 存成实例字段，`unsubscribe()` 才能摘掉它。此前传的是匿名箭头函数，
     // 无引用留存 ⇒ `unsubscribe()` 只摘 IPC remover，`beforeunload` 监听器永久累积
     // （每次重新 subscribe 多一个，且旧的仍持有本 service 引用）。
     window.addEventListener('beforeunload', this.beforeUnloadHandler)

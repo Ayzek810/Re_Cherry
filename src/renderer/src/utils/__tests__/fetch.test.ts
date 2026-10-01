@@ -90,9 +90,9 @@ describe('fetch', () => {
       expect(window.api.searchService.openUrlInSearchWindow).toHaveBeenCalled()
     })
 
-    // r2-75：非取消的失败必须 reject —— 此前它返回 content='No content found' 的"成功"结果，
+    // 非取消的失败必须 reject —— 此前它返回 content='No content found' 的"成功"结果，
     // 让引用卡把抓取失败渲染成"页面没有正文"。
-    it('rejects instead of faking a no-content success (r2-75)', async () => {
+    it('rejects instead of faking a no-content success', async () => {
       // 无效 URL
       await expect(fetchWebContent('not-a-url')).rejects.toThrow('Invalid URL format')
 
@@ -186,8 +186,8 @@ describe('fetch', () => {
       expect(results[1].content).toBe('# Test content')
     })
 
-    // r2-75：批量抓取不再把单条失败折成成功的 "No content found" 结果；失败向上抛。
-    it('rejects when a URL fails instead of disguising it as no content (r2-75)', async () => {
+    // 批量抓取不再把单条失败折成成功的 "No content found" 结果；失败向上抛。
+    it('rejects when a URL fails instead of disguising it as no content', async () => {
       vi.mocked(global.fetch)
         .mockResolvedValueOnce(createMockResponse())
         .mockRejectedValueOnce(new Error('Network error'))
@@ -208,7 +208,7 @@ describe('fetch', () => {
       expect(global.fetch).toHaveBeenCalledWith('https://example.com', expect.any(Object))
     })
 
-    it('rejects when the redirect cannot be resolved (r2-91: no fake "no redirect" result)', async () => {
+    it('rejects when the redirect cannot be resolved (: no fake "no redirect" result)', async () => {
       vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'))
 
       await expect(fetchRedirectUrl('https://example.com')).rejects.toThrow('Network error')

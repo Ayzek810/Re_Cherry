@@ -8,7 +8,7 @@ import { MessageBlockStatus } from '@renderer/types/newMessage'
 /**
  * 未决审批按 toolCallId 建索引，reselect 以 `requests` 切片引用为缓存键：同一批 store 变更内只建一次。
  * 旧实现是"每个工具块 × 每次 store 通知"各做一次 `Object.values(...).find(...)` 全表扫描，
- * 全部落在同一帧（§12 渲染饥饿的组成部分）。
+ * 全部落在同一帧（渲染饥饿的组成部分）。
  */
 export const selectApprovalRequestByToolCallId = createSelector(
   [(state: RootState) => state.toolPermissions.requests],
@@ -45,7 +45,7 @@ export interface UseToolApprovalOptions {
 }
 
 /**
- * 内核审批往返（v0.3.0 Step 2）：按 callId 配对 toolPermissions 里未决的审批请求，
+ * 内核审批往返（Step 2）：按 callId 配对 toolPermissions 里未决的审批请求，
  * 允许/拒绝经 IPC 发回内核（KernelInteractionHub.decideApproval），内核唤醒后继续回合。
  */
 export function useToolApproval(

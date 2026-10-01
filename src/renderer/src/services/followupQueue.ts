@@ -1,5 +1,5 @@
 /**
- * 追问队列泵（v0.4.7）。回合成功结束后把队首追问按正常发送路径发出；
+ * 追问队列泵。回合成功结束后把队首追问按正常发送路径发出；
  * 暂停态/空队列不泵。发送构建与 Inputbar.sendMessage 的纯文本路径同构
  * （getUserMessage + usage 估算 + sendMessageThunk），trace span 不另启
  * （队列发送是用户已提交消息的延迟重放，不是新的根交互）。
@@ -32,7 +32,7 @@ export async function pumpFollowupQueue(topicId: string): Promise<void> {
     return
   }
 
-  // 限流命中 = 发不出去：退回**队首原位**等待（不发也不丢，r2-18 前是 remove+enqueue 会被推到队尾并换新 id）。
+  // 限流命中 = 发不出去：退回**队首原位**等待（不发也不丢， 前是 remove+enqueue 会被推到队尾并换新 id）。
   if (checkRateLimit(assistant)) {
     store.dispatch(requeueFollowupHead({ topicId, item: next }))
     logger.warn('followupQueue: rate limited, kept head item in place')
@@ -44,7 +44,7 @@ export async function pumpFollowupQueue(topicId: string): Promise<void> {
     baseUserMessage.usage = await estimateUserPromptUsage(baseUserMessage)
     const { message, blocks } = getUserMessage(baseUserMessage)
 
-    // r2-17：先构建后移除。构建期抛错时队首原样留在队列里（保 id、保顺序），
+    // 先构建后移除。构建期抛错时队首原样留在队列里（保 id、保顺序），
     // 用户的排队文本不会"逐字消失"——旧实现在这里先 remove，失败只剩一条日志。
     store.dispatch(removeFollowup({ topicId, id: next.id }))
     void store.dispatch(sendMessage(message, blocks, assistant, topicId))

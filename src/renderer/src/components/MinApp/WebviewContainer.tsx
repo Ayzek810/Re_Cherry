@@ -44,7 +44,7 @@ const WebviewContainer = memo(
       if (!webviewRef.current) return
 
       let loadCallbackFired = false
-      // c2-17：这个定时器必须可被清理。小程序在 100ms 窗口内被关闭/淘汰时，回调仍会
+      // 这个定时器必须可被清理。小程序在 100ms 窗口内被关闭/淘汰时，回调仍会
       // `setWebviewLoaded(appid, true)` 写进模块级全局 Map，下一个同名 appid 实例会以
       // 「已加载」身份重现（加载遮罩不再出现，用户看到空白 webview）。
       let loadCallbackTimer: ReturnType<typeof setTimeout> | null = null

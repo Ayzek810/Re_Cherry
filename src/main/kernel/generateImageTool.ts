@@ -1,5 +1,5 @@
 /**
- * generate_image 内核 builtin 工具（v0.3.3 批次5，V2 PaintingTool 同构）。
+ * generate_image 内核 builtin 工具（V2 PaintingTool 同构）。
  *
  * 对话模型经 tool call 出图：执行 = 轻量 AI 服务面 lightGenerateImage
  * （lightLlmModalities 直调，主进程内无 IPC）；独立绘画模型出图，不用对话模型
@@ -77,7 +77,7 @@ export function apply(ctx: Context): void {
           }
         },
         render: (_args, value) => [{ type: 'text', text: `Generated ${value.count} image(s) for: ${value.prompt}` }],
-        // 批次5 投影通道（webSearch presentationMeta 同构）：结构化图片列表随
+        // 投影通道（webSearch presentationMeta 同构）：结构化图片列表随
         // tool/result 事件 meta 上行——内核正规通道，持久化、回放复现。渲染层
         // kernelChat 读 event.data.meta.kind === 'generate-image' 建 IMAGE 块。
         // 不走 tool/result 文本（那是 render 的人读句子，非 JSON）。
@@ -113,13 +113,13 @@ export function apply(ctx: Context): void {
             provider: config.providerId,
             model: config.modelId,
             prompt,
-            // fork 缝（v0.3.3 批次6）：工具无目录信息，只下发两个基础键；主进程按
+            // fork 缝：工具无目录信息，只下发两个基础键；主进程按
             // provider 的 wire profile 改名（diffusion 档），与旧行为等价。
             paramValues: { size: imageSize, numImages: batchSize },
             requestId
           },
           // exec.signal（回合暂停/中止）与 requestId 注册表（Dsh_LightImageAbort）在
-          // lightGenerateImage 内取并集，任一来源取消都打断在途请求（k2-13）；
+          // lightGenerateImage 内取并集，任一来源取消都打断在途请求；
           // 旧注释"工具路径无渲染层取消方"是错的：绘画页与工具共用同一 requestId 通道。
           exec.signal
         )

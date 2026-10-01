@@ -1,5 +1,4 @@
 /**
- * v1 二轮审查 m2-04 的行为证据。
  *
  * 缺陷：网关停机链路刻意「永不 reject」（关闭失败只吞成一行 warn，超时也不再等），
  * 而 `ApiGatewayService.deactivate()` 无条件 `activated = false` 并广播「已停」——
@@ -36,7 +35,7 @@ function fakeServerInfo(options: {
   }
 }
 
-describe('closeServerInfo (m2-04)', () => {
+describe('closeServerInfo', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

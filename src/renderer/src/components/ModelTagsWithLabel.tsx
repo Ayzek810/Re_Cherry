@@ -49,7 +49,7 @@ const ModelTagsWithLabel: FC<ModelTagsProps> = ({
   const [shouldShowLabel, setShouldShowLabel] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeObserver = useRef<ResizeObserver | null>(null)
-  // c2-26：`i18n.language` 是可变的全局值。原来经默认单例读取且依赖数组为空，
+  // `i18n.language` 是可变的全局值。原来经默认单例读取且依赖数组为空，
   // 语言切换后 `maxWidth` 仍是旧值（英文标签更长，被压在 zh 的阈值下不显示），
   // 直到重启才恢复。走 `useTranslation()`，组件订阅语言变化并把它放进依赖。
   const { i18n } = useTranslation()
@@ -90,7 +90,7 @@ const ModelTagsWithLabel: FC<ModelTagsProps> = ({
       {showToolsCalling && isFunctionCallingModel(model) && (
         <ToolsCallingTag size={size} showTooltip={showTooltip} showLabel={shouldShowLabel} />
       )}
-      {/* v0.3.3-18：生图标签（窄语义 = V2 的专用/文生图）。与嵌入/重排同形态，只传 size。 */}
+      {/* ：生图标签（窄语义 = V2 的专用/文生图）。与嵌入/重排同形态，只传 size。*/}
       {isTextToImageModel(model) && <ImageGenerationTag size={size} />}
       {isEmbeddingModel(model) && <EmbeddingTag size={size} />}
       {showFree && isFreeModel(model) && <FreeTag size={size} />}

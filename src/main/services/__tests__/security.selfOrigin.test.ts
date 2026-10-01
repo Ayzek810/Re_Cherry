@@ -1,5 +1,5 @@
 /**
- * v0.3.1-2：自身源导航判定测试。
+ * 自身源导航判定测试。
  *
  * 事故：`WindowService` 的 `will-navigate` 把自身源豁免硬编码为上游 dev 端口 `localhost:517`，
  * 而本 fork 的 dev 端口是 `DSH_DEV_PORT || 5870` → dev 下对自身源的整页导航被判为外链，

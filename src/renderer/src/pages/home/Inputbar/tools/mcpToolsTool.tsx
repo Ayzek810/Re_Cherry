@@ -3,9 +3,9 @@ import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputb
 import MCPToolsButton from './components/MCPToolsButton'
 
 /**
- * MCP Tools Tool（v0.3.2 自 CS_V1 移植）
- * 批次1 仅为 UI 开关（写 assistant.mcpMode / mcpServers）；服务器进程与工具调用批次3 接线。
- * V1 的 Prompts/Resources 两个 QuickPanel 入口依赖 window.api.mcp.*（fork 暂无该通道），批次3 恢复。
+ * MCP Tools Tool（自 CS_V1 移植）
+ * 仅为 UI 开关（写 assistant.mcpMode / mcpServers）；服务器进程与工具调用 接线。
+ * V1 的 Prompts/Resources 两个 QuickPanel 入口依赖 window.api.mcp.*（fork 暂无该通道），恢复。
  */
 const mcpToolsTool = defineTool({
   key: 'mcp_tools',

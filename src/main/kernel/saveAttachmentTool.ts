@@ -1,5 +1,5 @@
 /**
- * save_attachment 工作模式外置工具（v0.4.6）。
+ * save_attachment 工作模式外置工具。
  *
  * V2 saveAttachment.ts 同构物：把本轮附件（FILE 附件，read_document 同一登记）的原始
  * 字节复制为工作区**新**文件，工作模式 fs 工具链从此可以加工它。边界与安全设计照抄：

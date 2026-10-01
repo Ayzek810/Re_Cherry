@@ -13,7 +13,7 @@ type Props = {
   isOpen: boolean
   items: TranslateRecord[]
   languageLabel: (code: AnyTranslateLangCode | 'auto') => string
-  /** 历史读取失败原因（null = 没有失败）。失败不得与"暂无记录"同形（二轮审查 f2-24）。 */
+  /** 历史读取失败原因（null = 没有失败）。失败不得与"暂无记录"同形。 */
   error: string | null
   /** 清掉错误态并重跑一次历史读取。 */
   onRetry: () => void
@@ -59,7 +59,7 @@ const TranslateHistoryList: FC<Props> = ({
       title={t('translate.history')}
       styles={{ body: { paddingTop: 12 } }}>
       {error !== null && items.length === 0 ? (
-        // 二轮审查 f2-24：读取失败此前渲染成官方的"暂无翻译记录"空态——用户会判断"没有记录"
+        // 读取失败此前渲染成官方的"暂无翻译记录"空态——用户会判断"没有记录"
         // 并重复翻译，而本地历史是唯一副本。失败态与空态并列，并给出重试。
         <div
           data-testid="translate-history-error"

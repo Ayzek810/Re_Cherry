@@ -1,10 +1,10 @@
 /**
- * v1 二轮审查 m2-22 / m2-23 的行为证据（MCPService 客户端注册表投影）。
+ * MCPService 客户端注册表投影。
  *
- * m2-23：`setServers` 的关闭判据此前只是「id 从新表消失」，而 `clients` 的键是配置内容哈希。
+ * `setServers` 的关闭判据此前只是「id 从新表消失」，而 `clients` 的键是配置内容哈希。
  * 编辑服务器（改 command/args/env 是设置页常规操作）时 id 仍在表里，旧 key 的 Client 与它
  * spawn 的 stdio 子进程都不会被关闭。
- * m2-22：`getServerKey` 每调用点逐次 `JSON.stringify`（`emitServerLog` 每个 stderr 分片一次）。
+ * `getServerKey` 每调用点逐次 `JSON.stringify`（`emitServerLog` 每个 stderr 分片一次）。
  * 改为 `setServers` 投影期算一次并缓存。
  *
  * 本文件用真 MCPService，只注入 self 一致性对的假 Client + 假传输，直接观测
@@ -87,7 +87,7 @@ async function connect(service: AnyService, config: Record<string, unknown>) {
   return { key, client: client! }
 }
 
-describe('MCPService 配置注册表投影 (m2-22 / m2-23)', () => {
+describe('MCPService 配置注册表投影', () => {
   let service: AnyService
 
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe('MCPService 配置注册表投影 (m2-22 / m2-23)', () => {
     service.pendingClients.clear()
   })
 
-  it('m2-23：配置内容变化（id 不变）时关闭旧客户端并丢弃旧 key 的 pending', async () => {
+  it('配置内容变化（id 不变）时关闭旧客户端并丢弃旧 key 的 pending', async () => {
     const before = server()
     service.setServers([before])
     const { key: oldKey, client: oldClient } = await connect(service, before)
@@ -118,7 +118,7 @@ describe('MCPService 配置注册表投影 (m2-22 / m2-23)', () => {
     expect(service.serverKeys.get('srv-1')).toBe(service.getServerKey(after))
   })
 
-  it('m2-23：id 从新注册表消失时同样关闭旧客户端', async () => {
+  it('id 从新注册表消失时同样关闭旧客户端', async () => {
     const config = server()
     service.setServers([config])
     const { key, client } = await connect(service, config)
@@ -130,7 +130,7 @@ describe('MCPService 配置注册表投影 (m2-22 / m2-23)', () => {
     expect(service.serverKeys.has('srv-1')).toBe(false)
   })
 
-  it('m2-23：配置内容不变时不关客户端（不误伤连接）', async () => {
+  it('配置内容不变时不关客户端（不误伤连接）', async () => {
     const config = server()
     service.setServers([config])
     const { client } = await connect(service, config)
@@ -142,7 +142,7 @@ describe('MCPService 配置注册表投影 (m2-22 / m2-23)', () => {
     expect(service.clients.size).toBe(1)
   })
 
-  it('m2-22：setServers 投影时算一次 key，getServerKey 读缓存（内容相同则键相同）', async () => {
+  it('setServers 投影时算一次 key，getServerKey 读缓存（内容相同则键相同）', async () => {
     const first = server()
     service.setServers([first])
     const projected = service.getServerKey(first)
@@ -152,7 +152,7 @@ describe('MCPService 配置注册表投影 (m2-22 / m2-23)', () => {
     expect(service.getServerKey({ ...server() })).toBe(projected)
   })
 
-  it('m2-22/23：同步后缓存键随新配置更新（编辑后缓存不复用旧键）', async () => {
+  it('/23：同步后缓存键随新配置更新（编辑后缓存不复用旧键）', async () => {
     service.setServers([server()])
     const before = service.getServerKey(server())
 

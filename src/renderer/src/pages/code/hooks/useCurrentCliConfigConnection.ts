@@ -19,7 +19,7 @@ import { safeCreateUniqueModelId } from '../cliConfig/values'
 import type { ApiGatewayProviderBundle } from './useApiGatewayProvider'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useCurrentCliConfigConnection.ts
-//（2026-09-24，v0.3.4-1 批次4a）。缝点三处，读-比-置数据流（generation/cancelled 竞态守卫）逐字：
+//（2026-09-24）。缝点三处，读-比-置数据流（generation/cancelled 竞态守卫）逐字：
 // ① keys 缝：V2 经 DataApi `dataApiService.get('/providers/{id}/api-keys')` 读 provider 密钥表
 //   ← fork provider 无独立 keys 表（单 apiKey 字段，redux llm 快照为真源），构造同形单条
 //   ApiKeyEntry。

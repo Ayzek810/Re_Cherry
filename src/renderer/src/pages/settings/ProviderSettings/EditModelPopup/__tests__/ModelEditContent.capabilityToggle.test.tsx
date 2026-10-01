@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 能力标签的开关方向（v1 二轮审查 s2-42）。
+ * 能力标签的开关方向。
  *
  * 审计判断：`updateType` 的空依赖闭包永远用首帧那份 `selectedTypes`，于是第二次点击方向会错。
  * 复核结论（NOT-A-PROBLEM）：`ModelCapability` 定义在 `ModelEditContent` 的渲染体内，每次父渲染

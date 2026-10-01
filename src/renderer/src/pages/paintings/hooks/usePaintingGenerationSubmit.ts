@@ -1,5 +1,5 @@
 /**
- * 提交编排 hook（v0.3.3 批次4，② 薄适配）：validate→materialize→generate 骨架
+ * 提交编排 hook（② 薄适配）：validate→materialize→generate 骨架
  * 保留；materialize 桥简化——输入图来自页面自持 inputFiles（tray.materializeInputs），
  * 无 ComposerToolRuntime。两道闸（validateBeforeGenerate / complete flag）原样。
  */

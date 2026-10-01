@@ -10,7 +10,7 @@ import { disposeTopicQueue, getTopicQueue, hasTopicPendingRequests, waitForTopic
 /** 让 p-queue 的微任务链跑完（等待队列进入 idle）。 */
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-describe('utils/queue（audit2 r2-97）', () => {
+describe('utils/queue', () => {
   describe('scheduling behaviour（真实定时器；用 scheduleEviction 的 5 分钟延时保证不触发）', () => {
     beforeEach(() => {
       vi.clearAllMocks()

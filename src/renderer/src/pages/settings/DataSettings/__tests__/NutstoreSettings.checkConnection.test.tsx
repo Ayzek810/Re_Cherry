@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * Nutstore 连接检测的失败路径（v1 二轮审查 s2-07）。
+ * Nutstore 连接检测的失败路径。
  *
  * 被调方 `checkConnection` 会 reject（凭据 / 主机 / 路径写错时正是这条路径）。修改前
  * 函数内没有 try/catch，`setCheckConnectionLoading(false)` 永不执行：按钮永久转圈、

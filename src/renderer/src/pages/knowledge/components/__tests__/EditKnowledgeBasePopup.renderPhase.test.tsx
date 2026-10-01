@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-19：`EditKnowledgeBasePopup` 在 render 阶段调用 `resolve()`。
+ * `EditKnowledgeBasePopup` 在 render 阶段调用 `resolve()`。
  *
  * 缺陷形态：`if (!base) { resolve(null); return null }` 写在组件渲染体内，而 `show()` 传入的
  * `resolve` 包装先 `this.hide()`（TopView 容器 setState）再 `resolve(v)`。等于在一个组件渲染期间
@@ -54,7 +54,7 @@ import EditKnowledgeBasePopup from '../EditKnowledgeBasePopup'
 
 const anyBase = { id: 'base-1', name: 'Demo' } as KnowledgeBase
 
-describe('EditKnowledgeBasePopup render 期副作用（f2-19）', () => {
+describe('EditKnowledgeBasePopup render 期副作用', () => {
   it('base 缺省：只渲染 null、无渲染期跨组件更新告警、resolve(null) 恰好一次', async () => {
     useKnowledgeMock.mockReturnValue({ base: undefined, updateKnowledgeBase: vi.fn(), migrateBase: vi.fn() })
 

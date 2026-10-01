@@ -155,7 +155,7 @@ const PopupContainer: React.FC<Props> = ({ providerId, resolve }) => {
   const onRemoveModel = useCallback((model: Model) => removeModel(model), [removeModel])
 
   /**
-   * 「移除列表中的模型」是破坏性批量操作（v1 二轮审查 s2-15）：修改前没有任何确认框，
+   * 「移除列表中的模型」是破坏性批量操作：修改前没有任何确认框，
    * 且逐条 `dispatch(removeModel)` —— 每一条都是一次整片持久化 + 一次 IPC 广播
    *（`store/index.ts` 的 `syncList ['assistants/','llm/']`）。现在沿用 `onAddAll` 的确认框形态，
    * 并把「移除全部」收敛成**一次** `updateProvider`（`removeModel` 的语义就是按 id 过滤 models，

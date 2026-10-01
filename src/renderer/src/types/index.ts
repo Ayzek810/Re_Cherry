@@ -79,8 +79,8 @@ export type Assistant = {
    */
   externalTools?: Record<string, boolean>
   /**
-   * 按助手启用的技能（skill folderName 列表；技能系统 v0.3.2 加回）。
-   * 批次1 仅 UI 状态持久化，触发机制批次5 接线。
+   * 按助手启用的技能（skill folderName 列表；技能系统 加回）。
+   * 仅 UI 状态持久化，触发机制 接线。
    */
   enabledSkills?: string[]
 }
@@ -351,7 +351,7 @@ export enum ThemeMode {
   system = 'system'
 }
 
-/** 有限的UI语言（v0.2.4-1 i18n 收敛为 zh-CN / en-US，其余语言包已删） */
+/** 有限的UI语言（i18n 收敛为 zh-CN / en-US，其余语言包已删） */
 export type LanguageVarious = 'zh-CN' | 'en-US'
 
 export type CodeStyleVarious = 'auto' | string
@@ -388,7 +388,7 @@ export interface Shortcut {
   system: boolean
 }
 
-// r2-105：`ProcessingStatus` 的定义唯一化在 `./knowledge`（`KnowledgeItem.processingStatus` 的归属类型），
+// `ProcessingStatus` 的定义唯一化在 `./knowledge`（`KnowledgeItem.processingStatus` 的归属类型），
 // 这里原先另有一份逐字重复的本地声明——本地声明会遮蔽 barrel 导出，任一边增删状态都会让
 // `@renderer/types` 消费方与 `KnowledgeItem` 静默分叉。现改为再导出同一份。
 export type { ProcessingStatus } from './knowledge'
@@ -836,6 +836,6 @@ export const isHexColor = (value: string): value is HexColor => {
 }
 
 // More specific than NonNullable
-// `NotUndefined` 仍被 `types/aiCoreTypes.ts` 使用，保留；同族的 `NotNull` 在 r2-109
+// `NotUndefined` 仍被 `types/aiCoreTypes.ts` 使用，保留；同族的 `NotNull` 在
 // 复核中确认全仓零消费，已删除。
 export type NotUndefined<T> = Exclude<T, undefined>

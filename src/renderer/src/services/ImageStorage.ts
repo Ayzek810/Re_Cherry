@@ -11,11 +11,11 @@ export default class ImageStorage {
   /**
    * 写入（upsert）。
    *
-   * r2-08：此前分 add / update 两支，update 支是 `void db.settings.update(...)`——既不 await
+   * 此前分 add / update 两支，update 支是 `void db.settings.update(...)`——既不 await
    * 也不 catch：写失败变成 unhandled rejection，而 `set()` 在落库前就 resolve，紧跟其后的
    * `await ImageStorage.get(key)` 读回旧值（三个调用点都用读回值设置 UI）。`put` 本身就是
    * upsert，无需先 `get` 再分叉；单支 awaited 写 ⇒ 写后读回一定看到新值，失败也不会静默
-   * （log + toast，CLAUDE.md §9）。
+   * （log + toast）。
    */
   static async set(key: string, value: File | string): Promise<void> {
     const id = IMAGE_PREFIX + key
@@ -39,7 +39,7 @@ export default class ImageStorage {
   }
 
   /**
-   * 读取。无记录时返回空串（r2-54：此前签名承诺 `string` 却在无记录时返回 `undefined`，
+   * 读取。无记录时返回空串（此前签名承诺 `string` 却在无记录时返回 `undefined`，
    * 调用方把 undefined 直接塞进 `setState`/渲染。这里按 finding 的第二方案统一归一化——
    * `''` 与「无记录」在渲染面等价，且 `set(key, '')` 本就是清除语义）。
    */

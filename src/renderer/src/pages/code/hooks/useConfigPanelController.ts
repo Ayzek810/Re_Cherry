@@ -28,7 +28,7 @@ import type {
 import type { ApiGatewayProviderBundle } from './useApiGatewayProvider'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useConfigPanelController.ts
-//（2026-09-24，v0.3.4-1 批次4a）。缝点四处，enable/edit 状态机（inFlightToolsRef、回滚、
+//（2026-09-24）。缝点四处，enable/edit 状态机（inFlightToolsRef、回滚、
 // 写前置/置 current 顺序）逐字：
 // ① toast 缝：`@renderer/services/toast` → fork `window.toast`；logger 缝：import 对号 '@logger'。
 // ② Props 类型缝：ConfigEditPanelProps/SubmitValues ← components/configEditPanel/types

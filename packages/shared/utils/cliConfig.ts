@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/shared/utils/cliConfig.ts（2026-09-24，v0.3.4-1）。
+// fork 移植自 cherry-studio v2 src/shared/utils/cliConfig.ts（2026-09-24）。
 // 改动仅一处裁剪（目标/文件规格表裁到 hermes 两 target），已标 `// fork 缝`。
 
 import { CodeCli } from '@shared/types/codeCli'

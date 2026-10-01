@@ -19,6 +19,7 @@ import { registerIpc } from './ipc'
 import { disposeOcrWorker } from './services/preprocess/localPaddle/localOcr'
 import { analyticsService } from './services/AnalyticsService'
 import { appMenuService } from './services/AppMenuService'
+import { appUpdateService } from './services/AppUpdateService'
 import { configManager } from './services/ConfigManager'
 import { deepSeekHarnessService } from './services/deepSeekHarness/DeepSeekHarnessService'
 import { hermesDashboardService } from './services/hermes/HermesDashboardService'
@@ -111,7 +112,7 @@ app.on('web-contents-created', (_, webContents) => {
   })
 })
 
-// v1 二轮审查 m2-18：这两个兜底此前被 `if (!isDev)` 门在**生产**之外——注释说
+// 这两个兜底此前被 `if (!isDev)` 门在**生产**之外——注释说
 // "in production mode"，但 dev 才是最需要"异常不要静默死掉"的环境（dev 期间主进程
 // 崩溃只留一行无归属堆栈，甚至被 Electron 默认行为直接终止，日志里完全没有取证通道）。
 // 现在无条件安装，两条 handler 都只记日志（不改变进程终止语义）。
@@ -200,7 +201,15 @@ if (!app.requestSingleInstanceLock()) {
       logger.error('Failed to init power monitor service', error instanceof Error ? error : new Error(String(error)))
     }
 
-    // v1 二轮审查 m2-19：这两行是本文件里仅有的、绕过 §6.8「每个可选初始化器包
+    // 应用更新：延迟做的首次检查（默认 15 s 后）。它只影响"能否发现新版本"，
+    // 失败不该拖累启动，故同样 log-only，并排在关键接线之后。
+    try {
+      appUpdateService.scheduleBootCheck()
+    } catch (error) {
+      logger.error('Failed to schedule app update check', error instanceof Error ? error : new Error(String(error)))
+    }
+
+    // 这两行是本文件里仅有的、绕过 「每个可选初始化器包
     // log-only try/catch」的裸调用。`nodeTraceService.init()` 构造 CacheBatchSpanProcessor
     // 并注册全局 tracer；`analyticsService.init()` 走 configManager 读取——任一抛出都会
     // 让本 `whenReady().then()` 的整条后续链（activate 分支、replaceDevtoolsFont、
@@ -231,7 +240,7 @@ if (!app.requestSingleInstanceLock()) {
     await setupAppImageDeepLink()
 
     if (isDev) {
-      // v0.2.4-1：改为按需安装。默认关闭——该扩展从 Chrome 应用商店下载，网络受限环境下
+      // 改为按需安装。默认关闭——该扩展从 Chrome 应用商店下载，网络受限环境下
       // 会重试 5 次并抛出 net::ERR_CONNECTION_TIMED_OUT（每次启动白等约 60s 且刷 ERROR 日志）。
       // 需要 React/Redux DevTools 时设置 RC_DEVTOOLS=1（可写入 .env）即可恢复原行为。
       if (process.env.RC_DEVTOOLS === '1') {
@@ -282,7 +291,7 @@ if (!app.requestSingleInstanceLock()) {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IpcChannel.App_SaveData)
     }
-    // v0.3.4-2：Windows 上子进程不随父退出（async will-quit 跑不完 Electron 就退了）。
+    // Windows 上子进程不随父退出（async will-quit 跑不完 Electron 就退了）。
     // before-quit 是同步事件——在这里同步杀，保证 dsh/hermes 进程不残留。
     // 静态导入的单例直调（ipc.ts 已把两服务纳入静态图；require() 在 rolldown 产物里
     // 解析不到相对路径，会被 try/catch 吞成静默失效——真机踩过）。
@@ -296,13 +305,13 @@ if (!app.requestSingleInstanceLock()) {
     } catch {
       /* 未启动 */
     }
-    // v0.4.5：paper-agent（源码型受管 Web UI）同款同步杀树。
+    // paper-agent（源码型受管 Web UI）同款同步杀树。
     try {
       paperAgentService.killSync()
     } catch {
       /* 未启动 */
     }
-    // v1 二轮审查 m2-03：常驻 OCR worker（onnxruntime + PaddleOCR 模型，数百 MB）此前漏在
+    // 常驻 OCR worker（onnxruntime + PaddleOCR 模型，数百 MB）此前漏在
     // 退出路径外——空闲 5 分钟才自退，解析后很快退出即残留子进程。（PDF 文本层抽取已回到
     // 主进程内的共用抽取引擎，不再有 pdf worker 需要释放。）
     try {
@@ -320,7 +329,7 @@ if (!app.requestSingleInstanceLock()) {
       logger.warn('Error cleaning up services:', error as Error)
     }
 
-    // 编码助手（v0.3.4-1）：退出前停受管 Web UI 进程与统一网关
+    // 编码助手：退出前停受管 Web UI 进程与统一网关
     // （V2 生命周期 onStop 语义；POSIX detached 下不主动停会残留进程组）
     try {
       await deepSeekHarnessService.stop()
@@ -332,7 +341,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       logger.warn('Error stopping Hermes Dashboard:', error as Error)
     }
-    // v0.4.5：paper-agent 同款（POSIX detached 下不主动停会残留进程组）。
+    // paper-agent 同款（POSIX detached 下不主动停会残留进程组）。
     try {
       await paperAgentService.stop()
     } catch (error) {
@@ -354,7 +363,7 @@ if (!app.requestSingleInstanceLock()) {
       logger.warn('Error stopping dsh kernel:', error as Error)
     }
 
-    // v1 二轮 k2-20：冲刷并关闭 tracer——批处理器里的在途 span 不冲刷就会随进程退出丢掉。
+    // 冲刷并关闭 tracer——批处理器里的在途 span 不冲刷就会随进程退出丢掉。
     // 失败只记日志（退出路径不因可观测性组件卡住）；放在 logger.finish() 之前，让告警能落盘。
     try {
       await nodeTraceService.shutdown()

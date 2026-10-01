@@ -49,13 +49,13 @@ export interface LlmState {
   topicNamingModel: Model
   quickModel: Model
   quickAssistantModel: Model | undefined
-  /** 转述模型（v0.3.1 识图通道补全）：主模型无视觉时描述图片的视觉模型；undefined = 通道关闭。 */
+  /** 转述模型（识图通道补全）：主模型无视觉时描述图片的视觉模型；undefined = 通道关闭。 */
   imageDescriberModel: Model | undefined
   /** 转述提示词：'' = 内置默认（@shared/config/imageDescriber）。 */
   imageDescriberPrompt: string
-  /** 翻译模型（v0.3.3 翻译页）：undefined = 未配置（翻译时明错提示）。 */
+  /** 翻译模型（翻译页）：undefined = 未配置（翻译时明错提示）。 */
   translateModel: Model | undefined
-  /** 绘画模型（v0.3.3 绘画页）：undefined = 未配置（生成时明错提示）。 */
+  /** 绘画模型（绘画页）：undefined = 未配置（生成时明错提示）。 */
   paintingModel: Model | undefined
   settings: LlmSettings
 }
@@ -69,9 +69,9 @@ export const initialState: LlmState = {
   imageDescriberPrompt: '',
   translateModel: undefined,
   paintingModel: undefined,
-  // r2-81：`SYSTEM_PROVIDERS_CONFIG` 的值是 `config/providers.ts` 的模块级单例对象。
+  // `SYSTEM_PROVIDERS_CONFIG` 的值是 `config/providers.ts` 的模块级单例对象。
   // migrate 分支会就地改写 provider（`provider.anthropicApiHost = …`、`provider.type = …`），
-  // 把同一批引用交给 state 就等于把模块默认表交给迁移去改。此处按 r2-28（websearch）同形克隆，
+  // 把同一批引用交给 state 就等于把模块默认表交给迁移去改。此处按 （websearch）同形克隆，
   // models 数组一并克隆（迁移会整表替换 `provider.models = SYSTEM_MODELS.x`，但 reducer 的
   // `provider.models[i] = …` 是就地写，数组共享仍会串到默认表）。
   providers: Object.values(omit(SYSTEM_PROVIDERS_CONFIG, INITIAL_STATE_EXCLUDED_PROVIDER_IDS)).map((provider) => ({
@@ -136,7 +136,7 @@ const getIntegratedInitialState = () => {
  * 把 provider `id` 移到 **1-based 目标位置** `position`（结果数组里 `newProviders[position - 1]`
  * 就是被移动的那个 provider）。
  *
- * r2-30 定本：`splice` 在**已移除自己**的数组上按 `position - 1` 插入，结果数组的
+ * 定本：`splice` 在**已移除自己**的数组上按 `position - 1` 插入，结果数组的
  * `newProviders[position - 1]` 就是被移动的 provider——这正是「1-based 目标位置」的字面
  * 语义，被移者在目标之前或之后都成立（见 `store/__tests__/moveProvider.test.ts`）。
  * 审计曾疑「移除后偏移一位」，那是把语义读成了「按**移除前**的下标插入」；按该读法实现
@@ -209,8 +209,8 @@ const llmSlice = createSlice({
       state.quickAssistantModel = action.payload.model
     },
 
-    // 转述模型（v0.3.1 识图通道补全）：undefined = 关闭（纯文本主模型收到图片时
-    // 只剩 wire 占位文本，与 v0.3.1 现状完全一致——门禁回收到未启用态）。
+    // 转述模型（识图通道补全）：undefined = 关闭（纯文本主模型收到图片时
+    // 只剩 wire 占位文本，与 现状完全一致——门禁回收到未启用态）。
     setImageDescriberModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
       state.imageDescriberModel = action.payload.model
     },
@@ -218,11 +218,11 @@ const llmSlice = createSlice({
     setImageDescriberPrompt: (state, action: PayloadAction<string>) => {
       state.imageDescriberPrompt = action.payload
     },
-    // 翻译模型（v0.3.3 翻译页）：undefined = 未配置。
+    // 翻译模型（翻译页）：undefined = 未配置。
     setTranslateModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
       state.translateModel = action.payload.model
     },
-    // 绘画模型（v0.3.3 绘画页）：undefined = 未配置。
+    // 绘画模型（绘画页）：undefined = 未配置。
     setPaintingModel: (state, action: PayloadAction<{ model: Model | undefined }>) => {
       state.paintingModel = action.payload.model
     },

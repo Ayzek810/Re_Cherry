@@ -29,7 +29,7 @@ import {
 import type { ConfigDraft, ConfigEditPanelProps } from './types'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/configEditPanel/
-// useConfigDraftController.ts（2026-09-24，v0.3.4-1 批次4b）。缝点四处，草稿状态机
+// useConfigDraftController.ts（2026-09-24）。缝点四处，草稿状态机
 //（initial load 门控/managed-foreign 判定/文件回写/提交构造）逐字：
 // ① Claude 臂删除：stripClaudeDetailedModels/getClaudeContextModelId 与 CLAUDE_CODE 判定随
 //   claudeModels.ts 未移植裁剪（见 4a useConfigMetadata 缝④）——模型选择恒走 managed 单臂。

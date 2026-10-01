@@ -55,7 +55,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   }, [mcpServers, t])
 
   /**
-   * 保存 = 用编辑器内容整体替换服务器列表（v1 二轮审查 s2-23）。
+   * 保存 = 用编辑器内容整体替换服务器列表。
    *
    * 修改前：清空编辑器再确定 = **无确认**地删掉所有服务器；且只 `dispatch(setMCPServers(...))`，
    * 绕过了正常删除路径 `mcpApi.removeServer`（主进程关客户端 + DXT 解包目录清理）——
@@ -113,7 +113,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       }
 
       const parsedJson = parseJSON(jsonConfig)
-      // v1 二轮审查 s2-24：比较的是「导入的函数」而非解析结果，恒为 false —— 语法错误会带着
+      // 比较的是「导入的函数」而非解析结果，恒为 false —— 语法错误会带着
       // `null` 进入 zod 校验，用户看到的是 "expected object, received null" 而不是本意的导入格式无效。
       if (parsedJson === null) {
         throw new Error(t('settings.mcp.addServer.importFrom.invalid'))
@@ -154,7 +154,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
     resolve({})
   }
 
-  // v1 二轮审查 s2-43 同类：不在渲染期给静态类写属性（严格模式下执行两次；卸载后引用仍指向
+  // 同类：不在渲染期给静态类写属性（严格模式下执行两次；卸载后引用仍指向
   // 旧闭包）。关闭路径由 show() 内的 TopView.hide 与 `static hide()` 覆盖。
 
   return (

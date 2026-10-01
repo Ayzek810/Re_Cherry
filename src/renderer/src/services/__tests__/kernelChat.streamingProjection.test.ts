@@ -1,5 +1,5 @@
 /**
- * v0.4.6-1 直播投影机测：思考/正文分块与 thinking_millsec 冻结语义。
+ * 直播投影机测：思考/正文分块与 thinking_millsec 冻结语义。
  *
  * 真实事件序列（turn/start → assistant/chunk ×N → assistant/message → turn/end）驱动
  * handleSessionEvent（经 initKernelBridge 的订阅回调），逐 delta 断言：
@@ -88,7 +88,7 @@ beforeEach(() => {
   }
 })
 
-describe('kernelChat 直播投影（v0.4.6-1 思考计时冻结 + 正文流式回归门）', () => {
+describe('kernelChat 直播投影（思考计时冻结 + 正文流式回归门）', () => {
   it('正文逐 delta 增长；推理结束瞬间冻结思考块（SUCCESS + thinking_millsec 落块）', async () => {
     initKernelBridge()
     expect(listeners.length).toBeGreaterThan(0)
@@ -206,11 +206,11 @@ describe('kernelChat 直播投影（v0.4.6-1 思考计时冻结 + 正文流式�
 })
 
 /**
- * r2-20：回合收尾必须把「未回执的本地 user 消息 FIFO」清掉。旧实现只在回执到达时 shift，
+ * 回合收尾必须把「未回执的本地 user 消息 FIFO」清掉。旧实现只在回执到达时 shift，
  * 回执没到（内核侧失败/中断/删除轮次）的那一条会永久留在队列里，并让下一回合的回执
  * 把 seq 配对到**错误的**本地消息 id 上（锚点错位）。
  */
-describe('kernelChat 回合收尾的 FIFO 清理（r2-20）', () => {
+describe('kernelChat 回合收尾的 FIFO 清理', () => {
   const TOPIC = 'topic-fifo-cleanup'
   const putUserMessage = (id: string, blockId: string): void => {
     store.dispatch(
@@ -255,11 +255,11 @@ describe('kernelChat 回合收尾的 FIFO 清理（r2-20）', () => {
     const remapped = state.entities[`kernel-${TOPIC}-4`]
     expect(remapped).toBeDefined()
     expect(remapped?.blocks).toEqual(['block-b'])
-    // 改写后的 id 即锚点：r2-21 的"锚点从 id 解析"在改写后成立
+    // 改写后的 id 即锚点：的"锚点从 id 解析"在改写后成立
     expect(kernelAnchorOf(TOPIC, remapped)).toEqual({ sessionId: TOPIC, seq: 4 })
   })
 
-  it('回执前的本地 uuid 没有内核锚点（"回执前 fork"显式不支持，r2-21）', () => {
+  it('回执前的本地 uuid 没有内核锚点（"回执前 fork"显式不支持）', () => {
     expect(kernelAnchorOf(TOPIC, { id: 'kernel-x-7' } as Message)).toEqual({ sessionId: 'x', seq: 7 })
     expect(kernelAnchorOf(TOPIC, { id: 'local-uuid-no-receipt' } as Message)).toBeUndefined()
     expect(kernelAnchorOf(TOPIC, { id: 'kernel-x-notaseq' } as Message)).toBeUndefined()

@@ -1,5 +1,5 @@
 /**
- * DXT（.dxt）MCP 扩展包安装服务（v0.4.7 自上游 CS_V1 src/main/services/DxtService.ts 移植）。
+ * DXT（.dxt）MCP 扩展包安装服务（自上游 CS_V1 src/main/services/DxtService.ts 移植）。
  *
  * .dxt 本质是 zip 包：manifest.json（dxt_version/name/version/server.mcp_config）+ 服务器
  * 运行文件。uploadDxt 解包 → 校验 manifest → 落位 `{mcpDir}/server-{name}` → 渲染层把它转成
@@ -385,7 +385,7 @@ class DxtService {
 
       return {
         success: false,
-        // 失败出口同样脱敏（v1 二轮审查 m2-05）：错误文本可能回显含 key 的 args。
+        // 失败出口同样脱敏：错误文本可能回显含 key 的 args。
         error: redactSecretText(errorMessage)
       }
     }
@@ -416,7 +416,7 @@ class DxtService {
       const resolvedConfig = applyPlatformOverrides(manifest.server.mcp_config, dxtPath, userConfig)
 
       // args 是 `${user_config.KEY}` 插值的载体（该功能的设计用法），必然含 provider key——
-      // 与 codeCli/hermes/dsh/paper-agent 四处同纪律，落盘日志必须脱敏（v1 二轮审查 m2-05）。
+      // 与 codeCli/hermes/dsh/paper-agent 四处同纪律，落盘日志必须脱敏。
       logger.debug('Resolved MCP config:', {
         command: resolvedConfig.command,
         args: resolvedConfig.args?.map((arg) => redactSecretText(arg)),
@@ -435,7 +435,7 @@ class DxtService {
    *
    * 清理用途的校验是「必须是 mcpDir 的**后代**」，不是「直系子目录」——`ensurePathWithin`
    * 的直系约束是为**落位**设计的（`uploadDxt` 自己拼 `server-${name}`）。此前清理复用同一
-   * 判据（v1 二轮审查 m2-13），于是任何二级子目录形状的 `dxtPath`（旧版本落位形态、用户
+   * 判据，于是任何二级子目录形状的 `dxtPath`（旧版本落位形态、用户
    * 在 mcpDir 下手工分组）都会抛错并被吞成 `false`：配置已从注册表消失、解包目录（含可
    * 执行物）永久留在磁盘上，界面上再也看不到它。
    *

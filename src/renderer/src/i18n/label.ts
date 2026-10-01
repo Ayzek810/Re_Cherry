@@ -142,9 +142,9 @@ const titleKeyMap = {
   settings: 'title.settings',
   translate: 'title.translate',
   paintings: 'title.paintings',
-  // v0.3.3-2 笔记复活：标签页标题（V1 同键）
+  // 笔记复活：标签页标题（V1 同键）
   notes: 'title.notes',
-  // v0.3.4-1 编码助手（V2 Code Mate 同键）
+  // 编码助手（V2 Code Mate 同键）
   code: 'title.code'
 } as const
 
@@ -169,9 +169,9 @@ const sidebarIconKeyMap = {
   knowledge: 'knowledge.base',
   translate: 'translate.title',
   paintings: 'paintings.title',
-  // v0.3.3-2 笔记复活（V1 同键）
+  // 笔记复活（V1 同键）
   notes: 'notes.title',
-  // v0.3.4-1 编码助手（V2 Code Mate 同键）
+  // 编码助手（V2 Code Mate 同键）
   code: 'title.code'
 } as const
 
@@ -249,7 +249,7 @@ export const getFileFieldLabel = (key: string): string => {
   return getLabel(fileFieldKeyMap, key)
 }
 
-// ===== 以下自 CS_V1 i18n/label.ts 原样移植（批次1 MCPSettings 页面依赖）=====
+// ===== 以下自 CS_V1 i18n/label.ts 原样移植（MCPSettings 页面依赖）=====
 
 const mcpTypeKeyMap = {
   inMemory: 'settings.mcp.types.inMemory',

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { denyReadOnly, ensureNotReadOnly, escalationSchemaFields, resolveCallPolicy } from '../toolEscalation'
 
 /**
- * toolEscalation 机测（v0.4.6）：档位闸 + 升级问询流（dsh-tool-fs 同编舞）。
+ * toolEscalation 机测：档位闸 + 升级问询流（dsh-tool-fs 同编舞）。
  * ctx 以最小假体注入（sandboxPolicy.resolve + approval.request；结构化直传，
  * 调用点按 Context 断言——与内核机测的假缝惯例一致）。
  */

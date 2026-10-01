@@ -1,4 +1,4 @@
-// fork 缝（批次4b 原创缝模块）：V2 `@cherrystudio/ui` 的本页消费面替身（fork 无 packages/ui）。
+// fork 缝（原创缝模块）：V2 `@cherrystudio/ui` 的本页消费面替身（fork 无 packages/ui）。
 // shim 面以 V2 pages/code/**.tsx 的实际 import 为准（grep 汇总）：Button、Tooltip、NormalTooltip、
 // Dialog/DialogContent/DialogHeader/DialogTitle/DialogFooter/DialogDescription、ConfirmDialog、
 // Alert、SearchInput、EmptyState、ReorderableList、CodeEditor、Scrollbar、Input。
@@ -9,7 +9,7 @@
 // 视觉缝：V2 的 shadcn className 串原样保留（fork 的 Tailwind @theme 已含 background/foreground/
 // border-subtle/foreground-tertiary/accent 等语义令牌）；V2 复合状态色令牌（success-border /
 // success-subtle / warning-subtle / error-* 族）fork 未暴露，消费点以 success/warning/error 的
-// 透明度修饰（/35 /15）降级——视觉保真度批次 5 视真机效果再调。
+// 透明度修饰降级——视觉保真度 视真机效果再调。
 import ForkCodeEditor from '@renderer/components/CodeEditor'
 import ForkScrollbar from '@renderer/components/Scrollbar'
 import { cn } from '@renderer/utils/style'
@@ -303,7 +303,7 @@ export const EmptyState: FC<CherryEmptyStateProps> = ({ preset, title, descripti
 
 // fork 缝：V2 ReorderableList → 顺序列表（**无拖拽**）。
 //
-// 二轮审查 f2-46：旧实现把 `onReorder/disabled/gap` 显式丢弃（`void onReorder`），却在每张卡片上
+// 旧实现把 `onReorder/disabled/gap` 显式丢弃（`void onReorder`），却在每张卡片上
 // 渲染一个 `cursor-grab` 的拖拽把手、并把 `dragging` 恒置 false——"渲染承诺了交互但语义为空"，
 // 用户按住把手拖动毫无反应且没有任何提示。这里按审查给出的降级臂处理：**去掉假通道**，
 // 顺序只由消费点常显的"置顶"按钮改变（ConfigList.handleMoveToTop → onReorder 真正生效）。
@@ -401,7 +401,7 @@ export const GatewayIcon: FC<{ width?: number; height?: number; className?: stri
   className
 }) => <RadioTower width={width ?? 16} height={height ?? 16} className={className} />
 
-// fork 缝（v0.4.5-1，原创）：进度条作为**本页标准 UI 元素**（与 Button/Tooltip/Alert 同档）。
+// fork 缝（原创）：进度条作为**本页标准 UI 元素**（与 Button/Tooltip/Alert 同档）。
 // 为什么要进本表：进度此前是 VersionStatusCard 里的私有 markup，谁要展示进度都得复制一遍
 // 那串 div 与 ARIA 属性——这正是"只有某一家有进度条"的结构性原因。规则集中在本件：
 // - `value`（0..100）有值 → 确定性进度条；缺省 → 不确定态（脉冲）——**两者都不许假**；

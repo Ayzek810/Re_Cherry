@@ -1,5 +1,5 @@
 /**
- * v1 二轮审查 m2-25 的行为证据：工具快照读路径的 stale-while-revalidate 语义。
+ * 工具快照读路径的 stale-while-revalidate 语义。
  *
  * 设计意图是「有缓存即秒回旧状态，后台重探完成后 broadcastChanged 刷新」。但判定顺序此前是
  * 「后台重探在飞 ⇒ await 它再返回」，于是**恰好在最该秒回的窗口**（重探进行中，时长可达
@@ -46,7 +46,7 @@ function installPendingRefresh(): { state: { started: number }; release: () => v
   }
 }
 
-describe('BinaryManager 快照读路径 (m2-25)', () => {
+describe('BinaryManager 快照读路径', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     internals.snapshotCache = null

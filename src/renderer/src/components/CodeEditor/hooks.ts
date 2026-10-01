@@ -210,7 +210,7 @@ interface UseScrollToLineOptions {
 }
 
 export function useScrollToLine(editorViewRef: React.MutableRefObject<EditorView | null>) {
-  // c2-44：200ms 回退定时器与高亮监听都必须有取消通道。
+  // 200ms 回退定时器与高亮监听都必须有取消通道。
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const highlightCleanupRef = useRef<(() => void) | null>(null)
 

@@ -26,7 +26,7 @@ export interface MinAppsState {
 }
 
 const initialState: MinAppsState = {
-  // r2-29：`allMinApps` 是 `config/minapps.ts` 的模块数组。别名进初值会让「store 状态」与
+  // `allMinApps` 是 `config/minapps.ts` 的模块数组。别名进初值会让「store 状态」与
   // 「配置模板」共用一个数组与同一批元素对象——migrate 的 addMiniApp 与任何就地写入都会串到
   // 模板上（removeMiniAppIconsFromState 之所以克隆元素，正是绕这个坑）。初值处浅拷贝。
   enabled: allMinApps.map((app) => ({ ...app })),

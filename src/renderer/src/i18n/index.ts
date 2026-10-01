@@ -6,7 +6,7 @@ import dayjs from 'dayjs'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
-// Original translation（v0.2.4-1：机翻语言包已整体移除，只保留 zh-CN / en-US）
+// Original translation（机翻语言包已整体移除，只保留 zh-CN / en-US）
 import enUS from './locales/en-us.json'
 import zhCN from './locales/zh-cn.json'
 

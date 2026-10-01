@@ -1,10 +1,10 @@
 /**
- * 二轮审查 f2-13：知识库检索失败被渲染成"没有结果"。
+ * 知识库检索失败被渲染成"没有结果"。
  *
  * 缺陷形态：`knowledgeBaseApi.searchKnowledgeBase` 自己吞掉异常并 `return []`，于是弹窗的 catch
  * **不可达**，渲染面只有 `loading ? <Spin/> : <List dataSource={results}/>` 二分——检索失败（模型未
  * 配置、库文件损坏、向量维度不符）时用户看到的是一个安静的空列表框，会直接得出"知识库里没有相关
- * 内容"的错误结论（CLAUDE.md §9「A failure must never look like an empty result」）。
+ * 内容"的错误结论。
  *
  * 行为级断言：
  *   ① 检索失败 → 渲染显式错误态 + 重试按钮，并弹 toast.error（不是空列表）；
@@ -87,7 +87,7 @@ function searchFor(text: string) {
   fireEvent.keyDown(screen.getByTestId('search-input'), { key: 'Enter' })
 }
 
-describe('KnowledgeSearchPopup 检索失败语义（f2-13）', () => {
+describe('KnowledgeSearchPopup 检索失败语义', () => {
   beforeEach(() => {
     searchKnowledgeBase.mockReset()
     toastError.mockReset()

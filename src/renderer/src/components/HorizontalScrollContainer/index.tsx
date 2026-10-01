@@ -42,7 +42,7 @@ const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
   const [canScroll, setCanScroll] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
   const [isScrolledToEnd, setIsScrolledToEnd] = useState(false)
-  // c2-23：用 ref 记住上次的值，只在真的变化时 setState。否则每次 scroll 事件都要排队
+  // 用 ref 记住上次的值，只在真的变化时 setState。否则每次 scroll 事件都要排队
   // 一次渲染，等 React 走到重新渲染阶段才发现值没变（bail out 发生在渲染期，不是入口）。
   const lastCanScrollRef = useRef(false)
   const lastAtEndRef = useRef(false)
@@ -70,7 +70,7 @@ const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
     const availableWidth = parentElement ? parentElement.clientWidth : scrollElement.clientWidth
 
     // 确保容器不会超出可用宽度
-    // v0.3.1-1：≥4px 溢出才显示滚动能力。零迟滞硬阈值在相邻 reflow 期间高频翻转
+    // ≥4px 溢出才显示滚动能力。零迟滞硬阈值在相邻 reflow 期间高频翻转
     // （内容宽度在阈值上骑乘），是消息脚部横滚按钮反复消失重现的振荡源。
     const canScrollValue = scrollElement.scrollWidth > Math.min(availableWidth, scrollElement.clientWidth) + 4
     if (canScrollValue !== lastCanScrollRef.current) {
@@ -95,7 +95,7 @@ const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
     const scrollElement = scrollRef.current
     if (!scrollElement) return
 
-    // c2-23：`handleScroll` 原本没有任何节流，每个 scroll 事件都同步读 clientWidth/scrollWidth
+    // `handleScroll` 原本没有任何节流，每个 scroll 事件都同步读 clientWidth/scrollWidth
     // （强制 layout）并调用两次 setState。标签栏在首屏可见，一次横向拖动就是每帧一次强制 layout。
     const throttledCheck = throttle(checkScrollability, 100)
     checkScrollability()
@@ -136,7 +136,7 @@ const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
           tabIndex={0}
           aria-label={t('common.more')}
           onKeyDown={(event) => {
-            // c2-23：溢出时这个按钮是「继续看后面的内容」的唯一显式入口，键盘必须可达。
+            // 溢出时这个按钮是「继续看后面的内容」的唯一显式入口，键盘必须可达。
             if (event.key !== 'Enter' && event.key !== ' ') return
             event.preventDefault()
             scrollRef.current?.scrollBy({ left: scrollDistance, behavior: 'smooth' })
@@ -213,7 +213,7 @@ const ScrollButton = styled.div`
     background: var(--color-list-item);
   }
 
-  /* c2-23：键盘聚焦时必须显形（该按钮平时靠 hover 才出现）。 */
+  /* 键盘聚焦时必须显形（该按钮平时靠 hover 才出现）。 */
   &:focus-visible {
     opacity: 1;
     outline: 2px solid var(--color-primary);

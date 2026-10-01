@@ -8,7 +8,7 @@ type Props = {
 } & Omit<CustomTagProps, 'size' | 'tooltip' | 'icon' | 'color' | 'children'>
 
 /**
- * 图像生成能力标签（v0.3.3-18）。
+ * 图像生成能力标签。
  *
  * **语义 = V2 的 narrow（专用 / 文生图）**：`isTextToImageModel`
  * = `IMAGE_GENERATION && !REASONING`（`cherry-studio v2/src/shared/utils/model.ts:84-86`，

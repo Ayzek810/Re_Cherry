@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { moveProvider } from '../llm'
 
 /**
- * r2-30：`moveProvider(providers, id, position)` 的语义是 **1-based 目标位置**——
+ * `moveProvider(providers, id, position)` 的语义是 **1-based 目标位置**——
  * 结果数组的 `result[position - 1]` 就是被移动的那个 provider（不论它原先在目标之前还是之后）。
  * 实现是「先移除自己，再 `splice(position - 1, 0, provider)`」，所以结果下标恒为 `position - 1`。
  *
@@ -16,7 +16,7 @@ import { moveProvider } from '../llm'
 const mk = (...ids: string[]): Provider[] => ids.map((id) => ({ id }) as Provider)
 const ids = (providers: Provider[]): string[] => providers.map((provider) => provider.id)
 
-describe('moveProvider — 1-based 目标位置（r2-30）', () => {
+describe('moveProvider — 1-based 目标位置', () => {
   it('被移者在目标之前：落在第 position 格（不是第 position-1 格）', () => {
     const result = moveProvider(mk('a', 'b', 'c', 'd', 'e'), 'a', 3)
 

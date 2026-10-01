@@ -20,12 +20,12 @@ vi.mock('@shikijs/markdown-it/core', () => ({
 }))
 
 /**
- * r2-77 行为契约：`getMarkdownIt` 每次都返回**同一个** markdown-it 实例，且
+ * `getMarkdownIt` 每次都返回**同一个** markdown-it 实例，且
  * `md.use()` 只执行一次（插件在模块级单例的工厂里装配）。
  * 此前 `md.use(fromHighlighter(...))` 写在 `getMarkdownIt` 里，每次调用都往同一实例
  * 追加一份高亮插件，插件数/内存/单次 render 的 CPU 随调用次数线性增长。
  */
-describe('utils/shiki getMarkdownIt (r2-77)', () => {
+describe('utils/shiki getMarkdownIt', () => {
   beforeEach(() => {
     vi.resetModules()
     useMock.mockClear()

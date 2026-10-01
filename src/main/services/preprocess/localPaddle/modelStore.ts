@@ -1,5 +1,5 @@
 /**
- * LocalPaddle 模型仓（v0.4.4 收编：合并原 services/localModel 的 localModelService
+ * LocalPaddle 模型仓（收编：合并原 services/localModel 的 localModelService
  * + ocrPaths + ocrInferenceService 三文件——「本地模型系统」的通用壳不存在了，
  * 这里就是文档处理通道 local-paddle 条目的模型盘与下载生命周期）。
  *
@@ -14,7 +14,7 @@
  * 直接调 localOcr.terminateActiveOcrProcess，不再有中间层）。
  *
  * onnxruntime 二进制不下载：dev 下直接用 node_modules 的原生绑定；安装版依赖
- * electron-builder 收集 + asarUnpack（v0.4.4 起显式声明 + after-pack 断言）。
+ * electron-builder 收集 + asarUnpack（起显式声明 + after-pack 断言）。
  */
 import fs from 'node:fs'
 import { existsSync } from 'node:fs'

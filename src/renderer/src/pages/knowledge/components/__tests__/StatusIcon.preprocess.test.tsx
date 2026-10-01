@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-17：`StatusIcon` 的自定义 memo 比较器漏掉 `isPreprocessed`（与 `item.uniqueId`）。
+ * `StatusIcon` 的自定义 memo 比较器漏掉 `isPreprocessed`（与 `item.uniqueId`）。
  *
  * 缺陷形态：输出依赖这两个输入——`isPreprocessed` 决定 Tooltip 是「预处理完成」还是「嵌入完成」，
  * `item.uniqueId` 决定显示绿勾还是灰点——但比较器不比它们。文件预处理完成（或 store 回填
@@ -41,7 +41,7 @@ const base = (isPreprocessedItem: { uniqueId: string } | null): KnowledgeBase =>
     items: [{ id: 'src-1', type: 'file', ...(isPreprocessedItem ?? ({} as { uniqueId: string })) }]
   }) as unknown as KnowledgeBase
 
-describe('StatusIcon memo 比较器（f2-17）', () => {
+describe('StatusIcon memo 比较器', () => {
   it('isPreprocessed 由 false 变 true 时重渲染并换成「预处理完成」', () => {
     const props = {
       sourceId: 'src-1',

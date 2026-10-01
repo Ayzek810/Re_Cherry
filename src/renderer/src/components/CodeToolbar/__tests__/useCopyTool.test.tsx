@@ -63,7 +63,7 @@ const mockSetCopiedImageTemporarily = vi.fn()
 describe('useCopyTool', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // c2-13：复制失败现在要给出用户可见信号（window.toast.error），jsdom 里没有 toast 单例。
+    // 复制失败现在要给出用户可见信号（window.toast.error），jsdom 里没有 toast 单例。
     ;(window as any).toast = { error: vi.fn(), success: vi.fn(), warning: vi.fn(), info: vi.fn() }
     // Reset mocks for each test to ensure isolation
     mocks.useTemporaryValue
@@ -229,7 +229,7 @@ describe('useCopyTool', () => {
 
     it('should handle copy image failure gracefully', async () => {
       const mockPreviewHandles = createMockPreviewHandles()
-      // c2-13：copy() 是异步的，失败以 rejection 表达；成功勾不得在 resolve 之前亮起。
+      // copy() 是异步的，失败以 rejection 表达；成功勾不得在 resolve 之前亮起。
       mockPreviewHandles.copy = vi.fn().mockRejectedValue(new Error('Image copy failed'))
       const props = createMockProps({
         showPreviewTools: true,

@@ -1,5 +1,5 @@
 /**
- * 生成执行 hook（v0.3.3 批次4，② 薄适配）：V2 DataApi 建/改行 → db.paintings.put
+ * 生成执行 hook（② 薄适配）：V2 DataApi 建/改行 → db.paintings.put
  * (PaintingRecord)；cache 镜像 → PaintingSessionContext 瞬态 generatingById；
  * AbortController 按 paintingId 登记（取消走 lightLlm.lightImageAbort(paintingId)）。
  * 生成主链路 = paintingPipeline.paintingGenerate → runPainting 落盘。
@@ -41,7 +41,7 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
   const visibleIdRef = useRef(painting.id)
   // Live draft mirror: the composer stays editable while a generation runs, so a
   // completion must merge into the *current* draft, never overwrite it with the
-  // submit-time snapshot (二轮审查 f2-16).
+  // submit-time snapshot .
   const livePaintingRef = useRef(painting)
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export function usePaintingGeneration({ painting, onPaintingChange, reloadHistor
         // `targetPainting` is the submit-time snapshot, so only `files` and the
         // cleared generation state may come from it — merging it whole would
         // silently roll back every prompt / param / model edit the user made
-        // while the run was in flight (二轮审查 f2-16). That is the same
+        // while the run was in flight . That is the same
         // "sync files only" invariant `usePaintingResultSync` already applies to
         // the background path.
         const live = livePaintingRef.current

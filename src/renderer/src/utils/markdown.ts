@@ -46,7 +46,7 @@ const containsLatexRegex = /\\\(.*?\\\)|\\\[.*?\\\]/s
  *
  * 显示（`Markdown.tsx`）与导出（`utils/export.ts`）共用这一份实现。
  * 导出侧 `convertMathFormula` 此前是裸 `replaceAll`：既不跳代码块/链接，也不看
- * 转义括号，与显示结果必然不一致（audit2 r2-90）。现在两者是同一条代码路径。
+ * 转义括号，与显示结果必然不一致。现在两者是同一条代码路径。
  *
  * @see https://github.com/remarkjs/remark-math/issues/39
  * @see https://github.com/remarkjs/remark-math/issues/39
@@ -170,7 +170,7 @@ const findLatexMatch = (text: string, openDelim: string, closeDelim: string) => 
  * 转换数学公式格式（导出侧入口，保留原名以免破坏 `utils/export.ts` 的导入）。
  *
  * 实现已收敛到 `processLatexBrackets`：导出侧此前是裸 `replaceAll`，会改写代码块
- * 和链接里的 `\[`/`\(`，与显示侧结果必然不一致（audit2 r2-90）。这里改为委托，
+ * 和链接里的 `\[`/`\(`，与显示侧结果必然不一致。这里改为委托，
  * 导出与显示从此共用同一份平衡匹配 + 代码块/链接保护逻辑。
  *
  * @param {string} input 输入字符串

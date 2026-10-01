@@ -1,5 +1,5 @@
 /**
- * MCP 工具命名规则（v0.3.2 批次3 自 CS_V1 packages/shared/mcp.ts 移植，纯函数零依赖）。
+ * MCP 工具命名规则（自 CS_V1 packages/shared/mcp.ts 移植，纯函数零依赖）。
  *
  * 上游把 MCP 工具暴露给 LLM 时统一用 `mcp__{server}__{tool}` 函数名（camelCase、
  * 63 字符截断、冲突加序号后缀）；fork 的主进程 MCPService（listTools 组装 MCPTool.id）

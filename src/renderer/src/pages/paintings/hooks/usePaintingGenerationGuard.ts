@@ -1,5 +1,5 @@
 /**
- * 生成前 guard（v0.3.3 批次4，② 薄适配）：provider_enabled/model_missing/
+ * 生成前 guard（② 薄适配）：provider_enabled/model_missing/
  * model_unavailable/catalog_error 四类 guard 保留；数据源换 fork——
  * provider/模型从 redux providers + paintingModelSelection 取（无 DataApi 目录）。
  */

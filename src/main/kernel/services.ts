@@ -54,7 +54,7 @@ export interface TopicTreeService {
   /**
    * 删除话题（注册表 + 物理清盘）。
    * @returns `true` = 会话数据已从磁盘清掉；`false` = 注册表行已删但**物理清盘失败**
-   *  （k2-09：删除返回真实结果，`false` 必须透传到 UI，不得只记日志）。
+   * 删除返回真实结果，`false` 必须透传到 UI，不得只记日志。
    */
   delete: (id: string) => Promise<boolean>
   /** 消息级删除引擎：锚点集合计算 + 物理截断/清盘 + 焦点推导，一次事务内核权威。 */
@@ -74,7 +74,7 @@ export interface TopicTreeService {
   isRunning: (id: string) => boolean
   /**
    * 该话题会话事件的 **UI 视界**：注入的插件源消息（RuntimeContextProjection 的工具面
-   * 快照、档位标注等）已剔除。渲染层据此不再需要任何可见性判据（v0.3.0-1 结构化的核心）。
+   * 快照、档位标注等）已剔除。渲染层据此不再需要任何可见性判据（结构化的核心）。
    */
   uiEvents: (id: string) => readonly SessionEvent[]
 }
@@ -83,7 +83,7 @@ export interface TopicTreeService {
 export interface SessionGCService {
   /**
    * 物理清盘一个会话。
-   * @returns `true` = 已从磁盘删除；`false` = **失败，数据仍在**（消费方不得当成成功，见 k2-09）。
+   * @returns `true` = 已从磁盘删除；`false` = **失败，数据仍在**（消费方不得当成成功）。
    */
   purge: (sessionId: string) => Promise<boolean>
 }

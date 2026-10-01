@@ -247,7 +247,7 @@ describe('CherryAttachmentStore', () => {
     expect(attachmentFileExtension('image/jpeg')).toBe('.jpg')
   })
 
-  describe('图片不落盘作用域（v0.3.3-2，快捷助手）', () => {
+  describe('图片不落盘作用域（快捷助手）', () => {
     it('作用域内 saveImage 只进内存：盘上没有文件，readImage 仍能读回同字节', async () => {
       const bytes = pngBytes(32, 24, 40)
       store.beginEphemeralImages()

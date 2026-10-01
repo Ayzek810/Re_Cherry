@@ -37,7 +37,7 @@ const NewAppButton: FC<Props> = ({ size = 60 }) => {
 
   const handleAddCustomApp = async (values: any) => {
     try {
-      // r2-79/⑥：先只读一次做 id 冲突判定（`missing` = 全新安装的合法缺省 → 空列表）；
+      // /⑥：先只读一次做 id 冲突判定（`missing` = 全新安装的合法缺省 → 空列表）；
       // 冲突时**不写盘**。`error`（存在但读不出来）在这里抛出 → 报错且原文件原样保留。
       const existing = await readCustomMiniApps()
       if (existing.status === 'error') {
@@ -93,8 +93,8 @@ const NewAppButton: FC<Props> = ({ size = 60 }) => {
             form.setFieldValue('logo', base64Data)
           }
         }
-        // FileReader 的失败是**异步事件**，外层 try/catch 捕获不到（f2-61）。缺了 onerror
-        // 时"读不出来"与"用户没选文件"完全同形：既不报错也不成功，保存后得到无图标的小程序。
+        // FileReader 的失败是**异步事件**，外层 try/catch 捕获不到。缺了 onerror 时
+        // "读不出来"与"用户没选文件"完全同形：既不报错也不成功，保存后得到无图标的小程序。
         reader.onerror = () => {
           logger.error('Failed to read file:', { name: reader.error?.name, message: reader.error?.message })
           window.toast.error(t('settings.miniapps.custom.logo_upload_error'))

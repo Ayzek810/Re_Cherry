@@ -1,9 +1,9 @@
 /**
- * 二轮审查 f2-50：`runInstallTool` 的 catch 分支静默失败。
+ * `runInstallTool` 的 catch 分支静默失败。
  *
  * 有 toast 的那一臂只覆盖"主进程正常返回 `{success:false}`"。若 IPC 调用本身 reject
  *（通道缺失、preload 未桥、主进程 handler 抛错），旧实现只写日志：主进程什么都没记录，
- * 版本卡也不会出现失败行，用户看到的是"安装按钮转一圈又变回来"（§9「Never fail silently …
+ * 版本卡也不会出现失败行，用户看到的是"安装按钮转一圈又变回来"（「Never fail silently …
  * Do this also for fire-and-forget writes」，`onInstall: () => void install(...)` 正是这种写法）。
  *
  * 行为级断言：① install/upgrade 的 IPC reject 都有 toast，且文案键按动作区分；
@@ -36,7 +36,7 @@ function installBinaryBridge() {
   return { install, remove }
 }
 
-describe('useBinaryActions（f2-50：IPC reject 必须有可见信号）', () => {
+describe('useBinaryActions（IPC reject 必须有可见信号）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(window as unknown as { toast: unknown }).toast = {

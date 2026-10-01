@@ -1,5 +1,5 @@
 /**
- * 绘画页 provider/模型选择模块（v0.3.3 批次4，fork 侧新写薄适配层；v0.3.3-18 判据收敛）：
+ * 绘画页 provider/模型选择模块（fork 侧新写薄适配层；判据收敛）：
  * feature 目录不直接 import config/models 内部——在此消化 `isGenerateImageModel`
  * （生图场景的唯一判据，数据来源见 vision.ts 注释），对外只暴露图像生成模型选择器。
  */

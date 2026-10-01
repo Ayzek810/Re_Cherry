@@ -21,7 +21,7 @@ export default function useScrollPosition(key: string, throttleWait?: number) {
   }, [scrollKey])
 
   /**
-   * r2-35：throttle 必须按 `throttleWait` 记忆化。旧实现每次渲染都新建一个
+   * throttle 必须按 `throttleWait` 记忆化。旧实现每次渲染都新建一个
    * throttled 函数，而 cleanup effect 依赖这个新函数 ⇒ 每次渲染都跑一次
    * `cancel()`，把尚未触发的 trailing 调用丢掉（流式期间消费方逐帧重渲染，
    * 「用户停下滚动」的那次保存被系统性取消）。经 ref 读取 key，记忆化不会

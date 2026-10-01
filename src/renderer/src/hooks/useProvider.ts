@@ -40,7 +40,7 @@ const providerKeyLogger = loggerService.withContext('useProvider:ProviderKeyVaul
 
 const logger = loggerService.withContext('useProvider')
 
-/** v0.2.4 K4 写路径：renderer 侧 key 变更即时同步进 main 加密存储（持久真源）。空串/undefined = 删除。 */
+/** 写路径：renderer 侧 key 变更即时同步进 main 加密存储（持久真源）。空串/undefined = 删除。 */
 async function syncProviderKeyToVault(providerId: string, apiKey: string | undefined): Promise<void> {
   try {
     if (!window.api?.providerKeys) return
@@ -92,7 +92,7 @@ export function useAllProviders() {
 export function useProvider(id: string) {
   const allProviders = useAppSelector(selectAllProviders)
   /**
-   * 显式回落（r2-42）：本 hook 的 `id` 可能指不到现存 provider——调用方传的是助手当前模型
+   * 显式回落：本 hook 的 `id` 可能指不到现存 provider——调用方传的是助手当前模型
    * 的 `provider`（该 provider 可能已被删除），或空串（`InputEmbeddingDimension` 未拿到 model）。
    * 设置页需要一个 provider 对象才能渲染，故按「精确 `id` → 默认模型所属 provider → 清单第一项」
    * 依次回落，并在回落时留一条 warn。

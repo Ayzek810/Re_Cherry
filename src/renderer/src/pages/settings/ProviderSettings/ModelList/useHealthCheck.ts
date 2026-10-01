@@ -16,7 +16,7 @@ export const useHealthCheck = (provider: Provider, models: Model[]) => {
   const [modelStatuses, setModelStatuses] = useState<ModelWithStatus[]>([])
   const [isChecking, setIsChecking] = useState(false)
 
-  /** 卸载守卫：健康检查是长跑网络请求，卸载后不再写状态（s2-03）。 */
+  /** 卸载守卫：健康检查是长跑网络请求，卸载后不再写状态。 */
   const isMountedRef = useRef(true)
   useEffect(() => {
     return () => {
@@ -92,7 +92,7 @@ export const useHealthCheck = (provider: Provider, models: Model[]) => {
     }
 
     // 「整批都没跑起来」必须走错误信号。修改前这里无条件用 info toast 播汇总，
-    // 整体失败会渲染成「0/N 通过」的成功态（s2-03）。
+    // 整体失败会渲染成「0/N 通过」的成功态。
     const hasAnySuccess = checkResults.some((r) => r.keyResults.some((kr) => kr.status === HealthStatus.SUCCESS))
     const toastTitle = summarizeHealthResults(checkResults, provider.name)
     if (hasAnySuccess) {

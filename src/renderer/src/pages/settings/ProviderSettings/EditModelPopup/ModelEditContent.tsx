@@ -54,7 +54,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
   const labelWidth = useDynamicLabelWidth([t('settings.models.add.endpoint_type.label')])
 
   /**
-   * 价格字段的空值语义（v1 二轮审查 s2-16）：`Number(x) || 0` 把「清空输入框」当成 0 写库。
+   * 价格字段的空值语义：`Number(x) || 0` 把「清空输入框」当成 0 写库。
    * 清空是用户重填前的中间态，此时保留原值；只有真的填了数字才写。
    */
   const toTokenPrice = (raw: unknown, fallback: number | undefined): number => {
@@ -139,7 +139,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
       ...(isWebSearchModel(model) ? (['web_search'] as const) : []),
       ...(isEmbeddingModel(model) ? (['embedding'] as const) : []),
       ...(isRerankModel(model) ? (['rerank'] as const) : []),
-      // v0.3.3-18：生图能力位（宽语义 = `isGenerateImageModel`）——用户手选即最高优先，
+      // 生图能力位（宽语义 = `isGenerateImageModel`）——用户手选即最高优先，
       // 与 V2 `EditModelDrawer` 把主类型选成 image 时写 `IMAGE_GENERATION` 同一件事。
       ...(isGenerateImageModel(model) ? (['image_generation'] as const) : [])
     ],
@@ -187,7 +187,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelCapabilities])
 
-  // v1 二轮审查 s2-42：能力标签组原先定义在渲染体内并按 `<ModelCapability />` 使用。
+  // 能力标签组原先定义在渲染体内并按 `<ModelCapability />` 使用。
   // 那样每次父渲染都会产生新的组件类型 → React 卸载重挂整组（DOM 重建、焦点丢失）；
   // 而 `updateType` 的 `useCallback(..., [])` 之所以"看起来没问题"，正是靠这次重挂刷新闭包。
   // 现在标签组提为模块级组件（见文件末尾 `ModelCapabilityTags`），闭包正确性由依赖数组保证。
@@ -374,7 +374,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                   placeholder={t('models.price.custom_currency_placeholder')}
                   defaultValue={model.pricing?.currencySymbol}
                   maxLength={5}
-                  // 只刷新展示用的符号；落库交给失焦（同 s2-16：输入框不做按键级持久化）。
+                  // 只刷新展示用的符号；落库交给失焦（同 ：输入框不做按键级持久化）。
                   onChange={(e) => setCurrencySymbol(e.target.value)}
                   onBlur={(e) => {
                     autoSave({
@@ -395,7 +395,7 @@ const ModelEditContent: FC<ModelEditContentProps & ModalProps> = ({ provider, mo
                 precision={2}
                 style={{ width: '240px' }}
                 addonAfter={`${currencySymbol} / ${t('models.price.million_tokens')}`}
-                // v1 二轮审查 s2-16：输入框每敲一位都 autoSave 会把 llm + assistants 两个
+                // 输入框每敲一位都 autoSave 会把 llm + assistants 两个
                 // 持久化切片各写一次并广播两次；改为失焦提交（同名值不再触发）。
                 onBlur={() => autoSave()}
               />
@@ -443,10 +443,9 @@ interface ModelCapabilityTagsProps {
  *
  * 必须是**模块级**组件，不能定义在 `ModelEditContent` 的渲染体内：定义在渲染体内时每次父渲染
  * 都会产生新的组件类型，React 会卸载重挂整组（DOM 重建、焦点丢失）。
- * v1 二轮审查 s2-42。
  */
 function ModelCapabilityTags({ t, selectedTypes, hasUserModified, onToggle, onReset }: ModelCapabilityTagsProps) {
-  // 排他标签组（v0.3.3-18）：嵌入 / 重排 / 生图 三者互斥，且任一被选中即禁用其余"能力"标签
+  // 排他标签组：嵌入 / 重排 / 生图 三者互斥，且任一被选中即禁用其余"能力"标签
   // —— 一个模型不可能既是嵌入模型、又是重排模型、又是生图模型。
   const exclusiveTypes: ModelType[] = ['embedding', 'rerank', 'image_generation']
   const selectedExclusive = exclusiveTypes.filter((type) => selectedTypes.includes(type))

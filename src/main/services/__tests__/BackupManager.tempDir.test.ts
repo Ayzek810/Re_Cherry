@@ -1,5 +1,5 @@
 /**
- * v1 二轮审查 m2-11 的行为证据：备份/还原的暂存目录按调用独占。
+ * 备份/还原的暂存目录按调用独占。
  *
  * 此前 `tempDir` 是实例字段，`backup()` 结尾 `fs.remove(this.tempDir)`、`restore()` 开头
  * `ensureDir(this.tempDir)` 共用同一目录，主进程侧没有互斥。两个入口（设置页备份/还原、
@@ -52,7 +52,7 @@ import * as path from 'node:path'
 
 import BackupManager from '../BackupManager'
 
-describe('BackupManager 暂存目录独占 (m2-11)', () => {
+describe('BackupManager 暂存目录独占', () => {
   let manager: BackupManager
   let runRoot: string
 
@@ -60,8 +60,8 @@ describe('BackupManager 暂存目录独占 (m2-11)', () => {
     vi.clearAllMocks()
     // 仓规约定：临时根建在 os.tmpdir()，用例结束整树删除（同 ObsidianVaultService / FileStorage 测试）。
     // 旧写法建在 process.cwd() 且没有 afterEach：每跑一次 suite 就在仓库根留下一个
-    // `.tmp-backup-m2-11-*`，而 .gitignore 只覆盖 `.tmp-kernel-*-tests*`，于是污染 git status。
-    runRoot = fs.mkdtempSync(path.join(os.tmpdir(), '.tmp-backup-m2-11-'))
+    // `.tmp-backup-tests-*`，而 .gitignore 只覆盖 `.tmp-kernel-*-tests*`，于是污染 git status。
+    runRoot = fs.mkdtempSync(path.join(os.tmpdir(), '.tmp-backup-tests-'))
     paths.tempRoot = runRoot
     fs.mkdirSync(path.join(runRoot, 'userData', 'IndexedDB'), { recursive: true })
     fs.writeFileSync(path.join(runRoot, 'userData', 'IndexedDB', 'marker.txt'), 'x')

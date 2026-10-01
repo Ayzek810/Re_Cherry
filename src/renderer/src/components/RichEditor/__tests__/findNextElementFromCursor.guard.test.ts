@@ -1,5 +1,5 @@
 /**
- * c2-35② 行为测试：指针越过编辑器右缘时不得抛 RangeError。
+ * 指针越过编辑器右缘时不得抛 RangeError。
  *
  * 原状：`elementsFromPoint` 里找不到 `.ProseMirror` 时索引为 -1，`slice(0, -1)` 会返回编辑器
  * **之外**的元素，随后 `view.posAtDOM(target, 0)` 抛
@@ -31,7 +31,7 @@ const createEditor = (insideElement: HTMLElement | null) => ({
   state: { doc: { nodeAt: vi.fn(() => null) } }
 })
 
-describe('findElementNextToCoords boundary guard (c2-35)', () => {
+describe('findElementNextToCoords boundary guard', () => {
   it('stops probing and returns no match when the pointer is beyond the editor', () => {
     const outside = document.createElement('div')
     document.body.appendChild(outside)

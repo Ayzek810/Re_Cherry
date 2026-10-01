@@ -8,7 +8,7 @@
  *
  * 存储值直接使用 dsh 的预设名（即沙箱模式名），Step 3 接入真工具时按此注册预设。
  *
- * **本数组是全仓档位词表的唯一事实源**（k2-16）：`@shared/types/codeCli` 的
+ * **本数组是全仓档位词表的唯一事实源**：`@shared/types/codeCli` 的
  * `DEEPSEEK_HARNESS_PERMISSION_MODES` 直接再导出它。新增档位只改这里。
  */
 export const WORK_MODE_APPROVAL_TIERS = ['read-only', 'workspace-write', 'danger-full-access'] as const

@@ -73,14 +73,14 @@ export const useCodeHighlight = ({ rawLines, language, callerId }: UseCodeHighli
               })
             }
           } catch {
-            // r2-09：高亮服务改为对失败 throw。这里必须兜住——否则 `void highlightLines()`
+            // 高亮服务改为对失败 throw。这里必须兜住——否则 `void highlightLines()`
             // 的调用点会变成未处理拒绝。降级为纯文本（空 token 行，消费方已有 `?? []` 回落）。
             setTokenLines([])
             break
           }
         }
       } catch (error) {
-        // r2-09：高亮失败不再返回伪造成"看起来合法"的单行 token。
+        // 高亮失败不再返回伪造成"看起来合法"的单行 token。
         logger.warn('[useCodeHighlight] streaming highlight failed; degrading this block to plain text', error as Error)
         setTokenLines([])
       } finally {

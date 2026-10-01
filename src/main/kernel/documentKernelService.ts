@@ -1,6 +1,6 @@
 /**
- * read_document 每轮登记缝（ctx.documents，批次6 文档阅读接线；webSearch/knowledge/
- * skills 同先例）。v0.3.2 验收轮重构：状态本体在主进程 knowledgeService（文档处理
+ * read_document 每轮登记缝（ctx.documents，文档阅读接线；webSearch/knowledge/
+ * skills 同先例）。验收轮重构：状态本体在主进程 knowledgeService（文档处理
  * 系统，工具执行直读单例；原 DocumentService 已删除），本缝只承担 cordis 声明制
  * 落位与转发。
  */

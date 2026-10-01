@@ -3,7 +3,7 @@ import { KERNEL_QUERY_ATTEMPTS } from '@renderer/utils/topicBranch'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * 内核事件取数的失败分类与启动窗口容忍（v0.3.0-5，分支图"节点凭空消失"彻查的一部分）：
+ * 内核事件取数的失败分类与启动窗口容忍（分支图"节点凭空消失"彻查的一部分）：
  *   ① 确定性"内核无此行"立即返回空会话（真实状态），不耗重试窗口——
  *      尤其消息路径：新建未首发话题点开不应白等 6×700ms 的重试长尾；
  *   ② 瞬时失败（No handler registered / session is not loaded）重试自愈；

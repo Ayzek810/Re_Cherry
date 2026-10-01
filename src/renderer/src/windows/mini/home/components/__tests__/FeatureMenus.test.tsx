@@ -1,8 +1,8 @@
 /**
- * 快捷助手首页「功能菜单」的发送契约（v0.3.3-1 修复"快速助手一直不出字"）。
+ * 快捷助手首页「功能菜单」的发送契约（修复"快速助手一直不出字"）。
  *
  * 真机症状：在四选项首页打字后按回车（或点「回答此问题」），只切到对话面板、**什么都不发**，
- * 用户看到的就是"快捷助手不能用"。根因是 v0.3.3-9 把发送条件收成 `if (prompt)`，而 chat 项
+ * 用户看到的就是"快捷助手不能用"。根因是把发送条件收成 `if (prompt)`，而 chat 项
  * 在 V2 里本来就不带 prompt 也要发（V2 `FeatureMenus.tsx:36-41`：`setRoute('chat')` + `onSendMessage()`）。
  *
  * 本测试钉住四条：chat 无 prompt 也发；另三项带各自 prompt 发；空文本只切路由 + 提示；选项顺序不变。
@@ -73,7 +73,7 @@ describe('FeatureMenus · 发送契约', () => {
     expect(explanation.onSendMessage).toHaveBeenCalledWith(prompts.explanation)
   })
 
-  it('无文本时只切路由 + 提示，不发请求（保留 v0.3.3-9 的修复意图）', () => {
+  it('无文本时只切路由 + 提示，不发请求（保留原有修复意图）', () => {
     const { ref, onSendMessage, setRoute } = renderMenus('')
 
     act(() => ref.current?.useFeature())

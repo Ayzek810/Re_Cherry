@@ -40,7 +40,7 @@ const logger = loggerService.withContext('ApiService')
  * 从消息中收集图像（用于图像编辑）
  * 收集用户消息中上传的图像和助手消息中生成的图像
  *
- * 识图/图像批次预置实现（v0.3.0 复核九勘察、案底遗留节登记）：当前消息路径未接线，
+ * 识图/图像批次预置实现（复核九勘察、案底遗留节登记）：当前消息路径未接线，
  * 待识图批次启用（渲染层图片引用随 sendToKernel 的收集层）。
  */
 export async function collectImagesFromMessages(userMessage: Message, assistantMessage?: Message): Promise<string[]> {
@@ -149,7 +149,7 @@ export async function fetchMessagesSummary({
   const contextMessages = takeRight(messages, 5)
   const provider = getProviderByModel(model)
 
-  // r2-42：provider 查不到时**不**回落到清单里的任意 provider。回落会把请求发到
+  // provider 查不到时**不**回落到清单里的任意 provider。回落会把请求发到
   // 「外来 model.id + 别的 provider」的组合上，用户只看到误导性的报错。此处如实失败。
   if (!provider) {
     logger.warn('fetchMessagesSummary: no provider for model', { modelId: model?.id, providerId: model?.provider })
@@ -199,7 +199,7 @@ export async function fetchMessagesSummary({
 }
 
 /**
- * 单条笔记的标题/摘要（v0.3.3-2 笔记移植，②薄适配）。
+ * 单条笔记的标题/摘要（笔记移植，②薄适配）。
  *
  * V1 走 `AiProvider.completions`（老消息管线）；fork 统一走轻量内核一次性 completion
  * ——与话题命名同一条路：无 session 残留、思考缺省 off。失败/无 key 一律返回 null
@@ -222,7 +222,7 @@ export async function fetchNoteSummary({
 
   const provider = getProviderByModel(model)
 
-  // r2-42：查不到 provider 就如实失败。本函数用 `null` 表达失败，调用方
+  // 查不到 provider 就如实失败。本函数用 `null` 表达失败，调用方
   // `useNotesEditing.handleAutoRename` 已对 `null` 弹 `notes.auto_rename.failed`，
   // 因此失败对用户可见；不静默回落到别的 provider 去猜。
   if (!provider) {
@@ -254,7 +254,7 @@ export async function fetchNoteSummary({
 /**
  * 一次性生成（搜索编排 / 记忆 / 错误诊断等）。
  *
- * r2-41：结果形状与 `fetchMessagesSummary` 对齐——`{ text: null, error }` 表达调用失败，
+ * 结果形状与 `fetchMessagesSummary` 对齐——`{ text: null, error }` 表达调用失败，
  * 而不是折叠成 `''`。旧实现把 401 / 超时 / 网络错都压成空字符串，调用方（错误诊断）只能把
  * 它读成"模型返回空"，真实原因只剩一行 warn。
  */
@@ -272,7 +272,7 @@ export async function fetchGenerate({
   }
   const provider = getProviderByModel(model)
 
-  // r2-42：provider 缺失是**调用失败**，不是「模型返回空」。回落到清单第一项会让
+  // provider 缺失是**调用失败**，不是「模型返回空」。回落到清单第一项会让
   // 诊断/搜索编排拿到一个与 model.id 不匹配的 provider，错误原因完全误导。
   if (!provider) {
     logger.warn('fetchGenerate: no provider for model', { modelId: model.id, providerId: model.provider })

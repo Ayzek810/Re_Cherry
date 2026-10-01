@@ -1,5 +1,5 @@
 /**
- * 生成状态投影（v0.3.3 批次4，② 薄适配）：V2 的 cache 投影改为 feature 内
+ * 生成状态投影（② 薄适配）：V2 的 cache 投影改为 feature 内
  * React Context（PaintingSessionContext）——PaintingGenerationState 收窄为
  * generationStatus/generationError（fork 无 job 机制，无 taskId/progress）。
  * 状态镜像存 PaintingSessionContext.generatingById（瞬态，不持久化）。

@@ -103,7 +103,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
 
         // Save to database
         // 不写空数组：否则一次「成功但没有服务」的同步会把上一次拉到的缓存清成 []，
-        // 面板与缓存同时丢数据（v1 二轮审查 s2-05）。
+        // 面板与缓存同时丢数据。
         if (servers.length > 0) {
           const dbKey = `mcp:provider:${provider.key}:servers`
           await db.settings.put({ id: dbKey, value: servers })

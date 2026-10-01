@@ -1,4 +1,4 @@
-// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/types.ts（2026-09-24，v0.3.4-1 批次4a）。
+// fork 移植自 cherry-studio v2 src/renderer/pages/code/cliConfig/types.ts（2026-09-24）。
 // 逐字；import 面两处对号（Provider/Model 来自 ./providerView 投影缝，UniqueModelId 来自
 // fork @shared/types/uniqueModelId），均已标 `// fork 缝`。
 

@@ -1,5 +1,5 @@
 /**
- * 知识库类型（v0.3.2 按 CS_V1 全形恢复）。
+ * 知识库类型（按 CS_V1 全形恢复）。
  * KnowledgeReference 已于 v0.4 统一到 V1 形状（{id: number; content; sourceUrl; type; file?; metadata?}），
  * 生产方（kernel/knowledgeSearchTool 的 meta 通道）与消费方（store/messageBlock 引用卡格式化）同批切换。
  */
@@ -106,9 +106,9 @@ export interface KnowledgeBase {
 }
 
 /**
- * 知识库主进程参数（v0.3.2 批次1 按 UI 骨架恢复）。
- * fork 分叉点：V1 形状含 embedApiClient/rerankApiClient（由 aiCore 构造），fork 批次1 无嵌入
- * 机制，先省略；批次4（知识库接线）落地真实 IPC 时再对齐 V1 形状。
+ * 知识库主进程参数（按 UI 骨架恢复）。
+ * fork 分叉点：V1 形状含 embedApiClient/rerankApiClient（由 aiCore 构造），fork 无嵌入
+ * 机制，先省略；（知识库接线）落地真实 IPC 时再对齐 V1 形状。
  */
 export type KnowledgeBaseParams = {
   id: string
@@ -122,7 +122,7 @@ export type KnowledgeBaseParams = {
   }
 }
 
-/** 语义检索结果（批次1 仅类型；真实检索批次4 接线）。 */
+/** 语义检索结果（仅类型；真实检索 接线）。 */
 export interface KnowledgeSearchResult {
   pageContent: string
   score: number
@@ -137,9 +137,9 @@ export const PreprocessProviderIds = {
   mineru: 'mineru',
   'open-mineru': 'open-mineru',
   paddleocr: 'paddleocr',
-  /** 本地 PaddleOCR（v0.3.2 自 CS_V2 移植）：内置推理，权重按需下载，无密钥无 apiHost。 */
+  /** 本地 PaddleOCR（自 CS_V2 移植）：内置推理，权重按需下载，无密钥无 apiHost。 */
   'local-paddle': 'local-paddle',
-  /** 视觉模型文档解析（v0.4.4）：通道里的服务商条目——用用户配置的视觉模型逐页
+  /** 视觉模型文档解析：通道里的服务商条目——用用户配置的视觉模型逐页
    *  转写文档（本机光栅化 → OpenAI 兼容多模态 chat），无密钥无 apiHost 无模型权重。 */
   'vision-model': 'vision-model'
 } as const

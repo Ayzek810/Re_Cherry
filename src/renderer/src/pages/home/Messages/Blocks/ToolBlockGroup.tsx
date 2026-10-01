@@ -121,7 +121,7 @@ const HeaderSeparator = styled.span`
 
 const ScrollableToolList = styled.div<{ $allCompleted: boolean }>`
   max-height: ${(props) => (props.$allCompleted ? 'none' : '300px')};
-  /* v0.3.1-1 ask_user 弹卡跳动/横滚条反复闪烁案（结构性根因）：
+  /* ask_user 弹卡跳动/横滚条反复闪烁案（结构性根因）：
      1) 只写 overflow-y 时，CSS 会把另一轴的 visible 计算成 auto —— 任何一张卡内容稍宽，
         就在工具卡下方长出一根原生横滚动条（用户看到的那根），宽度稍回落又消失，反复闪烁；
      2) 竖向滚动条出现/消失是 in-flow 的，会改变内容宽度 → 卡内文本重新换行 → 高度变化 →
@@ -419,7 +419,7 @@ const ToolBlockGroup: React.FC<Props> = ({ blocks, role = 'assistant' }) => {
 
   useEffect(() => {
     if (activeKey.includes('tool-group') && currentRunningBlock && scrollRef.current) {
-      // v0.3.1-1 ask_user 弹卡跳动案：等待审批/问答的块不参与居中滚动（问答/审批中
+      // ask_user 弹卡跳动案：等待审批/问答的块不参与居中滚动（问答/审批中
       // 位置不应被反复抢占，卡进视口一次即可）。滚入视口改走 dom 包装并限定最近滚动
       // 祖先（container:'nearest'）——此前是全代码库唯一绕过包装的原生 scrollIntoView，
       // 无 container 限制的多祖先平滑滚动叠加 column-reverse 容器，正是弹卡视口跳动的根因。

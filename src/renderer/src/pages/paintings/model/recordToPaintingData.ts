@@ -1,5 +1,5 @@
 /**
- * PaintingRecord → PaintingData 反序列化（v0.3.3 批次4，V2 recordToPaintingData 重写）。
+ * PaintingRecord → PaintingData 反序列化（V2 recordToPaintingData 重写）。
  * V2 的 normalizeStoredPaintingModel（unique-model-id 剥壳）照搬——fork 的
  * modelId 也可能存成 provider:model 形态（历史数据防御）。文件解析从 DataApi
  * FileEntry 换成 Dexie 内嵌 FileMetadata（无 404 语义，直接透传）。

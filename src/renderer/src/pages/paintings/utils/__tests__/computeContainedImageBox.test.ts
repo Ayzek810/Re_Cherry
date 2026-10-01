@@ -1,7 +1,7 @@
 /**
  * "完整展示"（contain）盒的不变量测试：算出来的盒子**永远**能放进容器、
  * 永远不放大超过原始尺寸，且按提示条占位扣减可用高度。
- * 这条不变量就是用户要的"图片被完整展示"——v0.3.3-9 之前它靠组件内联算术，
+ * 这条不变量就是用户要的"图片被完整展示"—— 之前它靠组件内联算术，
  * 高度算不出来时会退化成"上对齐填满 + 裁切"。
  */
 import { computeContainedImageBox } from '@renderer/pages/paintings/utils/computeContainedImageBox'

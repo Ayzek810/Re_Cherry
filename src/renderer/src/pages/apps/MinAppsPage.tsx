@@ -20,7 +20,7 @@ const AppsPage: FC = () => {
   const { minapps } = useMinapps()
   const { isTopNavbar } = useNavbarPosition()
 
-  // r2-79/⑥：启动播种失败的提示在这里落地。`config/minapps.ts` 在渲染层启动期求值，
+  // /⑥：启动播种失败的提示在这里落地。`config/minapps.ts` 在渲染层启动期求值，
   // 那时 `window.toast` 还没赋值（TopView 在挂载 effect 里才设置）——当场弹 toast 会静默
   // no-op，失败就只剩一条日志。这里在挂载后取走一次性提示并展示（用户正是在这一页管理
   // 自定义小应用，提示落在上下文里）。

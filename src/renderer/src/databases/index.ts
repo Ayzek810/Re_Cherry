@@ -28,7 +28,7 @@ import { Dexie, type EntityTable } from 'dexie'
 import { upgradeToV5, upgradeToV7, upgradeToV8 } from './upgrades'
 
 // ---------------------------------------------------------------------------
-// r2-74 Dexie 版本纪律：**版本块只能追加，不能删除、不能合并、不能改写**。
+// Dexie 版本纪律：**版本块只能追加，不能删除、不能合并、不能改写**。
 // Dexie 用声明式版本表算升级路径：已升到 vN 的用户库，其 `_dbSchema` 里记着 vN 的表集，
 // 打开时必须能从旧表集沿**声明链**走到新表集。删掉/合并任何一个中间版本块，都会让停在
 // 该版本的库找不到自己的升级起点而打不开（IndexedDB 里数据还在，但应用永久无法读取）。
@@ -167,13 +167,13 @@ db.version(14).stores({
   message_files: null
 })
 
-// v0.3.3 批次3：翻译页回归——历史表用新名 translate_records（translate_history
+// 翻译页回归——历史表用新名 translate_records（translate_history
 // 在 v4-v10 存在过、v11 已 drop，复用旧名会撞已删表语义）。
 db.version(15).stores({
   translate_records: '&id, createdAt'
 })
 
-// v0.3.3 批次4：绘画页——生成历史（V2 PaintingSchema 形状收窄；文件字节落
+// 绘画页——生成历史（V2 PaintingSchema 形状收窄；文件字节落
 // FileStorage，本表只存引用与元数据）。
 db.version(16).stores({
   paintings: '&id, createdAt'
@@ -187,7 +187,7 @@ db.version(17).stores({
   message_translations: '&messageId'
 })
 
-// v0.4.7 用量统计面板：回合级 usage 记录（kernelChat 回合收尾落库）。派生分析数据
+// 用量统计面板：回合级 usage 记录（kernelChat 回合收尾落库）。派生分析数据
 // （trace/span 同类），不是会话状态第二真相源——不变量2 允许；++id 自增主键，
 // timestamp/modelId/topicId 二级索引服务时间范围与模型分组查询。
 db.version(18).stores({

@@ -1,5 +1,5 @@
 /**
- * c2-19 行为测试：展开/换行的 toggle 必须是稳定身份，否则注册 effect 每次渲染
+ * 展开/换行的 toggle 必须是稳定身份，否则注册 effect 每次渲染
  * 都摘挂一次并向 setTools 写入新数组 —— 自持渲染回路，且每个代码块独立在跑。
  *
  * 缺陷原状：`toggle: useCallback(() => ..., [])` 写在 props 位置，每次渲染都返回新函数。
@@ -42,7 +42,7 @@ vi.mock('@renderer/components/ActionTools', () => ({
 }))
 
 vi.mock('@renderer/hooks/useSettings', () => ({
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   useSettings: () => ({
     codeEditor: { enabled: false, keymap: true },
     codeExecution: { enabled: false, timeoutMinutes: 1 },

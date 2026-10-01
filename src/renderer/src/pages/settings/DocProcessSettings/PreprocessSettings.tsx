@@ -1,4 +1,4 @@
-/** v0.3.2 自 CS_V1 移植（文档处理 provider 选择 + 表单；裁剪见目录 index 头注释）。 */
+/** 自 CS_V1 移植（文档处理 provider 选择 + 表单；裁剪见目录 index 头注释）。 */
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultPreprocessProvider, usePreprocessProviders } from '@renderer/hooks/usePreprocess'
 import { Select } from 'antd'
@@ -15,7 +15,7 @@ const PreprocessSettings: FC = () => {
   const { theme: themeMode } = useTheme()
 
   /**
-   * v1 二轮审查 s2-11：选中值直接从 redux 派生，不再本地镜像一份。
+   * 选中值直接从 redux 派生，不再本地镜像一份。
    *
    * 旧实现在这里 `useState(defaultProvider)`，而默认 provider 也被知识库表单等其他消费者
    * 修改（`useDefaultPreprocessProvider` 只写 id），且没有任何 effect 回同步本页草稿——

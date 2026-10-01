@@ -14,7 +14,7 @@ export type ApiGatewayStatusResult = { success: true } | { success: false; error
 /**
  * Result of an API-gateway stop IPC call.
  *
- * v1 二轮审查 m2-04/m2-21：`'deferred'`（临时租约仍持有服务器）已删除——租约计数随瞬态
+ * `'deferred'`（临时租约仍持有服务器）已删除——租约计数随瞬态
  * 消费者子系统裁掉，恒无消费者，该分支永假。关闭失败不再伪装成成功：IPC 返回
  * `{ success: false, error }`（含"端口仍被占用"的可行动文案）。
  */

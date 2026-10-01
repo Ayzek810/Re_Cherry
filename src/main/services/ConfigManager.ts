@@ -41,7 +41,7 @@ export enum ConfigKeys {
   ClientId = 'clientId',
   GitBashPath = 'gitBashPath',
   GitBashPathSource = 'gitBashPathSource', // 'manual' | 'auto' | null
-  // 统一网关（v0.3.4-1 批次3）：V2 的 feature.api_gateway.* 四键的 fork 对应存储位。
+  // 统一网关：V2 的 feature.api_gateway.* 四键的 fork 对应存储位。
   ApiGatewayEnabled = 'apiGatewayEnabled',
   ApiGatewayPort = 'apiGatewayPort',
   ApiGatewayHost = 'apiGatewayHost',
@@ -157,7 +157,7 @@ export class ConfigManager {
   }
 
   getEnableDataCollection(): boolean {
-    // v0.3.1-2：本 fork 默认关闭数据收集（上游默认 true，且隐私政策更新会把开关强制重置为开）。
+    // 本 fork 默认关闭数据收集（上游默认 true，且隐私政策更新会把开关强制重置为开）。
     return this.get<boolean>(ConfigKeys.EnableDataCollection, false)
   }
 
@@ -193,7 +193,7 @@ export class ConfigManager {
     this.set(ConfigKeys.EnableDeveloperMode, value)
   }
 
-  // 统一网关（v0.3.4-1 批次3）：V2 PreferenceService 四键的 fork 读写面。
+  // 统一网关：V2 PreferenceService 四键的 fork 读写面。
   // setter 一律 setAndNotify：'apiGatewayEnabled' 的订阅方（ApiGatewayService
   // reconciler 触发）靠它驱动收敛；enabled 默认 false、port 23333、host 回环、
   // apiKey 空（ensureValidApiKey 首次启动时生成）。

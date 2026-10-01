@@ -16,11 +16,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 /**
- * v0.3.2 自 CS_V1 移植（批次1 UI）。fork 改动点：
- * - DXT 导入 v0.4.7 接线：uploadDxt 走 Mcp_UploadDxt → 主进程 DxtService 解包校验；
+ * 自 CS_V1 移植（UI）。fork 改动点：
+ * - DXT 导入 接线：uploadDxt 走 Mcp_UploadDxt → 主进程 DxtService 解包校验；
  *   manifest → MCPServer 转换与 ${__dirname}/user_config 参数清洗同上游 AddMcpServerModal
  *   （启动期主进程还会按 dxtPath 重解配置，见 MCPService.initTransport）；
- * - 导入成功后经 checkConnectivity 后台探测连通性并回写 isActive（批次1 替身期移除，
+ * - 导入成功后经 checkConnectivity 后台探测连通性并回写 isActive（替身期移除，
  *   随本批次恢复；探测失败不弹错——DXT 服务器可能需额外配置，结果只是启用状态信号）；
  * - 重名检查同时比对 manifest.name 与最终落库名 display_name||name（上游只查前者，
  *   display_name 存在时漏判重名）。
@@ -226,7 +226,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
                 .checkConnectivity(newServer)
                 .then((isConnected) => {
                   logger.debug(`Connectivity check for ${newServer.name}: ${isConnected}`)
-                  // v1 二轮审查 s2-19：按 id 窄更新，不再用导入瞬间的 `newServer` 快照整行覆盖。
+                  // 按 id 窄更新，不再用导入瞬间的 `newServer` 快照整行覆盖。
                   // `checkConnectivity` 走 initClient + listTools，超时下限 180s——用户在这段时间里
                   // 填好的 env / args / apiKey 会被旧快照静默回退（注释自己承认「失败是预期情况」，
                   // 即这条路径经常走到）。切片已有按 id 的 `setMCPServerActive`。

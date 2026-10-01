@@ -11,7 +11,7 @@ import { InstallProgress } from './InstallProgress'
 import { Button, Tooltip } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/VersionStatusCard.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点三处，状态推导/四脚位（upgrade/remove/retry/launch）与
+//（2026-09-24）。缝点三处，状态推导/四脚位（upgrade/remove/retry/launch）与
 // 启动按钮 aria 语义逐字：
 // ① operation 面缝：fork VersionStatus 无 operation 广播面（见 ../types 缝注）——removing/
 //   failedInstall/failedRemoval 恒 false，retry 走 applicationStatus（broken/unknown）臂，
@@ -43,17 +43,17 @@ interface VersionStatusCardProps {
   /** Failure message of the last install/upgrade attempt; renders a persistent failure row. */
   installError?: string
   onShowError?: () => void
-  /** v0.3.4-2：首探窗口（快照未返回）——安装按钮显示「检查中」而非可点击态。 */
+  /** 首探窗口（快照未返回）——安装按钮显示「检查中」而非可点击态。 */
   snapshotsLoading?: boolean
   /**
    * 安装进度（共享契约 `InstallProgressPayload`；仅本工具安装中时有值）。
    *
-   * v0.4.5-1：三个平行 prop 收成一份载荷——载荷加字段（如 stage）不必再改这一层。
+   * 三个平行 prop 收成一份载荷——载荷加字段（如 stage）不必再改这一层。
    */
   installProgress?: InstallProgressPayload
-  /** v0.4.5：手动检查更新（强制重探快照 + 现查最新版本）。 */
+  /** 手动检查更新（强制重探快照 + 现查最新版本）。 */
   onCheckUpdates?: () => void
-  /** v0.4.5：该工具正在检查更新（按钮旋转态）。 */
+  /** 该工具正在检查更新（按钮旋转态）。 */
   checkingUpdates?: boolean
 }
 
@@ -84,7 +84,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
 }) => {
   const { t } = useTranslation()
   const launchDisabledHintId = useId()
-  // fork 缝（v0.3.4-2 用户裁决）：启动按钮右边的「固定到启动台」——把当前工具的加号页
+  // fork 缝（用户裁决）：启动按钮右边的「固定到启动台」——把当前工具的加号页
   // 快捷方式一键建好/移除，不必先启动再右键侧栏磁贴。磁贴对象与 openSmartMinapp 的
   // transient 应用同形（url 留空：启动台点击进 /code 管理页，不消费 url）。
   const { pinned, updatePinnedMinapps } = useMinapps()
@@ -195,7 +195,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {/* v0.4.5：手动检查更新——已装工具才可查（未装时安装键已展示最新版本）。 */}
+          {/* ：手动检查更新——已装工具才可查（未装时安装键已展示最新版本）。*/}
           {isInstalled && onCheckUpdates && (
             <Tooltip content={t('code.check_updates')} placement="top" delay={300} sideOffset={6}>
               <Button
@@ -274,7 +274,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
                   {launchDisabledHint}
                 </span>
               ) : null}
-              {/* fork 缝（v0.3.4-2）：启动右边的「固定到启动台」开关 */}
+              {/* fork 缝：启动右边的「固定到启动台」开关 */}
               <Tooltip
                 content={t(isPinnedToLaunchpad ? 'minapp.remove_from_launchpad' : 'minapp.add_to_launchpad')}
                 placement="top"
@@ -295,7 +295,7 @@ export const VersionStatusCard: FC<VersionStatusCardProps> = ({
             </>
           ) : (
             // fork 缝①（续）：failedRemoval 臂恒 false（无 operation 面），比较式随状态面裁剪。
-            // v0.3.4-2：快照首探窗口显示「检查中」disabled 态——期间安装键可点会诱导重装
+            // 快照首探窗口显示「检查中」disabled 态——期间安装键可点会诱导重装
             //（用户担忧的极限场景）。
             !retryInstall &&
             (snapshotsLoading ? (

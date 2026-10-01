@@ -40,7 +40,7 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve }) => {
   }
 
   /**
-   * 取消 = 交回 `null` 哨兵（v1 二轮审查 s2-08）。
+   * 取消 = 交回 `null` 哨兵。
    *
    * 旧实现在这里排了一个 300ms 的 `reject`：`useTimer` 卸载时会 `clearAllTimers()`，
    * 弹窗关闭即卸载 → 定时器被清 → 外层 `await` 永不 settle（`onCheckApi` 后续一行都不执行）；

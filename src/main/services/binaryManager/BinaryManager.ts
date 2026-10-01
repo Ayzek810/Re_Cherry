@@ -4,7 +4,7 @@
 // 勾勒自勘查报告结论）。一切钉在 {userData}/Data/CodeMate/ 子树：不改
 // 系统 PATH、不写用户全局配置，卸载 = 删子树。BinaryToolSnapshot 为 V2
 // src/shared/types/binary.ts 的子集抄形状（fork 不建 shared 文件，operation/definition 面若
-// UI 需要随批次4 再补）。
+// UI 需要随 再补）。
 
 import fsp from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -58,7 +58,7 @@ import {
 
 const logger = loggerService.withContext('BinaryManager')
 
-// v0.3.4-2：快照 stale-while-revalidate 的缓存文件与后台重探冷却。
+// 快照 stale-while-revalidate 的缓存文件与后台重探冷却。
 const SNAPSHOT_CACHE_FILENAME = 'snapshot-cache.json'
 const SNAPSHOT_REFRESH_COOLDOWN_MS = 15_000
 
@@ -70,8 +70,8 @@ const PYPI_TIMEOUT_MS = 10_000
 // fork 缝：registry 固定走 npmmirror（V2 走用户代理/区域策略 + mise 内部解析；portable
 // 安装器为可预期行为写死镜像）。pip 源 official 在前、清华镜像在后（pip 按序尝试）——
 // 与 V2 的清华镜像策略对应（V2 另有腾讯镜像背书，fork 裁为单镜像）。
-// v0.4.5-1：镜像/备用源常量已单点到 registry.ts（市场通道共用同一份，见该件注释）。
-// v0.3.4-2（用户裁决）：dsh 通道锚 npm 的 `next` dist-tag——社区的当前代际发在 next
+// 镜像/备用源常量已单点到 registry.ts（市场通道共用同一份，见该件注释）。
+// （用户裁决）：dsh 通道锚 npm 的 `next` dist-tag——社区的当前代际发在 next
 // （0.1.7-rc.2），`latest` 停在 0.1.5-rc.3 不动；锚 latest 就永远收不到新一代（真机
 // 取证：用户对比社区桌面壳发现"已经到 0.17 而这里还是 0.15 且没有推送更新"）。
 // 安装与更新检查共用此 tag，语义恒对齐。
@@ -90,7 +90,7 @@ const PYPI_PRIMARY_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 const PYPI_FALLBACK_INDEX = 'https://pypi.org/simple'
 
 /**
- * pip 安装的时长预算（v0.4.5-1）：默认的 15 分钟**不足以**装完这两个工具的 Python 依赖。
+ * pip 安装的时长预算：默认的 15 分钟**不足以**装完这两个工具的 Python 依赖。
  *
  * 真机取证（app-error.2026-09-29.log 18:12:15）：`pip install paper-agent dependencies timed
  * out after 900000ms`——一次健康的依赖安装在 15 分钟被我们杀掉（`buildInPlace` 随即回滚，
@@ -111,7 +111,7 @@ const INSTALL_FAILURE_DETAIL_LIMIT = 600
  */
 const OPERATION_BUSY_MESSAGE = 'Another install or removal is already running. Wait for it to finish, then retry.'
 
-// v0.3.4-2（用户裁决）：通道版本可见化——主进程启动即打一行安装通道，日志里一眼
+// （用户裁决）：通道版本可见化——主进程启动即打一行安装通道，日志里一眼
 // 可辨运行中的代码是否加载了本次改动（真机取证：dev 未重启时 npm 日志显示旧 spec，
 // "改了没生效"与"代码没改"无法区分——这行日志终结歧义）。
 logger.info(`dsh install channel: @${DSH_NPM_DIST_TAG} (node ${NODE_VERSION})`)
@@ -132,7 +132,7 @@ export type BinaryToolSnapshot = {
   application: BinaryApplicationStatus
   availability: BinaryAvailability
   /**
-   * v0.4.5-1：该工具**最近一次**安装/升级失败的原始原因（已 redactSecretText 清洗）。
+   * 该工具**最近一次**安装/升级失败的原始原因（已 redactSecretText 清洗）。
    * 主进程持有并随快照下发/落盘，故渲染层的失败行刷新页面后依然在——此前失败原因只活在
    * 一次 toast 里，用户回头再看就没了。
    */
@@ -174,8 +174,8 @@ export type BinaryRemoveResult = { removed: boolean; message?: string }
  */
 export type InstallProgressEnter = (step: InstallProgressStep, extra?: { detail?: string; fraction?: number }) => void
 
-/** v0.4.5：手动检查更新的结论（渲染层按钮的结果反馈与版本卡注入面）。
- * v0.4.5-1（O1）：加 `source` 分态——只有受管安装才谈得上"本应用可升级"。 */
+/** 手动检查更新的结论（渲染层按钮的结果反馈与版本卡注入面）。
+ * （）：加 `source` 分态——只有受管安装才谈得上"本应用可升级"。 */
 export type BinaryCheckUpdatesResult =
   | {
       success: true
@@ -229,7 +229,7 @@ function sourceRepoName(plan: ToolPlan): string {
 }
 
 /**
- * 受管可执行文件的落点（v0.4.5-1：布局知识单点到 layout.ts，resolveBinary 与
+ * 受管可执行文件的落点（布局知识单点到 layout.ts，resolveBinary 与
  * PaperAgentService 共用同一份）。此处的 throw 只在"预设表出现无布局的后端"时可达——
  * 那是安装器自己的配置错误，应当响亮失败而不是猜路径。
  */
@@ -285,7 +285,7 @@ export class BinaryManager {
   /**
    * 变更类操作（安装/卸载）的串行闸。
    *
-   * v0.4.5-1 真机事故：原先用普通 mutex 的 `runExclusive` —— 一个长安装（paper-agent 的 pip
+   * 真机事故：原先用普通 mutex 的 `runExclusive` —— 一个长安装（paper-agent 的 pip
    * 超时预算 15 分钟）会把**所有**工具的安装与卸载都堵在队列里，而渲染层只看到转圈：
    * 整份主进程日志里连一条 remove 记录都没有（请求根本没进到方法体），用户看到的就是
    * "卸载始终卸不掉"。改用 tryAcquire 包装：拿不到闸**立刻**拒绝，并如实告诉用户
@@ -295,7 +295,7 @@ export class BinaryManager {
   private snapshotCache: { data: Record<string, BinaryToolSnapshot>; at: number } | null = null
   private snapshotProbeInFlight: Promise<void> | null = null
   /**
-   * v0.4.5-1：每个工具最近一次的安装失败原因（executable → 已清洗的消息）。
+   * 每个工具最近一次的安装失败原因（executable → 已清洗的消息）。
    * 生命周期与工具状态同档：开始新一次尝试时清除、失败时写入、卸载成功时清除。随快照落盘，
    * 故"上次为什么失败"在重启后仍可读。
    */
@@ -354,13 +354,13 @@ export class BinaryManager {
    * 事实）。刻意不取 mutation mutex——慢安装不得隐藏已发布的事实（V2 同款注释语义）。
    */
   async getToolSnapshots(names: readonly string[]): Promise<Record<string, BinaryToolSnapshot>> {
-    names // v0.3.4-2：探针面固定为全部预设（2 项），names 仅供 IPC 合同兼容。
-    // v0.3.4-2（用户裁决）：快照缓存 + 后台重探（stale-while-revalidate）——/code 页
+    names // 探针面固定为全部预设（2 项），names 仅供 IPC 合同兼容。
+    // （用户裁决）：快照缓存 + 后台重探（stale-while-revalidate）——/code 页
     // 打开时的"安装"按钮假象来自 3-5s 的探针窗口（hermes 系统 .exe 的 --version 挂到
     // 超时）。有缓存即秒回旧状态，后台重探完成后 broadcastChanged → 渲染层经
     // onChanged 回路自动刷新。冷却 15s 防重探风暴；安装/卸载后强制重探。
     //
-    // v1 二轮审查 m2-25：判定顺序此前是「重探在飞 ⇒ await 它再返回」，于是**恰好在最该秒回
+    // 判定顺序此前是「重探在飞 ⇒ await 它再返回」，于是**恰好在最该秒回
     // 的窗口**（后台重探进行中，时长可达探针超时级）读路径反而挂起，同一时刻多个渲染层请求
     // 一起悬着。改为「有缓存即以缓存作答」，重探结果只经 broadcastChanged 通知刷新；
     // 只有**完全无缓存**时才 await 首次探针。
@@ -424,7 +424,7 @@ export class BinaryManager {
   }
 
   private async writeSnapshotCacheFile(data: Record<string, BinaryToolSnapshot>): Promise<void> {
-    // v0.4.5-1 真机日志：首装时 cache 目录还不存在 → ENOENT，快照缓存永远写不下（每次启动
+    // 真机日志：首装时 cache 目录还不存在 → ENOENT，快照缓存永远写不下（每次启动
     // 全量重探）。写入前把父目录建出来。
     await fsp.mkdir(cacheRoot(), { recursive: true })
     await fsp.writeFile(
@@ -438,7 +438,7 @@ export class BinaryManager {
     const managedPath = managedBinaryPath(plan)
     if (await pathExists(managedPath)) {
       const version = await readToolVersionMarker(plan.name)
-      // v0.4.5-1：判定抽到 applicationStatus.ts（纯函数 + 单测）。最要紧的一条是**版本标记
+      // 判定抽到 applicationStatus.ts（纯函数 + 单测）。最要紧的一条是**版本标记
       // 缺失 ⇒ broken**——安装器把它写在最后，"核心换新、市场没换"的半成品此前被判 applied
       // 且显示"最新版本"（真机反馈：升级成功但插件市场不可用，还没有重试入口）。
       const probe = await probeBinary(managedPath)
@@ -466,14 +466,14 @@ export class BinaryManager {
         ...(this.installFailures.get(plan.name) ? { lastFailure: this.installFailures.get(plan.name) } : {})
       }
     }
-    // v0.4.5 源码型无 PATH 可执行物（其入口恒为受管 venv 解释器）——不探系统 PATH，
+    // 源码型无 PATH 可执行物（其入口恒为受管 venv 解释器）——不探系统 PATH，
     // 免得路径上恰好有个同名异物被当成"已装（系统）"。
     if (plan.kind === 'source') {
       return { name: plan.name, application: 'absent', availability: { source: 'none' } }
     }
     const systemPath = await probeSystemPath(plan.preset.executable)
     if (systemPath) {
-      // 批次5 真机加固：PATH 命中 ≠ 可执行（同名异物/缺子命令/损坏安装）。availability
+      // 真机加固：PATH 命中 ≠ 可执行（同名异物/缺子命令/损坏安装）。availability
       // 授权执行——探针失败按 V2 语义收敛为 source:'none'（不为不可跑的二进制背书），
       // UI 回落到安装面；探针输出的版本照实携带供展示。
       const probe = await probeBinary(systemPath)
@@ -524,7 +524,7 @@ export class BinaryManager {
   /**
    * 安装（变更闸串行；被占用即拒绝，不排队）。message 经 redactSecretText 清洗。
    *
-   * `targetVersion`（v0.4.5-1）来自渲染层"检查更新"的结论：检查到 A 就装 A。此前这个入参
+   * `targetVersion`来自渲染层"检查更新"的结论：检查到 A 就装 A。此前这个入参
    * 被渲染层 `void` 掉，装的恒是"点按钮那一刻的通道最新版"（`@next` 这类漂移 tag 下就是
    * "报 A 装 B"）。npm/venv 型按精确版本下 spec；源码型见 installSourceTool 的说明。
    */
@@ -541,7 +541,7 @@ export class BinaryManager {
       if (plan.kind === 'npm') await this.installNpmTool(plan, targetVersion)
       else if (plan.kind === 'venv') await this.installVenvTool(plan, targetVersion)
       else await this.installSourceTool(plan, targetVersion)
-      // v0.3.4-2：成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
+      // 成功后强制重探——紧随的 broadcast 让渲染层直接命中新状态，
       // 不再闪回安装前旧态。
       await this.refreshSnapshotCache().catch((error) =>
         logger.warn('Post-install snapshot refresh failed', error as Error)
@@ -550,7 +550,7 @@ export class BinaryManager {
     } catch (error) {
       const message = redactSecretText(error instanceof Error ? error.message : this.errorMessage(error))
       logger.warn(`Failed to install managed tool ${name}`, { error: message })
-      // v0.4.5-1：把原因留在主进程（随快照下发/落盘）——渲染层的失败行据此持久显示，
+      // 把原因留在主进程（随快照下发/落盘）——渲染层的失败行据此持久显示，
       // 不再"刷新一下就没原因了"。截断避免把整段 pnpm 输出写进快照缓存。
       this.installFailures.set(name, message.slice(0, INSTALL_FAILURE_DETAIL_LIMIT))
       return { success: false as const, message }
@@ -579,11 +579,11 @@ export class BinaryManager {
     const env: NodeJS.ProcessEnv = withPathPrepend(process.env, [nodeBinDir], pathSep)
     env.npm_config_cache = path.join(cacheRoot(), 'npm')
     env.npm_config_registry = NPM_REGISTRY_MIRROR
-    // 批次5：pnpm store 也钉进 CodeMate 子树（dshmarket 在 harness 内装插件时
+    // pnpm store 也钉进 CodeMate 子树（dshmarket 在 harness 内装插件时
     // 继承此 env → pnpm 子进程的 store 落点受控，卸载=删子树仍成立）。
     env.npm_config_store_dir = path.join(cacheRoot(), 'pnpm-store')
     enter('install')
-    // v0.4.5-1（O2）：带了检查到的版本就钉精确版——"报 A 装 B"正是通道 tag 漂移下的常态。
+    // （）：带了检查到的版本就钉精确版——"报 A 装 B"正是通道 tag 漂移下的常态。
     // 不设静默回退：装到与用户要求不同的版本，等于把刚修掉的问题换个地方放回去；精确版若
     // 已从 registry 撤下，就如实失败（失败原因现在会持久显示，用户可再点一次检查更新）。
     const npmSpec = targetVersion
@@ -601,10 +601,10 @@ export class BinaryManager {
       )
     }
 
-    // v0.3.4-2：bundle 装配——dshmarket（插件市场）+ PPT（社区预构建 tgz）。
+    // bundle 装配——dshmarket（插件市场）+ PPT（社区预构建 tgz）。
     // 全走 dsh 自带的 `plugin add` 命令（官方 bundle 安装通道：pnpm add 到 profile 树
     // + reconcilePlugins 自动把声明 dsh.bundle 的依赖加进 dsh.profile.bundles）。
-    // v0.4.5-1：市场那一条已改走受管市场通道（见 marketBaseline.ts）——裸 `add dshmarket`
+    // 市场那一条已改走受管市场通道（见 marketBaseline.ts）——裸 `add dshmarket`
     // 没有版本契约、没有 --workspace-root、没有装后核验，核心升级后市场停旧版就是这个
     // 缺口造成的（真机反馈"新版本的插件市场不可用"）。
     //
@@ -624,17 +624,17 @@ export class BinaryManager {
     })
     const bundleEnv = withPathPrepend(env, [path.join(dir, 'node_modules', '.bin')], pathSep)
     bundleEnv.DSH_HOME = deepSeekHarnessHome()
-    // v0.3.4-2 真机事故：pnpm **不吃 npm_config_registry**（`pnpm config get registry`
+    // 真机事故：pnpm **不吃 npm_config_registry**（`pnpm config get registry`
     // 恒返回 npmjs.org——真机取证；社区 #337 同款坑）→ 所有 pnpm 操作直连官方 registry，
     // 国内网络下 add 挂死 10 分钟。修复两层：①profile 目录写项目级 .npmrc（pnpm 读
     // 项目配置，且 dshmarket 墙内装插件的 pnpm 子进程 cwd 同在 profile——一并生效）；
     // ②每条 plugin add 显式带 --registry（社区 #337 的修复形态）。
     const webProfileDir = path.join(deepSeekHarnessHome(), 'profiles', 'web')
     const pnpmRegistryArgs = [`--registry=${NPM_REGISTRY_MIRROR}`]
-    // v0.3.4-2 真机事故（首装无市场）：首次安装时 profile 尚不存在（harness 首次启动才
+    // 真机事故（首装无市场）：首次安装时 profile 尚不存在（harness 首次启动才
     // 创建）——不 mkdir 则 .npmrc 写入 ENOENT → bundle 装配链整体中断，dsh 能启动但
     // 没有市场；卸载不删 home 树 → 首次启动建好 profile 后重装才有。真机现象完全吻合。
-    // v0.4.5-1 更正：pnpm ≥10 已不从 .npmrc 读链接器/registry 设置（harness 自己的
+    // 更正：pnpm ≥10 已不从 .npmrc 读链接器/registry 设置（harness 自己的
     // initProfile 写的是 pnpm-workspace.yaml）——本行对 npm 通道与旧 pnpm 仍有意义，
     // 真正生效的是各条命令的 --registry 与 marketBaseline 的命令环境。
     await fsp.mkdir(webProfileDir, { recursive: true })
@@ -644,7 +644,7 @@ export class BinaryManager {
       'utf-8'
     )
     enter('market')
-    // v0.4.5-1 真机回归修正：**插件 bundle 装不上不得让 dsh 装不上**。市场与 PPT 都是
+    // 真机回归修正：**插件 bundle 装不上不得让 dsh 装不上**。市场与 PPT 都是
     // bundle，不是工具本体；让它们的失败掀翻整个安装的后果是"标记不写 → 工具判 broken →
     // 用户既用不了也没法升级"（真机日志：dsh 0.2.0-rc.2 以 peer 不兼容拒收被钉死的
     // dshmarket@1.45.1）。失败改成**软失败**：记日志 + 记进快照的 lastFailure（渲染层会
@@ -659,7 +659,7 @@ export class BinaryManager {
       logger.warn('dshmarket could not be installed; DeepSeek Harness itself is unaffected', { error: message })
     }
 
-    // v0.3.4-2 真机修正：PPT 从 registry 装 `dsh-ppt@latest`（0.4.5，官方 DSH 演示文稿
+    // 真机修正：PPT 从 registry 装 `dsh-ppt@latest`（0.4.5，官方 DSH 演示文稿
     // 插件——技能+工具形态，声明 dsh.bundle ✓）。弃用社区 tgz（0.1.1-rc.2-desktop 旧
     // 构建，挂载形态在新代际下 failed to import）与其 composer（npm 私有件，依赖
     // dsh-ppt@0.1.1-rc.2 在 registry 已被 0.4.5 取代 → ERR_PNPM_NO_MATCHING_VERSION，
@@ -672,7 +672,7 @@ export class BinaryManager {
         [binJs, 'plugin', '--profile', 'web', 'add', 'dsh-ppt@latest', ...pnpmRegistryArgs],
         { env: bundleEnv, label: 'dsh plugin add dsh-ppt', timeoutMs: 300_000 }
       )
-      // v0.4.5-1：pnpm 退出 0 ≠ 插件生效。核验"装没装上"——缺了就记软失败（同市场那条）。
+      // pnpm 退出 0 ≠ 插件生效。核验"装没装上"——缺了就记软失败（同市场那条）。
       const pptVersion = await readProfileBundleVersion(nodeMarketIo, webProfileDir, 'dsh-ppt')
       if (!pptVersion) {
         throw new Error(
@@ -710,7 +710,7 @@ export class BinaryManager {
     const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, pipeline, 'runtime'))
     // 路径用变量名与本类其余处一致，便于对照（venv 的受管布局见 managedBinaryPath）。
     const dir = toolDir(plan.name)
-    // v0.4.5-1：改走 buildInPlace——旧实现在建 venv 之前就把整个工具目录删了，pip 阶段一失败
+    // 改走 buildInPlace——旧实现在建 venv 之前就把整个工具目录删了，pip 阶段一失败
     // 用户手上就只剩残骸（没有旧安装可退）。venv 必须在最终路径上生成（launcher/脚本把绝对
     // 路径写死），故不能走 staging 改名。
     await buildInPlace(dir, async (target) => {
@@ -727,7 +727,7 @@ export class BinaryManager {
       }
       // fork 缝：extras 数据（pipxExtras:['web']）留在 shared 预设，venv 规格按用户裁决写死
       // 为 <packageName>[web]；索引顺序见 PYPI_PRIMARY_INDEX 注释（**镜像在前**）。
-      // v0.4.5-1（O2）：带了检查到的版本就钉 `==<版本>`（PyPI 上"报 A 装 B"同样可能——
+      // （）：带了检查到的版本就钉 `==<版本>`（PyPI 上"报 A 装 B"同样可能——
       // 检查走 JSON API、安装走 pip 解析，两者跨源跨时刻）。
       const pipSpec = targetVersion
         ? `${plan.preset.packageName}[web]==${targetVersion}`
@@ -745,12 +745,12 @@ export class BinaryManager {
           PYPI_PRIMARY_INDEX,
           '--extra-index-url',
           PYPI_FALLBACK_INDEX,
-          // v0.4.5-1：优先取 wheel。两台索引并存时，pip 可能选中"更新的 sdist"而不是"稍旧的
+          // 优先取 wheel。两台索引并存时，pip 可能选中"更新的 sdist"而不是"稍旧的
           // wheel"，接着就地编译 C 扩展——那正是"卡很久"的最坏形态（几分钟到十几分钟），
           // 而且编译失败还会整个安装失败。`--prefer-binary` 只改**偏好**：没有 wheel 时照旧退回
           // sdist，不改变能装/不能装的结论。
           '--prefer-binary',
-          // v0.4.5-1：`--progress-bar` 保持 pip 默认（非 TTY 下输出 collect/download 行，
+          // `--progress-bar` 保持 pip 默认（非 TTY 下输出 collect/download 行，
           // 由此处的行回调解析成"N 个包 · X MB"）。不传 --quiet：那会把唯一的事实源也吞掉。
           pipSpec
         ],
@@ -761,7 +761,7 @@ export class BinaryManager {
           onOutputLine: this.pipProgressReporter(enter, 'pip')
         }
       )
-      // v0.4.5-1：pip 退出 0 ≠ 命令能用。npm 型在装完后就核验受管可执行物，venv 型此前没有
+      // pip 退出 0 ≠ 命令能用。npm 型在装完后就核验受管可执行物，venv 型此前没有
       // 这一步——pip 成功但 console script 没生成（上游改了 entry point / 装了不含脚本的
       // wheel）时，标记照写、installTool 照样返回成功，渲染层弹"安装成功"，而快照探针同一时刻
       // 判它 broken：用户看到的是互相矛盾的两句话。这里对齐 npm 型，先核验再写标记。
@@ -790,7 +790,7 @@ export class BinaryManager {
   }
 
   /**
-   * v0.4.5 源码型（paper-agent）：GitHub 源码树 → 受管 CPython venv 装依赖 → 受管 node
+   * 源码型（paper-agent）：GitHub 源码树 → 受管 CPython venv 装依赖 → 受管 node
    * 构建前端 → 用户态播种 + 产物部署 → 写 commit SHA 标记。
    *
    * 升级语义 = 再装一次：源码树整目录替换（纯上游代码，无用户态混入），venv 保留（pip
@@ -819,7 +819,7 @@ export class BinaryManager {
     ]
     const enter = this.stepper(plan, pipeline)
     enter('runtime')
-    // v0.4.5-1：两个运行时**串行**下载。原先并行是为了快，但两个各 ~30MB 的档案同时上报
+    // 两个运行时**串行**下载。原先并行是为了快，但两个各 ~30MB 的档案同时上报
     // 字节进度，进度条会在两条曲线之间来回跳（"真实进度"变成噪声）；串行的总字节数不变，
     // 换来的是一个单调可信的条。
     const { pythonBin } = await ensurePythonRuntime(this.progressCallbacks(plan, pipeline, 'runtime'))
@@ -828,7 +828,7 @@ export class BinaryManager {
     enter('source')
     // 先钉 SHA 再按 SHA 取 zip：分支在两次请求之间被推进也不会装到"另一半"。
     const sha = await resolveHeadSha(repo, branch)
-    // v0.4.5-1（O2）：源码型**无法**按渲染层给的短 SHA 钉定——codeload 要完整 40 位 SHA，
+    // （）：源码型**无法**按渲染层给的短 SHA 钉定——codeload 要完整 40 位 SHA，
     // 而版本卡展示的是 8 位短 SHA。这里如实记录"装的是分支当前 HEAD、而非检查时那一个提交"，
     // 卡片会在安装后按实际 SHA 自校正（marker 写的是真 SHA）。
     if (targetVersion && !sha.startsWith(targetVersion)) {
@@ -847,7 +847,7 @@ export class BinaryManager {
       // 用 unpack 而不是 extract：extract 指的是运行时归档（在 runtime 段之后），源码树解压
       // 排在 source 段之后，复用 extract 会让条倒着走一格。
       enter('unpack')
-      // v0.4.5-1（O8）：把钉住的 SHA 一起交下去——归档顶层目录名必须是 <Repo>-<sha>，
+      // （）：把钉住的 SHA 一起交下去——归档顶层目录名必须是 <Repo>-<sha>，
       // 这样"从镜像/代理取回的东西"也能被证伪（对不上即拒绝，见 selectSourceTreeEntry）。
       await extractSourceTree(archivePath, sourceDir, sourceRepoName(plan), sha)
     } finally {
@@ -857,7 +857,7 @@ export class BinaryManager {
     const venvPython = sourceVenvPython(plan.name)
     if (needsVenv) {
       enter('venv')
-      // v0.4.5-1：venv 用 buildInPlace（在最终路径上生成 + 失败回滚），不再"先删 venv 再建"。
+      // venv 用 buildInPlace（在最终路径上生成 + 失败回滚），不再"先删 venv 再建"。
       const venvDir = sourceVenvDir(plan.name)
       await buildInPlace(venvDir, async (target) => {
         await this.runCommand(pythonBin, ['-m', 'venv', target], {
@@ -942,7 +942,7 @@ export class BinaryManager {
     await fsp.writeFile(path.join(dir, TOOL_VERSION_MARKER), sha.slice(0, 8), 'utf-8')
   }
 
-  /** 该类运行时是否仍被别的已装工具需要（v0.4.5：paper-agent 与 hermes 共享 CPython）。 */
+  /** 该类运行时是否仍被别的已装工具需要（paper-agent 与 hermes 共享 CPython）。 */
   private async isRuntimeStillNeeded(runtime: 'node' | 'python', removing: string): Promise<boolean> {
     for (const [name, candidate] of TOOL_PLANS) {
       if (name === removing || candidate.runtime !== runtime) continue
@@ -952,14 +952,14 @@ export class BinaryManager {
   }
 
   /** 卸载（变更闸串行；被占用即拒绝，不排队）：删工具目录 + 整个同类运行时根。
-   * 批次5 真机事故修复：taskkill 后原生 .node 的 DLL 锁异步释放，立即 rm 撞 EPERM
+   * 真机事故修复：taskkill 后原生 .node 的 DLL 锁异步释放，立即 rm 撞 EPERM
    * （sharp-win32-x64.node 实证）——改逐项遍历删除 + 重试退避（removeTree.ts）。
-   * v0.3.4-2：运行时改为删 kind 根（runtime/node 整目录）——NODE_VERSION 跨版本升级
+   * 运行时改为删 kind 根（runtime/node 整目录）——NODE_VERSION 跨版本升级
    * 后旧版本目录不再残留，portable"卸载=零残留"在版本演进下仍成立。
-   * v0.4.5：paper-agent 与 hermes 共享受管 CPython——运行时根改为"该类运行时已无任何
+   * paper-agent 与 hermes 共享受管 CPython——运行时根改为"该类运行时已无任何
    * 已装工具时才删"（此前 1:1 映射会把对方的解释器一起删掉）；工具目录删除失败时
    * 不删运行时（fail-closed）。用户态 home/<tool> 不删（dsh home 先例）。
-   * v0.4.5-1 真机事故：见 operationGate 注释——被占用时**立即**返回可读原因，不再无限排队
+   * 真机事故：见 operationGate 注释——被占用时**立即**返回可读原因，不再无限排队
    *（"卸载始终卸不掉"且日志里一条记录都没有，就是这个排队造成的）。 */
   async removeTool(name: BinaryToolName): Promise<BinaryRemoveResult> {
     const plan = TOOL_PLANS.get(name)
@@ -972,7 +972,7 @@ export class BinaryManager {
     // v1（W4-4）：卸载同样登记进行态——否则切页回来会看到一个像空闲的"卸载"按钮。
     this.beginOperation(name, 'remove')
     try {
-      // v0.4.5-1（真机"卸载耗时过长"）：卸载耗时此前**没有任何日志**——用户说慢，日志里一条都
+      // （真机"卸载耗时过长"）：卸载耗时此前**没有任何日志**——用户说慢，日志里一条都
       // 查不到，只能靠事后复刻基准测量（本次即如此）。删树 + 运行时 + 重探各记一次耗时，
       // 下次这类反馈可以直接从日志读出是哪一段慢。
       const startedAt = Date.now()
@@ -991,8 +991,8 @@ export class BinaryManager {
         logger.warn(`Failed to fully remove managed tool ${name}: ${message}`, { toolMs, runtimeMs })
         return { removed: false, message: redactSecretText(message) }
       }
-      // v0.3.4-2：同安装——卸载后强制重探，广播命中的是已移除状态。
-      // v0.4.5-1：工具没了，它的失败记忆也没意义。
+      // 同安装——卸载后强制重探，广播命中的是已移除状态。
+      // 工具没了，它的失败记忆也没意义。
       this.installFailures.delete(name)
       const refreshStart = Date.now()
       await this.refreshSnapshotCache().catch((error) =>
@@ -1014,7 +1014,7 @@ export class BinaryManager {
   }
 
   /** 最新版本（尽力而为，失败即空值不抛）：dsh 走受管 npm view；hermes 走 PyPI 版本源。
-   * v0.4.5-1：查询通道本身改为"失败即抛"（见 latestNpmVersion），**这里**按场景容忍——本方法
+   * 查询通道本身改为"失败即抛"（见 latestNpmVersion），**这里**按场景容忍——本方法
    * 由页面挂载自动调用，只用来展示"最新版"一行；用户点"检查更新"的那条路走 checkUpdates，
    * 那里失败会如实返回错误而不是"已是最新"。 */
   async getLatestVersions(): Promise<Record<BinaryToolName, string | undefined>> {
@@ -1022,14 +1022,14 @@ export class BinaryManager {
       this.latestNpmVersion('dsh').catch(() => undefined),
       this.latestPypiVersion('hermes').catch(() => undefined)
     ])
-    // v0.4.5（用户裁决）：paper-agent 纯手动检查——本通道由渲染层在页面挂载时自动调用，
+    // （用户裁决）：paper-agent 纯手动检查——本通道由渲染层在页面挂载时自动调用，
     // 恒不触 GitHub（匿名 API 限流也不该被页面挂载烧掉）。它的最新版本只由 checkUpdates
     // 显式拉取。
     return { dsh, hermes, 'paper-agent': undefined }
   }
 
   /**
-   * v0.4.5：手动"检查更新"。与 getLatestVersions 的区别是**强制重探**——绕过快照 15s
+   * 手动"检查更新"。与 getLatestVersions 的区别是**强制重探**——绕过快照 15s
    * 冷却与 stale-while-revalidate，并立刻广播变化，让版本卡的当前版本与结论同一时刻。
    *
    * 每个工具的最新版本来源：npm 型 = `npm view <pkg>@next`；venv 型 = PyPI JSON；
@@ -1042,7 +1042,7 @@ export class BinaryManager {
       const snapshots = await this.refreshSnapshotCache()
       this.broadcastChanged()
       const availability = snapshots[name]?.availability
-      // v0.4.5-1（O1）：**非受管安装不谈"版本"**。系统来源（PATH 上的同名工具）本应用既
+      // （）：**非受管安装不谈"版本"**。系统来源（PATH 上的同名工具）本应用既
       // 不知道它是什么版本、也升不了它；旧实现在这种情况下 current 恒为 undefined →
       // canUpgrade:false → 渲染层弹"已是最新版本"，那是对用户的假陈述。这里直接给出来源，
       // 由渲染层说人话（"该系统安装不受本应用管理"）。
@@ -1110,7 +1110,7 @@ export class BinaryManager {
    * 最新版本查询（PyPI）。源表与载荷解析在 pypiSources.ts（**每源各自的端点**——镜像不实现
    * JSON API 这一事实写在那张表里，不再两源共用一个路径模板）。
    *
-   * v0.4.5-1：查不到就**抛**，不返回 undefined。"查不到"与"最新版就是当前版"是两回事，
+   * 查不到就**抛**，不返回 undefined。"查不到"与"最新版就是当前版"是两回事，
    * 旧实现让后者冒充前者（渲染层据此弹"已是最新版本"）；调用方按场景决定是容忍（页面挂载时
    * 的自动查询）还是如实报错（用户点"检查更新"）。
    */
@@ -1149,18 +1149,18 @@ export class BinaryManager {
     }
   }
 
-  /** v0.3.4-2（用户裁决）：安装步骤进度广播——渲染层进度条的数据源。step 为 i18n 键尾
+  /** （用户裁决）：安装步骤进度广播——渲染层进度条的数据源。step 为 i18n 键尾
    * （code.install_progress.<step>），由渲染层翻译；detail 为语言无关的补充事实（下载字节
    * 数），fraction 为**进度条本体的确定性比例**（0..1，只有可测的阶段才有）；stage 为本次
    * 安装在阶段序列里的位置（进度条据此分段）。
    *
-   * v0.4.5-1（用户反馈"进度条不反映真实下载进度"）：旧载荷只有步骤名，渲染层只能画一个
+   * （用户反馈"进度条不反映真实下载进度"）：旧载荷只有步骤名，渲染层只能画一个
    * 匀速脉冲的假条。可测的阶段（下载）带上 fraction，渲染层画真条；不可测的阶段
    * （npm/pip/vite 的执行）不编造比例，保持不确定态——**宁可显示"不确定"，不显示假进度**。
    *
    * 载荷字段的类型取自共享契约（`Omit<InstallProgressPayload, 'tool' | 'step'>`）：契约加字段
    * 时这里会跟着报错，不会出现"主进程发了、广播悄悄丢掉"——`{...spread}` 恰好会绕过对象字面量
-   * 的多余属性检查，v0.4.5-1 的 stage 就这样丢过一次（渲染层永远收不到 stage）。 */
+   * 多余属性检查，的 stage 就这样丢过一次（渲染层永远收不到 stage）。 */
   private broadcastInstallProgress(
     tool: BinaryToolName,
     step: InstallProgressStep,
@@ -1225,7 +1225,7 @@ export class BinaryManager {
   }
 
   /**
-   * 本次安装的阶段进入器（v0.4.5-1）：把"第几步 / 共几步"附在每次广播上。
+   * 本次安装的阶段进入器：把"第几步 / 共几步"附在每次广播上。
    *
    * 阶段序列由各安装函数**在运行时**组出来（条件阶段如 paper-agent 的 venv 只有需要时才进
    * 序列），所以 total 恒等于这次真会走的步数——不是猜的。步骤不在序列里时记一行日志并降级为
@@ -1269,7 +1269,7 @@ export class BinaryManager {
     }
   }
 
-  /** v0.4.5-1：命令执行原语抽到 runCommand.ts（市场通道共用），此处保留同一入口名。 */
+  /** 命令执行原语抽到 runCommand.ts（市场通道共用），此处保留同一入口名。 */
   private runCommand(
     executable: string,
     args: string[],

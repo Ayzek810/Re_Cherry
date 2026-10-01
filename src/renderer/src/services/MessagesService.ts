@@ -69,7 +69,7 @@ export async function safeDeleteFiles(filesToDelete: FileMetadata[]): Promise<vo
 /**
  * "生成中"闸门。
  *
- * r2-62：旧实现在生成中 `reject(false)`——拒绝值不是 `Error`，两个调用点又都是 UI 事件直呼
+ * 旧实现在生成中 `reject(false)`——拒绝值不是 `Error`，两个调用点又都是 UI 事件直呼
  * 且不接错误，于是每次点击都产生一条 `Uncaught (in promise) false`，日志里也看不出这是
  * 有意的拦截。改为 `Promise<boolean>`：`true` = 可以继续，`false` = 正在生成（已弹提示）。
  * 调用方必须读返回值并据此提前返回；`await` 不再会抛出。
@@ -247,7 +247,7 @@ export async function getMessageTitle(message: Message, length = 30): Promise<st
 export function checkRateLimit(assistant: Assistant): boolean {
   const provider = getAssistantProvider(assistant)
 
-  // r2-42：助手模型与默认模型都指不到现存 provider 时，无法确定限流值。
+  // 助手模型与默认模型都指不到现存 provider 时，无法确定限流值。
   // 限流是**提示性**检查：拿不到 provider 就放行，不谎报限流，也不假装成功——
   // 真正的发送会因 provider 缺失以可见错误失败。
   if (!provider) {

@@ -54,7 +54,7 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
   // 在途请求的 requestId：新请求/卸载使其作废，旧事件与旧终态一律丢弃
   const requestIdRef = useRef<string | null>(null)
 
-  // r2-01：playout 句柄放进 ref，不放进 effect 依赖数组。
+  // playout 句柄放进 ref，不放进 effect 依赖数组。
   // 旧实现的死循环链条：`streamDone: !isTranslating` → `reset` 依赖 `streamDone`
   // → 请求开始/结束翻转 `isTranslating` → `reset` 换 identity → 翻译 effect 因依赖变化重跑
   // → cleanup abort 旧流 + 再发一次 lightStream……翻译永不收敛，模型费用无界。
@@ -146,7 +146,7 @@ const TranslateWindow: FC<TranslateWindowProps> = ({ text, onResultChange }) => 
       requestIdRef.current = null
     }
     // 依赖只剩三个真输入：文本 / 目标语言 / 模型 id。languageLabel 随 targetLanguage 一并重算，
-    // playout 句柄经 ref 持有（r2-01）。
+    // playout 句柄经 ref 持有。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, targetLanguage, translateModel?.id])
 

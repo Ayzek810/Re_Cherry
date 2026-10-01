@@ -50,6 +50,7 @@ import {
   createThinkingBlock,
   createToolBlock
 } from '@renderer/utils/messageUtils/create'
+import { replacePromptVariables } from '@renderer/utils/prompt'
 import { kernelReasoningEffortsForModel, kernelReasoningLevelFor } from '@renderer/utils/reasoningKernel'
 import {
   invalidateKernelRootTopics,
@@ -85,7 +86,7 @@ interface TurnState {
   thinkingBlockId?: string
   thinkingText: string
   /**
-   * 尚在 rAF 队列里、未派发进 store 的正文字符（p2-11）：块 content 由 store 侧
+   * 尚在 rAF 队列里、未派发进 store 的正文字符：块 content 由 store 侧
    * **增量**追加（`appendBlockContentAction`），故这里只记"已 flush 的长度"这一游标
    * （`mainText` 仍是逐 delta 累积的全文，供计长与最终一致性核对）。
    */
@@ -93,7 +94,7 @@ interface TurnState {
   /** 同上，思考块。 */
   thinkingFlushedLen: number
   /**
-   * 推理计时段（v0.4.6-1 修复"完成态归 0.1"）：startedAt = 首条 reasoning-delta；
+   * 推理计时段（修复"完成态归 0.1"）：startedAt = 首条 reasoning-delta；
    * thinkingMillsec = 冻结值（推理结束瞬间——首条 text-delta / tool 块 / step 收尾/
    * 回合收尾最早者——一次性落块，值 = 冻结时刻 − startedAt，与用户看到的跳动器同值；
    * 正文流式时间不计入）。assistant/message 收尾后复位。
@@ -127,7 +128,7 @@ const streams = new Map<string, TurnState>()
 // 本地上送的 user 消息（uuid）在回执 user/message 事件到达前拿不到内核 seq；这里按会话 FIFO
 // 记录"尚未回执的发送"，回执到达时把本地消息 id 改写成 kernel-<topic>-<seq>（`remapMessageToKernelId`）。
 //
-// r2-20/r2-21：旧实现另有一张 `liveUserSeq`（topicId\0messageId → seq）登记表，但它在写入的
+// 旧实现另有一张 `liveUserSeq`（topicId\0messageId → seq）登记表，但它在写入的
 // **同一行**（回执到达）就被删除，随后消息 id 被改写成 kernel- 前缀——该表对用户消息永远查不到，
 // 是"回执前 fork"这条腿的**死登记**（回执前 seq 恰恰不可知，登记不可能存在）。故删除此表：
 // 锚点只从 `kernel-` 前缀 id 解析，`kernelAnchorOf` 对非 kernel- id 明确返回 undefined
@@ -158,9 +159,9 @@ export interface KernelAnchor {
 /**
  * 消息 → 内核锚点 (sessionId, seq)。
  * 只认 `kernel-<session>-<seq>` 形态：本地 uuid（回执未到、seq 未知）没有锚点——
- * **"回执前 fork"不支持**（自 r2-21 起为显式语义，旧实现的死登记表已删除）。
+ * **"回执前 fork"不支持**（自 起为显式语义，旧实现的死登记表已删除）。
  *
- * `_topicId` 保留在签名里是为了调用点语义稳定（调用方按话题查询），自 r2-21 起不再参与解析
+ * `_topicId` 保留在签名里是为了调用点语义稳定（调用方按话题查询），自 起不再参与解析
  * —— 锚点完全由消息 id 决定，所以不可能出现"按错话题查到别的锚点"。
  */
 export function kernelAnchorOf(_topicId: string, message: Message): KernelAnchor | undefined {
@@ -209,7 +210,7 @@ export interface DestroyTurnsResponse {
   purgedTopics: string[]
   truncated: { id: string; fromSeq: number }[]
   focusTopicId: string | null
-  /** 内核侧删了注册表但物理清库失败的会话 id（v1 二轮 k2-05/k2-09：半成功必须可被看见）。 */
+  /** 内核侧删了注册表但物理清库失败的会话 id（半成功必须可被看见）。 */
   purgeFailures: string[]
 }
 
@@ -281,7 +282,7 @@ export function initKernelBridge(): void {
 }
 
 /**
- * 网络搜索配置同步（批次2）：websearch 切片 → 主进程引擎（providers 含 apiKey、
+ * 网络搜索配置同步：websearch 切片 → 主进程引擎（providers 含 apiKey、
  * 黑名单、searchWithTime）。启动与切片变更时调用；apiKey 经此通道进主进程内存，
  * 不落内核 settings.json。载荷形状 KernelWebSearchConfig（@shared/config/types）。
  */
@@ -301,7 +302,7 @@ export async function syncWebSearchToKernel(config: {
   excludeDomains: string[]
   searchWithTime: boolean
   maxResults: number
-  /** 应用语言（BCP-47，v0.4.3 补齐——local-google/bing 的 lang: 过滤消费端此前是死路）。 */
+  /** 应用语言（BCP-47，补齐——local-google/bing 的 lang: 过滤消费端此前是死路）。 */
   language?: string
   /** 结果压缩（websearch 切片 compressionConfig 的收窄投影；rag 的 embeddingModel/rerankModel 收窄为引用）。 */
   compression?: {
@@ -324,7 +325,7 @@ export async function syncWebSearchToKernel(config: {
 }
 
 /**
- * 文档处理通道配置同步（§7.17 三轮）：preprocess 切片 providers（含 apiKey，只进
+ * 文档处理通道配置同步（三轮）：preprocess 切片 providers（含 apiKey，只进
  * 主进程内存，webSearch/MCP 同先例）→ 主进程内存配置表。ocr_document 工具与知识库
  * 摄取的 PDF 路由按此配置表反查服务商（V2 对齐：配置即路由）。
  * 启动与切片变更时调用。
@@ -335,7 +336,7 @@ export async function syncPreprocessToKernel(
     apiKey?: string
     apiHost?: string
     model?: string
-    /** vision-model 条目的视觉模型引用（v0.4.4）：provider + model 两个 id。 */
+    /** vision-model 条目的视觉模型引用：provider + model 两个 id。 */
     visionModel?: { provider: string; model: string }
     /** vision-model 条目的页级并发数（1..40；缺省走主进程默认 8）。 */
     visionConcurrency?: number
@@ -366,7 +367,7 @@ export async function syncProvidersToKernel(providers: unknown[]): Promise<void>
           const reasoningEfforts = kernelReasoningEffortsForModel(model as Model)
           // 三层思考协议修正：登记网关事实 + 泛用家族推断 + 用户 apiOptions 声明（见 config/reasoningCompat.ts）
           const compat = providerReasoningCompat(provider as ReasoningCompatProviderInput, model as Model)
-          // v0.3.1 识图通道：视觉模型声明输入模态（pi-ai models[].input）——目录外自定义
+          // 识图通道：视觉模型声明输入模态（pi-ai models[].input）——目录外自定义
           // 视觉模型缺了这条，图片会被内核按纯文本路由降级成 handle 文本，永远不上 wire。
           const input = isVisionModel(model as Model) ? (['text', 'image'] as const) : undefined
           if (reasoningEfforts === undefined && compat === undefined && input === undefined) return model
@@ -389,7 +390,7 @@ export async function syncProvidersToKernel(providers: unknown[]): Promise<void>
 }
 
 /**
- * 转述模型配置同步（v0.3.1 识图通道补全）。变更即推；启动窗内内核未就绪时
+ * 转述模型配置同步（识图通道补全）。变更即推；启动窗内内核未就绪时
  * 只记日志（下一处 provider 变更或重启会重推；describe_images 挂载由发送链
  * 的 builtinTools 决定，路由缺失仅使工具调用明错，不会静默劣化）。
  * prompt 为 '' = 内置默认提示词。
@@ -418,10 +419,10 @@ export function assistantReasoningLevel(assistant: Assistant): string | undefine
 /**
  * 确保内核侧存在该话题的 agent/session（幂等）。工作模式不进建册输入——它是渲染层话题开关，随发送参数生效。
  *
- * v0.3.0-2 目标 B（`report.md` §3.3.2-5）：`dshTopicCreate` 是 **upsert**，对"内核已遗忘的 id"调用
+ * `dshTopicCreate` 是 **upsert**，对"内核已遗忘的 id"调用
  * 会让该 id **复活**（违反内核兼容契约第 4 节的墓碑纪律）。因此只服务**真正新建**的话题：
  * 来自上次会话的行（`isRestoredTopicRow`）必须由内核**确认存在**（`kernelKnowsTopic` 返回 `true`）
- * 才允许建册；`false`（明确否定）与 `null`（重试窗口内没问到）都拒绝（r2-04）。
+ * 才允许建册；`false`（明确否定）与 `null`（重试窗口内没问到）都拒绝。
  * 本进程内新建的话题不需要这次确认——内核不认识它是因为它还没首发过（这正是本函数要做的建册）。
  */
 export async function ensureKernelTopic(topicId: string, assistant: Assistant): Promise<void> {
@@ -431,7 +432,7 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
   }
   if (isRestoredTopicRow(topicId)) {
     const known = await kernelKnowsTopic(topicId)
-    // r2-04：`dshTopicCreate` 是 upsert，对"内核已遗忘的 id"调用会让它复活（墓碑纪律）。
+    // `dshTopicCreate` 是 upsert，对"内核已遗忘的 id"调用会让它复活（墓碑纪律）。
     // 三值契约里只有 `true` 是"已确认存在"；`false`（内核确定没有）与 `null`（全部尝试都没问到）
     // 都属于**未确认存在**，而不变式 4 要求 `ensureAgent` 绝不在既有日志之上创建会话——
     // 所以两种情形都拒绝，只在诊断文案上区分：
@@ -448,12 +449,19 @@ export async function ensureKernelTopic(topicId: string, assistant: Assistant): 
       )
     }
   }
+  // 占位符必须先就地展开再送内核：助手提示词里的 {{date}} / {{model_name}} 等是 Cherry 自己的
+  // 语法，而内核的 systemPrompt.section 走 dsh 的**严格**插值——遇到未注册的 {{name}} 直接抛
+  // `unknown prompt variable`，且内核只注册了 provider / model / cwd（见 dsh-agent-loop 的
+  // ctx.systemPrompt.variable 三处注册），Cherry 这套一个都不在其中。
+  // 渲染侧原先只在设置页预览（usePromptProcessor）与旧的 ApiService 直连路径里做替换，
+  // 走到内核的这条注入路径漏了，于是预览能正常显示、一发送就崩。此处补上，两条路径归位。
+  const systemPrompt = await replacePromptVariables(assistant.prompt, model.name)
   await window.api.dshTopicCreate({
     id: topicId,
     provider: model.provider,
     model: model.id,
     maxTokens: assistant.settings?.maxTokens,
-    systemPrompt: assistant.prompt,
+    systemPrompt,
     reasoningEffort: assistantReasoningLevel(assistant),
     ...(assistant.workMode?.workingDir !== undefined && assistant.workMode.workingDir.length > 0
       ? { workingDir: assistant.workMode.workingDir }
@@ -474,11 +482,11 @@ export async function sendToKernel(
     builtinTools?: string[]
     externalTools?: string[]
     tier?: WorkModeApprovalTier
-    /** 随消息附带的图片（已规范化进预算，v0.3.1 识图通道）。 */
+    /** 随消息附带的图片（已规范化进预算，识图通道）。 */
     images?: KernelImageInput[]
-    /** 网络搜索（批次2）：本轮 web_search 工具的提供商（助手搜索开启且提供商就绪时上行）。 */
+    /** 网络搜索：本轮 web_search 工具的提供商（助手搜索开启且提供商就绪时上行）。 */
     webSearch?: { providerId: string }
-    /** 聊天生图（批次5）：本轮 generate_image 工具的绘画模型（双门开时上行）。 */
+    /** 聊天生图：本轮 generate_image 工具的绘画模型（双门开时上行）。 */
     generateImage?: { providerId: string; modelId: string }
   }
 ): Promise<void> {
@@ -493,7 +501,7 @@ export async function sendToKernel(
 }
 
 /**
- * 提取用户消息携带的图片并规范化为内核附件载荷新形态（v0.3.1 识图通道）。
+ * 提取用户消息携带的图片并规范化为内核附件载荷新形态（识图通道）。
  * 图片块 → FileMetadata → canvas 解码/EXIF 摆正/压预算 → base64 wire 载荷。
  * 单个图片失败即抛错（发送链可见失败），由附件仓库做最后防线校验。
  */
@@ -514,11 +522,11 @@ export async function extractImagesFromUserMessage(message: Message): Promise<Ke
  * 从内核会话日志还原一个话题的 Message/MessageBlock（打开话题的初始渲染用）。
  * 按"轮"归并（B8：一轮 = 一条回答）：turn 内所有 assistant/message（多 step）的说话块
  * 顺序追加进同一条回答消息；tool/call + tool/result 按 callId 配对产出统一工具块；
- * 用户消息的 image 内容块经 Dsh_AttachmentSync 幂等同步回本地文件仓后产出 IMAGE 块（v0.3.1）。
+ * 用户消息的 image 内容块经 Dsh_AttachmentSync 幂等同步回本地文件仓后产出 IMAGE 块。
  * @returns 投影结果（空历史 = 空数组，是真实状态）；`null` = 内核在重试窗口内始终不可达
  *   （真失败——调用方不得把它当"没有消息"渲染，须允许后续重进重拉）。
  *   启动窗口的瞬时失败（handler 未注册 / agent 异步 resume）由 fetchTopicEventsWithRetry
- *   覆盖（v0.3.0-5：此前一次瞬时失败即返回 null → 话题空白且被"已加载"短路卡住）。
+ * 覆盖（此前一次瞬时失败即返回 null → 话题空白且被"已加载"短路卡住）。
  */
 export async function loadKernelTopicMessages(
   topicId: string
@@ -568,12 +576,12 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
     case 'user/message': {
       // 注入的插件源消息（RuntimeContextProjection 的工具面快照、档位标注等）已由内核在
       // 广播口剔除（kernel/sessionEventView.ts），这里收到的一定是真实发送——回执 FIFO
-      // 不再有被注入事件抢占名额、把本地消息的回执 seq 记到注入事件上的风险（v0.3.0-1
+      // 不再有被注入事件抢占名额、把本地消息的回执 seq 记到注入事件上的风险（
       // 结构化：可见性由单一判据保证，本层无需再判）。
       // 回执登记：弹出本地上送的 user 消息（FIFO），其 seq 由事件的 seq 给出
       const localUserId = takePendingUser(topicId)
       // P3 消息 id 统一：回执到达即把本地 uuid 改写为 kernel-<topic>-<seq>（含块与 askId 引用）；
-      // 改写后该消息的锚点直接由 id 解析，故不再需要单独的 seq 登记表（r2-21）。
+      // 改写后该消息的锚点直接由 id 解析，故不再需要单独的 seq 登记表。
       if (localUserId) {
         remapMessageToKernelId(topicId, localUserId, event.seq)
       }
@@ -606,7 +614,7 @@ function handleSessionEvent(payload: { topicId: string; event: SessionEvent }): 
       // 错误/中断回合不命名：失败回合的名字没有语义，留给下一次成功的轮次。
       if (event.data.reason.kind !== 'error' && event.data.reason.kind !== 'aborted') {
         void autoNameKernelTopic(topicId)
-        // v0.4.7 追问队列泵：回合成功结束后把队首追问按正常路径发出（见
+        // 追问队列泵：回合成功结束后把队首追问按正常路径发出（见
         // services/followupQueue.ts；error/aborted 不泵——失败轮不该自动续问）。
         void pumpFollowupQueue(topicId)
       }
@@ -647,7 +655,7 @@ function startTurn(topicId: string, turn: number): void {
   )
 }
 
-/** 把本轮的块序列同步回消息（消息 blocks 列表的唯一写入口，保证 说话→工具→说话 的事件顺序）。 */
+/** 把本轮的块序列同步回消息（消息 blocks 列表的唯一写入口，保证「说话 → 工具 → 说话」的事件顺序）。 */
 function syncMessageBlocks(topicId: string, state: TurnState): void {
   store.dispatch(
     newMessagesActions.updateMessage({
@@ -659,7 +667,7 @@ function syncMessageBlocks(topicId: string, state: TurnState): void {
 }
 
 /**
- * 推理结束瞬间冻结思考块（v0.4.6-1 修复"完成态归 0.1"）：status 置 SUCCESS +
+ * 推理结束瞬间冻结思考块（修复"完成态归 0.1"）：status 置 SUCCESS +
  * thinking_millsec 落块，跳动器当场停在推理结束那格——正文/工具阶段不计入思考时长。
  * 冻结值 = 冻结时刻 − 推理起点（与跳动器同基同时钟）。幂等。
  */
@@ -754,10 +762,10 @@ function projectChunk(topicId: string, step: number, chunk: StreamChunk): void {
 }
 
 /** 块内容更新走 rAF 合并，避免高频 delta 刷爆渲染。
- * 派发异常必须放行队列（v0.4.6-1：dispatch 抛错时旧实现不 delete，条目变僵尸——
+ * 派发异常必须放行队列（dispatch 抛错时旧实现不 delete，条目变僵尸——
  * 该块后续所有 flush 永久合并进死条目，表现为"流几字停顿、收尾一次性全文"）。 */
 /**
- * 流式正文/思考的**增量**派发（v1 二轮性能审计 p2-11）。
+ * 流式正文/思考的**增量**派发。
  *
  * reducer 与 action 都在 `store/messageBlock.ts`（`appendBlockContent`，immer draft 上
  * `content += chunk`）。`getDefaultMiddleware().concat(...)` 会携带**全部** slice 的 matcher
@@ -819,7 +827,7 @@ function flushBlockUpdate(blockId: string, changes: Partial<MessageBlock>): void
   })
 }
 
-/** 流式块的增量写入口（p2-11）。
+/** 流式块的增量写入口。
  *
  * 把 `next` 相对 `flushedLen` 的新增后缀作为 delta 交给 rAF 合并队列（同一帧的多个 delta
  * 在队列里累积成一个 chunks 数组，一次派发）。返回新的"已提交长度"游标。
@@ -901,7 +909,7 @@ function finalizeStep(topicId: string, event: Extract<SessionEvent, { type: 'ass
     store.dispatch(upsertManyBlocks(finalBlocks))
   }
   // 被替换的流式块标记终态（消息 blocks 已不含它们）；思考块保留冻结值
-  //（此前只置 SUCCESS 不写 thinking_millsec，完成态计时归 0.1——v0.4.6-1 修复）。
+  //此前只置 SUCCESS 不写 thinking_millsec，完成态计时归 0.1—— 修复。
   for (const id of streamedIds) {
     const isThinkingBlock = id === state.thinkingBlockId
     store.dispatch(
@@ -963,7 +971,7 @@ function projectToolCall(topicId: string, event: Extract<SessionEvent, { type: '
  * 返回 undefined 不投影。type 取 'url'（ImageBlock 渲染层按字符串直用，
  * data URL 与 http URL 同路）。
  *
- * v0.3.3-2（用户点名）：这批图**同时登记进文件仓**——按源串 sha256 内容寻址落一份 +
+ * （用户点名）：这批图**同时登记进文件仓**——按源串 sha256 内容寻址落一份 +
  * `db.files` 一行，文件页才看得到聊天页的出图。内容寻址使回放/重开话题重投影时命中同一 id
  * 直接跳过，既有的"不落盘以免堆积"顾虑（旧注释的说法）由这一条解决；登记失败不影响本块渲染。
  */
@@ -1008,7 +1016,7 @@ function projectToolResult(topicId: string, event: Extract<SessionEvent, { type:
   )
   // 工具出结果即该调用的审批生命周期结束（'invoking' 条目随之摘除）
   store.dispatch(toolPermissionsActions.removeByToolCallId({ toolCallId: resultBlock.toolCallId }))
-  // 批次5 聊天生图：generate_image 成功结果 → IMAGE 块。结构化载荷在事件 meta
+  // 聊天生图：generate_image 成功结果 → IMAGE 块。结构化载荷在事件 meta
   // （presentationMeta 正规通道，webSearch 同构）；直播与回放两路共用
   // buildGenerateImageBlock。base64 data URL 原样进元数据不落盘——
   // saveBase64Image 每次生成新 uuid，回放重落盘会堆积重复文件；数据已在会话
@@ -1158,7 +1166,7 @@ export function buildSearchCitationBlock(
   return undefined
 }
 
-/** v0.3.1-1：turn/end kind=error → ErrorMessageBlock 载荷。
+/** turn/end kind=error → ErrorMessageBlock 载荷。
  * UNKNOWN_MODEL（话题绑定的模型不在内核路由集——渲染层模型选择与路由集脱同步）换双语
  * 友好文案；其余错误保留引擎原文，由 ErrorBlock 的分类体系渲染。 */
 function serializedTurnError(reason: { error?: { message: string; code: string } }): SerializedError {
@@ -1174,7 +1182,7 @@ function serializedTurnError(reason: { error?: { message: string; code: string }
   return { name: 'KernelTurnError', message, stack: null, code }
 }
 
-/** v0.3.1-1：空响应块载荷（回合正常收尾但零可见输出）。 */
+/** 空响应块载荷（回合正常收尾但零可见输出）。 */
 function serializedEmptyTurn(): SerializedError {
   return {
     name: 'KernelTurnError',
@@ -1184,7 +1192,7 @@ function serializedEmptyTurn(): SerializedError {
   }
 }
 
-/** v0.3.1-1：本轮是否产出过可见内容（非空正文/思考；工具卡本身即可见——
+/** 本轮是否产出过可见内容（非空正文/思考；工具卡本身即可见——
  * 纯工具轮是合法形态，不得按空响应误报）。 */
 function turnHasVisibleOutput(state: TurnState, entities: Record<string, MessageBlock | undefined>): boolean {
   return state.blockIds.some((blockId) => {
@@ -1206,7 +1214,7 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   const state = streams.get(topicId)
   if (state === undefined) {
     // 本回合没有投影状态（turn/end 先于 turn/start 到达、或 startTurn 未认领 stub）：回合仍然结束了，
-    // 本回合的簿记必须收口——否则未回执的 FIFO 条目会污染下一回合的回执配对（r2-20）。
+    // 本回合的簿记必须收口——否则未回执的 FIFO 条目会污染下一回合的回执配对。
     // 暂停记录也在这一处清掉（endTurn 是唯一的清理点，不存在残留闭包）。
     pendingUserIds.delete(topicId)
     endTurn(topicId)
@@ -1217,7 +1225,7 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   if (failed) {
     logger.error(`kernelChat: turn failed for topic "${topicId}": ${reason.error?.message ?? 'unknown'}`)
   }
-  // v0.3.1-1：失败/空响应以 ERROR 块投影进消息本体（直播路径）。此前只落日志并把
+  // 失败/空响应以 ERROR 块投影进消息本体（直播路径）。此前只落日志并把
   // 消息状态置 error，气泡里没有任何可见内容（"空回复"案的呈现层缺陷）。历史还原路径
   // （projectEventsToMessages 的 turn/end case）与此同构。
   const turnErrorBlock: ErrorMessageBlock | undefined = failed
@@ -1274,7 +1282,7 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
     }
   }
   store.dispatch(newMessagesActions.updateMessage({ topicId, messageId: state.assistantMessageId, updates }))
-  // v0.4.7 用量统计面板：回合级 usage 落库（派生分析数据，见 services/usageStore.ts；
+  // 用量统计面板：回合级 usage 落库（派生分析数据，见 services/usageStore.ts；
   // 失败/中断回合的 token 也已消耗，照记）。
   if (state.usage.inputTokens > 0 || state.usage.outputTokens > 0) {
     const assistantMessage = store.getState().messages.entities[state.assistantMessageId]
@@ -1292,11 +1300,11 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   }
   store.dispatch(updateTopicUpdatedAt({ topicId }))
   store.dispatch(newMessagesActions.setTopicLoading({ topicId, loading: false }))
-  // v0.3.1 第三轮：fulfilled 的**真来源**。旧位置在发送任务队列排空时设 true——queue 排
+  // 第三轮：fulfilled 的**真来源**。旧位置在发送任务队列排空时设 true——queue 排
   // 空≠回合结束（内核流还在打），绿点提前亮然后被"看没了"，也从不按回合亮。规则：回合
   // **成功**结束且用户没盯着它（盯着 = 看完了，不算未读）；错误/中断回合不置。
   if (!failed && !aborted) {
-    // 写入端直接写**根 id 投影**（v0.3.1 第三轮补丁）：重发/旁答的回合发生在 fork 出的
+    // 写入端直接写**根 id 投影**（第三轮补丁）：重发/旁答的回合发生在 fork 出的
     // 子会话上，侧栏只渲染根行——不折叠的话子会话的"完成"永远照不到根行（重发流绿点
     // 全灭）。判定"用户正盯着"也按家族：currentTopicId 与本回合同根 = 同一串对话在眼前。
     const rows = store.getState().assistants.assistants.flatMap((assistant) => assistant.topics ?? [])
@@ -1312,7 +1320,7 @@ function finishTurn(topicId: string, reason: { kind: string; error?: { message: 
   store.dispatch(userQuestionsActions.clearByTopic({ topicId }))
   streams.delete(topicId)
   pendingStubs.delete(topicId)
-  // r2-20：本回合未回执的本地 user 消息 FIFO 到此作废——回执没来（内核侧失败/中断/删除轮次）时
+  // 本回合未回执的本地 user 消息 FIFO 到此作废——回执没来（内核侧失败/中断/删除轮次）时
   // 留着它只会让下一回合的 user/message 回执把 seq 记到错误的本地 id 上（FIFO 错配 → 锚点错位）。
   pendingUserIds.delete(topicId)
   // 暂停记录在这里唯一收口：回合结束即清，不存在残留（旧的 abortMap + 话题索引 + 键迁移三件套
@@ -1377,9 +1385,9 @@ async function projectEventsToMessages(
 ): Promise<{ messages: Message[]; blocks: MessageBlock[] }> {
   const messages: Message[] = []
   const blocks: MessageBlock[] = []
-  // r2-22：块索引（id → 块 / id → 下标）。旧实现在 tool/result 回路里用 `blocks.find` 线性查引用
+  // 块索引（id → 块 / id → 下标）。旧实现在 tool/result 回路里用 `blocks.find` 线性查引用
   // 载体块，复杂度是"事件数 × 本轮块数"（直播路径用 store 的实体索引，O(1)）。这里同口径建索引，
-  // 顺带让 r2-23 的不可变替换（换数组元素）也是 O(1)。数组只追加、只按 id 替换，下标稳定。
+  // 顺带让不可变替换（换数组元素）也是 O(1)。数组只追加、只按 id 替换，下标稳定。
   const blockById = new Map<string, MessageBlock>()
   const blockIndexById = new Map<string, number>()
   const pushBlock = (block: MessageBlock): void => {
@@ -1394,19 +1402,19 @@ async function projectEventsToMessages(
   let reply: {
     messageId: string
     message: Message
-    /** 该回答消息在 `messages` 里的下标（不可变替换用，r2-23）。 */
+    /** 该回答消息在 `messages` 里的下标（不可变替换用）。 */
     messageIndex: number
     blockIds: string[]
     usage: { inputTokens: number; outputTokens: number }
     toolBlocks: Map<string, ToolMessageBlock>
-    /** v0.3.1-1：本轮是否产出过可见内容（正文/思考/工具卡）——turn/end 空轮守门。 */
+    /** 本轮是否产出过可见内容（正文/思考/工具卡）——turn/end 空轮守门。 */
     sawVisibleOutput: boolean
     /** 当前生效的引用数据载体块（与直播 TurnState 同语义，正文 [n] 药丸联动）。 */
     citationBlockId?: string
     citationBlockSource?: WebSearchSource
   } | null = null
 
-  /** r2-23：历史投影与直播路径同口径——收尾时用**新对象**替换数组元素，不就地改已入数组的对象。 */
+  /** 历史投影与直播路径同口径——收尾时用**新对象**替换数组元素，不就地改已入数组的对象。 */
   const replaceReplyMessage = (next: Message): void => {
     if (reply === null) return
     reply.message = next
@@ -1446,7 +1454,7 @@ async function projectEventsToMessages(
             pushBlock(block)
             blockIds.push(block.id)
           } else if (content.type === 'document') {
-            // 附件修复（v0.3.2）：文档引用块 → FILE 块。引用随会话日志持久
+            // 附件修复：文档引用块 → FILE 块。引用随会话日志持久
             //（kernelContentBlocks.ts 的 merge-extensible 扩展点），字节留磁盘原路径。
             const file: FileMetadata = {
               id: `doc-${messageId}-${blocks.length}`,
@@ -1463,7 +1471,7 @@ async function projectEventsToMessages(
             pushBlock(block)
             blockIds.push(block.id)
           } else if (content.type === 'image') {
-            // v0.3.1：内核只存图片 ref——按 ref 同步字节回本地文件仓（幂等）再产出 IMAGE 块。
+            // 内核只存图片 ref——按 ref 同步字节回本地文件仓（幂等）再产出 IMAGE 块。
             // 同步失败不吞：投影占位文本，重启后重进话题可再同步。
             const file = await syncKernelImageAttachment(content.attachment)
             if (file !== null) {
@@ -1471,7 +1479,7 @@ async function projectEventsToMessages(
               pushBlock(block)
               blockIds.push(block.id)
             } else {
-              // r2-24：失败占位与"真的有一段这样的文字"必须在结构上可分——旧实现用
+              // 失败占位与"真的有一段这样的文字"必须在结构上可分——旧实现用
               // `status: SUCCESS` 承载它，导出/复制/用量这类按 status 统计的消费方会把它
               // 当成正常内容。可见文本保持不变（消费方 MainTextBlock/Markdown 不看 status 渲染正文，
               // 见 pages/home/Messages/Blocks/MainTextBlock.tsx；Markdown 只把 status==='streaming'
@@ -1591,7 +1599,7 @@ async function projectEventsToMessages(
           .flatMap((b) => (b.type === 'text' && typeof b.text === 'string' ? [b.text] : []))
           .join('\n')
         const failed = resultBlock.isError === true || event.data.error !== undefined
-        // r2-23：回填结果用**新块对象**替换（不就地改已进 blocks 数组的块）——与直播路径的
+        // 回填结果用**新块对象**替换（不就地改已进 blocks 数组的块）——与直播路径的
         // `updateOneBlock` 同口径；toolBlocks/数组/索引表同步指向新对象。
         const filledToolBlock: ToolMessageBlock = {
           ...toolBlock,
@@ -1604,7 +1612,7 @@ async function projectEventsToMessages(
           blocks[toolBlockIndex] = filledToolBlock
           blockById.set(filledToolBlock.id, filledToolBlock)
         }
-        // 批次5 聊天生图回放投影：与直播路径同构（buildGenerateImageBlock 共用，
+        // 聊天生图回放投影：与直播路径同构（buildGenerateImageBlock 共用，
         // 载荷在事件 meta——presentationMeta 通道，回放复现）。
         if (!failed && filledToolBlock.toolName === 'generate_image') {
           const imageBlock = buildGenerateImageBlock(reply.messageId, event.data.meta)
@@ -1649,7 +1657,7 @@ async function projectEventsToMessages(
         break
       }
       case 'turn/end': {
-        // v0.3.1-1：错误/空轮的历史投影与直播路径（finishTurn）同构。此前投影循环
+        // 错误/空轮的历史投影与直播路径（finishTurn）同构。此前投影循环
         // 没有 turn/end case，失败轮重新打开话题后只剩空气泡。轮内没有任何
         // assistant/message 时（如 UNKNOWN_MODEL 在引擎之前失败），先补一条承载
         // 消息（id 用本事件 seq），否则错误块无处可挂。
@@ -1682,7 +1690,7 @@ async function projectEventsToMessages(
           : createErrorBlock(reply.messageId, serializedEmptyTurn())
         // 消息级 status 与直播路径（finishTurn）对齐：error 轮置 error；
         // 空轮保持 success（直播路径成功收尾语义，错误承载在块内）
-        // r2-23：用新消息对象替换数组元素（不就地改）。
+        // 用新消息对象替换数组元素（不就地改）。
         if (wantsErrorBlock) {
           replaceReplyMessage({ ...reply.message, status: 'error' as AssistantMessageStatus })
         }
@@ -1731,7 +1739,7 @@ function createKernelMessage(
     assistantId,
     topicId,
     createdAt: new Date().toISOString(),
-    // r2-52：旧写法 `role === 'user' ? 'success' : 'success'` 两支同值（读者会以为角色有默认差异）。
+    // 旧写法 `role === 'user' ? 'success' : 'success'` 两支同值（读者会以为角色有默认差异）。
     // 三个调用点都显式传 `status`（user→success、assistant→success/error），故缺省值不可达、
     // 无法从调用方证明"按角色分默认"的意图；这里退回单一表达式，行为与旧实现逐字一致。
     status: 'success' as AssistantMessageStatus,

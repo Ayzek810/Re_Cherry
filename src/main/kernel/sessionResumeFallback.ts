@@ -3,7 +3,7 @@
  *
  * ## 判据 = 持久化里到底有没有这个会话（本地事实），不是 resume 抛了哪种错误
  *
- * 原实现（v0.3.0-1）在这里用错误类型做门控：命中 `SessionFormatUnsupportedError` /
+ * 原实现在这里用错误类型做门控：命中 `SessionFormatUnsupportedError` /
  * `SessionPersistenceCorruptionError` 才拒绝新建。这条判据的鲁棒面**不在本仓库**——上游 dsh
  * 明确声明对磁盘格式无兼容承诺（`dsh-session` 的 `SESSION_FORMAT_VERSION` 钉在 `0`），一旦它
  * 新增第三种失败形态、或改用普通 `Error`，门控就**无声失效**（fail-open），于是在"已有日志的
@@ -29,7 +29,7 @@
  * 另：`list()` **只在 resume 失败后**才会被调用，正常发送路径不进这里（`liveHandles` 已缓存存活
  * agent），故不引入热路径开销。
  *
- * 背景与验收标准：`report.md` §2（v0.3.0-2 目标 A）。
+ * 背景与验收标准。
  */
 import type { AgentHandle } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'

@@ -448,7 +448,7 @@ const MessageMenubar: FC<Props> = (props) => {
   }, [isAssistantMessage, message.askId, topic.id])
 
   // 切换模型回答（v1 遗产按钮）：走隐藏 parallel 子会话（不污染主话题上下文），
-  // 旁答经 useParallelAnswers 投影并进本组卡片；工作模式 active 时入口隐藏（v0.3.0 实装）。
+  // 旁答经 useParallelAnswers 投影并进本组卡片；工作模式 active 时入口隐藏（实装）。
   const onMentionModel = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation()

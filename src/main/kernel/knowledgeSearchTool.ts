@@ -1,5 +1,5 @@
 /**
- * knowledge_search 内核 builtin 工具（批次4 知识库接线）。
+ * knowledge_search 内核 builtin 工具（知识库接线）。
  *
  * 上游 v1.9.11 双形态（发送前改写 user 消息 + aiCore knowledge_search 工具）中，
  * fork 因不变量2（渲染层是投影、内核日志唯一真相源——发送前改写会让检索结果
@@ -123,7 +123,7 @@ export function apply(ctx: Context): void {
                 })
               }
             }
-            // 重排相（批次2 rerank 实装）：库配置了 rerank 模型时，cosine 命中按
+            // 重排相（rerank 实装）：库配置了 rerank 模型时，cosine 命中按
             // lightRerank 精排重序（score 换为重排分；失败降级 cosine 序，如实记 warn）。
             if (base.rerank !== undefined && hitsInBase.length > 1) {
               try {
@@ -154,7 +154,7 @@ export function apply(ctx: Context): void {
           }
         }
         merged.sort((a, b) => b.score - a.score)
-        // 全部数据源都失败 ≠ 命中 0 条（CLAUDE.md §9 第一条硬规则）。此时直接以失败拒绝：
+        // 全部数据源都失败 ≠ 命中 0 条。此时直接以失败拒绝：
         // 模型若拿到"No ... results"这一确定结论，会据此对用户说"你的知识库里没有相关内容"，
         // 而真实原因是嵌入服务不可用 / 库读不出来。
         if (errors.length === bases.length) {
@@ -228,7 +228,7 @@ export function apply(ctx: Context): void {
           bases: bases.length,
           results: documents.length,
           // KnowledgeReference V1 形状（v0.4 统一）：数字序号 id + sourceUrl + type；
-          // baseId/uniqueId 留在 metadata（uniqueId 是 knowledge_read 的取回键，v0.4.6）。
+          // baseId/uniqueId 留在 metadata（uniqueId 是 knowledge_read 的取回键）。
           entries: documents.map((doc, index) => ({
             id: index + 1,
             content: doc.content,

@@ -1,5 +1,5 @@
 /**
- * c2-28 行为测试：`loading` toast 的默认文案必须过 i18next，且失败要收口。
+ * `loading` toast 的默认文案必须过 i18next，且失败要收口。
  *
  * 原状：四个默认串（`Loading...` / `Success` / `Error` / `An error occurred`）绕过 i18next，
  * 中文界面下直接显示英文；`loading()` 把 `promise.then(...).catch(...)` 的链**丢弃**，
@@ -19,7 +19,7 @@ const createApi = () => ({
   destroy: vi.fn()
 })
 
-describe('toast.loading (c2-28)', () => {
+describe('toast.loading', () => {
   let api: ReturnType<typeof createApi>
 
   beforeEach(() => {

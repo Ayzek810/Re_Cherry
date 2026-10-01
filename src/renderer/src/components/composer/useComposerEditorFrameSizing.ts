@@ -32,7 +32,7 @@ export function getComposerEditorContentStyle(
       ? `${manualEditorFrameHeight}px`
       : COMPOSER_EDITOR_COLLAPSED_MAX_HEIGHT
 
-  // c2-08：高度契约必须有消费方。`--composer-editor-max-height` 由 `ComposerSurface` 的 textarea
+  // 高度契约必须有消费方。`--composer-editor-max-height` 由 `ComposerSurface` 的 textarea
   // 就地消费（见该文件的 maxHeight）。V2 的 `--composer-editor-min-height` / `--composer-editor-height`
   // 与这里直接输出的 `minHeight` / `height` 重复且零消费方；`--composer-editor-overflow-y`
   // 在非 compact 子集里恒为 'auto'（textarea 的 `overflow-auto` class 已表达同一件事），
@@ -81,7 +81,7 @@ export function useComposerEditorFrameSizing({
   const frameRef = useRef<HTMLDivElement>(null)
   const [manualHeight, setManualHeight] = useState<number | null>(null)
   const dragStateRef = useRef<{ startClientY: number; startHeight: number; collapseExpanded: boolean } | null>(null)
-  // c2-14：拖拽期间挂在 window 上的两条监听的统一拆除函数。手势正常结束（mouseup）与
+  // 拖拽期间挂在 window 上的两条监听的统一拆除函数。手势正常结束（mouseup）与
   // 组件卸载都会走到它，避免「拖拽中切页/关面板」把监听永久留在 window 上，
   // 之后每次 mousemove 都去调已卸载实例的 setManualHeight。
   const dragCleanupRef = useRef<(() => void) | null>(null)

@@ -1,11 +1,11 @@
 /**
- * 话题行的**对账入口**（渲染层唯一）—— v0.3.0-2 目标 B。
+ * 话题行的**对账入口**（渲染层唯一）—— 。
  *
  * ## 为什么需要它
  *
  * 话题这个聚合上曾有三份持久化视图：内核会话日志（事件真相源）、内核话题注册表（元数据真相源）、
  * 渲染层 Redux persist（第三份话题行）。旧做法 `shouldShowTopicRow` 是渲染层用**自己那份** persist
- * 去推断**内核那份**的可见性（`updatedAt >= BOOT_TIME` 时间戳启发式）——这与 v0.3.0-1 在事件层
+ * 去推断**内核那份**的可见性（`updatedAt >= BOOT_TIME` 时间戳启发式）——这与 在事件层
  * 刚刚消灭的"靠治理、不靠结构"是同一个反模式，只是换了轴（那条轴是可见性，这条轴是权威性）。
  *
  * 本模块把成员资格收归内核：**问内核**（`dshTopicList`），渲染层只做两件事——
@@ -22,7 +22,7 @@
  * 内核返回"未知"（IPC 失败）时**什么都不做**并返回 `null`：调用方退回渲染层现有行。
  * 宁可多显示一行，也不在没有依据时删用户的行。
  *
- * 背景与验收标准：`report.md` §3（v0.3.0-2 目标 B）。
+ * 背景与验收标准。
  */
 import { loggerService } from '@logger'
 import { getDefaultTopic } from '@renderer/services/AssistantService'
@@ -111,7 +111,7 @@ export async function reconcileAssistantTopicRows(
   )
   const duplicated = (assistant.topics ?? []).filter((row) => ownedByOthers.has(row.id))
   if (duplicated.length > 0) {
-    // 浏览记忆随行归还（v0.3.0-5）：被归还的**根行**若带着 lastViewedBranchId 而主人那份没有，
+    // 浏览记忆随行归还：被归还的**根行**若带着 lastViewedBranchId 而主人那份没有，
     // 先把记忆写到主人副本上再剪——否则用户在重复副本上留下的"最后浏览分支"会随剪除丢失。
     const allAssistants = store.getState().assistants.assistants
     for (const dup of duplicated) {
@@ -174,7 +174,7 @@ export async function reconcileAssistantTopicRows(
     shown.push(row)
   }
 
-  // ③' 浏览记忆的有效性收口（v0.3.0-5）：根行上的 lastViewedBranchId 必须指向**同一助手**名下的
+  // ③' 浏览记忆的有效性收口：根行上的 lastViewedBranchId 必须指向**同一助手**名下的
   // 分支行。隔离对账会移动行，历史遗留的越界指针让"恢复上次浏览分支"时好时坏——统一清掉，
   // recallLastViewedBranch 的兜底（落回根）从此变成数据保证而不是碰运气。
   const freshRows = store.getState().assistants.assistants.find((row) => row.id === assistantId)?.topics ?? []

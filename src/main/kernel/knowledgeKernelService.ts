@@ -1,5 +1,5 @@
 /**
- * knowledge_search 每轮登记缝（ctx.knowledge，批次4 知识库接线；webSearch 同先例）。
+ * knowledge_search 每轮登记缝（ctx.knowledge，知识库接线；webSearch 同先例）。
  *
  * 渲染层 messageThunk 在助手挂知识库（assistant.knowledge_bases 非空）的轮把
  * 'knowledge_search' 并入 builtinTools，随发送参数 options.knowledgeBases 上行

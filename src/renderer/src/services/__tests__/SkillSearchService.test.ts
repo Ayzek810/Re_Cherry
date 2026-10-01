@@ -1,7 +1,7 @@
 /**
- * 二轮审查 r2-07：`searchSkills` 扇出三个 registry，旧实现给每个源挂 `.catch(() => [])`
+ * `searchSkills` 扇出三个 registry，旧实现给每个源挂 `.catch(() => [])`
  * ——失败被替换成「成功但空」，与「该源确实没有命中」不可区分，`useSkills` 的 `setError`
- * 永不置位（三个源全断网时界面显示「无结果」，CLAUDE.md §9）。
+ * 永不置位（三个源全断网时界面显示「无结果」）。
  * 另外旧注释「keep first occurrence = fastest source」是错的（`Promise.allSettled` 等最慢的源，
  * 顺序只由数组决定），按裸 `name` 去重还会吞掉不同 registry 的同名 skill。
  *
@@ -35,7 +35,7 @@ const clawhubItem = (slug: string, displayName: string) => ({
   updatedAt: 1
 })
 
-describe('SkillSearchService 三源检索失败语义（r2-07）', () => {
+describe('SkillSearchService 三源检索失败语义', () => {
   beforeEach(() => {
     fetchMock.mockReset()
     ;(globalThis as unknown as { fetch: unknown }).fetch = fetchMock

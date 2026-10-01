@@ -1,5 +1,5 @@
 /**
- * 知识库主进程 API（批次4 接线：批次1 替身整体换装真实 IPC）。
+ * 知识库主进程 API（接线：替身整体换装真实 IPC）。
  *
  * 嵌入模型引用只上行 {providerId, modelId, dimensions}（fork 偏离上游的明文
  * apiKey 下行——主进程从 provider 路由快照/ProviderKeyStore 自解析，见
@@ -74,7 +74,7 @@ export const knowledgeBaseApi = {
   }
 }
 
-/** 从 KnowledgeBase 派生主进程参数（批次4：补 embedding 引用派生入口）。 */
+/** 从 KnowledgeBase 派生主进程参数（补 embedding 引用派生入口）。 */
 export const getKnowledgeBaseParams = (base: KnowledgeBase): KnowledgeBaseParams => {
   return {
     id: base.id,
@@ -87,13 +87,12 @@ export const getKnowledgeBaseParams = (base: KnowledgeBase): KnowledgeBaseParams
 }
 
 /**
- * 语义检索（批次4 真实化）：主进程单库余弦检索 → 渲染层阈值过滤 + 截断。
+ * 语义检索（真实化）：主进程单库余弦检索 → 渲染层阈值过滤 + 截断。
  * 形参与上游 KnowledgeService.searchKnowledgeBase 保持一致，调用点无需改动。
  *
- * 失败语义（二轮审查 f2-13）：**检索失败必须 reject，不得返回空数组**。
+ * 失败语义：**检索失败必须 reject，不得返回空数组**。
  * 旧实现把异常吞成 `[]`，调用点的 catch 因此永不执行、UI 无法区分"没有命中"与"检索失败"，
- * 用户会得出"知识库里没有相关内容"的错误结论（CLAUDE.md §9「A failure must never look like an
- * empty result」）。命中 0 条仍是**成功**结果：返回空数组由调用方按空态渲染。
+ * 用户会得出"知识库里没有相关内容"的错误结论。命中 0 条仍是**成功**结果：返回空数组由调用方按空态渲染。
  */
 export const searchKnowledgeBase = async (
   query: string,

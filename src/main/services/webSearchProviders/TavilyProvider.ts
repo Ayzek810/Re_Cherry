@@ -7,7 +7,7 @@ import type { WebSearchHttpOptions, WebSearchProviderResponse, WebSearchRuntimeS
 const logger = loggerService.withContext('TavilyProvider')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：上游 TavilyProvider.ts + @agentic/tavily 7.3.3）：
+ * 自 CS_V1 移植 + 适配点清单（源：上游 TavilyProvider.ts + @agentic/tavily 7.3.3）：
  * - @agentic/tavily 的 TavilyClient → 等价裸 fetch：POST '{apiHost}/search'，body 照
  *   agentic 客户端的 json 形态 {query, max_results, api_key}（api_key 在 body，非请求头），
  *   Content-Type JSON；响应取 query 与 results[].{title,url,content}。

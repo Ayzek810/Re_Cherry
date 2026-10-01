@@ -1,5 +1,5 @@
 /**
- * c2-16 行为测试：隐私政策弹窗的加载中与失败态。
+ * 隐私政策弹窗的加载中与失败态。
  *
  * 原状：`privacyUrl` 就绪前 body 是空框；`runAsyncFunction` 不 catch，`getAppInfo()` 一旦 reject
  * 就**永久**空白。两种情况下「我已知晓」都可点并写入 `privacy-popup-accepted` ——
@@ -41,7 +41,7 @@ vi.mock('react-i18next', async (importOriginal) => {
   return { ...actual, useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en-US' } }) }
 })
 
-describe('PrivacyPopup content gate (c2-16)', () => {
+describe('PrivacyPopup content gate', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()

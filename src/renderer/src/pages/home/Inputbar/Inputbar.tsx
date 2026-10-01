@@ -132,7 +132,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   const { setCouldAddImageFile } = useInputbarToolsInternalDispatch()
 
   // 草稿缓存只在首次挂载时读取，onChange 引用固定：options 对象稳定后，
-  // useInputText 的 setText 只随文本变化，下游"安装一次"型 effect 不再每次渲染重建（f2-09）
+  // useInputText 的 setText 只随文本变化，下游"安装一次"型 effect 不再每次渲染重建
   const handleDraftChange = useCallback((value: string) => {
     CacheService.set(INPUTBAR_DRAFT_CACHE_KEY, value, DRAFT_CACHE_TTL)
   }, [])
@@ -172,7 +172,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   const { setTimeoutTimer } = useTimer()
   const isMultiSelectMode = useAppSelector((state) => state.runtime.chat.isMultiSelectMode)
 
-  // v0.3.1 识图通道补全：转述模型已配置时，无视觉主模型（含 @提及轮的被@模型）
+  // 识图通道补全：转述模型已配置时，无视觉主模型（含 @提及轮的被@模型）
   // 的图片也放行——发送链注入 describe_images 由转述模型转录，内核 wire 不变。
   // 未配置时此处退回原判定（视觉直读；无视觉=现状拦截）。
   const imageDescriberModel = useAppSelector((state) => state.llm.imageDescriberModel)
@@ -240,7 +240,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       })
 
   const sendMessage = useCallback(async () => {
-    // v0.4.7 追问队列（用户裁决：仅工作模式话题启用）：生成中发送 = 入队而不是丢弃。
+    // 追问队列（用户裁决：仅工作模式话题启用）：生成中发送 = 入队而不是丢弃。
     // 仅纯文本可入队——附件上传/预览与发送强耦合，带附件时保留"生成中锁发送"旧语义。
     if (loading && topic.workMode === true && files.length === 0) {
       dispatch(enqueueFollowup({ topicId: topic.id, text }))
@@ -442,7 +442,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
     setSelectedKnowledgeBases(assistant.knowledge_bases ?? [])
   }, [assistant.knowledge_bases, setSelectedKnowledgeBases])
 
-  // v0.3.3 批次5：删除 V1 的 enableGenerateImage 自动翻转语义——生图挂载门改由
+  // 删除 V1 的 enableGenerateImage 自动翻转语义——生图挂载门改由
   // generate_image 内核工具的双门（助手开关 + llm.paintingModel 已配置）决定，
   // 开关归用户（助手设置页），不再随模型能力被静默改写。
 
@@ -453,7 +453,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   // topContent: 所有顶部预览内容
   const topContent = (
     <>
-      {/* v0.4.7 追问队列（仅工作模式话题）：生成中入队的追问，回合结束后自动按序发出 */}
+      {/* 追问队列（仅工作模式话题）：生成中入队的追问，回合结束后自动按序发出 */}
       {topic.workMode === true && (
         <FollowupQueueDock topicId={topic.id} onEdit={setText} onFocusInput={focusTextarea} />
       )}

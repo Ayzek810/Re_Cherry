@@ -1,7 +1,7 @@
 /**
  * 会话读取失败的**诊断分类**——把 `resume` / `load` 的错误分成三类记入日志，便于真机判断故障形态。
  *
- * ## 它不承担安全职责（v0.3.0-2 起）
+ * ## 它不承担安全职责（起）
  *
  * 本模块**不得**用于决定"resume 失败后要不要用同一 id 新建会话"。那条决定的安全判据是
  * `sessionResumeFallback.ts` 里的**持久化存在性查询**（`ctx.sessionPersistence.list()`）：
@@ -12,7 +12,7 @@
  * ## 三类
  *
  * - `format-unsupported`：`SessionFormatUnsupportedError`——日志在库里，但含本构建不认识的事件
- *   类型且未标 `ignorable`（v0.3.0-1 实测到的遗留 `cherry/work-mode` 会话即此类）。
+ * 类型且未标 `ignorable`（实测到的遗留 `cherry/work-mode` 会话即此类）。
  * - `corrupted`：`SessionPersistenceCorruptionError`——日志本身损坏（例如 `ignorable` 字段非法）。
  * - `unclassified`：其余一切，含 dsh 对"会话不存在"抛的普通 `Error`（`session "x" not found`，
  *   没有类型化 code）。**注意**：`unclassified` 不等于"不存在"。

@@ -4,7 +4,7 @@ import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 
 import { buildStartSpanSnapshot } from '../core/spanSnapshot'
 
-/** Callback shape of `FunctionSpanProcessor` (not part of the public package surface — k2-21). */
+/** Callback shape of `FunctionSpanProcessor` (not part of the public package surface —). */
 type SpanFunction = (span: ReadableSpan) => void
 
 export class FunctionSpanProcessor extends BatchSpanProcessor {

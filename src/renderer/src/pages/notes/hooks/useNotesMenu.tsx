@@ -210,7 +210,7 @@ export const useNotesMenu = ({
                 key: 'yuque',
                 onClick: () => exportNote({ node, platform: 'yuque' })
               },
-              // obsidian 一路随 ObsidianExportDialog/Popup 链移植（v0.4.7）补回
+              // obsidian 一路随 ObsidianExportDialog/Popup 链移植补回
               exportMenuOptions.obsidian && {
                 label: t('chat.topics.export.obsidian'),
                 key: 'obsidian',

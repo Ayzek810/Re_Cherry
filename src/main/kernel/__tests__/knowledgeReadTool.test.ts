@@ -13,7 +13,7 @@ vi.mock('@main/services/knowledge/KnowledgeService', () => ({
 import { concatChunks, grepDocument, slicePage } from '../knowledgeReadTool'
 
 /**
- * knowledge_read 纯函数机测（v0.4.6）：chunk overlap 去重拼接、整读分页、文档内 grep。
+ * knowledge_read 纯函数机测：chunk overlap 去重拼接、整读分页、文档内 grep。
  * 钉住的语义：
  *   - 硬切段落带 overlap 尾部 → 相邻同源 chunk 去重；段落合并 chunk（无 overlap）原样拼接
  *   - 跨文档（source 变化）不做去重（不同文档块间以空行衔接）

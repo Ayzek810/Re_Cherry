@@ -1,8 +1,8 @@
 /**
- * v0.3.2 批次3 自 CS_V1 移植 + 裁剪清单。
+ * 自 CS_V1 移植 + 裁剪清单。
  *
  * 自 CS_V1 src/main/utils/process.ts 的 findCommandInShellEnv 移植（fork 主进程 utils
- * 无该工具，按批次3 范围收纳于 services/mcp/ 下）。
+ * 无该工具，按 范围收纳于 services/mcp/ 下）。
  *
  * 适配：CS_V1 传入登录 shell 环境（getLoginShellEnvironment，macOS/Linux GUI 应用
  * 不继承 shell PATH 才需要）；fork MVP 直接快照 process.env 作为查找与子进程环境。
@@ -61,7 +61,7 @@ export function getInheritedEnv(extra?: Record<string, string>): Record<string, 
 }
 
 /**
- * v1 二轮审查 m2-06：MCP `server.command` 进 `StdioClientTransport` 之前的准入校验。
+ * MCP `server.command` 进 `StdioClientTransport` 之前的准入校验。
  *
  * `MCPService.initTransport` 此前只在 `npx`/`uvx`/`uv` 三条分支走 `findCommandInShellEnv`
  * （注入面收在那里），其余情况直接 spawn 渲染层给的任意字符串——`C:\evil.exe`、

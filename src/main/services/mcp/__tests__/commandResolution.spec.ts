@@ -1,11 +1,10 @@
 /**
- * v1 二轮审查 m2-06 / m2-20 的行为证据。
  *
- * m2-06：`MCPService.initTransport` 此前只在 `npx`/`uvx`/`uv` 三条分支走命令名白名单，
+ * `MCPService.initTransport` 此前只在 `npx`/`uvx`/`uv` 三条分支走命令名白名单，
  * 其余 `server.command` 直接进 `StdioClientTransport`——裸名、`C:\evil.exe`、带 shell
  * 元字符的字符串都能落进 spawn。现在 `normalizeMcpCommand` 是唯一准入点。
  *
- * m2-20：Windows 上 `where npx` 只取 `.exe`，而 Node 官方安装器落的是 `npx.cmd`，
+ * Windows 上 `where npx` 只取 `.exe`，而 Node 官方安装器落的是 `npx.cmd`，
  * 已装 Node 的用户被误判为未安装。
  *
  * 注意：`tests/main.setup.ts` 把 `node:fs` 整体桩化（`statSync` 是 `vi.fn()`），
@@ -30,7 +29,7 @@ function stats(isFile: boolean): fs.Stats {
   return { isFile: () => isFile } as fs.Stats
 }
 
-describe('normalizeMcpCommand (m2-06)', () => {
+describe('normalizeMcpCommand', () => {
   afterEach(() => {
     vi.mocked(fs.statSync).mockReset()
   })
@@ -69,7 +68,7 @@ describe('normalizeMcpCommand (m2-06)', () => {
   })
 
   it('rejects a non-executable extension on an absolute path', () => {
-    const result = normalizeMcpCommand(absolutePath('m2-06-not-executable.txt'))
+    const result = normalizeMcpCommand(absolutePath('not-executable.txt'))
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('must end with')
   })
@@ -78,14 +77,14 @@ describe('normalizeMcpCommand (m2-06)', () => {
     vi.mocked(fs.statSync).mockImplementation(() => {
       throw new Error('ENOENT')
     })
-    const result = normalizeMcpCommand(absolutePath('m2-06-does-not-exist.exe'))
+    const result = normalizeMcpCommand(absolutePath('does-not-exist.exe'))
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('does not exist')
   })
 
   it('rejects a directory even when it has an executable-looking name', () => {
     vi.mocked(fs.statSync).mockReturnValue(stats(false))
-    const result = normalizeMcpCommand(absolutePath('m2-06-dir.exe'))
+    const result = normalizeMcpCommand(absolutePath('dir.exe'))
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('is not a file')
   })
@@ -105,7 +104,7 @@ describe('normalizeMcpCommand (m2-06)', () => {
   })
 })
 
-describe('findCommandInShellEnv (m2-20)', () => {
+describe('findCommandInShellEnv', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })

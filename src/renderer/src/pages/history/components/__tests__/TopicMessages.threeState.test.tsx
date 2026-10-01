@@ -1,5 +1,5 @@
 /**
- * 二轮审查 f2-53：话题详情把"加载中"、"加载失败"与"确实没有消息"渲染成同一个空态。
+ * 话题详情把"加载中"、"加载失败"与"确实没有消息"渲染成同一个空态。
  *
  * 三条可观察的差异（旧实现三者同形，本测试全部会红）：
  *   ① 点击话题后的第一帧必须渲染**加载占位**，绝不能先闪一次 `<Empty/>`，
@@ -28,7 +28,7 @@ vi.mock('@renderer/hooks/useScrollPosition', () => ({
 
 vi.mock('@renderer/hooks/useSettings', () => {
   const settings = { messageStyle: '' }
-  // s2-04 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
+  // 起组件按字段订阅（`useSetting(key)`），桩必须逐键取真值。
   return { useSettings: () => settings, useSetting: (key: string) => settings[key] }
 })
 
@@ -45,7 +45,7 @@ vi.mock('../../../home/Messages/Message', () => ({
   default: ({ message }: { message: { id: string } }) => <div data-testid="message-item">{message.id}</div>
 }))
 
-// r2-62：`isGenerating()` 是 `Promise<boolean>` 闸门——`true` = 可以继续，`false` = 正在生成。
+// `isGenerating()` 是 `Promise<boolean>` 闸门——`true` = 可以继续，`false` = 正在生成。
 // 默认桩返回 `true`（未生成），生成中的用例用 `mockResolvedValueOnce(false)` 覆盖。
 vi.mock('@renderer/services/MessagesService', () => ({
   isGenerating: vi.fn().mockResolvedValue(true),
@@ -111,7 +111,7 @@ function renderPanel(topic: Topic) {
   )
 }
 
-describe('TopicMessages 三态渲染（f2-53）', () => {
+describe('TopicMessages 三态渲染', () => {
   beforeEach(() => {
     getTopicById.mockReset()
     toastError.mockReset()
@@ -195,7 +195,7 @@ describe('TopicMessages 三态渲染（f2-53）', () => {
     expect(document.querySelector('.ant-empty')).toBeNull()
   })
 
-  it('生成中点击「继续对话」：isGenerating() 返回 false 即不切页（r2-62 返回值语义）', async () => {
+  it('生成中点击「继续对话」：isGenerating() 返回 false 即不切页（返回值语义）', async () => {
     getTopicById.mockResolvedValueOnce({ ...TOPIC_A, messages: [message('a-1')] })
     renderPanel(TOPIC_A)
     await waitFor(() => expect(screen.getByTestId('message-item')).toHaveTextContent('a-1'))

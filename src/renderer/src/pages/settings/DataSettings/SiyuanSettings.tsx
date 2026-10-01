@@ -29,7 +29,7 @@ const SiyuanSettings: FC = () => {
   const siyuanBoxId = useSelector((state: RootState) => state.settings.siyuanBoxId)
   const siyuanRootPath = useSelector((state: RootState) => state.settings.siyuanRootPath)
 
-  // s2-14：打字只改本地草稿，失焦才写 redux-persist 切片。
+  // 打字只改本地草稿，失焦才写 redux-persist 切片。
   const apiUrlField = useCommittedInput(siyuanApiUrl, (next) => dispatch(setSiyuanApiUrl(next)))
   const tokenField = useCommittedInput(siyuanToken, (next) => dispatch(setSiyuanToken(next)))
   const boxIdField = useCommittedInput(siyuanBoxId, (next) => dispatch(setSiyuanBoxId(next)))
@@ -38,7 +38,7 @@ const SiyuanSettings: FC = () => {
   const handleSiyuanHelpClick = () => {
     openSmartMinapp({
       id: 'siyuan-help',
-      // s2-41：`name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
+      // `name` 是用户可见的弹窗标题（MinappPopupContainer 直接渲染它）。
       name: t('settings.data.siyuan.title'),
       url: 'https://docs.cherry-ai.com/advanced-basic/siyuan',
       logo: AppLogo

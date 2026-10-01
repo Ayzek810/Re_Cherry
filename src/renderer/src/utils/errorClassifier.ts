@@ -33,13 +33,13 @@ export function classifyError(error?: SerializedError, providerId?: string): Err
   const msg = ((error.message as string) || '').toLowerCase()
   const providerSuffix = providerId ? `?id=${providerId}` : ''
 
-  // v0.3.1-1：内核回合正常收尾但零可见输出（_kernelChat EMPTY_RESPONSE）。
+  // 内核回合正常收尾但零可见输出（_kernelChat EMPTY_RESPONSE）。
   // 独立分类，避免落入 unknown 触发 AI 诊断兜底（对空响应无意义且徒增一次模型调用）。
   if ((error as Record<string, unknown>).code === 'EMPTY_RESPONSE') {
     return { category: 'empty_response', i18nKey: 'error.diagnosis.empty_response', navTarget: null }
   }
 
-  // v0.3.1-1：UNKNOWN_MODEL 的 message 已被投影层本地化（文本匹配不可用），按 code 命中
+  // UNKNOWN_MODEL 的 message 已被投影层本地化（文本匹配不可用），按 code 命中
   // model 分类（"前往设置"按钮随之出现，正对本案语义）。
   if ((error as Record<string, unknown>).code === 'UNKNOWN_MODEL') {
     return { category: 'model', i18nKey: 'error.diagnosis.model', navTarget: `/settings/provider${providerSuffix}` }
@@ -58,7 +58,7 @@ export function classifyError(error?: SerializedError, providerId?: string): Err
   }
 
   // Model not found (404)
-  // v0.3.1-1：'no configured model' = 内核 UNKNOWN_MODEL（话题绑定的模型不在路由集）
+  // 'no configured model' = 内核 UNKNOWN_MODEL（话题绑定的模型不在路由集）
   if (
     numStatus === 404 ||
     msg.includes('model_not_found') ||
@@ -147,7 +147,7 @@ export function classifyError(error?: SerializedError, providerId?: string): Err
 
   // Knowledge base / embedding
   if (msg.includes('embedding') || msg.includes('vectorize') || msg.includes('knowledge base')) {
-    // v0.3.2 批次1：knowledge 页面回归（/knowledge 路由随 KnowledgePage 恢复），导航目标随之恢复
+    // knowledge 页面回归（/knowledge 路由随 KnowledgePage 恢复），导航目标随之恢复
     return { category: 'knowledge', i18nKey: 'error.diagnosis.knowledge', navTarget: '/knowledge' }
   }
 

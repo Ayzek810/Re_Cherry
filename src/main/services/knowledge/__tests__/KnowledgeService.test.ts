@@ -6,7 +6,7 @@ import { extractFromFile } from '../extractors'
 import { KnowledgeService } from '../KnowledgeService'
 
 // 三条外部缝全 mock：extractors（文本抽取）、preprocessChannel（文档处理通道路由，
-// §7.17 三轮：工具按通道服务商路由，不再直连 LocalPaddle）。ProviderKeyStore 一并
+// 三轮：工具按通道服务商路由，不再直连 LocalPaddle）。ProviderKeyStore 一并
 // mock 以切断 electron-store 的模块级落盘（embeddings.ts 的导入链）。
 vi.mock('../extractors', () => ({
   extractFromFile: vi.fn(),
@@ -105,7 +105,7 @@ describe('readTurnDocument（2026-09-22 用户第二轮裁决：直读为中心�
   })
 })
 
-describe('ocrTurnDocument（§7.17 三轮：挂进文档处理通道，按通道服务商路由）', () => {
+describe('ocrTurnDocument（三轮：挂进文档处理通道，按通道服务商路由）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     const svc = service()
@@ -248,12 +248,12 @@ describe('processItem PDF 路由（V2 对齐：配置即路由，2026-09-22 用�
   })
 })
 
-describe('库生命周期（v1 二轮审查 m2-08 / m2-09）', () => {
+describe('库生命周期', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('m2-08：每轮登记表有淘汰上限，不随话题数无界增长', () => {
+  it('每轮登记表有淘汰上限，不随话题数无界增长', () => {
     const svc = service()
     // 512 是 MAX_TURN_TOPICS；登记 512 + 64 个话题后，最早的 key 必须已被淘汰。
     for (let i = 0; i < 576; i++) {
@@ -273,7 +273,7 @@ describe('库生命周期（v1 二轮审查 m2-08 / m2-09）', () => {
     }
   })
 
-  it('m2-09：resetBase 把新开的向量库登记回注册表（不再泄漏句柄）', async () => {
+  it('resetBase 把新开的向量库登记回注册表（不再泄漏句柄）', async () => {
     const { BaseVectorStore } = await import('../vectorStore')
     const opened: Array<{ close: ReturnType<typeof vi.fn> }> = []
     vi.mocked(BaseVectorStore.open).mockImplementation(async () => {
@@ -338,7 +338,7 @@ describe('ocrTurnDocument 的按话题中止源', () => {
     unblock?.()
     const result = await pending
     expect(result.text).toContain('interrupted')
-    // 结束后必须注销：否则登记表随话题数增长（与 m2-08 同一条纪律）。
+    // 结束后必须注销：否则登记表随话题数增长（与 同一条纪律）。
     expect(topicWorkCount('topic-abort')).toBe(0)
   })
 

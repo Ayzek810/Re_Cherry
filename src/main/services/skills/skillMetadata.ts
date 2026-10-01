@@ -1,5 +1,5 @@
 /**
- * 技能元数据解析（批次5 自 CS_V1 src/main/utils/markdownParser.ts 移植 + 裁剪）。
+ * 技能元数据解析（自 CS_V1 src/main/utils/markdownParser.ts 移植 + 裁剪）。
  *
  * SKILL.md frontmatter：name/description/tools/tags/version/author（gray-matter +
  * failsafe YAML，防反序列化攻击）；正文 = 指令。SKILL.md 或 skill.md 大小写均可。

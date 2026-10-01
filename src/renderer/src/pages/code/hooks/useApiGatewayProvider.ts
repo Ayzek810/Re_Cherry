@@ -1,8 +1,8 @@
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useApiGatewayProvider.ts
-//（2026-09-24，v0.3.4-1 批次5 由批次4a 的 dormant 桩转正）。V2 结构（合成 provider /
+//（2026-09-24，由 的 dormant 桩转正）。V2 结构（合成 provider /
 // ensureRunning / getApiKey）逐字；数据源缝三处，均已标注：
 // ① V2 useApiGateway（preference 面）→ fork `window.api.codeCli.apiGateway.getConfig()`
-//   （批次5 新增读通道：ConfigManager 四键 + running，apiKey 只读不生成——V2 语义
+// （新增读通道：ConfigManager 四键 + running，apiKey 只读不生成——V2 语义
 //   "网关从未启动过则为 null"）+ useApiGatewayStatus（运行态订阅）；
 // ② V2 Provider/ENDPOINT_TYPE → fork cliConfig/providerView 的最小结构（端点字面量同值）；
 // ③ fork Provider 形状无 authType/settings/reportsActualCost（V2 独有装饰字段，不投影），

@@ -38,12 +38,29 @@ const api = {
   dshSyncWebSearch: (config: unknown) => ipcRenderer.invoke(IpcChannel.Dsh_SyncWebSearch, config),
   dshSyncMcpServers: (servers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncMcpServers, servers),
   dshSyncPreprocess: (providers: unknown[]) => ipcRenderer.invoke(IpcChannel.Dsh_SyncPreprocess, providers),
-  // 编码助手（v0.3.4-1）：受管 Web UI 工具生命周期 + 状态广播订阅（薄转发）。
+  // 应用更新：检查 / 下载 / 取消 / 安装 / 偏好读写。状态由主进程在每次变化后主动推送。
+  update: {
+    getState: () => ipcRenderer.invoke(IpcChannel.App_Update_GetState),
+    getPrefs: () => ipcRenderer.invoke(IpcChannel.App_Update_GetPrefs),
+    setPrefs: (patch: unknown) => ipcRenderer.invoke(IpcChannel.App_Update_SetPrefs, patch),
+    check: (options?: { manual?: boolean }) => ipcRenderer.invoke(IpcChannel.App_Update_Check, options),
+    download: () => ipcRenderer.invoke(IpcChannel.App_Update_Download),
+    cancel: () => ipcRenderer.invoke(IpcChannel.App_Update_Cancel),
+    install: () => ipcRenderer.invoke(IpcChannel.App_Update_Install),
+    onState: (callback: (state: unknown) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state)
+      ipcRenderer.on(IpcChannel.App_Update_State, listener)
+      return () => {
+        ipcRenderer.removeListener(IpcChannel.App_Update_State, listener)
+      }
+    }
+  },
+  // 编码助手：受管 Web UI 工具生命周期 + 状态广播订阅（薄转发）。
   codeCli: {
     deepseekHarness: {
       start: (input: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_DeepseekHarness_Start, input),
       stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_DeepseekHarness_Stop),
-      // 批次4a：渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道。
+      // 渲染层订阅缝（useCodeCliStatus）的"立即拉当前值"通道。
       getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_DeepseekHarness_GetStatus),
       onStatus: (callback: (status: unknown) => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
@@ -53,15 +70,15 @@ const api = {
         }
       }
     },
-    // Hermes Dashboard（批次1 收尾）：生命周期 + 状态广播订阅（照 deepseekHarness 写法）；
+    // Hermes Dashboard（收尾）：生命周期 + 状态广播订阅（照 deepseekHarness 写法）；
     // readConfig/writeConfig 为 code_cli 配置读写通道（V2 经 zod 路由 ipcApi.request，
     // fork 摊平为直连通道，入参校验在主进程 ipc.ts）。
     hermesDashboard: {
-      // fork 缝（批次4a）：V2 zod schema 的 hermes_dashboard.start 入参为 z.void()，形参保形
+      // fork 缝：V2 zod schema 的 hermes_dashboard.start 入参为 z.void()，形参保形
       // 为可选（fork 主进程 handler 不消费入参）。
       start: (input?: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_HermesDashboard_Start, input),
       stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_HermesDashboard_Stop),
-      // 批次4a：同 deepseekHarness.getStatus。
+      // 同 deepseekHarness.getStatus。
       getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_HermesDashboard_GetStatus),
       onStatus: (callback: (status: unknown) => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
@@ -73,7 +90,7 @@ const api = {
     },
     readConfig: (targets: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_ReadConfig, targets),
     writeConfig: (payload: unknown) => ipcRenderer.invoke(IpcChannel.CodeCli_WriteConfig, payload),
-    // v0.4.5：Paper-Agent（源码型受管工具）Web UI 生命周期（照 hermesDashboard 写法）。
+    // Paper-Agent（源码型受管工具）Web UI 生命周期（照 hermesDashboard 写法）。
     paperAgent: {
       start: () => ipcRenderer.invoke(IpcChannel.CodeCli_PaperAgent_Start),
       stop: () => ipcRenderer.invoke(IpcChannel.CodeCli_PaperAgent_Stop),
@@ -86,15 +103,15 @@ const api = {
         }
       }
     },
-    // 受管 CLI 安装器（批次2）：装卸/快照/最新版本 + 变化广播订阅（照 onStatus 写法）。
+    // 受管 CLI 安装器：装卸/快照/最新版本 + 变化广播订阅（照 onStatus 写法）。
     binary: {
-      // v0.4.5-1：targetVersion 来自"检查更新"的结论——检查到 A 就装 A（主进程订 spec）。
+      // targetVersion 来自"检查更新"的结论——检查到 A 就装 A（主进程订 spec）。
       install: (name: string, targetVersion?: string) =>
         ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Install, name, targetVersion),
       remove: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Remove, name),
       snapshots: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_Snapshots),
       latestVersions: () => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_LatestVersions),
-      // v0.4.5：手动检查更新（强制重探 + 现查最新版本；失败返回 {success:false, message}）。
+      // 手动检查更新（强制重探 + 现查最新版本；失败返回 {success:false, message}）。
       checkUpdates: (name: string) => ipcRenderer.invoke(IpcChannel.CodeCli_Binary_CheckUpdates, name),
       onChanged: (callback: () => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent) => callback()
@@ -103,7 +120,7 @@ const api = {
           ipcRenderer.removeListener(IpcChannel.CodeCli_Binary_Changed, listener)
         }
       },
-      // v0.3.4-2：安装步骤进度订阅。v0.4.5-1：载荷形状与步骤词汇取自
+      // 安装步骤进度订阅。：载荷形状与步骤词汇取自
       // @shared/types/installProgress（主进程广播、本桥、渲染层同一份契约——步骤名写错是
       // 编译错误，新工具/新步骤不会悄悄漏展示）。
       onInstallProgress: (callback: (payload: InstallProgressPayload) => void): (() => void) => {
@@ -114,7 +131,7 @@ const api = {
         }
       }
     },
-    // 统一网关（批次3）：生命周期 + LAN 开关 + 配置部分更新 + 状态广播订阅
+    // 统一网关：生命周期 + LAN 开关 + 配置部分更新 + 状态广播订阅
     //（照 deepseekHarness 写法；syncConfig 为 {enabled?, port?, host?} 部分更新，
     // 主进程先持久化再收敛）。
     apiGateway: {
@@ -124,9 +141,9 @@ const api = {
       setLanEnabled: (enabled: boolean) => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_LanSetEnabled, enabled),
       syncConfig: (partial: { enabled?: boolean; port?: number; host?: string }) =>
         ipcRenderer.invoke(IpcChannel.CodeCli_SyncGatewayConfig, partial),
-      // 批次4a：立即拉当前运行态（载荷 {running, lanRunning?, port?} 同 Status 广播）。
+      // 立即拉当前运行态（载荷 {running, lanRunning?, port?} 同 Status 广播）。
       getStatus: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_GetStatus),
-      // 批次5：网关配置读取（host/port/apiKey|null/running）——合成网关 provider 数据源。
+      // 网关配置读取（host/port/apiKey|null/running）——合成网关 provider 数据源。
       getConfig: () => ipcRenderer.invoke(IpcChannel.CodeCli_ApiGateway_GetConfig),
       onStatus: (callback: (status: unknown) => void): (() => void) => {
         const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status)
@@ -140,7 +157,7 @@ const api = {
   webSearch: {
     check: (providerId: string) => ipcRenderer.invoke(IpcChannel.WebSearch_Check, providerId)
   },
-  // MCP 设置页通道（批次3）：与主进程 MCPService 一一对应的薄转发（invoke）+ 日志事件订阅。
+  // MCP 设置页通道：与主进程 MCPService 一一对应的薄转发（invoke）+ 日志事件订阅。
   mcp: {
     listTools: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_ListTools, server),
     listPrompts: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_ListPrompts, server),
@@ -166,7 +183,7 @@ const api = {
       }
     }
   },
-  // 知识库通道（批次4）：主进程 KnowledgeService 薄转发（嵌入引用只含 id，密钥主进程自解析）。
+  // 知识库通道：主进程 KnowledgeService 薄转发（嵌入引用只含 id，密钥主进程自解析）。
   knowledgeBase: {
     create: (base: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Create, base),
     reset: (baseId: string) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Reset, baseId),
@@ -175,7 +192,7 @@ const api = {
     remove: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Remove, payload),
     search: (payload: unknown) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Search, payload)
   },
-  // 文档处理通道 local-paddle 条目（v0.4.4 收编自 localModel）：下载生命周期；
+  // 文档处理通道 local-paddle 条目（收编自 localModel）：下载生命周期；
   // 进度由渲染层轮询 getStatus。
   preprocess: {
     localPaddle: {
@@ -185,7 +202,7 @@ const api = {
       remove: () => ipcRenderer.invoke(IpcChannel.Preprocess_LocalPaddle_Remove)
     }
   },
-  // 技能通道（批次5）：主进程 SkillService 薄转发（磁盘 = 真相源，列表全量投影）。
+  // 技能通道：主进程 SkillService 薄转发（磁盘 = 真相源，列表全量投影）。
   skills: {
     installFromZip: (zipFilePath: string) => ipcRenderer.invoke(IpcChannel.Skill_InstallFromZip, zipFilePath),
     installFromDirectory: (directoryPath: string) =>
@@ -213,7 +230,7 @@ const api = {
     }
     ipcRenderer.on(IpcChannel.Dsh_CompletionEvent, listener)
     const off = () => ipcRenderer.off(IpcChannel.Dsh_CompletionEvent, listener)
-    // v0.3.3-1 修复（"快速助手完成输出后不自动停止"）：这条轻通路（不建内核会话）的终态事件（done/error）
+    // 修复（"快速助手完成输出后不自动停止"）：这条轻通路（不建内核会话）的终态事件（done/error）
     // 与 invoke 回复走的是**两条不同通道**，会赛跑——主进程在 `send(done)` 之后立刻 return，回复常常先被
     // 渲染层处理，于是 `.finally(off)` 在终态事件排队期间就把监听摘掉了：正文 delta 早已送达、末条 done
     // 永远到不了 ⇒ 消息停在 processing、块停在 streaming、"按 ESC 暂停"一直挂着（真机与隔离实例探针都能复现）。
@@ -249,15 +266,15 @@ const api = {
       builtinTools?: string[]
       externalTools?: string[]
       tier?: WorkModeApprovalTier
-      /** 随消息附带的图片（base64，v0.3.1 识图通道；内核准入后并入用户消息内容块）。 */
+      /** 随消息附带的图片（base64，识图通道；内核准入后并入用户消息内容块）。 */
       images?: Array<{ mediaType: string; data: string; name?: string }>
-      /** 网络搜索（批次2）：本轮 web_search 的提供商（与 topics.TopicSendOptions 逐字段对齐）。 */
+      /** 网络搜索：本轮 web_search 的提供商（与 topics.TopicSendOptions 逐字段对齐）。 */
       webSearch?: { providerId: string }
-      /** 聊天生图（批次5）：本轮 generate_image 工具的绘画模型（与 topics.TopicSendOptions 逐字段对齐）。 */
+      /** 聊天生图：本轮 generate_image 工具的绘画模型（与 topics.TopicSendOptions 逐字段对齐）。 */
       generateImage?: { providerId: string; modelId: string }
-      /** 持久记忆（v0.4.6）：本轮 memory 工具的助手 id（与 topics.TopicSendOptions 逐字段对齐）。 */
+      /** 持久记忆：本轮 memory 工具的助手 id（与 topics.TopicSendOptions 逐字段对齐）。 */
       memory?: { assistantId: string }
-      /** 知识库检索（批次4）：本轮可检索库清单。 */
+      /** 知识库检索：本轮可检索库清单。 */
       knowledgeBases?: Array<{
         id: string
         chunkSize?: number
@@ -266,7 +283,7 @@ const api = {
         threshold?: number
         embedding: { providerId: string; modelId: string; dimensions: number }
       }>
-      /** 技能（批次5）：本轮可读技能清单。 */
+      /** 技能：本轮可读技能清单。 */
       skills?: Array<{
         id: string
         folderName: string
@@ -275,7 +292,7 @@ const api = {
         contentHash?: string
         author?: string | null
       }>
-      /** 文档阅读（批次6）：本轮附件文档清单。 */
+      /** 文档阅读：本轮附件文档清单。 */
       documents?: Array<{ name: string; path: string; ext?: string }>
     }
   ) => ipcRenderer.invoke(IpcChannel.Dsh_TopicSend, id, text, options),
@@ -413,7 +430,7 @@ const api = {
     renameDir: (dirPath: string, newName: string) => ipcRenderer.invoke(IpcChannel.File_RenameDir, dirPath, newName),
     read: (fileId: string, detectEncoding?: boolean) =>
       ipcRenderer.invoke(IpcChannel.File_Read, fileId, detectEncoding),
-    // r2-79/⑥：区分「不存在」与「读失败」的读通道（File_Read 对两者抛同一个通用错误）
+    // /⑥：区分「不存在」与「读失败」的读通道（File_Read 对两者抛同一个通用错误）
     readById: (fileId: string): Promise<FileReadByIdResult> => ipcRenderer.invoke(IpcChannel.File_ReadById, fileId),
     readExternal: (filePath: string, detectEncoding?: boolean) =>
       ipcRenderer.invoke(IpcChannel.File_ReadExternal, filePath, detectEncoding),
@@ -423,7 +440,7 @@ const api = {
     mkdir: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_Mkdir, dirPath),
     write: (filePath: string, data: Uint8Array | string) => ipcRenderer.invoke(IpcChannel.File_Write, filePath, data),
     writeWithId: (id: string, content: string) => ipcRenderer.invoke(IpcChannel.File_WriteWithId, id, content),
-    // v0.3.3-2：生成图内容寻址落盘（id = 源串 sha256；同 id 同文件，回放不堆积）
+    // 生成图内容寻址落盘（id = 源串 sha256；同 id 同文件，回放不堆积）
     saveGeneratedImage: (payload: { id: string; source: string }): Promise<unknown> =>
       ipcRenderer.invoke(IpcChannel.File_SaveGeneratedImage, payload),
     open: (options?: OpenDialogOptions) => ipcRenderer.invoke(IpcChannel.File_Open, options),
@@ -450,7 +467,7 @@ const api = {
     isTextFile: (filePath: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.File_IsTextFile, filePath),
     isDirectory: (filePath: string): Promise<boolean> => ipcRenderer.invoke(IpcChannel.File_IsDirectory, filePath),
     getDirectoryStructure: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_GetDirectoryStructure, dirPath),
-    // v0.3.3-2 笔记（V1 原样）：用户自选笔记目录的校验/补全
+    // 笔记（V1 原样）：用户自选笔记目录的校验/补全
     validateNotesDirectory: (dirPath: string) => ipcRenderer.invoke(IpcChannel.File_ValidateNotesDirectory, dirPath),
     listDirectory: (dirPath: string, options?: DirectoryListOptions) =>
       ipcRenderer.invoke(IpcChannel.File_ListDirectory, dirPath, options),
@@ -618,7 +635,7 @@ const api = {
     trackTokenUsage: (data: TokenUsageData) => ipcRenderer.invoke(IpcChannel.Analytics_TrackTokenUsage, data)
   },
   /**
-   * 主 → 渲染的**具名**事件面（k2-06/k2-07 收窄暴露面时补的显式桥）。
+   * 主 → 渲染的**具名**事件面（收窄暴露面时补的显式桥）。
    *
    * 此前渲染层用 `window.electron.ipcRenderer.on(<channel>, …)` 直连：那既绕开三层契约
    * （任意字符串 channel，无声明、无检查），也让 preload 的暴露面等于整个 Electron API。
@@ -722,7 +739,7 @@ const api = {
 }
 
 /**
- * 渲染层可见的 `window.electron`（k2-06：不再 expose `@electron-toolkit/preload` 的整个
+ * 渲染层可见的 `window.electron`（不再 expose `@electron-toolkit/preload` 的整个
  * `electronAPI`）。
  *
  * 旧暴露面把三层 IPC 契约降级成"建议"：`window.electron.ipcRenderer.invoke/send` 接受**任意
@@ -732,7 +749,7 @@ const api = {
  *
  * - `ipcRenderer.invoke/send`：**白名单**通道。白名单是显式的（不是"以 'dsh:' 开头的都放行"），
  *   未登记即拒绝并带上面名——渲染层不需要 preload 声明就能调任何 handler 的路径就此关闭。
- *   新增通道时三层一起改（CLAUDE.md §8），这里漏登记会在第一次调用时如实失败。
+ *   新增通道时三层一起改，这里漏登记会在第一次调用时如实失败。
  * - `process`：只有 `platform` 与三个日志相关键（`LoggerService` 的开发期开关）。
  *   `env` 的其余键（含用户环境里的密钥与 `DSH_*`）不再进入渲染层。
  * - `webFrame` / `webUtils` 整体移除：渲染层取文件路径走 `window.api.file.getPathForFile`

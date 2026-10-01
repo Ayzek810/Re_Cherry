@@ -7,7 +7,7 @@
  * 需要识图的主模型收到的只是 wire 占位文本。提示词为空字符串 = 内置默认
  * （@shared/config/imageDescriber 的 DEFAULT_IMAGE_DESCRIBE_PROMPT）。
  *
- * 会话状态一概不留：图片附件的真相源是会话日志（v0.3.1 user/message 的
+ * 会话状态一概不留：图片附件的真相源是会话日志（user/message 的
  * image 内容块），describe_images 执行时按附件句柄在日志内反查
  * （见 describeImageTool.collectSessionImageRefs）——本服务不建并行登记表。
  *

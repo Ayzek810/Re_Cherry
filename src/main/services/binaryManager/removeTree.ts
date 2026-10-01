@@ -1,13 +1,13 @@
-// fork 缝（原创+社区移植混合，2026-09-24 v0.3.4-2 批次0）：
+// fork 缝（原创+社区移植混合，2026-09-24）：
 // - 逐项遍历删除：移植自社区 dsh-desktop packages/dsh-desktop-market-installer/remove-tree.mjs
 //   （MIT）——修复 Windows 两坑：①Node 递归 rm 对非 ASCII 路径静默失败（rmSync 报成功但
 //   什么都没删，社区原文有实证）；②symlink 用 unlink 断链而不跟进（防把 pnpm store 内容
-//   连带删除）。批次5 起我们的 profile 树会引入 pnpm link，此纪律前移。
-// - removeTreeWithRetry：批次5 真机事故（EPERM on sharp .node）——进程 taskkill 后
+// 连带删除）。起我们的 profile 树会引入 pnpm link，此纪律前移。
+// - removeTreeWithRetry：真机事故（EPERM on sharp .node）——进程 taskkill 后
 //   Windows 释放原生 DLL 锁是异步的（Defender 扫描/句柄回收延迟），立即 rm 撞 EPERM。
 //   重试退避到锁释放；仍失败如实上报由 UI 引导稍后重试。
 //
-// v0.4.5-1（真机反馈"卸载还是耗时过长"）：**原生递归 rm 成为常规路径，逐项遍历降为兜底**。
+// （真机反馈"卸载还是耗时过长"）：**原生递归 rm 成为常规路径，逐项遍历降为兜底**。
 // 本机实测（受管 hermes 树的一份拷贝，11074 个项 / 161 MB）：
 //   逐项遍历 15497 ms   ·   `rm --recursive` 4852 ms   ·   3.2×
 // 逐项遍历慢的原因是它把每个文件都变成一个 await 往返（Windows + Defender 下每次都是真 I/O），

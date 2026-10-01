@@ -20,7 +20,7 @@ export type BuiltinToolId = (typeof BUILTIN_TOOL_IDS)[number]
 
 /**
  * 外置工具 id（= topics.ts 工作模式工具面的挂载单元）。
- * v0.4.6 用户裁决：memory / todo / goal 归外置——它们都会在会话之外留下持久状态（memory 写
+ * 用户裁决：memory / todo / goal 归外置——它们都会在会话之外留下持久状态（memory 写
  * 磁盘助手级 FACT/JOURNAL；todo/goal 写会话日志并驱动 UI 面板/自动续轮），属"模型对会话之外
  * 的状态起作用"，归工作模式信任边界（外置不必然消费沙箱——jobs 是先例）。
  */

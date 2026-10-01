@@ -1,11 +1,11 @@
 /**
- * 二轮审查 r2-08 / r2-54：图片存储的写与读。
+ * 图片存储的写与读。
  *
- * r2-08：`set()` 的 update 分支是 `void db.settings.update(...)`——既不 await 也不 catch。
+ * `set()` 的 update 分支是 `void db.settings.update(...)`——既不 await 也不 catch。
  * 后置读回（三个调用点都用 `await ImageStorage.get(...)` 的结果设置 UI）因此读到旧值，
  * 写失败则变成 unhandled rejection。现在两支统一为一个 awaited `put`（upsert）。
  *
- * r2-54：`get()` 签名承诺 `string`，无记录时却返回 `undefined`，undefined 会漏进
+ * `get()` 签名承诺 `string`，无记录时却返回 `undefined`，undefined 会漏进
  * `setState`/渲染。现在归一化为 `''`。
  *
  * 行为级断言：
@@ -46,7 +46,7 @@ vi.mock('@renderer/i18n', () => ({
 
 import ImageStorage from '../ImageStorage'
 
-describe('ImageStorage 写入/读取语义（r2-08 / r2-54）', () => {
+describe('ImageStorage 写入/读取语义', () => {
   beforeEach(() => {
     put.mockReset()
     add.mockReset()
@@ -109,7 +109,7 @@ describe('ImageStorage 写入/读取语义（r2-08 / r2-54）', () => {
     expect(put).toHaveBeenCalledWith({ id: 'image://provider-1', value: 'data:image/png;base64,AAA' })
   })
 
-  it('无记录时 get() 返回空串（r2-54：不再是 undefined）', async () => {
+  it('无记录时 get() 返回空串（不再是 undefined）', async () => {
     getRecord.mockResolvedValue(undefined)
 
     const value = await ImageStorage.get('missing')

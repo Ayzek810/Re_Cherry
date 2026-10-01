@@ -41,7 +41,7 @@ const PaintingSettings: FC<PaintingSettingsProps> = ({ painting, onConfigChange,
   // that `canonicalGenerate` partitions into AI SDK args vs provider bag at
   // request time. Top-level PaintingData fields are not visible to the wire.
   const paintingParams = painting.params ?? {}
-  // fork 缝（v0.3.3 批次6 / v0.3.3-9）：V2 经 useImageGenerationSupport(providerId, model) 查询；
+  // fork 缝：V2 经 useImageGenerationSupport(providerId, model) 查询；
   // fork 目录是同步静态数据，按 painting 的 (providerId, model) 解析。目录未收录时
   // `resolveImageGenerationSupport` 给**通用兜底字段面**（否则参数 Popover 会整体消失）。
   const resolved = useMemo(

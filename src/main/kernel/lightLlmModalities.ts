@@ -68,9 +68,9 @@ function endpoint(apiHost: string, path: string): string {
  * `/api/paas/v4/v1/images/generations`、`/api/v3/v1/images/generations` 这种无效路径。
  * 按 host 后缀识别并去掉多余的 `/v1`；其余 host 保持 V2 等价行为。
  *
- * `v0.3.3-9`：补 `/api/v3`（火山 Ark 的图像接口就是 `{base}/images/generations`，
+ * 补 `/api/v3`（火山 Ark 的图像接口就是 `{base}/images/generations`，
  * seedream 系列走这里）——此前 doubao 被当作"范围外"拒绝，属于**误杀**。
- * `v0.4.4`：同一规则由图像平面推广到 chat 形端点（视觉文档解析的
+ * 同一规则由图像平面推广到 chat 形端点（视觉文档解析的
  * `/chat/completions`），故命名从 `imageEndpoint` 收敛为 `compatibleEndpoint`。
  */
 const VERSIONED_API_HOST_SUFFIXES = ['/api/paas/v4', '/api/v3']
@@ -96,7 +96,7 @@ async function readErrorDetail(response: Response): Promise<string> {
   return (await response.text().catch(() => '')).slice(0, 300)
 }
 
-// ---- embed（知识库嵌入/搜索压缩的执行缝；批次2 EmbeddingClient 归位至此） ----
+// ---- embed（知识库嵌入/搜索压缩的执行缝；EmbeddingClient 归位至此） ----
 
 export interface LightEmbedRef {
   providerId: string
@@ -363,7 +363,7 @@ export function abortLightImage(requestId: string): void {
 }
 
 /**
- * 合并调用方 signal 与渲染层 requestId 注册表 signal（k2-13）。
+ * 合并调用方 signal 与渲染层 requestId 注册表 signal。
  *
  * 两个来源都必须在场：`exec.signal` 由**内核 agent 回合**持有（回合中止/暂停），
  * `abort` 由 `Dsh_LightImageAbort(requestId)` 命中。旧写法 `signal ?? abort` 在工具路径
@@ -381,7 +381,7 @@ function mergeAbortSignals(signal: AbortSignal | undefined, abort: AbortSignal |
  * 调用方）走 `diffusion` 兼容档，只下发 `size`/`n` 两个基础字段；登记在表的
  * provider（openai / openrouter / dmxapi / zhipu / silicon …）按表改名。
  *
- * fork 缝（v0.3.3-9）：**未登记的 provider id 也落 `diffusion` 档**——fork 允许用户自建
+ * fork 缝：**未登记的 provider id 也落 `diffusion` 档**——fork 允许用户自建
  * OpenAI 兼容 provider（以前就是 POST `/v1/images/generations`），在入口把它拒掉等于砍掉
  * 用户自己的端点。只有 `OFF_PLANE_VENDOR_IDS`（V2 靠 `vendorTransport` 换端点的厂商）
  * 才走明错，判定统一在 `imageWireProfileForProvider`。

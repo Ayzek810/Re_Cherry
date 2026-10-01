@@ -9,12 +9,12 @@ import { OwnLoginCard } from './OwnLoginCard'
 import { EmptyState, ReorderableList } from './shadcn'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/components/ConfigList.tsx
-//（2026-09-24，v0.3.4-1 批次4b）。缝点两处，搜索过滤/置顶/双卡片分派逻辑逐字：
+//（2026-09-24）。缝点两处，搜索过滤/置顶/双卡片分派逻辑逐字：
 // ① 类型缝：Provider ← providerView 投影、CliProviderConfig ← @shared/types/codeCliState。
-// ② UI 面缝：EmptyState/ReorderableList → 本页 shim（拖拽排序未实现，见 shim 缝注与 f2-46）；
+// ② UI 面缝：EmptyState/ReorderableList → 本页 shim（拖拽排序未实现，见 shim 缝注与）；
 //    import 面对号（isOwnLoginConfigurable ← 本页 cliConfig barrel）。
 //
-// 二轮审查 f2-45：不再接收 `currentProviderModelName`——调用方只能拿"磁盘配置不属于当前服务商"
+// 不再接收 `currentProviderModelName`——调用方只能拿"磁盘配置不属于当前服务商"
 // 这一事实去填它，卡片于是把选中服务商的模型名显示成「未知供应商」。模型名一律取 `resolveMeta`。
 
 export interface ConfigListProps {

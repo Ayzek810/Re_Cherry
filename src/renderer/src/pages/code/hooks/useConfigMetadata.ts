@@ -12,7 +12,7 @@ import { CLI_TOOL_PROVIDER_MAP } from '../constants/cliTools'
 import { modelSupportsCliTool } from '../utils/modelSupport'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useConfigMetadata.ts
-//（2026-09-24，v0.3.4-1 批次4a）。缝点六处，解析结构（filter/makeModelFilter/resolveProviderMeta
+//（2026-09-24）。缝点六处，解析结构（filter/makeModelFilter/resolveProviderMeta
 // 的返回形状）逐字：
 // ① 模型源缝：V2 useModels({enabled:true}) 全局查询 ← fork providers 自带 models（同步快照，
 //   无 loading 态，isModelsLoading 恒 false）；模型以 createUniqueModelId(providerId, modelId)

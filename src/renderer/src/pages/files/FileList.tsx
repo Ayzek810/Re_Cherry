@@ -35,13 +35,13 @@ interface FileItemProps {
 const IMAGE_BATCH_SIZE = 24
 
 /**
- * 二轮审查 f2-40：图片分支是唯一会随使用量单调增长的数据面（AI 出图与上传图片都归 image），
+ * 图片分支是唯一会随使用量单调增长的数据面（AI 出图与上传图片都归 image），
  * 旧实现一次性为**全部**图片渲染 `Image` + `Spin` + 删除按钮 + 信息条四层节点，且 antd `Image`
  * 会为每张图挂 preview 监听——几百张图时首帧明显卡顿。
  *
  * 这里改成按需揭示：先渲染一批，列表底部的哨兵进入视口（含 300px 预取边距）时再追加一批。
  * 首批 DOM 恒定在 `IMAGE_BATCH_SIZE` 量级，滚动到哪渲染到哪。
- * 观察者能力缺失（非 Chromium 环境）时退回全量渲染——宁可慢，不得静默少显示（§9）。
+ * 观察者能力缺失（非 Chromium 环境）时退回全量渲染——宁可慢，不得静默少显示。
  */
 function useProgressiveReveal(total: number, batchSize: number) {
   const [visibleCount, setVisibleCount] = useState(() => Math.min(batchSize, total))
@@ -115,7 +115,7 @@ const FileList: React.FC<FileItemProps> = ({ id, list, files }) => {
                         cancelText: t('common.cancel'),
                         centered: true,
                         onOk: () => {
-                          // r2-45：handleDelete 现在会 throw。`void` 只让 lint 闭嘴——拒绝会变成
+                          // handleDelete 现在会 throw。`void` 只让 lint 闭嘴——拒绝会变成
                           // unhandled rejection（antd 的 ActionButton 在拒绝分支里 `Promise.reject(e)`，
                           // 无人接住）。用户可见信号由 handleDelete 统一给出，这里留取证行。
                           handleDelete(file.id, t).catch((error) => {

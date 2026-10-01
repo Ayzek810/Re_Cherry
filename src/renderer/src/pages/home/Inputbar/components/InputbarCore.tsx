@@ -58,7 +58,7 @@ export interface InputbarCoreProps {
   handleSendMessage: () => void
 
   /**
-   * 生成中允许发送（v0.4.7 追问队列）：true 时 isLoading 不再禁用发送键/回车，
+   * 生成中允许发送（追问队列）：true 时 isLoading 不再禁用发送键/回车，
    * 发送动作由调用方决定（内核聊天话题 = 入队）。mini 窗口等无内核会话的
    * scope 不传，保持"生成中锁发送"的既有语义。
    */
@@ -186,7 +186,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   // 判断是否有内容：文本不为空或有文件
   const noContent = isEmpty && files.length === 0
   // 发送入口统一禁用条件：空内容、正在生成、全局搜索态。
-  // v0.4.7 追问队列（仅工作模式话题，用户裁决）：queueWhileLoading 时生成中仍可发送，
+  // 追问队列（仅工作模式话题，用户裁决）：queueWhileLoading 时生成中仍可发送，
   // 动作语义由调用方改为入队（见 Inputbar.sendMessage 拦截）。
   const isSendDisabled = noContent || searching || (isLoading && !queueWhileLoading)
 
@@ -462,7 +462,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
     PasteService.setLastFocusedComponent('inputbar')
   }, [dispatch, quickPanel])
 
-  // 拖拽拉伸把手：全局监听的生命周期收口在 useDragResizeHandle（卸载即清理，f2-12）
+  // 拖拽拉伸把手：全局监听的生命周期收口在 useDragResizeHandle（卸载即清理）
   const handleDragStart = useDragResizeHandle({
     enabled: config.enableDragDrop,
     getStartHeight: () => textareaRef.current?.resizableTextArea?.textArea?.offsetHeight || 0,
@@ -508,14 +508,14 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   }, [focusTextarea])
 
   // 剪贴板处理器只注册一次：handlePaste 的引用随 setText（useInputText 的 [text, options] 依赖）
-  // 每次输入变化，以它为依赖会让"安装一次"的语义失效（每次按键 unregister + register 一遍，f2-09）
+  // 每次输入变化，以它为依赖会让"安装一次"的语义失效（每次按键 unregister + register 一遍）
   const handlePasteRef = useRef(handlePaste)
   useEffect(() => {
     handlePasteRef.current = handlePaste
   }, [handlePaste])
 
   useEffect(() => {
-    // r2-58：不再调用 `PasteService.init()`（全局 paste 监听路径不可达，已删除）；
+    // 不再调用 `PasteService.init()`（全局 paste 监听路径不可达，已删除）；
     // 保留注册表登记，供 `getLastFocusedComponent` 的路由语义与测试桩使用。
     PasteService.registerHandler('inputbar', (event) => handlePasteRef.current(event))
 
@@ -527,7 +527,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   const rightSectionExtras = useMemo(() => {
     const extras: React.ReactNode[] = []
     // v1 同款：生成中把发送键替换为醒目的红色“停止”按钮。
-    // v0.4.7 追问队列（仅工作模式）：生成中保留发送键（= 入队追问），停止键并排。
+    // 追问队列（仅工作模式）：生成中保留发送键（= 入队追问），停止键并排。
     if (isLoading) {
       extras.push(
         <Tooltip key="stop" placement="top" title={t('chat.input.pause')} mouseLeaveDelay={0} arrow>

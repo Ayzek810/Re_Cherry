@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 const logger = loggerService.withContext('BlacklistMatchPattern')
 
 /**
- * v0.3.2 批次2 自 CS_V1 移植 + 适配点清单（源：fork src/renderer/src/utils/blacklistMatchPattern.ts）：
+ * 自 CS_V1 移植 + 适配点清单（源：fork src/renderer/src/utils/blacklistMatchPattern.ts）：
  * - 渲染层原件依赖渲染层 store/types，按父代指令在主进程复制同语义实现；
  *   渲染层原件与既有 import 面零改动。
  * - WebSearchState / WebSearchProviderResponse 换成本文件最小结构类型，过滤函数
@@ -50,7 +50,7 @@ export {
   parseMatchPattern
 } from '@shared/utils/matchPattern'
 
-/** 纯域名串 → hostname 匹配（v0.3.2 批次2 适配：上游裸域名在 MatchPatternMap 里会被丢弃）。 */
+/** 纯域名串 → hostname 匹配（适配：上游裸域名在 MatchPatternMap 里会被丢弃）。 */
 function matchesExcludeDomain(hostname: string, domain: string): boolean {
   const normalized = domain
     .trim()

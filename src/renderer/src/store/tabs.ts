@@ -103,7 +103,7 @@ const tabsSlice = createSlice({
       }
     },
     /**
-     * 启动时恢复上次会话保留下来的固定标签页（v0.3.3-1 持久化）：已在清单里的只补 `isPinned`，
+     * 启动时恢复上次会话保留下来的固定标签页（持久化）：已在清单里的只补 `isPinned`，
      * 缺的按记录补回标签条；没有任何变化时**返回原 state**，避免无谓刷新。
      */
     restorePinnedTabs: (state, action: PayloadAction<{ id: string; path: string }[]>) => {

@@ -95,7 +95,7 @@ export interface DynamicVirtualListProps<T> extends InheritedVirtualizerOptions 
 
   /**
    * Accessible name for the scroll region.
-   * c2-10：`role="region"` 只有配上可读名才计入地标。不传时不渲染 `role`，
+   * `role="region"` 只有配上可读名才计入地标。不传时不渲染 `role`，
    * 避免出现一个无名 landmark。
    */
   ariaLabel?: string
@@ -256,7 +256,7 @@ function DynamicVirtualList<T>(props: DynamicVirtualListProps<T>) {
       $show={showScrollbar}
       style={{
         overflow: 'auto',
-        // c2-32：有 header 时由外层承担 `size`，滚动区在剩下的空间里 flex；没有 header 时保持原样。
+        // 有 header 时由外层承担 `size`，滚动区在剩下的空间里 flex；没有 header 时保持原样。
         ...(header
           ? { flex: 1, minWidth: 0, minHeight: 0 }
           : horizontal
@@ -334,7 +334,7 @@ function DynamicVirtualList<T>(props: DynamicVirtualListProps<T>) {
     </ScrollContainer>
   )
 
-  // c2-32：`header` 原先渲染在滚动容器内、测量容器外，其高度不参与 `virtualItem.start` 计算 ——
+  // `header` 原先渲染在滚动容器内、测量容器外，其高度不参与 `virtualItem.start` 计算 ——
   // 第一条虚拟行会落在 header 之下（视觉重叠），`scrollTop = 0` 时第 0 行藏在 header 后面。
   // 现在把 header 移到滚动容器之外（与 prop 的 JSDoc「display above the list」一致），
   // 测量区与滚动区重新对齐。

@@ -1,11 +1,11 @@
 /**
- * r2-15 / r2-16 / r2-48：sessionTaskState（任务面板投影）的重放契约与有界性。
+ * sessionTaskState（任务面板投影）的重放契约与有界性。
  *
  * 三条不变量在这里被钉住：
- * - r2-15：重放失败（`null` = 重试窗口耗尽"不知道" / reject）不得把话题标记成"已重放"，
+ * - ：重放失败（`null` = 重试窗口耗尽"不知道" / reject）不得把话题标记成"已重放"，
  *   否则该话题的历史 todo/goal 在整个进程生命周期内都不会再折叠；重试限次（REPLAY_MAX_ATTEMPTS）。
- * - r2-16：重放回调落地时若直播已推进过状态版本，丢弃重放整值——不让旧快照覆盖较新状态。
- * - r2-48：`states` 有 LRU 上限；空快照且最后一位订阅者退订时释放条目。
+ * - ：重放回调落地时若直播已推进过状态版本，丢弃重放整值——不让旧快照覆盖较新状态。
+ * - ：`states` 有 LRU 上限；空快照且最后一位订阅者退订时释放条目。
  */
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -73,7 +73,7 @@ beforeEach(() => {
   liveCallback = null
 })
 
-describe('sessionTaskState · 重放失败不得留下"已重放"标记（r2-15）', () => {
+describe('sessionTaskState · 重放失败不得留下"已重放"标记', () => {
   it('`null`（重试窗口耗尽 = 不知道）后再次 ensure 会重新拉取，成功即折叠历史', async () => {
     const { ensureTopicTasks, getTopicTaskSnapshot, isTopicTaskReplayComplete } = await loadModule()
     fetchTopicEventsWithRetry.mockResolvedValueOnce(null).mockResolvedValueOnce([todoEvent('历史任务')])
@@ -140,7 +140,7 @@ describe('sessionTaskState · 重放失败不得留下"已重放"标记（r2-15�
   })
 })
 
-describe('sessionTaskState · 重放不得覆盖较新的直播状态（r2-16）', () => {
+describe('sessionTaskState · 重放不得覆盖较新的直播状态', () => {
   it('直播事件在重放落地前推进 → 丢弃重放整值，保留直播的新状态', async () => {
     const { ensureTopicTasks, getTopicTaskSnapshot } = await loadModule()
     let resolveReplay: (value: SessionEvent[] | null) => void = () => {}
@@ -164,7 +164,7 @@ describe('sessionTaskState · 重放不得覆盖较新的直播状态（r2-16）
     expect(snapshot.todos?.[0]).toMatchObject({ content: '直播较新' })
     // 重放整值被丢弃 → 直播已清掉的 goal 不得被旧快照写回
     expect(snapshot.goal).toBeNull()
-    // 取证钩子确实记了这次丢弃（r2-16 的可观测信号）
+    // 取证钩子确实记了这次丢弃（的可观测信号）
     expect(forensicWarn.mock.calls.some((call) => String(call[0]).includes('replay result dropped'))).toBe(true)
   })
 
@@ -183,7 +183,7 @@ describe('sessionTaskState · 重放不得覆盖较新的直播状态（r2-16）
   })
 })
 
-describe('sessionTaskState · 投影缓存有界（r2-48）', () => {
+describe('sessionTaskState · 投影缓存有界', () => {
   it('states 有 LRU 上限：写满上限后条目数不再增长，且最近写入的话题仍可读', async () => {
     const { STATES_MAX, ensureTopicTasks, getTopicTaskSnapshot, getTopicTaskStateCount } = await loadModule()
     fetchTopicEventsWithRetry.mockResolvedValue(null)

@@ -18,7 +18,7 @@ import { SettingDescription, SettingRow, SettingSubtitle } from '..'
 
 const logger = loggerService.withContext('McpRuntimeDependencies')
 
-/** 三值探测结果（v1 二轮审查 s2-26）：`'unknown'` = 探测本身失败，不可当作「缺失」。 */
+/** 三值探测结果：`'unknown'` = 探测本身失败，不可当作「缺失」。 */
 type RuntimeCommandProbe = string | null | 'unknown'
 
 interface Props {
@@ -40,10 +40,10 @@ const McpRuntimeDependencies: FC<Props> = ({ mini = false }) => {
   const [commandPaths, setCommandPaths] = useState<Record<McpRuntimeCommand, RuntimeCommandProbe> | null>(null)
 
   /**
-   * 探测两个命令（v1 二轮审查 s2-26）。
+   * 探测两个命令。
    *
    * `probeMcpRuntimeCommands` 把「IPC 探测失败」与「命令确实不在 PATH」都折叠成 `null`，
-   * 而它的文档注释承诺「不谎报缺失」。UI 不能把不可知状态当结论（家规 §6/§9），
+   * 而它的文档注释承诺「不谎报缺失」。UI 不能把不可知状态当结论，
    * 所以这里对返回 `null` 的命令**复核一次**：复核抛错 = 探测失败（unknown），
    * 复核仍是 `null` = 命令确实不在 PATH（missing）。
    */

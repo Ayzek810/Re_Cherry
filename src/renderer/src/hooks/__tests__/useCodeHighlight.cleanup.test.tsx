@@ -1,5 +1,5 @@
 /**
- * p2-12 第 2 条行为测试：代码块卸载必须把 callerId 交给 `ShikiStreamService.cleanupTokenizers`。
+ * 第 2 条行为测试：代码块卸载必须把 callerId 交给 `ShikiStreamService.cleanupTokenizers`。
  *
  * 这条测试锁定的是**生产消费点确实存在**：`ShikiStreamService.cleanupTokenizers(callerId)`
  * 此前被审计判定为"生产路径没有可见的按 callerId 清理者"（`grep shikiStreamService.cleanupTokenizers`
@@ -8,7 +8,7 @@
  * `callerId` 调用了它，且清理的是自己的 callerId。
  *
  * `CodeViewer` 是 `useCodeHighlight` 的**唯一**消费方，且每个实例用
- * ``useRef(`${Date.now()}-${uuid()}`).current`` 生成实例级 callerId；`CodeViewer` 的唯一生产
+ * useRef(`${Date.now()}-${uuid()}`).current 生成实例级 callerId；`CodeViewer` 的唯一生产
  * 挂载点是 `CodeBlockView`（Markdown 代码块）——因此"代码块卸载 ⇒ 清理该块的 tokenizer"
  * 这条链由本测试 + `CodeViewer.debounceCleanup.test.tsx` 共同覆盖。
  */
@@ -32,7 +32,7 @@ vi.mock('@renderer/context/CodeStyleProvider', () => ({
   })
 }))
 
-describe('useCodeHighlight unmount cleanup (p2-12 #2)', () => {
+describe('useCodeHighlight unmount cleanup (#2)', () => {
   beforeEach(() => {
     cleanupTokenizersMock.mockClear()
     highlightStreamingCodeMock.mockClear()

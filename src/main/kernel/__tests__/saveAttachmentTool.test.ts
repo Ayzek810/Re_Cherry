@@ -14,7 +14,7 @@ vi.mock('@main/services/knowledge/KnowledgeService', () => ({
 import { copyNoClobber, hasWindowsInvalidFilenameSegment, validateOutputPath } from '../saveAttachmentTool'
 
 /**
- * save_attachment 纯函数机测（v0.4.6 V2 移植）：输出路径校验（工作区相对/禁 .. 禁非法
+ * save_attachment 纯函数机测（V2 移植）：输出路径校验（工作区相对/禁 .. 禁非法
  * 字符）与 wx 独占复制（EEXIST 具名、失败回滚）。真实 fs（fs/promises 未被 setup mock）。
  * 主测试 setup mock 掉 node:os，临时目录挂进程工作目录下统一清扫。
  */

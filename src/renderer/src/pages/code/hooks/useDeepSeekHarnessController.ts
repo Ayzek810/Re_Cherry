@@ -10,7 +10,7 @@ import type { Provider } from '../cliConfig/providerView'
 import { useManagedToolStatus } from './useManagedToolStatus'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useDeepSeekHarnessController.ts
-//（2026-09-24，v0.3.4-1 批次4a）。缝点四处，函数体逐字：
+//（2026-09-24）。缝点四处，函数体逐字：
 // ① 弹窗缝：V2 useMiniAppPopup.openSmartMiniApp（MiniAppWebviewService webview 池）→ fork
 //   useMinappPopup.openSmartMinapp（既有 minapp 弹窗/Tab 池，minAppsCache 临时应用语义天然
 //   支持不进 allMinApps 持久化）。config 形状 {appId,name,url,logo} → fork MinAppType

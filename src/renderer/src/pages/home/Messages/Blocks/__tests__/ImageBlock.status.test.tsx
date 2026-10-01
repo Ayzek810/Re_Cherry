@@ -1,5 +1,5 @@
 /**
- * ImageBlock 的**渲染完备性**（v0.3.3-2）。
+ * ImageBlock 的**渲染完备性**。
  *
  * 真机事故：快捷助手把用户粘贴的图建成了块，但没给 status ⇒ `createBaseMessageBlock` 的默认
  * 状态是 PROCESSING ⇒ 旧实现 `return null` ⇒ 聊天里"我发出去的图什么都不显示"（模型却能读到图）。

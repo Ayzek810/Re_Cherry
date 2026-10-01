@@ -12,7 +12,7 @@ export type MCPConfigSample = {
   env?: Record<string, string>
 }
 
-// ===== 以下自 CS_V1 types/mcp.ts 原样移植（批次1 MCPSettings 页面依赖）=====
+// ===== 以下自 CS_V1 types/mcp.ts 原样移植（MCPSettings 页面依赖）=====
 
 export const MCPConfigSampleSchema = z.object({
   command: z.string(),

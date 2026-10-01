@@ -1,5 +1,5 @@
 /**
- * 自定义工具的沙箱档位闸（v0.4.6，move_to_trash / save_attachment 共用）。
+ * 自定义工具的沙箱档位闸（move_to_trash / save_attachment 共用）。
  *
  * 复用 dsh-tool-fs 确立的升级编舞（词汇表在 @deepseek-ai/dsh-sandbox 公开导出）：
  * 站态档位由 ctx.sandboxPolicy.resolve({session}) 解析（会话 cwd 即工作区边界）；

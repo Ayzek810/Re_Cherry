@@ -13,7 +13,7 @@ import { useMemo } from 'react'
 interface PaintingModelSelectorProps {
   /** V2 标志：工具栏里不重复标题（V2 作曲条就这么传，fork 照旧不显示标题）。 */
   hideTitle?: boolean
-  /** V2 `renderContextControls` 的图标态（v0.3.3-7 接上）：窄窗时只留头像 + 箭头。 */
+  /** V2 `renderContextControls` 的图标态（接上）：窄窗时只留头像 + 箭头。 */
   iconOnly?: boolean
   painting: PaintingData
   onSelect: (selection: PaintingModelSelection) => void

@@ -76,7 +76,7 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
     useNotesEditing({ onRenameNode })
 
   /**
-   * f2-36：`useInPlaceEdit`（`@renderer/hooks/useInPlaceEdit.ts:124-138`，禁改区）每次渲染都返回
+   * `useInPlaceEdit`（`@renderer/hooks/useInPlaceEdit.ts:124-138`，禁改区）每次渲染都返回
    * 新对象字面量（`inputProps` 里的 `handleKeyDown`/`handleBlur` 又依赖每次渲染新建的 `saveEdit`）。
    * 直接把它放进 `NotesEditingContext`，上下文引用就每渲染一换 ⇒ `memo` 的 `TreeNode` 全部重渲染，
    * 注释里"only subscribe to what this node needs"的分片上下文设计失效。
@@ -383,7 +383,7 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
     [isShowSearch, trimmedSearchKeyword]
   )
 
-  // f2-36：内联字面量每渲染都是新对象，NotesUIContext 的消费者（每个 TreeNode）会跟着全量重渲染。
+  // 内联字面量每渲染都是新对象，NotesUIContext 的消费者（每个 TreeNode）会跟着全量重渲染。
   const uiValue = useMemo(() => ({ openDropdownKey }), [openDropdownKey])
 
   return (
@@ -456,7 +456,7 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
                           </span>
                         </SearchStatusBar>
                       )}
-                    {/* f2-35：0 命中原本是一片空列表，与"读失败"不可区分——补一行显式占位。 */}
+                    {/* ：0 命中原本是一片空列表，与"读失败"不可区分——补一行显式占位。 */}
                     {isShowSearch &&
                       !isSearching &&
                       hasSearchKeyword &&
@@ -467,7 +467,7 @@ const NotesSidebar: FC<NotesSidebarProps> = ({
                           <span>{t('notes.search.no_results')}</span>
                         </SearchStatusBar>
                       )}
-                    {/* f2-35 的另一半：部分文件读失败时结果集必然不完整，不得只显示"N 条结果"。 */}
+                    {/* 的另一半：部分文件读失败时结果集必然不完整，不得只显示"N 条结果"。 */}
                     {isShowSearch && !isSearching && hasSearchKeyword && !searchError && searchFailedFiles > 0 && (
                       <SearchStatusBar data-testid="notes-search-partial-failure">
                         <span title={searchFailureMessage ?? undefined}>

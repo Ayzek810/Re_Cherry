@@ -1,9 +1,9 @@
 /**
- * v0.3.2 自 CS_V1 移植（单搜索提供商设置表单）。
- * 批次1（UI）改动点：
- * - 多 Key 列表按钮未移植（fork 的 ApiKeyListPopup 仅面向 llm/preprocess 提供商，批次3 评估）；
+ * 自 CS_V1 移植（单搜索提供商设置表单）。
+ * （UI）改动点：
+ * - 多 Key 列表按钮未移植（fork 的 ApiKeyListPopup 仅面向 llm/preprocess 提供商，评估）；
  * - 本地浏览器搜索的「打开设置」按钮呈禁用态（fork 无对应浏览器设置页，键保留）。
- * 批次2（接线）：「检查」按钮恢复——经 services/WebSearchService.checkSearch 走主进程
+ * （接线）：「检查」按钮恢复——经 services/WebSearchService.checkSearch 走主进程
  * 引擎真实执行路径（'test query' 真跑一次），不做任何假成功。
  */
 import { CheckOutlined, ExportOutlined, LoadingOutlined } from '@ant-design/icons'
@@ -141,7 +141,7 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
     }
   }
 
-  // 批次2：「检查」= 主进程引擎以 'test query' 真跑一次（同 web_search 工具执行路径）
+  // 「检查」= 主进程引擎以 'test query' 真跑一次（同 web_search 工具执行路径）
   const [apiChecking, setApiChecking] = useState(false)
   const [apiValid, setApiValid] = useState(false)
   const handleCheckSearch = async () => {
@@ -164,7 +164,7 @@ const WebSearchProviderSetting: FC<Props> = ({ providerId }) => {
   }
 
   /**
-   * v1 二轮审查 s2-39：校验结果不再被定时器无条件抹掉。
+   * 校验结果不再被定时器无条件抹掉。
    *
    * 旧实现在 `finally` 里排了一个 2.5 秒的 `setApiValid(false)`：校验结果是用户判断
    * 「这个 key 能不能用」的唯一持久信号，绿灯一闪即灭会让人以为没生效而重复点击。
