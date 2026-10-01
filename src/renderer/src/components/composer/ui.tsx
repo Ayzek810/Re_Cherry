@@ -84,9 +84,13 @@ export const PopoverTrigger: FC<PropsWithChildren<{ asChild?: boolean } & HTMLAt
   asChild,
   ...rest
 }) => {
+  // shim prop 有意忽略：V2 的 asChild 模式在 fork 恒成立（始终透传给唯一子节点），
+  // 保留签名以兼容调用方。
   void asChild
+  // eslint-disable-next-line @eslint-react/no-children-only -- 契约即「唯一子节点」透传（上文注释）
   const child = Children.only(children)
   if (!isValidElement(child)) return <>{children}</>
+  // eslint-disable-next-line @eslint-react/no-clone-element -- antd Popover 同款透传机制（上文注释）
   return cloneElement(child as ReactElement<Record<string, unknown>>, rest as Record<string, unknown>)
 }
 

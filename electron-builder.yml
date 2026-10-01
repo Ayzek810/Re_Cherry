@@ -133,18 +133,40 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Re_Cherry 0.2.2 - Shutdown and History Restore Fixes
+    Re_Cherry 1.0.0 - v1 Release
 
-    🐛 Bug Fixes
-    - [App] Fix lingering background processes after quitting the app.
-    - [Chat] Fix conversation history showing as empty after restarting the app.
-    - [Chat] Fix model avatar and name missing in restored conversation history.
+    Full code review, performance work and cleanup before the official release.
+
+    ⚡ Performance
+    - Route-level code splitting: first-paint JS payload dropped from 21.3 MB to 14.1 MB (-33%).
+    - MathJax loads only when the MathJax math engine is selected (KaTeX is the default).
+    - Removed a bundle leak that pulled the PDF-parsing stack into the renderer; Excel export now loads on demand.
+    - The trace window no longer polls the DOM 10 times per second.
+
+    🐛 Fixes
+    - In-place translation could create a duplicate translation block after a restart.
+    - Obsidian export used a stale topic name after renaming a topic.
+    - The MCP dependency page always reported "missing dependencies"; it now reports the real PATH status of npx/uvx.
+
+    🧹 Cleanup
+    - 257 unused translation keys removed; lint warnings across the repository reduced to zero.
 
     <!--LANG:zh-CN-->
-    Re_Cherry 0.2.2 - 退出与历史恢复问题修复
+    Re_Cherry 1.0.0 - v1 正式版
 
-    🐛 问题修复
-    - [应用] 修复退出应用后仍有残留进程的问题。
-    - [对话] 修复重启应用后历史对话显示为空白的问题。
-    - [对话] 修复历史消息中模型头像和显示名称丢失的问题。
+    正式上线前的全量代码审查、性能优化与清理。
+
+    ⚡ 性能
+    - 路由级代码分割：首屏 JS 载荷由 21.3MB 降至 14.1MB（-33%）。
+    - MathJax 仅在选择 MathJax 数学引擎时加载（默认引擎为 KaTeX）。
+    - 修复把 PDF 解析栈拖入渲染层的打包泄漏；Excel 导出改为按需加载。
+    - trace 窗不再以每秒 10 次的频率轮询 DOM。
+
+    🐛 修复
+    - 消息级翻译在重启后可能重复创建翻译块。
+    - 话题改名后导出到 Obsidian 仍使用旧名。
+    - MCP 依赖页此前恒显示「依赖缺失」，现如实呈现 npx/uvx 在系统 PATH 中的状态。
+
+    🧹 清理
+    - 删除 257 个无用文案键；全仓 lint 警告清零。
     <!--LANG:END-->

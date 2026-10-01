@@ -309,4 +309,3 @@ export async function fetchSerpPage(url: string, signal: AbortSignal | undefined
   // 二级/三级：net.fetch（Chromium 栈，代理感知）→ Node 直连（undici，无代理）
   return await fetchHtmlDirect(url, signal)
 }
-

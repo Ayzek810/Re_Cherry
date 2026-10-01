@@ -105,7 +105,7 @@ describe('PowerMonitorService', () => {
   })
 
   it('swallows window send failures (log only, no throw)', async () => {
-    ;(mockSend).mockImplementation(() => {
+    mockSend.mockImplementation(() => {
       throw new Error('webContents gone')
     })
     const { powerMonitorService } = await import('../PowerMonitorService')

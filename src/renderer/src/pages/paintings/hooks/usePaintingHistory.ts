@@ -40,7 +40,8 @@ export function usePaintingHistory(): {
         query = db.paintings.where('createdAt').below(cursorRef.current).reverse()
       }
       const rows = await query.limit(PAGE_SIZE).toArray()
-      const mapped = await recordsToPaintingDataList(rows)
+      // recordsToPaintingDataList 是同步纯函数（Dexie 内嵌直通），不得 await
+      const mapped = recordsToPaintingDataList(rows)
       cursorRef.current = rows.length > 0 ? rows[rows.length - 1].createdAt : cursorRef.current
       setItems((prev) => (reset ? mapped : [...prev, ...mapped]))
       setHasMore(rows.length === PAGE_SIZE)

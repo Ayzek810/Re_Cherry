@@ -231,6 +231,9 @@ export enum IpcChannel {
   Mcp_StopServer = 'mcp:stop-server',
   Mcp_RemoveServer = 'mcp:remove-server',
   Mcp_CheckConnectivity = 'mcp:check-connectivity',
+  /** MCP 运行时依赖探测（v1）：PATH 中能否解析命令（fork 不托管 uv/bun 二进制，stdio
+   *  服务器靠系统 PATH 的 npx/uvx——见 main/services/mcp/commandResolution.ts）。 */
+  Mcp_CheckCommand = 'mcp:check-command',
   /** DXT（.dxt）扩展安装（v0.4.7 自上游 Mcp_UploadDxt 移植）：ArrayBuffer + 文件名，返回解包结果。 */
   Mcp_UploadDxt = 'mcp:upload-dxt',
   /** MCP 服务器日志事件（主 → 渲染，上游 Mcp_ServerLog 同语义）。 */

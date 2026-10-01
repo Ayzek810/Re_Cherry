@@ -492,7 +492,7 @@ export type GenerateImageResponse = {
 export type SidebarIcon = 'assistants' | 'minapp' | 'files' | 'knowledge' | 'translate' | 'paintings' | 'notes' | 'code'
 
 export type { PaintingParams, PaintingRecord } from './painting'
-export type { MessageTranslationRecord,TranslateLanguageSelection, TranslateRecord } from './translate'
+export type { MessageTranslationRecord, TranslateLanguageSelection, TranslateRecord } from './translate'
 export type { UsageRecord } from './usage'
 
 export type ExternalToolResult = {

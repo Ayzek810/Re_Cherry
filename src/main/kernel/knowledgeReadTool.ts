@@ -33,10 +33,7 @@ const DESCRIPTION =
   'Pass pattern (a regular expression) to locate exact text instead; results carry line numbers and snippets.'
 
 /** chunk 序列 → 摄取全文：相邻同源 chunk 做后缀/前缀重叠去重（窗口上限 = 库的 chunkOverlap）。 */
-export function concatChunks(
-  chunks: Array<{ content: string; source: string }>,
-  maxOverlap: number
-): string {
+export function concatChunks(chunks: Array<{ content: string; source: string }>, maxOverlap: number): string {
   let text = ''
   let previousSource: string | undefined
   for (const chunk of chunks) {
@@ -207,9 +204,10 @@ export function apply(ctx: Context): void {
         }
         if (typeof args.pattern === 'string' && args.pattern.length > 0) {
           const ignoreCase = args.ignoreCase === true
-          const requested = typeof args.maxMatches === 'number' && Number.isFinite(args.maxMatches)
-            ? Math.trunc(args.maxMatches)
-            : DEFAULT_MAX_MATCHES
+          const requested =
+            typeof args.maxMatches === 'number' && Number.isFinite(args.maxMatches)
+              ? Math.trunc(args.maxMatches)
+              : DEFAULT_MAX_MATCHES
           const maxMatches = Math.min(Math.max(1, requested), MAX_MATCHES_CAP)
           const { totalMatches, matches } = grepDocument(fullText, args.pattern, ignoreCase, maxMatches)
           const text =
@@ -237,7 +235,8 @@ export function apply(ctx: Context): void {
           totalChars: fullText.length,
           truncated,
           ...(nextOffset === undefined ? {} : { nextOffset }),
-          text: page.length === 0 ? `Offset ${offset} is past the end of the document (${fullText.length} chars).` : page
+          text:
+            page.length === 0 ? `Offset ${offset} is past the end of the document (${fullText.length} chars).` : page
         }
       }
     })

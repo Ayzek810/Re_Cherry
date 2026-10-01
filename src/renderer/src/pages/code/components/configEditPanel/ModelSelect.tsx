@@ -6,7 +6,7 @@ import type { Model as ForkModel, Provider as ForkProvider } from '@renderer/typ
 import type { UniqueModelId } from '@shared/types/uniqueModelId'
 import { parseUniqueModelId } from '@shared/types/uniqueModelId'
 
-import { type Model,toCliModel } from '../../cliConfig/providerView'
+import { type Model, toCliModel } from '../../cliConfig/providerView'
 import { isUniqueModelId, safeCreateUniqueModelId } from '../../cliConfig/values'
 
 // fork 缝（批次4b 原创缝模块，configEditPanel 的模型选择面）：V2 的 ModelSelector 为自绘

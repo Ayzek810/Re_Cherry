@@ -124,7 +124,11 @@ export async function memoryAppend(root: string, text: string, tags: string[]): 
   const journalPath = await resolveFileCI(memoryDir, JOURNAL_FILE)
   await assertRegularFileOrMissing(journalPath)
   const entry: JournalEntry = { ts: new Date().toISOString(), tags, text }
-  const handle = await open(journalPath, withNoFollow(fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_WRONLY), 0o600)
+  const handle = await open(
+    journalPath,
+    withNoFollow(fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_WRONLY),
+    0o600
+  )
   try {
     const fileStat = await handle.stat()
     if (!fileStat.isFile()) throw new Error(`memory journal must be a real file: ${journalPath}`)
@@ -136,12 +140,7 @@ export async function memoryAppend(root: string, text: string, tags: string[]): 
 }
 
 /** search：JOURNAL 大小写不敏感子串 + tag 过滤 + limit（最新优先；损坏行跳过并记日志）。 */
-export async function memorySearch(
-  root: string,
-  query: string,
-  tag: string,
-  limit: number
-): Promise<JournalEntry[]> {
+export async function memorySearch(root: string, query: string, tag: string, limit: number): Promise<JournalEntry[]> {
   const journalPath = await resolveFileCI(await assertMemoryDirectory(root), JOURNAL_FILE)
   let fileContent: string
   try {
@@ -236,7 +235,9 @@ export function apply(ctx: Context): void {
             if (typeof text !== 'string' || text.length === 0) {
               throw new Error("memory: 'text' is required for the append action")
             }
-            const tags = Array.isArray(args.tags) ? args.tags.filter((tag): tag is string => typeof tag === 'string') : []
+            const tags = Array.isArray(args.tags)
+              ? args.tags.filter((tag): tag is string => typeof tag === 'string')
+              : []
             const ts = await memoryAppend(root, text, tags)
             logger.info(`memory: journal entry appended (${tags.length} tag(s))`)
             return { text: `Journal entry added at ${ts}.` }

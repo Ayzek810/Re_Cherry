@@ -196,6 +196,7 @@ describe('lightStream', () => {
     expect(events).toEqual(['delta', 'done'])
 
     const boom = makeCtx([finishStop])
+    // oxlint-disable-next-line require-yield -- 坏线替身：首步即抛，无产出可言（断言的是 error 事件）
     ;(boom.ctx as unknown as { llm: { stream: () => AsyncGenerator<StreamChunk> } }).llm.stream = async function* () {
       throw new Error('wire dead')
     }
@@ -363,6 +364,7 @@ describe('lightStream', () => {
 
     // 流中途抛错也要退出作用域（finally），否则临时字节会一直留在内存里
     const broken = makeEphemeralCtx()
+    // oxlint-disable-next-line require-yield -- 坏线替身：首步即抛（断言的是 finally 作用域退出）
     ;(broken as unknown as { llm: { stream: () => AsyncGenerator<StreamChunk> } }).llm.stream = async function* () {
       throw new Error('wire dead')
     }

@@ -55,7 +55,8 @@ export function apply(ctx: Context): void {
         },
         count: {
           type: 'number',
-          description: 'Maximum number of results. Omit to use the user-configured value; higher values are clamped to it.'
+          description:
+            'Maximum number of results. Omit to use the user-configured value; higher values are clamped to it.'
         }
       },
       output: {

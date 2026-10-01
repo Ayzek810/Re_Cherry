@@ -21,9 +21,9 @@ import styled from 'styled-components'
 
 import { SettingContainer } from '..'
 import BuiltinMCPServerList from './BuiltinMCPServerList'
-import InstallNpxUv from './InstallNpxUv'
 import McpMarketList from './McpMarketList'
 import ProviderDetail from './McpProviderSettings'
+import McpRuntimeDependencies from './McpRuntimeDependencies'
 import McpServersList from './McpServersList'
 import McpSettings from './McpSettings'
 import NpxSearch from './NpxSearch'
@@ -142,7 +142,7 @@ const MCPSettings: FC = () => {
               path="mcp-install"
               element={
                 <SettingContainer style={{ backgroundColor: 'inherit' }}>
-                  <InstallNpxUv />
+                  <McpRuntimeDependencies />
                 </SettingContainer>
               }
             />

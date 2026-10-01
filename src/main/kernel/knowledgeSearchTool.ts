@@ -88,7 +88,8 @@ export function apply(ctx: Context): void {
         if (bases === undefined || bases.length === 0) {
           throw new Error('knowledge_search: no knowledge bases are attached to this conversation turn')
         }
-        const merged: Array<{ score: number; source: string; uniqueId: string; pageContent: string; baseId: string }> = []
+        const merged: Array<{ score: number; source: string; uniqueId: string; pageContent: string; baseId: string }> =
+          []
         const errors: string[] = []
         for (const base of bases) {
           try {
@@ -104,7 +105,13 @@ export function apply(ctx: Context): void {
               exec.signal
             )
             const threshold = base.threshold ?? 0
-            const hitsInBase: Array<{ score: number; source: string; uniqueId: string; pageContent: string; baseId: string }> = []
+            const hitsInBase: Array<{
+              score: number
+              source: string
+              uniqueId: string
+              pageContent: string
+              baseId: string
+            }> = []
             for (const hit of hits) {
               if (hit.score >= threshold) {
                 hitsInBase.push({

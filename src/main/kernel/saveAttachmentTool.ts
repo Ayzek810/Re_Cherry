@@ -151,7 +151,9 @@ export function apply(ctx: Context): void {
           throw new Error('save_attachment: no active conversation turn')
         }
         const turnDocuments = knowledgeService.getTurnDocuments(topicId) ?? []
-        const document = turnDocuments.find((candidate) => candidate.name === documentName || candidate.path === documentName)
+        const document = turnDocuments.find(
+          (candidate) => candidate.name === documentName || candidate.path === documentName
+        )
         if (document === undefined) {
           const available = turnDocuments.map((candidate) => `"${candidate.name}"`).join(', ') || '(none)'
           throw new Error(

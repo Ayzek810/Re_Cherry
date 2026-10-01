@@ -16,7 +16,8 @@ import {
   escalationHintMarker,
   sandboxDenialMarker,
   validateEscalationArgs,
-  WIDER_MODES} from '@deepseek-ai/dsh-sandbox'
+  WIDER_MODES
+} from '@deepseek-ai/dsh-sandbox'
 import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { ParameterSchemaSpec } from '@deepseek-ai/dsh-tools'
 
@@ -45,7 +46,10 @@ interface EscalationArgs {
 }
 
 /** 从 defineTool 解析参数里取升级字段（schema 经展开合入，TS 推断看不到字面量键）。 */
-function readEscalationArgs(args: unknown): { sandboxPermissions: string | undefined; justification: string | undefined } {
+function readEscalationArgs(args: unknown): {
+  sandboxPermissions: string | undefined
+  justification: string | undefined
+} {
   const source = (typeof args === 'object' && args !== null ? args : {}) as EscalationArgs
   return {
     sandboxPermissions: source.sandbox_permissions === undefined ? undefined : String(source.sandbox_permissions),

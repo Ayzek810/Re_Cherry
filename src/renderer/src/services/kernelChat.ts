@@ -983,7 +983,7 @@ export function buildSearchCitationBlock(
         }
       }
       logger.info(
-        `kernelChat: citation carrier (web-search) merged, ${(mergedBlock.response?.results as { results: unknown[] }).results.length} entries total`
+        `kernelChat: citation carrier (web-search) merged, ${wrapper.results.length + entries.length} entries total`
       )
       return { block: mergedBlock, merged: true }
     }

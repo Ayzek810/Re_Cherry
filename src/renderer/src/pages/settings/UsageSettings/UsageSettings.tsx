@@ -18,6 +18,14 @@ type RangePreset = 'today' | '7d' | '30d' | 'all'
 
 const RANGE_PRESETS: RangePreset[] = ['today', '7d', '30d', 'all']
 
+/** 预设 → 文案键。显式映射取代模板键（v1）：联合穷尽由编译器保证，键为字面量走静态键检。 */
+const RANGE_LABEL_KEYS: Record<RangePreset, string> = {
+  today: 'settings.usage.range.today',
+  '7d': 'settings.usage.range.7d',
+  '30d': 'settings.usage.range.30d',
+  all: 'settings.usage.range.all'
+}
+
 const UsageSettings: FC = () => {
   const { t } = useTranslation()
   const theme = useAppSelector((state) => state.settings.theme)
@@ -53,14 +61,10 @@ const UsageSettings: FC = () => {
                 key={presetOption}
                 type="button"
                 onClick={() => setPreset(presetOption)}
-                className={
-                  'rounded-md px-2.5 py-1 text-xs transition-colors ' +
-                  (preset === presetOption
-                    ? 'bg-primary text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-accent') +
-                  ' focus-visible:outline-none'
-                }>
-                {t(`settings.usage.range.${presetOption}`)}
+                className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                  preset === presetOption ? 'bg-primary text-white' : 'bg-muted text-muted-foreground hover:bg-accent'
+                } focus-visible:outline-none`}>
+                {t(RANGE_LABEL_KEYS[presetOption])}
               </button>
             ))}
           </div>
@@ -78,7 +82,7 @@ const UsageSettings: FC = () => {
       <SettingGroup theme={theme}>
         <SettingTitle>{t('settings.usage.daily')}</SettingTitle>
         {(summary?.days ?? []).length === 0 ? (
-          <p className="text-foreground-tertiary mt-3 text-center text-xs">{t('settings.usage.empty')}</p>
+          <p className="mt-3 text-center text-foreground-tertiary text-xs">{t('settings.usage.empty')}</p>
         ) : (
           <div className="mt-3 flex flex-col gap-2">
             {(summary?.days ?? []).map((day) => {
@@ -86,11 +90,11 @@ const UsageSettings: FC = () => {
               const width = Math.round((total / maxDayTokens) * 100)
               return (
                 <div key={day.date} className="flex items-center gap-2">
-                  <span className="text-foreground-tertiary w-24 shrink-0 font-mono text-xs">{day.date}</span>
+                  <span className="w-24 shrink-0 font-mono text-foreground-tertiary text-xs">{day.date}</span>
                   <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-primary/70" style={{ width: `${Math.max(width, 2)}%` }} />
                   </div>
-                  <span className="text-foreground-tertiary w-20 shrink-0 text-right font-mono text-xs">
+                  <span className="w-20 shrink-0 text-right font-mono text-foreground-tertiary text-xs">
                     {total.toLocaleString()}
                   </span>
                 </div>
@@ -103,13 +107,13 @@ const UsageSettings: FC = () => {
       <SettingGroup theme={theme}>
         <SettingTitle>{t('settings.usage.by_model')}</SettingTitle>
         {(summary?.byModel ?? []).length === 0 ? (
-          <p className="text-foreground-tertiary mt-3 text-center text-xs">{t('settings.usage.empty')}</p>
+          <p className="mt-3 text-center text-foreground-tertiary text-xs">{t('settings.usage.empty')}</p>
         ) : (
           <div className="mt-3 flex flex-col gap-1.5">
             {(summary?.byModel ?? []).map((model) => (
               <div key={model.modelId} className="flex items-center justify-between gap-3 text-sm">
                 <span className="min-w-0 flex-1 truncate">{model.modelId}</span>
-                <span className="text-foreground-tertiary shrink-0 text-xs">
+                <span className="shrink-0 text-foreground-tertiary text-xs">
                   {t('settings.usage.requests_count', { count: model.requests })}
                 </span>
                 <span className="w-36 shrink-0 text-right font-mono text-xs">

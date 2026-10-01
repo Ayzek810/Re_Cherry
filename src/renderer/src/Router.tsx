@@ -1,7 +1,8 @@
 import '@renderer/databases'
 
+import { Skeleton } from 'antd'
 import type { FC } from 'react'
-import { useMemo } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
 import { HashRouter, Route, Routes } from 'react-router-dom'
 
 import Sidebar from './components/app/Sidebar'
@@ -10,18 +11,31 @@ import TabsContainer from './components/Tab/TabContainer'
 import NavigationHandler from './handler/NavigationHandler'
 import { useOnboardingState } from './hooks/useOnboardingState'
 import { useNavbarPosition } from './hooks/useSettings'
-import MinAppPage from './pages/apps/MinAppPage'
-import MinAppsPage from './pages/apps/MinAppsPage'
-import CodeCliPage from './pages/code/CodeCliPage'
-import FilesPage from './pages/files/FilesPage'
+// 首页（默认路由）保持静态导入：它就是首屏本身，懒加载只会换来一次不必要的空屏闪烁，
+// 且其子树（消息/Markdown/输入栏）本来就必须在启动时可用。
 import HomePage from './pages/home/HomePage'
-import KnowledgePage from './pages/knowledge/KnowledgePage'
-import LaunchpadPage from './pages/launchpad/LaunchpadPage'
-import NotesPage from './pages/notes/NotesPage'
 import { OnboardingPage } from './pages/onboarding'
-import PaintingPage from './pages/paintings/PaintingPage'
-import SettingsPage from './pages/settings/SettingsPage'
-import TranslatePage from './pages/translate/TranslatePage'
+
+// v1 启动优化（包体实测：首屏 eager 约 21MB rendered）：其余页面路由级分割。
+// 每个页面连同其专属重依赖（RichEditor/tiptap、CodeMirror、dnd、xyflow、各设置面板）
+// 移出首屏 eager 图，首次进入该路由时才加载。首次进入有 Suspense 骨架兜底。
+const FilesPage = lazy(() => import('./pages/files/FilesPage'))
+const KnowledgePage = lazy(() => import('./pages/knowledge/KnowledgePage'))
+const LaunchpadPage = lazy(() => import('./pages/launchpad/LaunchpadPage'))
+const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'))
+const TranslatePage = lazy(() => import('./pages/translate/TranslatePage'))
+const PaintingPage = lazy(() => import('./pages/paintings/PaintingPage'))
+const NotesPage = lazy(() => import('./pages/notes/NotesPage'))
+const MinAppPage = lazy(() => import('./pages/apps/MinAppPage'))
+const MinAppsPage = lazy(() => import('./pages/apps/MinAppsPage'))
+const CodeCliPage = lazy(() => import('./pages/code/CodeCliPage'))
+
+/** 路由懒加载占位：页面形状的骨架（不用空白屏；静默不可见是最差失败形态）。 */
+const RouteLoadingFallback: FC = () => (
+  <div style={{ padding: 24, width: '100%' }} role="status" aria-busy="true" aria-live="polite">
+    <Skeleton active paragraph={{ rows: 6 }} />
+  </div>
+)
 
 const Router: FC = () => {
   const { onboardingCompleted, completeOnboarding } = useOnboardingState()
@@ -58,7 +72,7 @@ const Router: FC = () => {
     return (
       <HashRouter>
         <Sidebar />
-        {routes}
+        <Suspense fallback={<RouteLoadingFallback />}>{routes}</Suspense>
         <NavigationHandler />
       </HashRouter>
     )
@@ -67,7 +81,9 @@ const Router: FC = () => {
   return (
     <HashRouter>
       <NavigationHandler />
-      <TabsContainer>{routes}</TabsContainer>
+      <TabsContainer>
+        <Suspense fallback={<RouteLoadingFallback />}>{routes}</Suspense>
+      </TabsContainer>
     </HashRouter>
   )
 }

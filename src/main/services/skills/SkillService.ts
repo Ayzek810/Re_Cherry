@@ -27,7 +27,8 @@ import {
   findSkillMdPath,
   type ParsedSkillMetadata,
   parseSkillMdContent,
-  sanitizeFolderName} from './skillMetadata'
+  sanitizeFolderName
+} from './skillMetadata'
 
 const logger = loggerService.withContext('SkillService')
 

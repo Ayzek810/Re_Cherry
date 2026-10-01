@@ -125,7 +125,9 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
     // rootTopicOf 拿 activeTopic 行对象上溯，行不在本帧清单也能经由 parentTopicId 到根。
     const rootId = rootTopicOf(activeTopic, assistant?.topics ?? []).id
     dispatch(newMessagesActions.setTopicFulfilled({ topicId: rootId, fulfilled: false }))
-  }, [activeTopic.id, dispatch, topicFulfilledQuery])
+    // 依赖含 activeTopic 与 assistant?.topics：上溯链的中间行可能后到清单（分支新建/清单刷新），
+    // 清单变则根 id 可能变。重跑是幂等的——reducer 同值赋值在 immer 下不产生新 revision，不成环。
+  }, [activeTopic, assistant?.topics, dispatch, topicFulfilledQuery])
 
   const isRenaming = useCallback(
     (topicId: string) => {
@@ -176,7 +178,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       removeTopic(topic)
       setDeletingTopicId(null)
     },
-    [activeTopic.id, addTopic, assistant.id, assistant.topics, removeTopic, rootTopics, setActiveTopic]
+    [activeTopic.id, addTopic, assistant.id, removeTopic, rootTopics, setActiveTopic]
   )
 
   // v0.3.1 第三轮（验收反馈"置顶还乱动"）：置顶改为**纯显示层分组**。
@@ -200,7 +202,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       }
       removeTopic(topic)
     },
-    [assistant.topics, removeTopic, rootTopics, setActiveTopic, activeTopic]
+    [removeTopic, rootTopics, setActiveTopic, activeTopic]
   )
 
   const onMoveTopic = useCallback(
@@ -210,7 +212,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       setActiveTopic(rootTopics[index + 1 === rootTopics.length ? 0 : index + 1])
       moveTopic(topic, toAssistant)
     },
-    [assistant.topics, moveTopic, rootTopics, setActiveTopic]
+    [moveTopic, rootTopics, setActiveTopic]
   )
 
   const onSwitchTopic = useCallback(

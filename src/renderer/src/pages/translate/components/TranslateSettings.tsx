@@ -20,6 +20,14 @@ import { useDispatch } from 'react-redux'
 
 const PROMPT_PLACEHOLDERS = ['🌐', '🇺🇸', '🇬🇧', '🇨🇳', '🇯🇵', '🇰🇷', '🇫🇷', '🇩🇪', '🇪🇸', '🇧🇷']
 
+/** 校验失败原因 → 文案键。显式映射取代模板键（v1）：联合穷尽由编译器保证（漏原因是编译错误）。 */
+const CUSTOM_ERROR_KEYS: Record<Extract<ReturnType<typeof validateCustomLanguage>, { ok: false }>['reason'], string> = {
+  empty_value: 'translate.custom_error.empty_value',
+  empty_code: 'translate.custom_error.empty_code',
+  builtin: 'translate.custom_error.builtin',
+  exists: 'translate.custom_error.exists'
+}
+
 type Props = {
   visible: boolean
   model?: Model
@@ -69,7 +77,7 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
   const handleAdd = () => {
     const result = validateCustomLanguage(newValue, newCode, BUILTIN_CODE_SET, customLanguages)
     if (!result.ok) {
-      setAddError(t(`translate.custom_error.${result.reason}`))
+      setAddError(t(CUSTOM_ERROR_KEYS[result.reason]))
       return
     }
     persist({
@@ -109,7 +117,7 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
           </button>
         </div>
         {model && (
-          <p className="text-foreground-tertiary text-xs break-all">
+          <p className="break-all text-foreground-tertiary text-xs">
             {t('translate.model_hint_prefix')}
             {getModelUniqId(model)}
           </p>
@@ -129,7 +137,7 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
               <button
                 type="button"
                 onClick={resetPrompt}
-                className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 transition-colors hover:underline focus-visible:outline-none">
+                className="text-muted-foreground text-xs underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:outline-none">
                 {t('common.reset')}
               </button>
             )}
@@ -152,7 +160,7 @@ const TranslateSettings: FC<Props> = ({ visible, model, onClose, onSelectModel }
               <span className="min-w-0 flex-1 truncate text-sm">
                 {lang.emoji} {lang.value}
               </span>
-              <span className="text-foreground-tertiary font-mono text-xs">{lang.langCode}</span>
+              <span className="font-mono text-foreground-tertiary text-xs">{lang.langCode}</span>
               <Button
                 type="text"
                 size="small"

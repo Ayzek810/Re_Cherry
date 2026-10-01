@@ -163,7 +163,10 @@ function ensureTranslationBlock(
     store.dispatch(
       updateOneBlock({
         id: blockId,
-        changes: { content: accumulatedText, status: isComplete ? MessageBlockStatus.SUCCESS : MessageBlockStatus.STREAMING }
+        changes: {
+          content: accumulatedText,
+          status: isComplete ? MessageBlockStatus.SUCCESS : MessageBlockStatus.STREAMING
+        }
       })
     )
     mirrorTranslationRecord(message.id, accumulatedText, targetLanguage)

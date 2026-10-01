@@ -183,7 +183,18 @@ const TranslatePage = () => {
         requestIdRef.current = undefined
       }
     }
-  }, [sourceText, translating, translateModel, source, target, translateAutoCopy, translateCustomPrompt, languageLabel, loadHistory, t])
+  }, [
+    sourceText,
+    translating,
+    translateModel,
+    source,
+    target,
+    translateAutoCopy,
+    translateCustomPrompt,
+    languageLabel,
+    loadHistory,
+    t
+  ])
 
   const abort = useCallback(() => {
     // fork 缝：「停止」额外发起真取消——作废事件之外，主进程 abort 该 requestId 的在途流

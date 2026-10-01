@@ -1265,8 +1265,9 @@ export async function sendMessage(ctx: Context, id: string, text: string, option
   // 批次5 聊天生图：本轮绘画模型登记（generate_image 工具执行时按 topicId 反查）。
   generateImageTool.setTurnGenerateImageConfig(id, options?.generateImage)
   // v0.4.6 持久记忆：本轮根目录登记（主进程派生受控目录并确保存在）。
-  const memoryKernel = (ctx as unknown as { memory?: { setTurnRoot: (topicId: string, assistantId: string | undefined) => Promise<void> } })
-    .memory
+  const memoryKernel = (
+    ctx as unknown as { memory?: { setTurnRoot: (topicId: string, assistantId: string | undefined) => Promise<void> } }
+  ).memory
   if (memoryKernel !== undefined) {
     await memoryKernel.setTurnRoot(id, options?.memory?.assistantId)
   } else if (options?.memory !== undefined) {
@@ -1675,7 +1676,9 @@ async function ensureAgent(
           ? turnDocuments.map((document) => `- "${sanitizeUntrustedText(document.name)}"`).join('\n')
           : '(no documents are attached to this turn)'
       const verbs = builtinsMounted.includes('ocr_document') ? 'read_document or ocr_document' : 'read_document'
-      const ocrHint = builtinsMounted.includes('ocr_document') ? ' PDFs without a text layer need the ocr_document tool.' : ''
+      const ocrHint = builtinsMounted.includes('ocr_document')
+        ? ' PDFs without a text layer need the ocr_document tool.'
+        : ''
       const saveHint = externalsMounted.includes('saveAttachment')
         ? ' The save_attachment tool can copy one into the workspace.'
         : ''
@@ -1703,7 +1706,7 @@ async function ensureAgent(
             name: 'cherry:memory',
             order: 1,
             text:
-              'These are your durable notes accumulated across this assistant\'s past conversations. Trust them ' +
+              "These are your durable notes accumulated across this assistant's past conversations. Trust them " +
               'as ground truth unless you have direct evidence otherwise; update them via the memory tool ' +
               '(action: update) so the next conversation also benefits.\n' +
               sanitizeUntrustedText(factContent)

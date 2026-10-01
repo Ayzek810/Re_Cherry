@@ -19,10 +19,18 @@ import type { WebSearchRuntimeState } from '../types'
 
 const providerConfig = { id: 'tavily', name: 'Tavily', apiKey: 'k', apiHost: 'https://api.tavily.com' }
 
-const runtime = (over: Partial<WebSearchRuntimeState> = {}): WebSearchRuntimeState =>
-  ({ maxResults: 3, excludeDomains: [], blacklistPatterns: [], searchWithTime: false, ...over })
+const runtime = (over: Partial<WebSearchRuntimeState> = {}): WebSearchRuntimeState => ({
+  maxResults: 3,
+  excludeDomains: [],
+  blacklistPatterns: [],
+  searchWithTime: false,
+  ...over
+})
 
-const makeEngine = async (sdkResults: Array<{ title: string; url: string; content: string }>, rt: WebSearchRuntimeState) => {
+const makeEngine = async (
+  sdkResults: Array<{ title: string; url: string; content: string }>,
+  rt: WebSearchRuntimeState
+) => {
   const engine = new WebSearchEngineProvider(providerConfig, rt)
   ;(engine as unknown as { sdk: { search: ReturnType<typeof vi.fn> } }).sdk = {
     search: vi.fn(async () => ({ query: 'q', results: sdkResults }))
@@ -38,7 +46,11 @@ describe('maxResults 终审截断（v0.4.3）', () => {
     const engine = await makeEngine(results, runtime({ maxResults: 3 }))
     const response = await engine.search('q')
     expect(response.results.length).toBe(3)
-    expect(response.results.map((r) => r.url)).toEqual(['https://a.example/1', 'https://a.example/2', 'https://a.example/3'])
+    expect(response.results.map((r) => r.url)).toEqual([
+      'https://a.example/1',
+      'https://a.example/2',
+      'https://a.example/3'
+    ])
   })
 
   it('返回不足上限 → 原样通过（不回填）', async () => {
@@ -55,10 +67,7 @@ describe('maxResults 终审截断（v0.4.3）', () => {
       result('https://good.example/4'),
       result('https://good.example/5')
     ]
-    const engine = await makeEngine(
-      results,
-      runtime({ maxResults: 3, excludeDomains: ['ads.example'] })
-    )
+    const engine = await makeEngine(results, runtime({ maxResults: 3, excludeDomains: ['ads.example'] }))
     const response = await engine.search('q')
     expect(response.results.map((r) => r.url)).not.toContain('https://ads.example/1')
     expect(response.results.length).toBe(3)

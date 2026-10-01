@@ -74,9 +74,7 @@ function loadService(modelPaths: OcrWorkerJob['modelPaths'], gpuEnabled: boolean
   if (cachedService !== null && cachedGpu !== gpuEnabled) {
     const stale = cachedService
     cachedService = null
-    void stale
-      .then((service) => service.destroy().catch(() => undefined))
-      .catch(() => undefined)
+    void stale.then((service) => service.destroy().catch(() => undefined)).catch(() => undefined)
     log(`GPU acceleration toggled to ${String(gpuEnabled)}; rebuilding OCR session`)
   }
   if (cachedService === null) {
@@ -117,13 +115,7 @@ function gpuSessionOptions(gpuEnabled: boolean): {
   onSessionFallback: (error: unknown) => void
 } {
   const gpu: string[] =
-    gpuEnabled === false
-      ? []
-      : process.platform === 'win32'
-        ? ['dml']
-        : process.platform === 'darwin'
-          ? ['coreml']
-          : []
+    gpuEnabled === false ? [] : process.platform === 'win32' ? ['dml'] : process.platform === 'darwin' ? ['coreml'] : []
   return {
     executionProviders: [...gpu, 'cpu'],
     onSessionFallback: (error: unknown) => {

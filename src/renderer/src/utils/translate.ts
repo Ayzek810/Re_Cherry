@@ -55,7 +55,9 @@ export function validateCustomLanguage(
   langCode: string,
   builtinCodes: ReadonlySet<string>,
   existing: Array<{ langCode: string }>
-): { ok: true; value: string; langCode: string } | { ok: false; reason: 'empty_value' | 'empty_code' | 'builtin' | 'exists' } {
+):
+  | { ok: true; value: string; langCode: string }
+  | { ok: false; reason: 'empty_value' | 'empty_code' | 'builtin' | 'exists' } {
   const nextValue = value.trim()
   const nextCode = langCode.trim().toLowerCase()
   if (nextValue.length === 0) return { ok: false, reason: 'empty_value' }

@@ -105,9 +105,9 @@ describe('ensurePathWithin', () => {
   })
 
   it('拒绝 Windows 风格穿越', () => {
-    expect(() =>
-      ensurePathWithin('C:\\Users\\user\\mcp', 'C:\\Users\\user\\mcp\\..\\..\\Windows\\System32')
-    ).toThrow('Path traversal detected')
+    expect(() => ensurePathWithin('C:\\Users\\user\\mcp', 'C:\\Users\\user\\mcp\\..\\..\\Windows\\System32')).toThrow(
+      'Path traversal detected'
+    )
   })
 
   it('拒绝 null 字节路径', () => {
@@ -175,12 +175,8 @@ describe('performVariableSubstitution', () => {
   it('替换 ${__dirname}/${HOME}/${pathSeparator}', () => {
     const dir = path.join(os.tmpdir(), 'extract')
     // ${__dirname} 是纯字符串替换：manifest 里的 `server/server.py` 段保持原样（上游同语义）
-    expect(applyPlatformOverrides(validManifest.server.mcp_config, dir).args[0]).toBe(
-      `${dir}/server/server.py`
-    )
-    expect(applyPlatformOverrides(validManifest.server.mcp_config, dir).env?.TEST_VAR).toBe(
-      `${os.homedir()}/data`
-    )
+    expect(applyPlatformOverrides(validManifest.server.mcp_config, dir).args[0]).toBe(`${dir}/server/server.py`)
+    expect(applyPlatformOverrides(validManifest.server.mcp_config, dir).env?.TEST_VAR).toBe(`${os.homedir()}/data`)
   })
 
   it('替换 ${user_config.KEY}，未配置保留原文', () => {
@@ -263,14 +259,8 @@ describe('uploadDxt', () => {
   it('manifest 缺字段逐项具名报错', async () => {
     const cases: Array<[Record<string, unknown>, string]> = [
       [{ name: 'x', version: '1', server: { mcp_config: { command: 'a', args: [] } } }, 'missing dxt_version'],
-      [
-        { dxt_version: '0.1', version: '1', server: { mcp_config: { command: 'a', args: [] } } },
-        'missing name'
-      ],
-      [
-        { dxt_version: '0.1', name: 'x', server: { mcp_config: { command: 'a', args: [] } } },
-        'missing version'
-      ],
+      [{ dxt_version: '0.1', version: '1', server: { mcp_config: { command: 'a', args: [] } } }, 'missing name'],
+      [{ dxt_version: '0.1', name: 'x', server: { mcp_config: { command: 'a', args: [] } } }, 'missing version'],
       [{ dxt_version: '0.1', name: 'x', version: '1' }, 'missing server configuration'],
       [{ dxt_version: '0.1', name: 'x', version: '1', server: {} }, 'missing server.mcp_config'],
       [

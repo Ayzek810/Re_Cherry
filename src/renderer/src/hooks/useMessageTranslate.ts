@@ -59,25 +59,26 @@ export function useTranslateLanguages(): TranslateLanguage[] {
  */
 export function useTranslationHydration(message: Message): void {
   const dispatch = useAppDispatch()
+  const messageId = message.id
+  const blockIds = message.blocks
 
   useEffect(() => {
-    const state = store_hasTranslationBlock(message)
-    if (state) return
+    if (store_hasTranslationBlock(blockIds)) return
 
     let cancelled = false
     void (async () => {
       try {
-        const record = await db.message_translations.get(message.id)
+        const record = await db.message_translations.get(messageId)
         if (cancelled || !record || record.content.trim().length === 0) return
 
-        // 双检：等待 Dexie 期间块可能已被创建（在途流/重译）
-        const live = store_hasTranslationBlock(message)
-        if (live) return
-
-        const currentMessage = store_currentMessage(message.id)
+        // 双检必须读**实时** store：等待 Dexie 期间在途流/重译可能已建块，
+        // 而闭包里的 blockIds 是旧快照（新块 id 不在其中），旧实现会把
+        // 「已有翻译块」漏检成「无块」→ 水合再建一个重复翻译块。
+        const currentMessage = store_currentMessage(messageId)
         if (!currentMessage) return
+        if (store_hasTranslationBlock(currentMessage.blocks)) return
 
-        const block = createTranslationBlock(message.id, record.content, record.targetLanguage, {
+        const block = createTranslationBlock(messageId, record.content, record.targetLanguage, {
           status: MessageBlockStatus.SUCCESS,
           createdAt: record.updatedAt
         })
@@ -85,7 +86,7 @@ export function useTranslationHydration(message: Message): void {
         dispatch(
           newMessagesActions.updateMessage({
             topicId: currentMessage.topicId,
-            messageId: message.id,
+            messageId,
             updates: { blockInstruction: { id: block.id } }
           })
         )
@@ -97,14 +98,14 @@ export function useTranslationHydration(message: Message): void {
     return () => {
       cancelled = true
     }
-  }, [dispatch, message.blocks, message.id])
+  }, [dispatch, messageId, blockIds])
 }
 
 // ---- 水合内部的小读面（独立函数便于测试桩注入点的一致性；非导出 API） ----
 
-function store_hasTranslationBlock(message: Message): boolean {
+function store_hasTranslationBlock(blockIds: Message['blocks']): boolean {
   const state = store.getState()
-  return (message.blocks ?? []).some(
+  return (blockIds ?? []).some(
     (blockId) => state.messageBlocks.entities[blockId]?.type === MessageBlockType.TRANSLATION
   )
 }

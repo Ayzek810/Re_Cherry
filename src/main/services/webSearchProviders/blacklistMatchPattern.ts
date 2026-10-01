@@ -47,7 +47,8 @@ export {
   MatchPatternMap,
   type MatchPatternMapJSON,
   type ParsedMatchPattern,
-  parseMatchPattern} from '@shared/utils/matchPattern'
+  parseMatchPattern
+} from '@shared/utils/matchPattern'
 
 /** 纯域名串 → hostname 匹配（v0.3.2 批次2 适配：上游裸域名在 MatchPatternMap 里会被丢弃）。 */
 function matchesExcludeDomain(hostname: string, domain: string): boolean {

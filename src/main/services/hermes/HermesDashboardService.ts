@@ -16,7 +16,7 @@
 //    （services/codeCli/hermesHome.ts，钉进 CodeMate 子树）；AbsoluteFilePath 品牌类型
 //    未移植，退化为 string。V2 无 workspace 概念（spawn 无 cwd），fork 不造。
 
-import type { ChildProcess} from 'node:child_process';
+import type { ChildProcess } from 'node:child_process'
 import { execFileSync } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { createServer } from 'node:net'

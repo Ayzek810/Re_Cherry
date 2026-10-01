@@ -998,7 +998,9 @@ class FileStorage {
               (options.includeHidden || !entry.name.startsWith('.')) &&
               !excludedDirs.has(entry.name)
           )
-          .map((entry) => this.searchDirectories(path.join(resolvedPath, entry.name).replace(/\\/g, '/'), options, currentDepth + 1))
+          .map((entry) =>
+            this.searchDirectories(path.join(resolvedPath, entry.name).replace(/\\/g, '/'), options, currentDepth + 1)
+          )
         const subResults = await Promise.all(subDirPromises)
         for (const subDirs of subResults) {
           directories.push(...subDirs)
@@ -2006,9 +2008,7 @@ class FileStorage {
           }
         })
       )
-      const fileOperations = prepared.filter(
-        (op): op is { sourcePath: string; targetPath: string } => op !== null
-      )
+      const fileOperations = prepared.filter((op): op is { sourcePath: string; targetPath: string } => op !== null)
 
       // 递归 mkdir 幂等且自建中间层：一次调用确保整条目录链，无需逐层 existsSync 预检
       await Promise.all(

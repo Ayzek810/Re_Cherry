@@ -377,7 +377,7 @@ export function useConfigDraftController({
     } finally {
       setSubmitting(false)
     }
-  }, [canSave, cliTool, commitDraft, createManagedDraft, gateway, models, onSubmit, onClose, provider.id, t])
+  }, [canSave, cliTool, commitDraft, createManagedDraft, onSubmit, onClose, t])
 
   return {
     draft,

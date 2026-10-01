@@ -1,4 +1,4 @@
-import { lstat,mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { join, win32 as winPath } from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'

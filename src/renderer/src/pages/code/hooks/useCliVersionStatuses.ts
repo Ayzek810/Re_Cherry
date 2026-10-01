@@ -4,7 +4,7 @@ import type { CodeCli } from '@shared/types/codeCli'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { VersionStatus } from '../types'
-import { type BinaryToolSnapshot,interpretBinarySnapshot } from '../utils/binarySnapshot'
+import { type BinaryToolSnapshot, interpretBinarySnapshot } from '../utils/binarySnapshot'
 
 // fork 移植自 cherry-studio v2 src/renderer/pages/code/hooks/useCliVersionStatuses.ts
 //（2026-09-24，v0.3.4-1 批次4a）。缝点三处，其余（重试/版本缓存/latestRef 数据流）逐字：

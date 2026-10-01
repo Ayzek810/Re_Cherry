@@ -2,7 +2,7 @@ import 'katex/dist/katex.min.css'
 
 import type { MainTextMessageBlock, ThinkingMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import Markdown from '../Markdown'
@@ -10,6 +10,16 @@ import Markdown from '../Markdown'
 // Mock dependencies
 const mockUseSettings = vi.fn()
 const mockUseTranslation = vi.fn()
+
+// v1 包体契约：MathJax 改为懒加载（默认引擎 KaTeX 不加载 2.3MB 闭包）。
+// 这里捕获 react-markdown 实际收到的 rehypePlugins，用于断言"引擎 → 插件"接线。
+const { capturedRehypePlugins } = vi.hoisted(() => ({ capturedRehypePlugins: { current: [] as unknown[] } }))
+
+/** 捕获里是否出现带指定标记的插件（标记由上方 vi.mock 工厂打上）。 */
+const hasPlugin = (marker: string): boolean =>
+  capturedRehypePlugins.current.some(
+    (plugin) => typeof plugin === 'function' && (plugin as { __probePlugin?: string }).__probePlugin === marker
+  )
 
 // Mock hooks
 vi.mock('@renderer/hooks/useSettings', () => ({
@@ -105,8 +115,16 @@ vi.mock('remark-alert', () => ({ __esModule: true, default: vi.fn() }))
 vi.mock('remark-gfm', () => ({ __esModule: true, default: vi.fn() }))
 vi.mock('remark-cjk-friendly', () => ({ __esModule: true, default: vi.fn() }))
 vi.mock('remark-math', () => ({ __esModule: true, default: vi.fn() }))
-vi.mock('rehype-katex', () => ({ __esModule: true, default: vi.fn() }))
-vi.mock('rehype-mathjax', () => ({ __esModule: true, default: vi.fn() }))
+// 标记式桩：断言按标记走（不依赖函数标识——组件动态 import 与测试内再 import
+// 可能拿到不同的 mock 实例）
+vi.mock('rehype-katex', () => {
+  const plugin = Object.assign(vi.fn(), { __probePlugin: 'katex' })
+  return { __esModule: true, default: plugin }
+})
+vi.mock('rehype-mathjax', () => {
+  const plugin = Object.assign(vi.fn(), { __probePlugin: 'mathjax' })
+  return { __esModule: true, default: plugin }
+})
 vi.mock('rehype-raw', () => ({ __esModule: true, default: vi.fn() }))
 
 // Mock custom plugins
@@ -128,25 +146,28 @@ vi.mock('../plugins/rehypeScalableSvg', () => ({
 // Mock ReactMarkdown with realistic rendering
 vi.mock('react-markdown', () => ({
   __esModule: true,
-  default: ({ children, components, className }: any) => (
-    <div data-testid="markdown-content" className={className}>
-      {children}
-      {/* Simulate component rendering */}
-      {components?.a && <span data-testid="has-link-component">link</span>}
-      {components?.code && (
-        <div data-testid="has-code-component">
-          {components.code({ children: 'test code', node: { position: { start: { line: 1 } } } })}
-        </div>
-      )}
-      {components?.table && (
-        <div data-testid="has-table-component">
-          {components.table({ children: 'test table', node: { position: { start: { line: 1 } } } })}
-        </div>
-      )}
-      {components?.img && <span data-testid="has-img-component">img</span>}
-      {components?.style && <span data-testid="has-style-component">style</span>}
-    </div>
-  )
+  default: ({ children, components, className, rehypePlugins }: any) => {
+    capturedRehypePlugins.current = rehypePlugins ?? []
+    return (
+      <div data-testid="markdown-content" className={className}>
+        {children}
+        {/* Simulate component rendering */}
+        {components?.a && <span data-testid="has-link-component">link</span>}
+        {components?.code && (
+          <div data-testid="has-code-component">
+            {components.code({ children: 'test code', node: { position: { start: { line: 1 } } } })}
+          </div>
+        )}
+        {components?.table && (
+          <div data-testid="has-table-component">
+            {components.table({ children: 'test table', node: { position: { start: { line: 1 } } } })}
+          </div>
+        )}
+        {components?.img && <span data-testid="has-img-component">img</span>}
+        {components?.style && <span data-testid="has-style-component">style</span>}
+      </div>
+    )
+  }
 }))
 
 describe('Markdown', () => {
@@ -271,12 +292,13 @@ describe('Markdown', () => {
       expect(screen.getByTestId('markdown-content')).toBeInTheDocument()
     })
 
-    it('should configure MathJax when mathEngine is MathJax', () => {
+    it('should configure MathJax when mathEngine is MathJax', async () => {
       mockUseSettings.mockReturnValue({ mathEngine: 'MathJax', mathEnableSingleDollar: true })
 
       render(<Markdown block={createMainTextBlock()} />)
 
-      // Component should render successfully with MathJax configuration
+      // 懒加载完成后插件进管线（异步 state，需等待以免留下 act 外的悬挂更新）
+      await waitFor(() => expect(hasPlugin('mathjax')).toBe(true))
       expect(screen.getByTestId('markdown-content')).toBeInTheDocument()
     })
 
@@ -287,6 +309,23 @@ describe('Markdown', () => {
 
       // Component should render successfully without math plugins
       expect(screen.getByTestId('markdown-content')).toBeInTheDocument()
+    })
+
+    it('KaTeX 路径：katex 插件进管线，且不推 MathJax 插件（v1 包体：默认引擎不加载 2.3MB 闭包）', async () => {
+      mockUseSettings.mockReturnValue({ mathEngine: 'KaTeX', mathEnableSingleDollar: true })
+
+      render(<Markdown block={createMainTextBlock()} />)
+
+      await waitFor(() => expect(hasPlugin('katex')).toBe(true))
+      expect(hasPlugin('mathjax')).toBe(false)
+    })
+
+    it('MathJax 路径：懒加载完成后插件进入 rehype 管线（异步接线，加载前不静默失败）', async () => {
+      mockUseSettings.mockReturnValue({ mathEngine: 'MathJax', mathEnableSingleDollar: true })
+
+      render(<Markdown block={createMainTextBlock()} />)
+
+      await waitFor(() => expect(hasPlugin('mathjax')).toBe(true))
     })
   })
 
@@ -364,7 +403,7 @@ describe('Markdown', () => {
       expect(screen.getByTestId('markdown-content')).toHaveTextContent('Updated')
     })
 
-    it('should re-render when math engine changes', () => {
+    it('should re-render when math engine changes', async () => {
       mockUseSettings.mockReturnValue({ mathEngine: 'KaTeX', mathEnableSingleDollar: true })
       const { rerender } = render(<Markdown block={createMainTextBlock()} />)
 
@@ -373,7 +412,9 @@ describe('Markdown', () => {
       mockUseSettings.mockReturnValue({ mathEngine: 'MathJax', mathEnableSingleDollar: true })
       rerender(<Markdown block={createMainTextBlock()} />)
 
-      // Should still render correctly with new math engine
+      // 切到 MathJax 会触发懒加载（异步 state 更新）：等到插件真正进管线再收尾，
+      // 否则测试在 act 外留下悬挂更新。
+      await waitFor(() => expect(hasPlugin('mathjax')).toBe(true))
       expect(screen.getByTestId('markdown-content')).toBeInTheDocument()
     })
   })

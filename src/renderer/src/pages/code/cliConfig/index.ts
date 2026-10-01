@@ -18,7 +18,7 @@ export { formatCliConfigDraftFile, updateCliConfigDraftConfig } from './draftUpd
 export { gatewayExpectedModel, gatewayModelIdFromAddress } from './gatewayModel'
 export { resolveLaunchModelId } from './launchModelId'
 export { extractConfigFromCliConfigDraft, extractConnectionFromCliConfigDraft } from './parser'
-export { type ApiKeyEntry,cliConfigConnectionMatchesProvider } from './providerMatching'
+export { type ApiKeyEntry, cliConfigConnectionMatchesProvider } from './providerMatching'
 export type {
   CliConfigConnection,
   CliConfigFileDraft,

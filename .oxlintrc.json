@@ -53,7 +53,17 @@
     "no-fallthrough": "warn",
     "no-unassigned-vars": "warn",
     "no-unused-expressions": "off",
-    "no-unused-vars": ["warn", { "caughtErrors": "none" }],
+    "no-unused-vars": [
+      "warn",
+      {
+        "caughtErrors": "none",
+        // `_` 前缀 = 有意不用的参数/变量（接口签名、V2 对位桩、rest 解构摘字段）。
+        // 这是本仓既有的书写约定，此处把约定编码化，而不是逐处静默。
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
     "no-useless-rename": "warn",
     "oxc/bad-array-method-on-arguments": "warn",
     "oxc/bad-char-at-comparison": "warn",

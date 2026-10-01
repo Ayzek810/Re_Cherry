@@ -46,7 +46,19 @@ import type { MenuProps } from 'antd'
 import { Dropdown, Popconfirm, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
-import { AtSign, Bug, Check, CirclePause, FilePenLine, Languages, ListChecks, Menu, Save, ThumbsUp, Upload } from 'lucide-react'
+import {
+  AtSign,
+  Bug,
+  Check,
+  CirclePause,
+  FilePenLine,
+  Languages,
+  ListChecks,
+  Menu,
+  Save,
+  ThumbsUp,
+  Upload
+} from 'lucide-react'
 import type { Dispatch, FC, ReactNode, SetStateAction } from 'react'
 import { Fragment, memo, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -386,7 +398,9 @@ const MessageMenubar: FC<Props> = (props) => {
     messageContainerRef,
     onEdit,
     t,
-    toggleMultiSelectMode
+    toggleMultiSelectMode,
+    // 导出文件名带话题名（Obsidian 导出用 topic.name），改名后菜单要重建
+    topic.name
   ])
 
   const onRegenerate = async (e: React.MouseEvent | undefined) => {
@@ -699,7 +713,16 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
   // 消息级原地翻译（V1 messageMenubar translate 按钮移植）：用户消息无入口；翻译中 =
   // 停止按钮；常态 = 语言下拉（内置 20 语言，上游 translateLanguages 同交互），已有译文时
   // 追加 复制/关闭 两项；点击语言重译（上游 getTranslationUpdater 原地重置语义）。
-  translate: ({ isUserMessage, isTranslating, translateLanguages, handleTranslate, hasTranslationBlocks, message, softHoverBg, t }) => {
+  translate: ({
+    isUserMessage,
+    isTranslating,
+    translateLanguages,
+    handleTranslate,
+    hasTranslationBlocks,
+    message,
+    softHoverBg,
+    t
+  }) => {
     if (isUserMessage) {
       return null
     }
@@ -758,7 +781,10 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
         placement="top"
         arrow>
         <Tooltip title={t('messageTranslate.action')} mouseEnterDelay={1.2}>
-          <ActionButton className="message-action-button" onClick={(e) => e.stopPropagation()} $softHoverBg={softHoverBg}>
+          <ActionButton
+            className="message-action-button"
+            onClick={(e) => e.stopPropagation()}
+            $softHoverBg={softHoverBg}>
             <Languages size={15} />
           </ActionButton>
         </Tooltip>

@@ -10,7 +10,13 @@ import type {
   ToolMessageBlock
 } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { isMainTextBlock, isMessageProcessing, isToolBlock, isTranslationBlock, isVideoBlock } from '@renderer/utils/messageUtils/is'
+import {
+  isMainTextBlock,
+  isMessageProcessing,
+  isToolBlock,
+  isTranslationBlock,
+  isVideoBlock
+} from '@renderer/utils/messageUtils/is'
 import { AnimatePresence, motion, type Variants } from 'motion/react'
 import React, { useMemo } from 'react'
 import { shallowEqual, useSelector } from 'react-redux'
@@ -198,9 +204,7 @@ const MessageBlockRenderer: React.FC<Props> = ({ blocks, message }) => {
   // 之前订阅全量 selectEntities，任何一个 token 都会让所有消息的块树重算。
   const renderedBlocks = useSelector(
     (state: RootState) =>
-      blocks
-        .map((blockId) => messageBlocksSelectors.selectById(state, blockId))
-        .filter((b): b is MessageBlock => !!b),
+      blocks.map((blockId) => messageBlocksSelectors.selectById(state, blockId)).filter((b): b is MessageBlock => !!b),
     shallowEqual
   )
   // Check if message is still processing

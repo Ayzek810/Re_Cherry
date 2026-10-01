@@ -20,8 +20,6 @@ import { type FC, memo, useCallback, useEffect, useMemo, useRef, useState } from
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown, { type Components, defaultUrlTransform } from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
-// @ts-ignore rehype-mathjax is not typed
-import rehypeMathjax from 'rehype-mathjax'
 import rehypeRaw from 'rehype-raw'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
@@ -44,6 +42,21 @@ import Table from './Table'
 /** V2 移植：内联 HTML 工件预览模式——流式期间 generating，落定后 ready。 */
 export type InlineHtmlPreviewMode = 'generating' | 'ready'
 
+/**
+ * MathJax 插件懒加载（v1 包体）：mathjax-full 静态闭包约 2.3MB，而默认数学引擎是
+ * KaTeX（settings.mathEngine 默认 'KaTeX'）。只有用户把引擎切到 MathJax 时才加载；
+ * 插件就绪前该引擎的公式按原文渲染，就绪后由 state 更新触发重渲染。
+ * 加载结果模块级缓存（跨消息块共享一次网络/解析成本）。
+ */
+let mathjaxPluginPromise: Promise<Pluggable> | null = null
+function loadMathjaxPlugin(): Promise<Pluggable> {
+  mathjaxPluginPromise ??= import('rehype-mathjax').then(
+    // @ts-ignore rehype-mathjax 无类型声明（与旧静态导入同）
+    (mod) => mod.default as unknown as Pluggable
+  )
+  return mathjaxPluginPromise
+}
+
 const ALLOWED_ELEMENTS =
   /<(style|p|div|span|b|i|strong|em|ul|ol|li|table|tr|td|th|thead|tbody|h[1-6]|blockquote|pre|code|br|hr|svg|path|circle|rect|line|polyline|polygon|text|g|defs|title|desc|tspan|sub|sup|details|summary)/i
 const DISALLOWED_ELEMENTS = ['iframe', 'script']
@@ -64,6 +77,21 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
   const isTrulyDone = 'status' in block && block.status === 'success'
   const [displayedContent, setDisplayedContent] = useState(postProcess ? postProcess(block.content) : block.content)
   const [isStreamDone, setIsStreamDone] = useState(isTrulyDone)
+  // MathJax 引擎的插件（懒加载；默认引擎 KaTeX 时恒为 null，不加载 2.3MB 闭包）
+  const [mathjaxPlugin, setMathjaxPlugin] = useState<Pluggable | null>(null)
+
+  useEffect(() => {
+    if (mathEngine !== 'MathJax') return
+    let cancelled = false
+    void loadMathjaxPlugin().then((plugin) => {
+      // 必须包成 updater：rehype 插件本身是函数，直接 setState(fn) 会被 React
+      // 当成更新函数调用（存进去的是"以旧 state 调用插件的返回值"= undefined）。
+      if (!cancelled) setMathjaxPlugin(() => plugin)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [mathEngine])
 
   const prevContentRef = useRef(block.content)
   const prevBlockIdRef = useRef(block.id)
@@ -170,11 +198,11 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
     plugins.push([rehypeHeadingIds, { prefix: `heading-${block.id}` }])
     if (mathEngine === 'KaTeX') {
       plugins.push(rehypeKatex)
-    } else if (mathEngine === 'MathJax') {
-      plugins.push(rehypeMathjax)
+    } else if (mathEngine === 'MathJax' && mathjaxPlugin !== null) {
+      plugins.push(mathjaxPlugin)
     }
     return plugins
-  }, [mathEngine, hasRawHtml, block.id])
+  }, [mathEngine, mathjaxPlugin, hasRawHtml, block.id])
 
   // 稳定引用：内联对象同样会让处理器管线逐帧重建
   const remarkRehypeOptions = useMemo(
@@ -217,7 +245,7 @@ const Markdown: FC<Props> = ({ block, postProcess, citationRegistry }) => {
   const urlTransform = useCallback((value: string) => {
     if (value.startsWith('data:image/png') || value.startsWith('data:image/jpeg')) return value
     return defaultUrlTransform(value)
-  }, [])  // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
+  }, []) // V2 移植：整条消息是单个 HTML 工件时，绕过 Markdown 管线直渲染（文档/围栏双源）。
   // position 的 end 外推一个围栏长度，让 isOpenFenceBlock 恒判"已闭合"（V2 语境等价）。
   if (standaloneArtifact) {
     const startOffset = standaloneArtifact.start.offset ?? 0

@@ -5,7 +5,7 @@ const logger = loggerService.withContext('BlacklistMatchPattern')
 
 // ublacklist match pattern 核心已收口到 shared（主进程 webSearchProviders 同源引用），
 // 此处只保留渲染层订阅源解析，并转发 parseMatchPattern 维持既有 import 面。
-export { type ParsedMatchPattern,parseMatchPattern } from '@shared/utils/matchPattern'
+export { type ParsedMatchPattern, parseMatchPattern } from '@shared/utils/matchPattern'
 
 /** 拉取订阅源内容，按行解析出合法的 ublacklist 模式串（跳过空行与 # 注释）。 */
 export async function parseSubscribeContent(url: string): Promise<string[]> {

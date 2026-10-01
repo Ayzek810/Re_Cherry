@@ -25,7 +25,7 @@ import {
 import { CallId, ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import { loggerService } from '@logger'
 import { getKernel } from '@main/kernel'
-import { type KernelProviderInput,PROTOCOL_BY_TYPE } from '@main/kernel/providers'
+import { type KernelProviderInput, PROTOCOL_BY_TYPE } from '@main/kernel/providers'
 import { asSchema, type ToolSet, type UIMessageChunk } from 'ai'
 
 import type { CherryUIMessage } from '../adapters/interfaces'

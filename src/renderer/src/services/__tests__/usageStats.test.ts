@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  filterUsageRecords,
-  summarizeUsage,
-  usageDateKey,
-  usageRangeForPreset,
-  type UsageRecord
-} from '../usageStats'
+import { filterUsageRecords, summarizeUsage, usageDateKey, usageRangeForPreset, type UsageRecord } from '../usageStats'
 
 /**
  * 用量统计纯函数层（services/usageStats.ts，v0.4.7）单测：

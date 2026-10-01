@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import type { CodeCli} from '@shared/types/codeCli';
+import type { CodeCli } from '@shared/types/codeCli'
 import { isApiGatewayProviderId } from '@shared/types/codeCli'
 import type { CliProviderConfig } from '@shared/types/codeCliState'
 import type { UniqueModelId } from '@shared/types/uniqueModelId'

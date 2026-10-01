@@ -17,7 +17,7 @@ import { timingSafeEqual } from 'node:crypto'
 
 import { loggerService } from '@logger'
 import { createLatestReconciler, type LatestReconciler } from '@main/core/concurrency/latestReconciler'
-import { ConfigKeys,configManager } from '@main/services/ConfigManager'
+import { ConfigKeys, configManager } from '@main/services/ConfigManager'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ApiGatewayConfig, ApiGatewayStopOutcome } from '@shared/types/apiGateway'
 import { REDACTED } from '@shared/utils/redaction'

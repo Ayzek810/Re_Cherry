@@ -21,7 +21,7 @@ import styled from 'styled-components'
 import { SettingTitle } from '..'
 import AddMcpServerModal from './AddMcpServerModal'
 import EditMcpJsonPopup from './EditMcpJsonPopup'
-import InstallNpxUv from './InstallNpxUv'
+import McpRuntimeDependencies from './McpRuntimeDependencies'
 import McpServerCard from './McpServerCard'
 
 const logger = loggerService.withContext('McpServersList')
@@ -231,7 +231,7 @@ const McpServersList: FC = () => {
           />
         </SettingTitle>
         <ButtonGroup>
-          <InstallNpxUv mini />
+          <McpRuntimeDependencies mini />
           <Button icon={<EditIcon size={14} />} type="default" shape="round" onClick={() => EditMcpJsonPopup.show()}>
             {t('common.edit')}
           </Button>

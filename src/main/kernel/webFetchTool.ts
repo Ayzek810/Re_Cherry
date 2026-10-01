@@ -196,16 +196,16 @@ export function apply(ctx: Context): void {
                     `[${e.index}] ${e.title}`,
                     e.url,
                     e.content,
-                    e.truncated ? `(truncated at ${e.content.length} of ${e.totalChars} chars; call again with offset ${e.nextOffset} for the next part)` : ''
+                    e.truncated
+                      ? `(truncated at ${e.content.length} of ${e.totalChars} chars; call again with offset ${e.nextOffset} for the next part)`
+                      : ''
                   ]
                     .filter((line) => line.length > 0)
                     .join('\n')
                 ),
                 'Citation rule: in your answer, place the matching [n] marker immediately after each statement these pages support.'
               ].join('\n\n')
-        logger.info(
-          `web_fetch: ${urls.length} url(s) -> ${entries.map((e) => `${e.totalChars}ch`).join(', ')}`
-        )
+        logger.info(`web_fetch: ${urls.length} url(s) -> ${entries.map((e) => `${e.totalChars}ch`).join(', ')}`)
         return {
           results: entries.length,
           entries: entries.map(({ title, url, content, truncated, totalChars, nextOffset }) => ({

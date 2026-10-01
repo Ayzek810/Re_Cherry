@@ -24,7 +24,7 @@ import { analyticsService } from './services/AnalyticsService'
 import appService from './services/AppService'
 import BackupManager from './services/BackupManager'
 import { binaryManager } from './services/binaryManager/BinaryManager'
-import { BINARY_TOOL_NAMES, type BinaryToolName,isBinaryToolName } from './services/binaryManager/presets'
+import { BINARY_TOOL_NAMES, type BinaryToolName, isBinaryToolName } from './services/binaryManager/presets'
 import { parseCliConfigReadInput, parseCliConfigWriteInput } from './services/codeCli/configPayload'
 import { readCliConfigFiles, writeCliConfigFiles } from './services/codeCli/configWriter'
 import { configManager } from './services/ConfigManager'
@@ -679,6 +679,12 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     ipcMain.handle(IpcChannel.Mcp_StopServer, (_, server) => mcpService.stopServer(asServer(server)))
     ipcMain.handle(IpcChannel.Mcp_RemoveServer, (_, server) => mcpService.removeServer(asServer(server)))
     ipcMain.handle(IpcChannel.Mcp_CheckConnectivity, (_, server) => mcpService.checkConnectivity(asServer(server)))
+    // MCP 运行时依赖探测（v1）：命令名 → 可执行绝对路径 | null。命令名由
+    // findCommandInShellEnv 内的白名单正则校验（注入面收在那一处），非法名返回 null。
+    ipcMain.handle(IpcChannel.Mcp_CheckCommand, async (_, command: string) => {
+      const { findCommandInShellEnv, getInheritedEnv } = await import('./services/mcp/commandResolution')
+      return findCommandInShellEnv(command, getInheritedEnv())
+    })
 
     // DXT 扩展安装（v0.4.7 自上游 Mcp_UploadDxt 移植）：上传内容落临时文件后交 DxtService
     // 解包校验。文件名过 basename 防穿越（createTempFile 直接拼接，不可透传原始名字）；

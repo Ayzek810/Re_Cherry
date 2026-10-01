@@ -110,9 +110,9 @@ describe('denyReadOnly / ensureNotReadOnly', () => {
 
   it('ensureNotReadOnly：read-only 抛、workspace-write 放行', () => {
     expect(() => ensureNotReadOnly({ mode: 'read-only', workspaceRoot: 'C:\\ws' }, 'operation')).toThrow()
-    expect(
-      ensureNotReadOnly({ mode: 'danger-full-access', workspaceRoot: 'C:\\ws' }, 'operation').mode
-    ).toBe('danger-full-access')
+    expect(ensureNotReadOnly({ mode: 'danger-full-access', workspaceRoot: 'C:\\ws' }, 'operation').mode).toBe(
+      'danger-full-access'
+    )
   })
 })
 

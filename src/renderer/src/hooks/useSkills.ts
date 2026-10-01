@@ -207,7 +207,7 @@ export function useSkillInstall() {
         setInstallingKey(null)
       }
     },
-    [commitEntries, dispatch, t]
+    [commitEntries, t]
   )
 
   const installFromZip = useCallback(
@@ -224,7 +224,7 @@ export function useSkillInstall() {
         setInstallingKey(null)
       }
     },
-    [commitEntries, dispatch, t]
+    [commitEntries, t]
   )
 
   const installFromDirectory = useCallback(
@@ -241,7 +241,7 @@ export function useSkillInstall() {
         setInstallingKey(null)
       }
     },
-    [commitEntries, dispatch, t]
+    [commitEntries, t]
   )
 
   const isInstalling = useCallback(

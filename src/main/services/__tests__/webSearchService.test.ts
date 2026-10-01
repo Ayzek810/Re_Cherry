@@ -18,10 +18,12 @@ const m = vi.hoisted(() => ({
   fetchWebContent: vi.fn(),
   isAbortError: vi.fn((error: unknown) => error instanceof Error && error.name === 'AbortError'),
   // 引擎包装层每轮 search() 现场实例化——桩必须先于实例存在，故共享同一 vi.fn
-  engineSearch: vi.fn(async (): Promise<{ query: string; results: Array<{ title: string; url: string; content: string }> }> => ({
-    query: 'q',
-    results: []
-  }))
+  engineSearch: vi.fn(
+    async (): Promise<{ query: string; results: Array<{ title: string; url: string; content: string }> }> => ({
+      query: 'q',
+      results: []
+    })
+  )
 }))
 
 vi.mock('../webSearchProviders/compression', () => ({ compressWithRag: m.compressWithRag }))
@@ -48,7 +50,7 @@ vi.mock('../webSearchProviders', () => ({
       engineInstances.push(this as unknown as EngineInstance)
     }
   }
-}));
+}))
 
 import { webSearchService } from '../WebSearchService'
 
@@ -62,7 +64,7 @@ const baseConfig = (over: Partial<KernelWebSearchConfig>): KernelWebSearchConfig
     searchWithTime: false,
     maxResults: 3,
     ...over
-  } as KernelWebSearchConfig)
+  }) as KernelWebSearchConfig
 
 const result = (url: string, content: string) => ({ title: `t of ${url}`, url, content })
 

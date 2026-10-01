@@ -11,7 +11,7 @@ import { tabToImageGenerationMode } from '@renderer/pages/paintings/utils/painti
 import { supportsPaintingEdit } from '@renderer/services/paintingModelSelection'
 import { useAppSelector } from '@renderer/store'
 import type { Model } from '@renderer/types'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 
 const logger = loggerService.withContext('paintings/usePaintingModelSwitch')
 
@@ -25,9 +25,11 @@ export type PaintingModelSelection = { providerId: string; modelId: string }
 export function usePaintingModelSwitch({ painting, onPaintingChange }: UsePaintingModelSwitchInput) {
   const providers = useAppSelector((state) => state.llm.providers)
   const currentProviderId = painting.providerId
-  const models: Model[] = currentProviderId
-    ? (providers.find((provider) => provider.id === currentProviderId)?.models ?? [])
-    : []
+  // useMemo 固定引用：`?? []` 的兜底数组每次渲染都是新引用，会让下方 useCallback 每帧重建
+  const models: Model[] = useMemo(
+    () => (currentProviderId ? (providers.find((provider) => provider.id === currentProviderId)?.models ?? []) : []),
+    [providers, currentProviderId]
+  )
 
   return useCallback(
     async ({ providerId, modelId }: PaintingModelSelection) => {

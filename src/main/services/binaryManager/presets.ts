@@ -22,5 +22,5 @@ export type BinaryToolName = (typeof CODE_CLI_TOOL_PRESETS)[number]['executable'
 export const BINARY_TOOL_NAMES: readonly BinaryToolName[] = BINARY_TOOL_PRESETS.map((preset) => preset.executable)
 
 export function isBinaryToolName(value: unknown): value is BinaryToolName {
-  return typeof value === 'string' && (BINARY_TOOL_NAMES).includes(value)
+  return typeof value === 'string' && BINARY_TOOL_NAMES.includes(value)
 }

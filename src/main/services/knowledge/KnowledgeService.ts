@@ -29,7 +29,8 @@ import {
   extractFromSitemap,
   extractFromUrl,
   extractFromVideoPair,
-  listDirectoryFiles} from './extractors'
+  listDirectoryFiles
+} from './extractors'
 import { BaseVectorStore } from './vectorStore'
 
 const logger = loggerService.withContext('KnowledgeService')

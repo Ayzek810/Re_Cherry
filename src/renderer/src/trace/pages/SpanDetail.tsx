@@ -70,9 +70,12 @@ const SpanDetail: FC<SpanDetailProps> = ({ node, clickShowModal }) => {
     }
 
     updateCopyButtonTitles()
-    const timer = setInterval(updateCopyButtonTitles, 100) // 每秒检查一次
+    // v1 性能：原实现是 setInterval(…, 100) —— 10Hz 空转 DOM 查询（注释还写过"每秒"）。
+    // react-json-view 的复制按钮是随数据渲染出现的，用 MutationObserver 只在 DOM 真变化时跑一次。
+    const observer = new MutationObserver(updateCopyButtonTitles)
+    observer.observe(document.body, { childList: true, subtree: true })
 
-    return () => clearInterval(timer)
+    return () => observer.disconnect()
   }, [t])
 
   const formatDate = (timestamp: number | null) => {

@@ -17,7 +17,7 @@
  * MarkItDown 同样不支持 .doc）；本地 .html 与网页 url 正文走 turndown 转
  * Markdown。sitemap/directory/video 已接入（v0.4 工程项）。
  */
-import { readdir,readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
@@ -324,10 +324,7 @@ async function extractLegacyDoc(filePath: string): Promise<string> {
 }
 
 /** 按文件扩展名/类型抽取文本。signal 仅作用于可中断的分支（PDF worker 抽取）。 */
-export async function extractFromFile(
-  filePath: string,
-  options?: { signal?: AbortSignal }
-): Promise<ExtractedContent> {
+export async function extractFromFile(filePath: string, options?: { signal?: AbortSignal }): Promise<ExtractedContent> {
   const extension = path.extname(filePath).toLowerCase()
   const source = path.basename(filePath)
   let text = ''

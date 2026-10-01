@@ -9,12 +9,7 @@ import type { ExternalAppInfo } from '@shared/externalApp/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { InstallProgressPayload } from '@shared/types/installProgress'
 import type { Notification } from '@types'
-import type {
-  FileMetadata,
-  Shortcut,
-  ThemeMode,
-  WebDavConfig
-} from '@types'
+import type { FileMetadata, Shortcut, ThemeMode, WebDavConfig } from '@types'
 import type { OpenDialogOptions } from 'electron'
 import { contextBridge, ipcRenderer, shell, webUtils } from 'electron'
 import type { CreateDirectoryOptions } from 'webdav'
@@ -164,6 +159,8 @@ const api = {
     stopServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_StopServer, server),
     removeServer: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_RemoveServer, server),
     checkConnectivity: (server: unknown) => ipcRenderer.invoke(IpcChannel.Mcp_CheckConnectivity, server),
+    // 运行时依赖探测（v1）：命令名 → PATH 中的可执行绝对路径 | null（主进程校验命令名）。
+    checkCommand: (command: string) => ipcRenderer.invoke(IpcChannel.Mcp_CheckCommand, command),
     // DXT 扩展安装（上游同构）：File 读成 ArrayBuffer + 原始文件名 invoke（不依赖 File.path 扩展）。
     uploadDxt: async (file: File) => {
       const buffer = await file.arrayBuffer()

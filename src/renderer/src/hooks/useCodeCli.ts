@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { type RootState,useAppDispatch, useAppSelector } from '@renderer/store'
+import { type RootState, useAppDispatch, useAppSelector } from '@renderer/store'
 import { setCodeCliConfigs } from '@renderer/store/settings'
 import { CLI_OWN_LOGIN_PROVIDER_ID, CodeCli, isApiGatewayProviderId } from '@shared/types/codeCli'
 import type { CliProviderConfig, CodeCliConfigs, CodeCliId, CodeCliToolState } from '@shared/types/codeCliState'
@@ -81,7 +81,8 @@ export const useCodeCli = (initialTool: CodeCli = DEFAULT_TOOL, onToolChange?: (
         const prev = getToolState(toolId, latest)
         const next = { ...latest, [toolId]: patch(prev) }
         configsRef.current = next
-        await setConfigs(next)
+        // dispatch 同步完成（setConfigs 返回 action 非 Promise，await 是空转）
+        setConfigs(next)
       })
       writeQueueRef.current = task.catch(() => {})
       return task

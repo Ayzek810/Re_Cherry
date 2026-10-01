@@ -556,9 +556,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
         </Tooltip>
       )
       if (queueWhileLoading) {
-        extras.push(
-          <SendMessageButton key="queue-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />
-        )
+        extras.push(<SendMessageButton key="queue-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />)
       }
     } else {
       extras.push(<SendMessageButton key="send-message" sendMessage={handleSendMessage} disabled={isSendDisabled} />)

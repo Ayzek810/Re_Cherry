@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getStoreProviders } from '@renderer/hooks/useStore'
-import { CLI_OWN_LOGIN_PROVIDER_ID, type CodeCli,isApiGatewayProviderId } from '@shared/types/codeCli'
+import { CLI_OWN_LOGIN_PROVIDER_ID, type CodeCli, isApiGatewayProviderId } from '@shared/types/codeCli'
 import type { CliProviderConfig } from '@shared/types/codeCliState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 

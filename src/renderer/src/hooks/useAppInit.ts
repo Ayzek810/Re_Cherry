@@ -64,7 +64,6 @@ export function useAppInit() {
     return () => {
       window.electron.ipcRenderer.removeListener(IpcChannel.App_SaveData, handler)
     }
-     
   }, [])
 
   useFullScreenNotice()

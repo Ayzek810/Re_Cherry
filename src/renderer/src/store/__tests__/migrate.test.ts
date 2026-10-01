@@ -166,7 +166,11 @@ describe('store migrations', () => {
         preprocess: {
           providers: [
             { id: 'doc2x', name: 'Doc2X', apiKey: 'user-key' },
-            { id: 'vision-model', name: 'VisionModel', visionModel: { id: 'qwen-vl', name: 'Qwen-VL', provider: 'silicon' } }
+            {
+              id: 'vision-model',
+              name: 'VisionModel',
+              visionModel: { id: 'qwen-vl', name: 'Qwen-VL', provider: 'silicon' }
+            }
           ],
           defaultProvider: 'doc2x'
         },

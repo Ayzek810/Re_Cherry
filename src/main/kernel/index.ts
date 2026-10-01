@@ -738,7 +738,12 @@ function registerKernelIpc(): void {
       }
       if (options?.memory !== undefined) {
         const memory = options.memory
-        if (typeof memory !== 'object' || memory === null || typeof memory.assistantId !== 'string' || memory.assistantId.length === 0) {
+        if (
+          typeof memory !== 'object' ||
+          memory === null ||
+          typeof memory.assistantId !== 'string' ||
+          memory.assistantId.length === 0
+        ) {
           throw new Error('kernel: invalid memory in topic send options')
         }
         // 只上行助手 id：memory 根目录由主进程派生（路径权威在主进程，v0.4.6）。

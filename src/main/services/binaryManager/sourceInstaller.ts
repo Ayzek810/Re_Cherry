@@ -19,7 +19,7 @@ import { loggerService } from '@logger'
 import StreamZip from 'node-stream-zip'
 
 import { replaceDirectory } from './atomicSwap'
-import { downloadFromAnySource,type DownloadProgress } from './downloadFile'
+import { downloadFromAnySource, type DownloadProgress } from './downloadFile'
 
 const logger = loggerService.withContext('SourceInstaller')
 
